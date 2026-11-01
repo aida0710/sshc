@@ -4,7 +4,6 @@ import type { SplitGroup } from "./splitView/splitGroups";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { TerminalForward, TerminalSession } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
-import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { draggableCursor } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
 import { describeForwardProblem } from "./forwardProblem";
@@ -21,6 +20,7 @@ import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { useShiftKeyHeld } from "../ui/useShiftKeyHeld";
 import { TerminalProgressBar } from "./TerminalProgressBar";
+import { SessionCloseConfirmation } from "./SessionCloseConfirmation";
 import { isImeComposing } from "../ui/imeComposition";
 
 type SessionListProps = {
@@ -370,7 +370,7 @@ export function SessionList({
         </ul>
       )}
       {closing === null ? null : (
-        <CloseConfirmation
+        <SessionCloseConfirmation
           session={closing}
           onCancel={() => setClosing(null)}
           onConfirm={() => {
@@ -380,37 +380,5 @@ export function SessionList({
         />
       )}
     </div>
-  );
-}
-function CloseConfirmation({
-  session,
-  onCancel,
-  onConfirm,
-}: {
-  session: TerminalSession;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const t = useTranslate();
-  const forwards = (session.forwards ?? []).length;
-  return (
-    <ConfirmDialog
-      id="close-session-heading"
-      heading={t("terminal.closeHeading", { title: session.title })}
-      body={
-        <>
-          <p className="text-sm text-ink-muted">{t("terminal.closeBody")}</p>
-          {forwards === 0 ? null : (
-            <p className="text-sm text-ink-muted">
-              {t("terminal.closeForwards", { count: String(forwards) })}
-            </p>
-          )}
-        </>
-      }
-      confirmLabel={t("terminal.closeConfirm")}
-      cancelLabel={t("terminal.closeCancel")}
-      onConfirm={onConfirm}
-      onCancel={onCancel}
-    />
   );
 }

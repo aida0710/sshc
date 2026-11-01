@@ -26,6 +26,7 @@ import type { UnreadSessions } from "../terminal/terminalNotifications";
 import type { SeenProgramStatus } from "../terminal/programStatus";
 import { navigationWidth } from "./navigationLayout";
 import { sftpTransferManager } from "../sftp/transferManager";
+import type { SessionShortcutRequest } from "./useAppShortcuts";
 
 // A phone reaches the other sections and Menu from the bar at the bottom (MobileNavigation), so its
 // navigation links only Home: the way back to that bar from a terminal, whose own top bar takes its place.
@@ -66,6 +67,7 @@ export function AppNavigation({
   hosts = [],
   onConnect,
   onOpenCommandPalette,
+  sessionShortcut = null,
 }: {
   navigationRef?: RefObject<HTMLElement | null>;
   navigationId: string;
@@ -100,6 +102,8 @@ export function AppNavigation({
   hosts?: HostEntry[];
   onConnect?: (alias: string, workspaceId: string) => void;
   onOpenCommandPalette: () => void;
+  // sessionShortcut is the last new session or close session shortcut, for the session list to answer.
+  sessionShortcut?: SessionShortcutRequest | null;
 }) {
   const t = useTranslate();
   const shortcuts = useBindings();
@@ -217,6 +221,7 @@ export function AppNavigation({
           hosts={hosts}
           {...(onConnect === undefined ? {} : { onConnect })}
           runTarget={runTargets.selected}
+          sessionShortcut={sessionShortcut}
         />
       </div>
 

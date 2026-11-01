@@ -6608,7 +6608,7 @@ components:
         bindings:
           type: object
           additionalProperties: false
-          required: [palette, terminalSearch, copy, paste, previousPrompt, nextPrompt, nextSession, previousSession, home, sftp]
+          required: [palette, terminalSearch, copy, paste, previousPrompt, nextPrompt, increaseFontSize, decreaseFontSize, resetFontSize, quickCommands, newSession, closeSession, nextSession, previousSession, nextPane, previousPane, home, sftp]
           properties:
             palette: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             terminalSearch: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
@@ -6616,8 +6616,16 @@ components:
             paste: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             previousPrompt: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             nextPrompt: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            increaseFontSize: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            decreaseFontSize: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            resetFontSize: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            quickCommands: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            newSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            closeSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             nextSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             previousSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            nextPane: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            previousPane: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             home: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             sftp: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
     Metadata:
