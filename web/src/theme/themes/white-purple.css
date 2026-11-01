@@ -1,0 +1,66 @@
+/* ホワイトパープル。ライトの地と線を紫に寄せ、既定のさし色（薄紫）を少し濃い紫にする。 */
+[data-theme="white-purple"] {
+  color-scheme: light;
+
+  --ui-canvas: #ebe8f3;
+  --ui-sidebar: #fdfcff;
+  --ui-tree: #f6f4fb;
+  --ui-toolbar: #fdfcff;
+  --ui-card: #ffffff;
+  --ui-surface: #e3dff0;
+  --ui-surface-subtle: #f3f1f9;
+  --ui-line: #d5cfe4;
+  --ui-hairline: #e7e3f0;
+  --ui-control: #ffffff;
+  --ui-control-line: #8d87a0;
+  --ui-hover: #f0edf7;
+  --ui-well: #f2eff8;
+  --ui-select-fill: #eae6f9;
+  --ui-ink: #211c2d;
+  --ui-ink-muted: #4f4861;
+  --ui-ink-faint: #605873;
+  /* 既定のさし色（薄紫）。index.css の [data-accent="lavender"] もこの色を使う。 */
+  --ui-accent-lavender: #5b45c9;
+  --ui-accent-lavender-ink: #ffffff;
+  --ui-accent: var(--ui-accent-lavender);
+  --ui-accent-ink: var(--ui-accent-lavender-ink);
+  --ui-notice: #fff6df;
+  --ui-notice-line: #efd08b;
+  --ui-notice-ink: #71500a;
+  --ui-danger: #c92b3a;
+  --ui-live: #177451;
+  /* The icons of pictures and recordings in a file list, so they are found at a glance. */
+  --ui-kind-image: #1f7a52;
+  --ui-kind-video: #b5541c;
+  --ui-code-bg: #080b0d;
+  --ui-code-fg: #d8dfe4;
+  --ui-brand-background: var(--ui-accent);
+  --ui-brand-mark: var(--ui-accent-ink);
+  --ui-brand-cursor: color-mix(in srgb, var(--ui-accent-ink) 70%, var(--ui-accent));
+  --ui-card-shadow: 0 1px 2px rgb(20 24 27 / 0.06);
+  --ui-pane-shadow: 0 6px 20px rgb(20 24 40 / 0.08);
+  --ui-float-shadow: 0 10px 15px -3px rgb(20 24 27 / 0.1), 0 4px 6px -4px rgb(20 24 27 / 0.1);
+  --ui-overlay-shadow: 0 25px 50px -12px rgb(20 24 27 / 0.25);
+  --ui-skeleton: #e1e3e1;
+  --ui-skeleton-highlight: #f7f7f6;
+  --ui-term-bg: #fdfcff;
+  --ui-term-fg: #1d1d1f;
+  --ui-term-cursor: #5b45c9;
+  --ui-term-selection: rgb(101 80 208 / 0.2);
+  --ui-term-black: #2b2b2b;
+  --ui-term-red: #c02c38;
+  --ui-term-green: #23794a;
+  --ui-term-yellow: #8a6300;
+  --ui-term-blue: #1a56c4;
+  --ui-term-magenta: #9333a8;
+  --ui-term-cyan: #0f6f78;
+  --ui-term-white: #cfcfd4;
+  --ui-term-bright-black: #6e6e73;
+  --ui-term-bright-red: #e2453f;
+  --ui-term-bright-green: #2f9d5f;
+  --ui-term-bright-yellow: #b07d05;
+  --ui-term-bright-blue: #2f6fe0;
+  --ui-term-bright-magenta: #b455ca;
+  --ui-term-bright-cyan: #158b96;
+  --ui-term-bright-white: #f5f5f7;
+}

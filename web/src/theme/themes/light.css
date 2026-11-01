@@ -1,27 +1,28 @@
-/* ライト。<html> にテーマがまだ付いていない間（最初の描画の前）もこの色にする。:where(:root) は
-   詳細度を持たないので、ほかのテーマのファイルを読み込む順に関わらず、そちらの色が勝つ。
+/* ライト。灰色は色みを持たない（無彩色）。<html> にテーマがまだ付いていない間（最初の描画の前）も
+   この色にする。:where(:root) は詳細度を持たないので、ほかのテーマのファイルを読み込む順に関わらず、
+   そちらの色が勝つ。
    [data-theme="light"] は、ダークの画面の中にライトの見本を描くとき（設定のテーマの見本）にも使う。 */
 :where(:root),
 [data-theme="light"] {
   color-scheme: light;
 
-  --ui-canvas: #e9ebef;
+  --ui-canvas: #ebebeb;
   --ui-sidebar: #ffffff;
-  --ui-tree: #f7f8fa;
+  --ui-tree: #f8f8f8;
   --ui-toolbar: #ffffff;
   --ui-card: #ffffff;
-  --ui-surface: #e4e7ec;
-  --ui-surface-subtle: #f4f5f8;
-  --ui-line: #d3d7de;
-  --ui-hairline: #e6e8ec;
+  --ui-surface: #e6e6e6;
+  --ui-surface-subtle: #f5f5f5;
+  --ui-line: #d6d6d6;
+  --ui-hairline: #e8e8e8;
   --ui-control: #ffffff;
-  --ui-control-line: #8c949a;
-  --ui-hover: #eef0f4;
-  --ui-well: #f1f2f5;
-  --ui-select-fill: #eeecfa;
-  --ui-ink: #1f2326;
-  --ui-ink-muted: #4f575e;
-  --ui-ink-faint: #5f676e;
+  --ui-control-line: #8f8f8f;
+  --ui-hover: #f0f0f0;
+  --ui-well: #f2f2f2;
+  --ui-select-fill: #edeaf9;
+  --ui-ink: #202020;
+  --ui-ink-muted: #525252;
+  --ui-ink-faint: #636363;
   /* 既定のさし色（薄紫）。index.css の [data-accent="lavender"] もこの色を使う。 */
   --ui-accent-lavender: #6550d0;
   --ui-accent-lavender-ink: #ffffff;
