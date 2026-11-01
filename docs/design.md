@@ -363,7 +363,7 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
   - host key変更、失効、未知鍵、利用可能なidentityや認証方式の欠如、サーバーによる認証の拒否（`authentication_rejected`。差し出した鍵が多すぎてMaxAuthTriesで切断された場合を含む）、鍵パスフレーズの問題、VPNプロファイル・ProxyJump・ProxyCommandの矛盾した組み合わせ（`route_misconfigured`）は、利用者の確認が必要なのでreopenを1回で止め、固定problem codeを返します
   - UI の「既定（5回・最大40秒）」は最大jitterを含む再試行間隔から計算します。`internal/acceptance` は両言語の表示値を `terminal.ReconnectWindow` と照合します
 
-  session APIはSSH processの状態を`connecting`、`connected`、`reconnecting`、`exited`で返します。再接続中は試行回数、上限、次回時刻と固定problem codeを返し、raw transport errorは返しません。WebSocketの接続状態はbrowser attachmentの状態であり、SSH processとは別に表示します。Web UIはsessionが存在するときだけ2秒間隔で一覧を更新し、世代番号が古い応答を捨てます。
+  session APIはSSH processの状態を`connecting`、`connected`、`reconnecting`、`exited`で返します。再接続中は試行回数、上限、次回時刻と固定problem codeを返し、raw transport errorは返しません。WebSocketの接続状態はbrowser attachmentの状態であり、SSH processとは別に表示します。Web UIは、画面を見ているあいだ2秒間隔で一覧を更新し、世代番号が古い応答を捨てます。sessionが0個でも更新します。ほかのブラウザ、このエンジンを実行先として使うマシン、`sshc terminal create`がsessionを開くことがあり、更新で起動し直したエンジンはsessionを持たずに戻るためです。sessionがあるあいだは、画面が裏にあっても更新します。ワークスペースの一覧も同じ間隔で読み直します（`useTerminalWorkspaces`）。作成・名前の変更・並べ替え・削除の答えを受け取ったら、それより前に出した読み取りの答えは捨てます。
 
   自動再接続の途中で利用者が「再接続を停止」を押すと、`POST /api/v1/terminal/sessions/{id}/reconnect/stop` が待機中・dial 中・ハンドシェイク中の試行を打ち切り、session を problem `reconnect_stopped` の exited にして「[sshc] 再接続を停止しました。」を出力します（reconnecting 以外では 409 `terminal_not_reconnecting`）。ハンドシェイク中の新しい process も閉じるので、入力を捨てる生きた reconnecting には留まりません。その後は手動の「再接続」を使えます。
 
