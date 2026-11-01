@@ -36,8 +36,8 @@ export function TerminalScreen({
   onOSC52Change,
   onOpenNavigation,
 }: {
-  // onOpenNavigation opens the sidebar from a phone's terminal top bar.
-  onOpenNavigation?: () => void;
+  // onOpenNavigation opens the sidebar from a phone's terminal top bar; undefined while the sidebar stays open.
+  onOpenNavigation?: (() => void) | undefined;
   visible: boolean;
   terminalSessions: TerminalSessionsState;
   activeSessionId: string | null;
