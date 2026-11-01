@@ -739,6 +739,34 @@ describe("App", () => {
     expect(navigation).toHaveAttribute("aria-expanded", "false");
   });
 
+  it("goes Home with Android back from the top of a section, in place of it in the history, and leaves Home to the app", async () => {
+    window.history.replaceState(null, "", "/connections");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={() => Promise.resolve(vaultStatus())}
+      />,
+    );
+    await waitFor(() => expect(document.querySelector("[data-session-status]")).toHaveTextContent("Local session active"));
+    const entries = window.history.length;
+
+    const back = new Event("sshc-android-back", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(back);
+    });
+    expect(back.defaultPrevented).toBe(true);
+    expect(window.location.pathname).toBe("/");
+    expect(window.history.length).toBe(entries);
+
+    // From Home the app leaves (MainActivity sends it to the background), so the page does not take the event.
+    const backAtHome = new Event("sshc-android-back", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(backAtHome);
+    });
+    expect(backAtHome.defaultPrevented).toBe(false);
+  });
+
   it("renders a direct section URL and links every primary destination", async () => {
     window.history.replaceState(null, "", "/keys");
     render(
