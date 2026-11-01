@@ -34,6 +34,8 @@ type InterfaceSettings struct {
 	NotificationSound *NotificationSound `json:"notificationSound,omitempty"`
 	// KeepScreenAwake は、ターミナルを表示している間、画面を消さない。
 	KeepScreenAwake bool `json:"keepScreenAwake,omitempty"`
+	// HideTouchLinkUnderlines は、タッチのターミナルでリンクにいつも引く下線を引かない。既定（false）は引く。
+	HideTouchLinkUnderlines bool `json:"hideTouchLinkUnderlines,omitempty"`
 	// ShortcutPreset は、使うショートカットのプリセットの ID である。空は既定の割り当て。
 	ShortcutPreset string `json:"shortcutPreset,omitempty"`
 }

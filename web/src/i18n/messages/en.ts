@@ -1072,6 +1072,8 @@ export const en = {
   "terminal.touchModeFixedLabel": "Fixed input",
   "terminal.touchModeTouchShort": "Touch",
   "terminal.touchModeMouseShort": "Mouse",
+  "terminal.touchLinkUnderlinesLabel": "Always underline links",
+  "terminal.touchLinkUnderlinesHint": "With touch, the URLs and paths a tap opens get a line in the accent colour. With a mouse, only the link under the pointer gets one",
   "terminal.globalSettings": "All terminals",
   "terminal.osc52Hint":
     "Allow remote programs to write to the system clipboard via OSC 52 in every terminal",
