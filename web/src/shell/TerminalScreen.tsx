@@ -72,7 +72,7 @@ export function TerminalScreen({
     document.title = session === null ? "sshc" : `${session.presentation?.displayTitle ?? session.title} · sshc`;
     return () => { document.title = "sshc"; };
   }, [session]);
-  function renderTerminal(session: TerminalSession, headerActions: ReactNode) {
+  function renderTerminal(session: TerminalSession, headerActions: ReactNode, inPane: boolean) {
     const appearance = resolveAppearance(
       session.alias === undefined
         ? undefined
@@ -87,6 +87,7 @@ export function TerminalScreen({
           key={session.id}
           session={session}
           active={visible && activeSessionId === session.id}
+          inPane={inPane}
           focusRequest={splitView.state.focusRevision}
           headerActions={headerActions}
           {...(splitView.compact ? {} : { onSplit: (edge: PaneEdge) => setSplitRequest({ targetSessionId: session.id, edge }) })}
