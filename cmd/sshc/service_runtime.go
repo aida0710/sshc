@@ -117,6 +117,48 @@ func restartServiceIfActive(ctx context.Context, service restartableService, exe
 	return true, nil
 }
 
+// failedService は、起動の失敗が続いて OS が起動し直すのをやめた service を起動し直せる manager である。
+type failedService interface {
+	restartDefinition(context.Context) serviceRestartDefinition
+	acquireOperationLock() (func() error, error)
+	// stoppedByFailure は、service が止まっている理由が起動の失敗かを返す。利用者が sshc stop で
+	// 止めた service（正常に終わった service）は false である。
+	stoppedByFailure(context.Context) (bool, error)
+	// startAfterFailure は、OS が数えた失敗を消してから service を起動する。
+	startAfterFailure(context.Context) error
+	waitUntilReady(context.Context) error
+}
+
+// startServiceIfFailed は、起動の失敗で止まった service を、入れたばかりの実行ファイルで起動し直す。
+// 起動のたびに落ちる版から直した版へ上げたとき、service が止まったまま残らないようにする。利用者が
+// 止めた service は起動しない（restartServiceIfActive と同じ境界）。
+func startServiceIfFailed(ctx context.Context, service failedService, executable string) (started bool, result error) {
+	release, err := service.acquireOperationLock()
+	if err != nil {
+		return false, err
+	}
+	defer func() { result = errors.Join(result, release()) }()
+	definition := service.restartDefinition(ctx)
+	matches, err := definition.matches(executable)
+	if err != nil || !matches {
+		return false, err
+	}
+	failed, err := service.stoppedByFailure(ctx)
+	if err != nil || !failed {
+		return false, err
+	}
+	if err := service.startAfterFailure(ctx); err != nil {
+		return false, err
+	}
+	if err := service.waitUntilReady(ctx); err != nil {
+		return false, fmt.Errorf("started service did not become ready: %w", err)
+	}
+	if err := definition.ensureStillMatches(executable, "starting"); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // serviceOperationLock は、install／disable／restart を同じ home で直列化する。
 func serviceOperationLock(home string) func() (func() error, error) {
 	path := filepath.Join(home, ".config", "sshc", "service.mutation.lock")

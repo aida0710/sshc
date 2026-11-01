@@ -174,6 +174,29 @@ func (manager *linuxServiceManager) restartRunning(ctx context.Context) error {
 	return manager.run(ctx, "--user", "try-restart", serviceUnitName)
 }
 
+// StartIfFailed は、起動の失敗で止まった unit を起動し直す。Restart=on-failure の unit は、起動の
+// たびに落ちると StartLimitBurst（既定は10秒に5回）を使い切って failed で止まる。
+func (manager *linuxServiceManager) StartIfFailed(ctx context.Context, executable string) (bool, error) {
+	return startServiceIfFailed(ctx, manager, executable)
+}
+
+func (manager *linuxServiceManager) stoppedByFailure(ctx context.Context) (bool, error) {
+	// is-failed は failed のときだけ 0 で終わる。sshc stop で止めた unit は inactive で、0 以外になる。
+	result, err := manager.runner.Run(ctx, "--user", "is-failed", "--quiet", serviceUnitName)
+	if err != nil {
+		return false, err
+	}
+	return result.ExitCode == 0, nil
+}
+
+func (manager *linuxServiceManager) startAfterFailure(ctx context.Context) error {
+	// 失敗の回数を消さないと、start も「短い間に起動しすぎた」で断られる。
+	if err := manager.run(ctx, "--user", "reset-failed", serviceUnitName); err != nil {
+		return err
+	}
+	return manager.run(ctx, "--user", "start", serviceUnitName)
+}
+
 func (manager *linuxServiceManager) acquireOperationLock() (func() error, error) {
 	return acquireServiceOperationLock(manager.lock)
 }
