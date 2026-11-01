@@ -128,7 +128,7 @@ func runTargetForwardFixture(t *testing.T) (*echo.Echo, session.Credentials, str
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := previous.SaveOnStop([]terminalrestore.Session{{Kind: "ssh", Alias: "web", Workspace: "default", PinnedTitle: "build"}}); err != nil {
+	if err := previous.Save([]terminalrestore.Session{{Kind: "ssh", Alias: "web", Workspace: "default", PinnedTitle: "build"}}); err != nil {
 		t.Fatal(err)
 	}
 	restore, err := terminalrestore.NewService(storageRoot)

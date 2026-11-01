@@ -87,6 +87,9 @@ type Dependencies struct {
 	// SessionNow は、セッションマネージャがアクショントークンの失効に使う時計。
 	SessionNow      func() time.Time
 	ShutdownTimeout time.Duration
+	// RestoreRecordInterval は、動いている間に開き直すセッションの記録を書き直す間隔である。0 なら
+	// restoreRecordInterval。テストが短くする。
+	RestoreRecordInterval time.Duration
 	// SFTPDownloadSpoolRoot is where SFTP downloads are prepared, a directory
 	// only this user can write. The desktop engine passes its user cache and
 	// Android the app's cache; empty leaves downloads unavailable.
@@ -164,6 +167,9 @@ type runtime struct {
 	remoteEngines *remoteengine.Manager
 	releaseCancel context.CancelFunc
 	releaseDone   chan struct{}
+	// restoreCancel と restoreDone は、開き直しの記録を動いている間に書き直す処理（startRestoreRecording）を止めて待つ。
+	restoreCancel context.CancelFunc
+	restoreDone   chan struct{}
 	// config は、止める前に、まだ書いていないこのマシンの今の状態を書く（FlushMachineState）。
 	config *application.Service
 }
@@ -387,6 +393,7 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	go func() { serveErrors <- built.server.Serve() }()
 
 	built.startAutoSync(asked)
+	built.startRestoreRecording(asked, dependencies)
 	if dependencies.Updates != nil {
 		watching, cancel := context.WithCancel(asked)
 		built.releaseCancel = cancel
@@ -466,9 +473,15 @@ func (r runtime) unwind(dependencies Dependencies) error {
 		joined = append(joined, fmt.Errorf("remove the command-line handoff: %w", err))
 	}
 
+	// 動いている間の書き直しを止めて待ってから、止まるときの記録を書く。このあとセッションが閉じていくので、
+	// 書き直しが続くと、閉じかけの少ない一覧で記録を上書きしてしまう。
+	if r.restoreCancel != nil {
+		r.restoreCancel()
+		<-r.restoreDone
+	}
 	// セッションが閉じ始める前に、次のエンジンが開き直せるよう記録する。
 	if r.restore != nil {
-		if err := r.restore.SaveOnStop(terminalrestore.FromReopenings(r.terminals.Reopenings())); err != nil {
+		if err := r.restore.Save(terminalrestore.FromReopenings(r.terminals.Reopenings())); err != nil {
 			joined = append(joined, fmt.Errorf("record the terminal sessions to reopen: %w", err))
 		}
 	}
@@ -564,6 +577,43 @@ func (r *runtime) startVPNSupervisor(parent context.Context, logger *slog.Logger
 	go func() {
 		defer close(done)
 		superviseVPNRoutes(watching, r.vpn, logger)
+	}()
+}
+
+// restoreRecordInterval は、動いている間に、開き直すセッションの記録を書き直す間隔である。止まらずに終わった
+// エンジン（スマホのシステムがアプリを閉じた、落ちた）は、この時間より前に開いていたセッションを残す。書くのは
+// 中身が変わったときだけ（terminalrestore.Service.Save）なので、短くしても書き込みは増えない。
+const restoreRecordInterval = 5 * time.Second
+
+// startRestoreRecording は、開き直すセッションの記録を、動いている間も書き直し続ける。止まるときの記録だけでは、
+// 止まる処理を通らずに終わったエンジンのセッションが残らない。
+func (r *runtime) startRestoreRecording(parent context.Context, dependencies Dependencies) {
+	if r.restore == nil {
+		return
+	}
+	interval := dependencies.RestoreRecordInterval
+	if interval <= 0 {
+		interval = restoreRecordInterval
+	}
+	logger := dependencies.Logger
+	recording, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	r.restoreCancel = cancel
+	r.restoreDone = done
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-recording.Done():
+				return
+			case <-ticker.C:
+				if err := r.restore.Save(terminalrestore.FromReopenings(r.terminals.Reopenings())); err != nil && logger != nil {
+					logger.Warn("could not record the terminal sessions to reopen", "error", err)
+				}
+			}
+		}
 	}()
 }
 

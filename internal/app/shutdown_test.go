@@ -5,9 +5,13 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,6 +20,7 @@ import (
 
 	"sshc/internal/handoff"
 	"sshc/internal/terminal"
+	"sshc/internal/terminalrestore"
 )
 
 type stuckProcess struct {
@@ -223,5 +228,56 @@ func TestStoppingRefusesValidMutationsAfterSecurityHasAcceptedThem(t *testing.T)
 	response.Body.Close()
 	if status == http.StatusServiceUnavailable {
 		t.Fatal("a read-only request was refused by the stopping gate")
+	}
+}
+
+// An engine ended without stopping (a phone's system closing the app, a crash) never reaches unwind. The record of
+// the sessions to open again is written while it runs, so the next engine can still offer them.
+func TestARunningEngineRecordsItsSessionsBeforeItStops(t *testing.T) {
+	dependencies := testDependencies(t)
+	dependencies.RestoreRecordInterval = 20 * time.Millisecond
+	built, err := build(dependencies, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	served := make(chan error, 1)
+	go func() { served <- built.server.Serve() }()
+	recording, stopRecording := context.WithCancel(context.Background())
+	defer stopRecording()
+	built.startRestoreRecording(recording, dependencies)
+
+	process := newStuckProcess()
+	if _, err := built.terminals.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "edge",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) { return process, nil },
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	recorded := func() bool {
+		found := false
+		_ = filepath.WalkDir(dependencies.Home, func(path string, entry fs.DirEntry, err error) error {
+			if err == nil && !entry.IsDir() && filepath.Base(path) == filepath.Base(terminalrestore.PathRelative) {
+				contents, readErr := os.ReadFile(path)
+				found = readErr == nil && strings.Contains(string(contents), `"alias": "edge"`)
+			}
+			return nil
+		})
+		return found
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !recorded() {
+		if time.Now().After(deadline) {
+			t.Fatal("the running engine never recorded its session")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	process.ForceClose()
+	if err := built.unwind(dependencies); err != nil {
+		t.Fatalf("unwind = %v", err)
+	}
+	if err := <-served; err != nil {
+		t.Fatalf("serve = %v", err)
 	}
 }
