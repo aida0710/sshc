@@ -71,7 +71,7 @@ describe("wrapped terminal links", () => {
     terminal.registerLinkProvider = (registered) => { provider = registered; return { dispose() {} }; };
     const opened: string[] = [];
     const selected: string[] = [];
-    attachLinkProvider(terminal, { open: (target) => opened.push(target), select: (link) => selected.push(link.target) });
+    attachLinkProvider(terminal, { open: (target) => opened.push(target), select: (link) => selected.push(link.target), point: () => {} });
     try {
       const links = await new Promise<ILink[] | undefined>((resolve) => provider?.provideLinks(2, resolve));
       expect(links).toHaveLength(1);

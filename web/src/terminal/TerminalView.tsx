@@ -32,6 +32,8 @@ import { createStatusLineTerminal, type StatusLineTerminal } from "./statusLineT
 import type { ExitReport } from "./stream";
 import { encodeIntlYen } from "./intlYenKey";
 import { attachLinkProvider } from "./linkProvider";
+import { attachLinkUnderlines, type LinkUnderlines } from "./linkUnderlines";
+import { useTouchLinkUnderlines } from "./touchLinkUnderlines";
 import { openTerminalURL, TerminalLinkPopover, type TerminalLinkSelection } from "./TerminalLinkPopover";
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
@@ -184,6 +186,11 @@ export function TerminalView({
   const touchTerminal = useTouchTerminal();
   const touchTerminalRef = useRef(touchTerminal);
   touchTerminalRef.current = touchTerminal;
+  const touchLinkUnderlines = useTouchLinkUnderlines();
+  const everyLinkUnderlined = touchTerminal && touchLinkUnderlines;
+  const everyLinkUnderlinedRef = useRef(everyLinkUnderlined);
+  everyLinkUnderlinedRef.current = everyLinkUnderlined;
+  const linkUnderlines = useRef<LinkUnderlines | null>(null);
   const resolvedFontSize = fontSize ?? (mobile ? mobileTerminalFontSize : desktopTerminalFontSize);
   // zoomedFontSize is the size a pinch, or the wheel with Ctrl, gave this terminal over the settings' size
   // (base). It is this view's alone and is not saved. When the settings' size changes, the view follows it again.
@@ -408,9 +415,15 @@ export function TerminalView({
       enabled: () => !touchTerminalRef.current,
       send: (keys) => sendInput.current(keys),
     });
+    const underlines = attachLinkUnderlines(view, {
+      everyLink: () => everyLinkUnderlinedRef.current,
+      allowWindowsPaths: () => windowsPathsRef.current,
+    });
+    linkUnderlines.current = underlines;
     const terminalLinks = attachLinkProvider(view, {
       open: openTerminalURL,
       select: selectLinkAt,
+      point: underlines.point,
       allowWindowsPaths: () => windowsPathsRef.current,
     });
 
@@ -578,6 +591,8 @@ export function TerminalView({
       promptJump.current = null;
       promptCursor.current = null;
       terminalLinks.dispose();
+      underlines.dispose();
+      linkUnderlines.current = null;
       unbindSearch();
       parts.dispose();
       ligatureDrawing.current = null;
@@ -641,6 +656,12 @@ export function TerminalView({
     if (terminal.current === null || host.current === null) return;
     terminal.current.options.theme = terminalTheme(host.current, hasBackground);
   }, [resolved, palette, hasBackground]);
+
+  // A touch terminal underlines every link, unless the preset turns it off; Windows paths become links once the
+  // engine is known to run on Windows.
+  useEffect(() => {
+    linkUnderlines.current?.refresh();
+  }, [everyLinkUnderlined, allowWindowsPaths]);
 
   // The command marks follow their settings and the theme's colours.
   const { pointed: pointedCommand, close: closeCommandCard } = commandCard;

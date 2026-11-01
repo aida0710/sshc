@@ -44,4 +44,20 @@ describe("TouchModeField", () => {
     await userEvent.click(detect);
     expect(keptTouchMode("phone")).toBe("auto");
   });
+
+  it("underlines links on touch unless turned off, in the preset being edited", async () => {
+    fakeSettingsServer({ presets: [{ id: "default" }, { id: "phone", name: "Phone" }] });
+    render(<LanguageProvider><TouchModeField presetId="phone" /></LanguageProvider>);
+    const underline = screen.getByRole("checkbox", { name: "Always underline links" });
+    expect(underline).toBeChecked();
+
+    await userEvent.click(underline);
+    expect(underline).not.toBeChecked();
+    expect(presetInterfaceOf(currentSettings(), "phone").hideTouchLinkUnderlines).toBe(true);
+    expect(presetInterfaceOf(currentSettings(), "default").hideTouchLinkUnderlines).toBeUndefined();
+
+    // Turning it back on is the default, which a preset does not keep.
+    await userEvent.click(underline);
+    expect(presetInterfaceOf(currentSettings(), "phone")).toEqual({});
+  });
 });
