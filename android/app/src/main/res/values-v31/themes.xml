@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 以降の起動画面（スプラッシュ）も黒にする。指定しないと、ライトのシステムでは
+         明るい起動画面になる。 -->
+    <style name="Theme.Sshc" parent="Theme.Sshc.Launch">
+        <item name="android:windowSplashScreenBackground">@color/launch_background</item>
+    </style>
+</resources>

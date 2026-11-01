@@ -71,10 +71,11 @@ func androidChromeColours(t *testing.T, java string) (dark, light string) {
 // ない。ページのツールバーと違う色を置くと、画面の上端に別の板が乗っているよう
 // に見える。
 //
-// Web を読み込む前と、ネイティブの画面（起動の失敗など）では、MainActivity が
-// システムの明暗でライトかダークの色を自分で塗る。MainActivity は Web UI の CSS
-// 変数を直接参照できないため、両方の値を検証する。Web を読み込んだあとは、Web が
-// 表示中のテーマの --ui-toolbar を渡すので、ほかのテーマはここに要らない。
+// ネイティブの画面（起動の失敗など）では、MainActivity がシステムの明暗でライトか
+// ダークの色を自分で塗る。MainActivity は Web UI の CSS 変数を直接参照できないため、
+// 両方の値を検証する。Web を読み込んだあとは、Web が表示中のテーマの --ui-toolbar を
+// 渡すので、ほかのテーマはここに要らない。Web を読み込む前の色は、下の
+// TestTheAndroidLaunchIsTheDarkCanvas が確かめる。
 func TestTheAndroidChromeMatchesThePageToolbar(t *testing.T) {
 	t.Parallel()
 	java := readRepoFile(t, "android", "app", "src", "main", "java",
@@ -100,6 +101,47 @@ func TestTheAndroidChromeMatchesThePageToolbar(t *testing.T) {
 			t.Errorf("%s: %s.css は --ui-toolbar: %s、MainActivity は %s\n"+
 				"  どちらかを変えたら、もう一方も変えること。", want.selector, want.theme, token, got)
 		}
+	}
+}
+
+// 起動の間は、ダークのページの地と同じ黒である。
+//
+// 起動画面（スプラッシュ）と、ページが描かれるまでの窓と WebView は、システムや
+// アプリのテーマに関わらず launch_background で塗る。ライトの窓のまま起動すると、
+// 暗いページの前に白い画面が一瞬光る。ダークのページへ切り替わる所で色が変わら
+// ないよう、dark.css の --ui-canvas とそろえる。
+func TestTheAndroidLaunchIsTheDarkCanvas(t *testing.T) {
+	t.Parallel()
+	res := func(parts ...string) string {
+		return readRepoFile(t, append([]string{"android", "app", "src", "main", "res"}, parts...)...)
+	}
+
+	found := regexp.MustCompile(`<color name="launch_background">#([0-9A-Fa-f]{6})</color>`).FindStringSubmatch(res("values", "colors.xml"))
+	if found == nil {
+		t.Fatal("colors.xml に launch_background の RGB が無い")
+	}
+	canvas := cssToken(t, readRepoFile(t, "web", "src", "theme", "themes", "dark.css"), `[data-theme="dark"]`, "--ui-canvas")
+	if got := "#" + strings.ToLower(found[1]); got != strings.ToLower(canvas) {
+		t.Errorf("colors.xml の launch_background は %s、dark.css の --ui-canvas は %s\n"+
+			"  どちらかを変えたら、もう一方も変えること。", got, canvas)
+	}
+
+	for _, want := range []struct {
+		folder string
+		item   string
+	}{
+		{"values", "android:windowBackground"},
+		{"values-v31", "android:windowSplashScreenBackground"},
+	} {
+		item := `<item name="` + want.item + `">@color/launch_background</item>`
+		if !strings.Contains(res(want.folder, "themes.xml"), item) {
+			t.Errorf("%s/themes.xml の起動のテーマに %s が無い", want.folder, item)
+		}
+	}
+	java := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "MainActivity.java")
+	if !strings.Contains(java, "webView.setBackgroundColor(getColor(R.color.launch_background));") {
+		t.Error("MainActivity が、ページが描かれる前の WebView を launch_background で塗っていない")
 	}
 }
 

@@ -2,4 +2,7 @@
 <resources>
     <!-- desktop/build/icon.svg の下地。あちらの角丸は adaptive icon の型が持つ。 -->
     <color name="launcher_background">#09111F</color>
+    <!-- 起動の間の地の色。web/src/theme/themes/dark.css の地の色（ui-canvas）と同じにし、ダークのページへ
+         切り替わる所で色が変わらないようにする。 -->
+    <color name="launch_background">#0B0B0B</color>
 </resources>
