@@ -1,6 +1,8 @@
 @import "tailwindcss";
 /* テーマごとの色。一覧は theme/theme.ts の colorThemes。 */
 @import "./theme/themes/light.css";
+@import "./theme/themes/white-blue.css";
+@import "./theme/themes/white-purple.css";
 @import "./theme/themes/dark.css";
 @import "./theme/themes/dark-blue.css";
 @import "./theme/themes/dark-purple.css";

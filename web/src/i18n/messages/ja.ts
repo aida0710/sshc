@@ -1328,6 +1328,8 @@ export const ja = {
   "shell.themeMenu": "テーマメニュー",
   "shell.themeSystem": "システムに合わせる",
   "shell.themeLight": "ライト",
+  "shell.themeWhiteBlue": "ホワイトブルー",
+  "shell.themeWhitePurple": "ホワイトパープル",
   "shell.themeDark": "ダーク",
   "shell.themeDarkBlue": "ダークブルー",
   "shell.themeDarkPurple": "ダークパープル",
