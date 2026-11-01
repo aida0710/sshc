@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   applyTheme,
   detectTheme,
+  isFirstDarkTheme,
   isTheme,
   copyTheme,
   resolveTheme,
@@ -19,7 +20,7 @@ afterEach(() => {
 
 describe("isTheme", () => {
   it("accepts system and every theme, and nothing else", () => {
-    expect(themes).toEqual(["system", "light", "dark", "dark-blue", "dark-purple"]);
+    expect(themes).toEqual(["system", "light", "white-blue", "white-purple", "dark", "dark-blue", "dark-purple"]);
     for (const theme of themes) expect(isTheme(theme)).toBe(true);
     expect(isTheme("solarized")).toBe(false);
     expect(isTheme(undefined)).toBe(false);
@@ -29,9 +30,17 @@ describe("isTheme", () => {
 describe("schemeOf", () => {
   it("tells a light theme from a dark one", () => {
     expect(schemeOf("light")).toBe("light");
+    expect(schemeOf("white-blue")).toBe("light");
+    expect(schemeOf("white-purple")).toBe("light");
     expect(schemeOf("dark")).toBe("dark");
     expect(schemeOf("dark-blue")).toBe("dark");
     expect(schemeOf("dark-purple")).toBe("dark");
+  });
+});
+
+describe("isFirstDarkTheme", () => {
+  it("marks the dark theme that comes first in the list, where the settings page starts a new row", () => {
+    expect(themes.filter(isFirstDarkTheme)).toEqual(["dark"]);
   });
 });
 
@@ -41,6 +50,8 @@ describe("themeLabel", () => {
     expect(themeLabel("dark")).toBe("shell.themeDark");
     expect(themeLabel("dark-blue")).toBe("shell.themeDarkBlue");
     expect(themeLabel("dark-purple")).toBe("shell.themeDarkPurple");
+    expect(themeLabel("white-blue")).toBe("shell.themeWhiteBlue");
+    expect(themeLabel("white-purple")).toBe("shell.themeWhitePurple");
   });
 });
 

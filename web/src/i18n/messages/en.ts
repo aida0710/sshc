@@ -1335,6 +1335,8 @@ export const en = {
   "shell.themeMenu": "Theme menu",
   "shell.themeSystem": "System",
   "shell.themeLight": "Light",
+  "shell.themeWhiteBlue": "White blue",
+  "shell.themeWhitePurple": "White purple",
   "shell.themeDark": "Dark",
   "shell.themeDarkBlue": "Dark blue",
   "shell.themeDarkPurple": "Dark purple",
