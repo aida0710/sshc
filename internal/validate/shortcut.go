@@ -37,7 +37,7 @@ var ShortcutActions = []string{
 	"palette", "terminalSearch", "copy", "paste", "previousPrompt", "nextPrompt",
 	"increaseFontSize", "decreaseFontSize", "resetFontSize", "quickCommands",
 	"newSession", "closeSession", "nextSession", "previousSession", "nextPane", "previousPane",
-	"home", "sftp",
+	"toggleNavigation", "home", "sftp",
 }
 
 // ショートカットのプリセットの上限。API（api/openapi.yaml の Metadata.shortcutPresets と
