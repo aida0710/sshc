@@ -58,6 +58,8 @@ test("edits shortcuts, keeps them after reload and uses them in a live terminal"
   await openLocalShell(page);
   const rows = page.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await expect(rows).toHaveCount(2);
+  // Wait for the new session to be the one shown: before that, PageUp would go back from the first.
+  await expect(rows.nth(1).locator('[aria-current="true"]')).toBeVisible();
   await page.keyboard.press("Alt+PageUp");
   await expect(rows.nth(0).locator('[aria-current="true"]')).toBeVisible();
   await page.keyboard.press("Alt+PageDown");
@@ -102,4 +104,32 @@ test("keeps Ctrl+F inside Terminal and leaves browser Find available on other pa
   await openSection(page, "Home");
   // The shell remains mounted in the background; it must not intercept this key.
   await pressFind(false);
+});
+
+test("opens a new session and closes the one shown from their shortcuts, asking before closing it", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Menu");
+  await page.getByRole("link", { name: "Open Keyboard shortcuts" }).click();
+  for (const [action, chord, shown] of [["New session", "Alt+n", "Alt+N"], ["Close session", "Alt+w", "Alt+W"]] as const) {
+    await page.getByRole("button", { name: `Assign shortcut: ${action}`, exact: true }).click();
+    await page.keyboard.press(chord);
+    await expect(page.getByRole("button", { name: `Assign shortcut: ${action}`, exact: true })).toHaveText(shown);
+  }
+  await openLocalShell(page);
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toContainText(/[$#%>]/);
+  const rows = page.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
+  await expect(rows).toHaveCount(1);
+
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Alt+n");
+  const picker = page.getByRole("dialog", { name: "New session" });
+  await picker.getByRole("button", { name: /^Local shell, localhost/ }).click();
+  await expect(picker).toBeHidden();
+  await expect(rows).toHaveCount(2);
+
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Alt+w");
+  const confirmation = page.getByRole("dialog", { name: /^Close / });
+  await confirmation.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(rows).toHaveCount(1);
 });

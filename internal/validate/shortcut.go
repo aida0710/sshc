@@ -33,7 +33,12 @@ var ShortcutCommandModifiers = []string{"Ctrl", "Alt", "Meta"}
 
 // ShortcutActions は、ショートカットを割り当てられる操作である。並びは設定画面の
 // 並びでもある。
-var ShortcutActions = []string{"palette", "terminalSearch", "copy", "paste", "previousPrompt", "nextPrompt", "nextSession", "previousSession", "home", "sftp"}
+var ShortcutActions = []string{
+	"palette", "terminalSearch", "copy", "paste", "previousPrompt", "nextPrompt",
+	"increaseFontSize", "decreaseFontSize", "resetFontSize", "quickCommands",
+	"newSession", "closeSession", "nextSession", "previousSession", "nextPane", "previousPane",
+	"home", "sftp",
+}
 
 // ショートカットのプリセットの上限。API（api/openapi.yaml の Metadata.shortcutPresets と
 // ShortcutPreset）も同じ値を約束し、internal/acceptance のテストが突き合わせる。

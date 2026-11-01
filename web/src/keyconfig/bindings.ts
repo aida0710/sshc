@@ -15,8 +15,20 @@ export const defaultBindings = {
   // As Ghostty: Ctrl+Shift with the arrows, and Command with them on a Mac.
   previousPrompt: ["Ctrl+Shift+ArrowUp", "Meta+ArrowUp"],
   nextPrompt: ["Ctrl+Shift+ArrowDown", "Meta+ArrowDown"],
+  // As Windows Terminal and a browser's page zoom, read only on a terminal. Ctrl+; is the + key of a JIS
+  // keyboard, which zooms a page there.
+  increaseFontSize: ["Ctrl+=", "Ctrl+;", "Meta+="],
+  decreaseFontSize: ["Ctrl+-", "Meta+-"],
+  resetFontSize: ["Ctrl+0", "Meta+0"],
+  // The keys other terminals use for these (Ctrl+Shift+T, Ctrl+Shift+W, Alt with the arrows) are taken by the
+  // browser or by programs in the terminal, so they wait for the user to choose.
+  quickCommands: [],
+  newSession: [],
+  closeSession: [],
   nextSession: ["Alt+PageDown"],
   previousSession: ["Alt+PageUp"],
+  nextPane: [],
+  previousPane: [],
   home: [],
   sftp: [],
 } satisfies Bindings;
