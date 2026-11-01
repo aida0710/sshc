@@ -6,13 +6,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b tsconfig.app.json && vite build",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "generate:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts",
     "test": "vitest run",
     "check:i18n": "vitest run src/i18n/catalogue.test.ts --reporter=verbose",
-    "typecheck": "tsc -b --force --pretty false && tsc -p tsconfig.e2e.json --pretty false",
-    "lint": "eslint src e2e playwright.config.ts vite.config.ts vitest.setup.ts",
+    "typecheck": "tsc -b --force --pretty false",
+    "lint": "oxlint src e2e playwright.config.ts vite.config.ts vitest.setup.ts",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -39,13 +39,12 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.4",
-    "eslint": "^9.39.1",
-    "eslint-plugin-react-hooks": "^7.1.0",
     "jsdom": "29.1.1",
     "openapi-typescript": "7.13.0",
+    "oxlint": "1.90.0",
+    "oxlint-tsgolint": "7.0.2005",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
-    "typescript-eslint": "^8.46.4",
     "vite": "8.1.6",
     "vitest": "4.1.12"
   },

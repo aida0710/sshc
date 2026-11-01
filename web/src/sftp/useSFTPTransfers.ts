@@ -126,7 +126,7 @@ export function useSFTPTransfers({
     void browser.refresh();
     // `browser` is a fresh object each render; only a change in the jobs or
     // in the directory on screen should trigger a refresh.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [transferJobs, alias, path, connected, local]);
 
   async function uploadFiles(files: LocalTransferFile[], options: { directories?: string[]; patterns?: readonly string[]; excludedEntries?: number } = {}) {

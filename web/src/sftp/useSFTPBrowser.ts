@@ -207,7 +207,7 @@ export function useSFTPBrowser({
     // own disk needs no connection, and a tab that was connected when it moved
     // between panes reopens at once.
     if (!restored.can.connect || initialLocation.connect === true) void load(initialLocation.path, { alias: initialLocation.alias });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [aliases, initialLocation?.alias, initialLocation?.path]);
 
   async function navigateHistory(offset: -1 | 1): Promise<void> {

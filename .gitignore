@@ -11,7 +11,7 @@
 /pages/.vitepress/cache/
 /pages/.vitepress/dist/
 /node_modules/
-/web/tsconfig.tsbuildinfo
+/web/*.tsbuildinfo
 /web/.playwright-browsers/
 /web/playwright-report/
 /web/test-results/

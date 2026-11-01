@@ -1,0 +1,58 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // TypeScript の型検査では検出できない Promise と React Hooks の規則と、識別子の綴りの規則だけを扱う。
+  // 新しい規則は既存コードの誤検出を確認してから追加する。
+  "plugins": ["typescript"],
+  "jsPlugins": ["./lint/idSpelling.mjs"],
+  // Oxlint が最初から入れる correctness の規則も、既存コードの誤検出を確かめるまでは入れない。
+  "categories": { "correctness": "off" },
+  "options": {
+    "typeAware": true,
+    // 不要になった disable コメントをエラーにする。
+    "reportUnusedDisableDirectives": "error"
+  },
+  "ignorePatterns": [
+    // openapi.yaml から生成されるため直接編集しない。
+    "src/api/schema.d.ts",
+    "src/rules/generated.ts",
+    "dist/**",
+    "playwright-report/**",
+    "test-results/**"
+  ],
+  "rules": {
+    // 未処理の Promise と不正な Promise コールバックを検出する。
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+
+    // オブジェクトの意図しない文字列化を検出する。
+    "typescript/no-base-to-string": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+
+    // 先頭の `_` は「受け取るが使わない」という意思表示である。
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_"
+      }
+    ],
+
+    // 識別子を API の JSON と同じ `Id` の綴りに揃える（理由は lint/idSpelling.mjs）。
+    "sshc/id-spelling": "error"
+  },
+  "overrides": [
+    {
+      // Playwright の use を React hook と誤認しないよう、React 規則は src だけに適用する。
+      "files": ["src/**/*.ts", "src/**/*.tsx"],
+      "plugins": ["react"],
+      "rules": {
+        // hook の呼び出し位置と依存配列を検証する。
+        "react-hooks/rules-of-hooks": "error",
+        "react-hooks/exhaustive-deps": "error"
+      }
+    }
+  ]
+}

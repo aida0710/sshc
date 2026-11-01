@@ -16,6 +16,6 @@ export default defineConfig({
     restoreMocks: true,
     // Vitest は Playwright の spec を決して収集してはならない。e2e/*.spec.ts は本物の
     // ブラウザを本物のバイナリに対して動かすため、jsdom 下では無意味に失敗する。
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "lint/**/*.test.mjs"],
   },
 });

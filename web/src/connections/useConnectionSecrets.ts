@@ -115,7 +115,7 @@ export function useConnectionSecrets({ detail, resetKey, keys, secrets, savedSta
     });
     return () => { active = false; };
     // `alias` is part of resetKey; listing it as well would refetch twice.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey, keys, secrets, t, savedState]);
 
   // Resolves to true when the vault is open afterwards.
