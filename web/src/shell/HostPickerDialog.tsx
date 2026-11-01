@@ -9,6 +9,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { iconAction } from "../ui/form";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 type HostChoice = { alias: string; group: string; hostName: string; user: string };
 
@@ -161,7 +162,7 @@ export function HostPickerDialog({
         <label className="relative block">
           <span className="sr-only">{t("sftp.searchHosts")}</span>
           <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
-          <input
+          <input {...literalTextEntry}
             ref={search}
             type="search"
             aria-label={t("sftp.searchHosts")}

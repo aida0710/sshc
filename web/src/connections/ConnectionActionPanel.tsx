@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import { control, hintText } from "../ui/form";
 import { Button } from "../ui/surface";
 import { usePendingAction } from "../ui/usePendingAction";
+import { asciiTextEntry } from "../ui/softKeyboard";
 
 // ConnectionAction は、見出しの「…」から開いて、入力してから書き込む操作である。複製と削除は入力が要らないので
 // ここには無い（複製はすぐ行い、削除は ConfirmDialog で確かめる）。
@@ -61,7 +62,7 @@ export function ConnectionActionPanel({
       ready: renameTo.trim() !== "" && renameTo !== identity.alias,
       submitLabel: t("host.rename"),
       run: () => onRename(renameTo.trim()),
-      body: <input id={fieldId} value={renameTo} onChange={(event) => setRenameTo(event.target.value)} className={`${control} font-mono`} />,
+      body: <input {...asciiTextEntry} id={fieldId} value={renameTo} onChange={(event) => setRenameTo(event.target.value)} className={`${control} font-mono`} />,
       hint: "",
     },
     group: {

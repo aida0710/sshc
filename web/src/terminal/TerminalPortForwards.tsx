@@ -10,6 +10,7 @@ import { clipboard } from "../ui/clipboard";
 import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
+import { asciiTextEntry } from "../ui/softKeyboard";
 
 type ForwardApi = Pick<TerminalSessionsApi, "startTerminalForward" | "stopTerminalForward">;
 type SaveApi = Pick<typeof configApi, "overview" | "host" | "save">;
@@ -170,12 +171,12 @@ export function TerminalPortForwards({
                 </select>
               </Field>
               <Field label={t(kind === "remote" ? "conn.forwardRemoteListenPort" : "conn.forwardListenPort")} error={listenError}>
-                <input autoFocus inputMode="numeric" className={control} value={listenPort} disabled={!connected || busy} onChange={(event) => setListenPort(event.currentTarget.value)} />
+                <input {...asciiTextEntry} autoFocus inputMode="numeric" className={control} value={listenPort} disabled={!connected || busy} onChange={(event) => setListenPort(event.currentTarget.value)} />
               </Field>
               {kind !== "dynamic" ? (
                 <div className="sm:col-span-2">
                   <Field label={t("conn.forwardDestination")} error={destinationError}>
-                    <input aria-label={t("conn.forwardDestination")} className={control} placeholder="127.0.0.1:5432" value={destination} disabled={!connected || busy} onChange={(event) => setDestination(event.currentTarget.value)} />
+                    <input {...asciiTextEntry} aria-label={t("conn.forwardDestination")} className={control} placeholder="127.0.0.1:5432" value={destination} disabled={!connected || busy} onChange={(event) => setDestination(event.currentTarget.value)} />
                   </Field>
                 </div>
               ) : null}

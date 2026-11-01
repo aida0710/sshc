@@ -17,6 +17,7 @@ import { listGroups, ungroupedCount } from "./groupListing";
 import { isImeComposing } from "../ui/imeComposition";
 import { belongsToGroup, buildGroupTree, decorateHosts, type DecoratedHost, type GroupNode } from "./connectionTreeIndex";
 import type { ConnectionDrag } from "./useConnectionDrag";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 export type HostSelection = { path: string; alias: string };
 
@@ -284,7 +285,7 @@ export function ConnectionTree({
           <label className="relative block min-w-0" htmlFor="connection-filter">
             <span className="sr-only">{t("tree.filter")}</span>
             <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
-            <input id="connection-filter" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("hostSearch.placeholder")} className={`${control} min-h-10 pl-8 md:min-h-0`} />
+            <input {...literalTextEntry} id="connection-filter" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("hostSearch.placeholder")} className={`${control} min-h-10 pl-8 md:min-h-0`} />
           </label>
           <div className="flex items-center justify-between gap-3 whitespace-nowrap text-xs text-ink-faint">
             <span role="status">{t("tree.resultCount", { visible: visible.length, total: decorated.length })}</span>

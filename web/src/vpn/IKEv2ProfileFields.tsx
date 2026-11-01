@@ -5,6 +5,7 @@ import { FieldRow } from "../ui/FieldRow";
 import type { VPNProfileDraft } from "./vpnProfileDraft";
 import type { IKEv2Authentication } from "./vpnProfileRules";
 import type { VPNSecretKey } from "./vpnSecretRules";
+import { asciiTextEntry } from "../ui/softKeyboard";
 
 // VPN プロファイルのフォームのうち、IKEv2/IPsec の欄。認証の方式で、ユーザー名と
 // パスワード（EAP）か、ローカル ID と事前共有鍵かが変わる。CA の証明書は EAP のとき
@@ -42,7 +43,7 @@ export function IKEv2ProfileFields({
         {...(psk ? { hint: t("vpn.localIdentityHint") } : {})}
         warning={errorFor("ikev2.identity")}
       >
-        <input className={control} value={draft.username} onChange={(event) => onEdit("username")(event.target.value)} />
+        <input {...asciiTextEntry} className={control} value={draft.username} onChange={(event) => onEdit("username")(event.target.value)} />
       </FieldRow>
       {psk ? secretField("ikev2Psk", t("vpn.psk")) : secretField("ikev2Password", t("vpn.password"))}
       <FieldRow label={t("vpn.serverIdentity")} hint={t("vpn.serverIdentityHint")} warning={errorFor("ikev2.serverIdentity")}>
@@ -65,10 +66,10 @@ export function IKEv2ProfileFields({
         </FieldRow>
       )}
       <FieldRow label={t("vpn.ike")} hint={t("vpn.ikev2ProposalsHint")} warning={errorFor("ikev2.ike")}>
-        <input className={control} value={draft.ike} onChange={(event) => onEdit("ike")(event.target.value)} />
+        <input {...asciiTextEntry} className={control} value={draft.ike} onChange={(event) => onEdit("ike")(event.target.value)} />
       </FieldRow>
       <FieldRow label={t("vpn.esp")} hint={t("vpn.ikev2ProposalsHint")} warning={errorFor("ikev2.esp")}>
-        <input className={control} value={draft.esp} onChange={(event) => onEdit("esp")(event.target.value)} />
+        <input {...asciiTextEntry} className={control} value={draft.esp} onChange={(event) => onEdit("esp")(event.target.value)} />
       </FieldRow>
     </>
   );

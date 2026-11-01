@@ -3,6 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { isImeComposing } from "../ui/imeComposition";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { literalTextEntry } from "../ui/softKeyboard";
 
 // The field grows with its text up to this many lines and then scrolls, so the
 // terminal above keeps most of the screen.
@@ -74,7 +75,7 @@ export function TerminalComposer({
         onSubmit();
       }}
     >
-      <textarea
+      <textarea {...literalTextEntry}
         ref={field}
         rows={1}
         value={value}
