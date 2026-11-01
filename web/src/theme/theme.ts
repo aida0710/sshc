@@ -12,6 +12,8 @@ export type ColorScheme = "light" | "dark";
 export const colorThemes = [
   { name: "light", scheme: "light", label: "shell.themeLight" },
   { name: "dark", scheme: "dark", label: "shell.themeDark" },
+  { name: "dark-blue", scheme: "dark", label: "shell.themeDarkBlue" },
+  { name: "dark-purple", scheme: "dark", label: "shell.themeDarkPurple" },
 ] as const satisfies readonly { name: string; scheme: ColorScheme; label: MessageKey }[];
 
 export type ColorTheme = (typeof colorThemes)[number]["name"];

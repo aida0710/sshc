@@ -84,3 +84,29 @@ func TestAMetadataMoveThatStoppedBeforeReplacingAnythingDoesNotBlockTheNextStart
 		t.Fatalf("pending = %#v, %v; want none", pending, err)
 	}
 }
+
+// 前のバージョンの engine-settings.json を読めなくても（持ち主の違うファイルなど）、ポートを移さずに
+// 起動する。読めないファイルは中身を確かめられないので、消さずに残す。
+func TestAnEngineSettingsFileThatCannotBeReadDoesNotStopTheStart(t *testing.T) {
+	service, workspace := newTerminalService(t)
+	legacyPath := writeSchema9Files(t, service, workspace.StateDir())
+	// ファイルの代わりにディレクトリを置き、どの OS でも読めないようにする。
+	if err := os.Remove(legacyPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(legacyPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.PrepareMachine(rand.Reader, testMachineStart); err != nil {
+		t.Fatal(err)
+	}
+
+	requireSchema10Metadata(t, service)
+	if port := service.ThisMachineSettings().Port; port != 0 {
+		t.Fatalf("port = %d, want 0 (the machine's own port)", port)
+	}
+	if _, err := os.Stat(legacyPath); err != nil {
+		t.Fatalf("the unreadable engine-settings.json was removed: %v", err)
+	}
+}

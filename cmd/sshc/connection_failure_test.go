@@ -2,10 +2,12 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"sshc/internal/sshclient"
+	"sshc/internal/storage"
 )
 
 // sshclient は AWS SSO の認証切れに、sshcエンジンのターミナル向けの日本語の案内を
@@ -26,6 +28,25 @@ func TestAnExpiredAWSSSOLoginIsExplainedInEnglishOnTheCommandLine(t *testing.T) 
 		}
 		if containsJapanese(sentence) {
 			t.Errorf("%s: failure = %q, want English only", mode, sentence)
+		}
+	}
+}
+
+// 中断した変更が残っていると、受け入れたホスト鍵を known_hosts へ書けずに接続が止まる。
+// storage の文は別の sshc が動いているように読めるので、CLI は History で片付ける案内を出す。
+func TestAnInterruptedChangeThatStopsAConnectionPointsToHistory(t *testing.T) {
+	// golang.org/x/crypto/ssh は、ホスト鍵の検証の失敗を %w で包んで返す。
+	refused := fmt.Errorf("ssh: handshake failed: %w", storage.ErrPendingTransaction)
+	for mode, failure := range map[string]error{
+		"sshc ssh":                   describeConnectionFailure(refused),
+		"sshc ssh --non-interactive": runAdvice(refused, "moon-tunnel"),
+	} {
+		sentence := failure.Error()
+		if sentence != pendingTransactionAdvice {
+			t.Errorf("%s: failure = %q, want %q", mode, sentence, pendingTransactionAdvice)
+		}
+		if strings.Contains(sentence, "another sshc process") {
+			t.Errorf("%s: failure = %q, still reads as if another sshc were running", mode, sentence)
 		}
 	}
 }

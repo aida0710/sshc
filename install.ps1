@@ -365,6 +365,18 @@ function Get-EnabledService([string]$Target) {
     return [pscustomobject]@{ Task = $task; Definition = $task.Xml }
 }
 
+# Test-LastRunFailed says whether the sshc task's last run ended in a failure. Task Scheduler gives up
+# after its retries, and the engine stays stopped until something starts the task again: installing a
+# release that fixes the failure starts it, as launchd and systemd keep a crashed engine running.
+# sshc stop ends the engine with 0, so an engine the user stopped is left stopped.
+function Test-LastRunFailed($Service) {
+    $result = $Service.Task.LastTaskResult
+    # SCHED_S_TASK_HAS_NOT_RUN and SCHED_S_TASK_TERMINATED are not failures of the engine.
+    $taskHasNotRun = 0x41303
+    $taskTerminated = 0x41306
+    return $result -ne 0 -and $result -ne $taskHasNotRun -and $result -ne $taskTerminated
+}
+
 function Start-InstalledEngine([string]$Target, $Service) {
     if ($null -eq $Service) {
         & $Target open --no-browser
@@ -574,12 +586,22 @@ try {
 
     Remove-Backups $installDirectory
     $service = $null
+    $failedService = $null
     # The web engine must save its update result before the detached helper stops it.
     if ($env:SSHC_INSTALL_CALLER -ne 'web-update') {
         $engine = Get-InstalledEngine $target
         if ($null -ne $engine) {
             $service = Get-EnabledService $target
             Stop-InstalledEngine $target $engine
+        }
+        elseif (Test-Path -LiteralPath $target -PathType Leaf) {
+            # Installing may be what repairs a broken executable, so not being able to ask it about the
+            # task leaves the task alone instead of stopping the installation.
+            try {
+                $stoppedService = Get-EnabledService $target
+                if ($null -ne $stoppedService -and (Test-LastRunFailed $stoppedService)) { $failedService = $stoppedService }
+            }
+            catch { Write-Note "the sshc task was not inspected ($($_.Exception.Message)); start it with sshc service install if needed" }
         }
     }
 
@@ -607,6 +629,10 @@ try {
     Show-ShadowedExecutable $target
     Write-Output "sshc: installed $installedLine"
     if ($null -ne $engine) { Start-InstalledEngine $target $service }
+    elseif ($null -ne $failedService) {
+        Write-Note "the sshc task's last run failed (result $($failedService.Task.LastTaskResult)); starting it again"
+        Start-InstalledEngine $target $failedService
+    }
 }
 catch {
     Write-Note "installation stopped; inspect $installDirectory for the executable, receipt, uninstaller and backups"
