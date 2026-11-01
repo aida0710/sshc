@@ -1076,7 +1076,7 @@ export const ja = {
   "terminal.touchModeTouchShort": "タッチ",
   "terminal.touchModeMouseShort": "マウス",
   "terminal.touchLinkUnderlinesLabel": "リンクにいつも下線を引く",
-  "terminal.touchLinkUnderlinesHint": "タッチで操作するとき、タップで開けるURLとパスにさし色の線を引きます。マウスで操作するときは、マウスを乗せたリンクにだけ引きます",
+  "terminal.touchLinkUnderlinesHint": "タッチで操作するとき、タップで開けるURLとパスにさし色の線を引きます。マウスで操作するときは、マウスを乗せたリンクにだけ引きます。",
   "terminal.globalSettings": "すべてのターミナル",
   "terminal.osc52Hint":
     "すべてのターミナルで、リモートのプログラムがOSC 52でクリップボードへ書き込むことを許可します",
