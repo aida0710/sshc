@@ -351,6 +351,40 @@ test("the key bar's ^C stops a running program in one tap", async ({ page, insta
   await expect(drawnRows(page).filter({ visible: true })).toContainText("stopped-42", { timeout: 15_000 });
 });
 
+// pressAndroidBack does what MainActivity.navigateBack does with Android's Back, past the open dialog check:
+// the page closes what it can or moves itself, otherwise the app goes back in the history, and from Home with
+// nothing to close the app leaves (reported here as "left").
+async function pressAndroidBack(page: Page): Promise<"handled" | "history" | "left"> {
+  return page.evaluate(() => {
+    const event = new Event("sshc-android-back", { cancelable: true });
+    window.dispatchEvent(event);
+    if (event.defaultPrevented) return "handled";
+    if (location.pathname === "/" && !location.search) return "left";
+    history.back();
+    return "history";
+  });
+}
+
+test("Android back goes Home from any section of the bottom bar, and leaves the app from Home", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  const bar = page.getByRole("navigation", { name: "Quick navigation" });
+  // Switching between the sections of the bar does not make Back walk them again.
+  for (const name of ["Connections", "SFTP", "Menu", "Connections"]) {
+    await bar.getByRole("link", { name, exact: true }).tap();
+  }
+  await expect(page).toHaveURL(/\/connections\/servers$/);
+  await page.getByRole("button", { name: /^bastion\b/ }).first().tap();
+  await expect(page).toHaveURL(/\/connections\/servers\?/);
+
+  // Inside a section Back goes one step back: from the opened connection to the list.
+  expect(await pressAndroidBack(page)).toBe("history");
+  await expect(page).toHaveURL(/\/connections\/servers$/);
+  expect(await pressAndroidBack(page)).toBe("handled");
+  await expect(page).toHaveURL(/\/$/);
+  expect(await pressAndroidBack(page)).toBe("left");
+});
+
 test("coming back to the app after typing leaves the keyboard down", async ({ page, installation }) => {
   await page.setViewportSize({ width: 390, height: 640 });
   await openApplication(page, installation);
