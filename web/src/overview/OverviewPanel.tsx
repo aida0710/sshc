@@ -106,7 +106,7 @@ export function OverviewPanel({
   const attention = configProblems + connectionNotices + pendingRecovery;
 
   return (
-    <PageBoard labelledBy="home-heading" className="flex flex-col gap-[18px]">
+    <PageBoard wide labelledBy="home-heading" className="flex flex-col gap-[18px]">
       <PageHeader
         title={t("home.heading")}
         headingId="home-heading"

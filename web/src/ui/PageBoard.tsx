@@ -7,10 +7,15 @@ import { mobileViewportQuery, useMediaQuery } from "./useMediaQuery";
 //
 // fill is for a workspace that takes the whole pane, such as Connections: the card fills the pane's
 // height and width without padding, and the page lays out its own scrolling columns inside it.
+//
+// Other pages keep a readable width (max-w-6xl). wide drops it for a page of cards that adds columns as the
+// pane grows (Home). A page with an aside sits at the left beside the sidebar, so its list of pages does not
+// float in the middle of a wide screen.
 export function PageBoard({
   labelledBy,
   aside,
   fill = false,
+  wide = false,
   className = "",
   children,
 }: {
@@ -18,6 +23,7 @@ export function PageBoard({
   labelledBy?: string;
   aside?: ReactNode;
   fill?: boolean;
+  wide?: boolean;
   className?: string;
   children: ReactNode;
 }) {
@@ -26,7 +32,7 @@ export function PageBoard({
   // tools) does not mount the page afresh and drop what was being typed.
   const frame = compact
     ? fill ? "flex h-full min-h-0 flex-col" : ""
-    : fill ? "flex h-full min-h-0 gap-2 p-2" : "mx-auto flex min-h-full w-full max-w-6xl gap-2 p-2";
+    : fill ? "flex h-full min-h-0 gap-2 p-2" : `flex min-h-full w-full gap-2 p-2 ${wide ? "" : aside ? "max-w-6xl" : "mx-auto max-w-6xl"}`;
   const card = compact
     ? fill ? "flex min-h-0 flex-1 flex-col" : "px-3 pb-[18px] pt-3.5"
     : `@container min-w-0 flex-1 rounded-xl border border-line bg-sidebar shadow-pane ${fill ? "flex min-h-0 flex-col overflow-hidden" : "px-8 py-[26px]"}`;

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { clickAndAwait, expect, openSection, test, openApplication } from "./support/environment";
 import { createGroups, groupList, openGroupMenu } from "./support/groups";
+import { openKeyCreation } from "./support/keys";
 
 // moveNasInto moves the fixture's nas connection into a group from the 「…」 in its header.
 async function moveNasInto(page: Page, group: string) {
@@ -110,6 +111,7 @@ test("shows the files and keys in a group's folders", async ({ page, installatio
   await installation.write("connections/lab/10-gpu.conf", "Host gpu-01\n\tHostName 192.0.2.31\n\nHost gpu-02\n\tHostName 192.0.2.32\n");
 
   await openSection(page, "Keys");
+  await openKeyCreation(page);
   await page.getByLabel("File name").fill("id_lab");
   await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);

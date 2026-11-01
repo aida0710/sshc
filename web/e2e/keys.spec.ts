@@ -1,5 +1,6 @@
 import { clickAndAwait, expect, openSection, test, openApplication } from "./support/environment";
 import { createGroups } from "./support/groups";
+import { openKeyCreation } from "./support/keys";
 
 test("hands a generated private key to one connection exactly once", async ({
   page,
@@ -7,6 +8,7 @@ test("hands a generated private key to one connection exactly once", async ({
 }) => {
   await openApplication(page, installation);
   await openSection(page, "Keys");
+  await openKeyCreation(page);
   await page.getByLabel("File name").fill("id_handoff_connection");
   await page.getByLabel(/Create without a passphrase/).check();
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
@@ -44,6 +46,7 @@ test("preloads a generated public key only on the requested server workflow", as
   );
   await openApplication(page, installation);
   await openSection(page, "Keys");
+  await openKeyCreation(page);
   await page.getByLabel("File name").fill("id_handoff_server");
   await page.getByLabel(/Create without a passphrase/).check();
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
@@ -70,6 +73,8 @@ test("lists generated keys and reveals one only after an explicit confirmation",
   await expect(
     page.getByRole("table", { name: "Files classified by content and permissions" }),
   ).toBeVisible();
+
+  await openKeyCreation(page);
 
   await page.getByLabel("File name").fill("id_e2e");
   await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
@@ -121,6 +126,7 @@ test("stores an encrypted key passphrase from the key row and shows only its nam
   const passphrase = "e2e key phrase that must leave the DOM";
   await openApplication(page, installation);
   await openSection(page, "Keys");
+  await openKeyCreation(page);
   await page.getByLabel("File name").fill("id_saved_phrase");
   await page.getByRole("textbox", { name: "Passphrase" }).fill(passphrase);
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
@@ -167,6 +173,8 @@ test("offers agent registration and refuses it honestly when no agent is reachab
   await openApplication(page, installation);
   await openSection(page, "Keys");
 
+  await openKeyCreation(page);
+
   await page.getByLabel("File name").fill("id_agent");
   await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
@@ -188,6 +196,8 @@ test("renames a key and carries every directive that named it", async ({ page, i
   );
   await openApplication(page, installation);
   await openSection(page, "Keys");
+
+  await openKeyCreation(page);
 
   await page.getByLabel("File name").fill("id_rename");
   await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
@@ -213,9 +223,13 @@ test("refuses a rename whose destination is taken, and writes nothing", async ({
   await openApplication(page, installation);
   await openSection(page, "Keys");
 
+  await openKeyCreation(page);
+
   await page.getByLabel("File name").fill("id_first");
   await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
   expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+
+  await openKeyCreation(page);
 
   await page.getByLabel("File name").fill("id_second");
   await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
@@ -241,6 +255,7 @@ test("moves several chosen keys into a folder at once", async ({ page, installat
 
   await openSection(page, "Keys");
   for (const name of ["id_bulk_a", "id_bulk_b"]) {
+    await openKeyCreation(page);
     await page.getByLabel("File name").fill(name);
     await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
     expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
@@ -265,6 +280,7 @@ test("shows one folder at a time", async ({ page, installation }) => {
 
   await openSection(page, "Keys");
   for (const name of ["id_kept", "id_filed"]) {
+    await openKeyCreation(page);
     await page.getByLabel("File name").fill(name);
     await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
     expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);

@@ -44,3 +44,6 @@ export function useCompactViewport(
 
   return narrowViewport || narrowContainer;
 }
+
+// Narrower than Tailwind's sm breakpoint (640px), where a page's sm: classes stack what sits side by side.
+export const belowSmallWidthQuery = "(max-width: 639px)";

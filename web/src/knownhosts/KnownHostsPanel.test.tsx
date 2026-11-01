@@ -472,3 +472,29 @@ describe("where the scan control sits", () => {
     expect(candidates.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
+
+describe("KnownHostsPanel on a narrow screen", () => {
+  it("shows each key as two lines, opens it whole on a tap and deletes it from its menu", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: query === "(max-width: 639px)",
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    const api = buildApi();
+    render(<ToastProvider><KnownHostsPanel api={api} /></ToastProvider>);
+
+    const row = await screen.findByRole("button", { name: /^bastion\.example\.com, 203\.0\.113\.10\s?ssh-ed25519/ });
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(row).toHaveTextContent(/ssh-ed25519.*SHA256:bytFrSjx/);
+    expect(row).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(row);
+    expect(row).toHaveAttribute("aria-expanded", "true");
+
+    await userEvent.click(screen.getByRole("button", { name: "Actions for bastion.example.com, 203.0.113.10" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Confirm delete" }));
+    await waitFor(() => expect(api.deleteKnownHosts).toHaveBeenCalledWith([{ line: 2, digest: entry.digest }], "~/.ssh/known_hosts"));
+    vi.unstubAllGlobals();
+  });
+});
