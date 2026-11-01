@@ -1,8 +1,9 @@
 import type { Page } from "@playwright/test";
-import { expect, openApplication, test, openLocalShell } from "./support/environment";
+import { expect, openApplication, openSection, test, openLocalShell } from "./support/environment";
 import {
   drawnRowCount,
   loseTerminalWebGLContext,
+  markWebGLCanvases,
   terminalCanvasCount,
   terminalDrawingRects,
   terminalKeyboard,
@@ -83,4 +84,20 @@ test("sends a new session one size, measured without the connecting banner and w
   // would come first and be followed by the right one.
   const sizes = observed.sizes.map((size) => `${size.cols}x${size.rows}`);
   expect([...new Set(sizes)]).toEqual([sizes.at(-1)]);
+});
+
+// Coming back to the Terminal section used to build the WebGL renderer again: the screen stopped for a moment and the
+// text was drawn with the DOM renderer's cells first, which wrap differently, then moved. The terminal on screen keeps
+// its renderer while another section is open.
+test("keeps the WebGL renderer of the terminal on screen while another section is open", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openWebGLShell(page);
+  const canvases = await terminalCanvasCount(page);
+  const kept = await markWebGLCanvases(page, "before-another-section");
+
+  await openSection(page, "Home");
+  await openSection(page, "Terminal");
+
+  await expect(kept).toHaveCount(canvases);
+  await expectDrawingFits(page);
 });

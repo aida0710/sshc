@@ -80,6 +80,10 @@ type TerminalViewProps = {
   session: TerminalSession;
   searchShortcutActive?: boolean;
   active?: boolean;
+  // inPane is whether this terminal is one of the panes of the Terminal section, not a session kept hidden behind
+  // them. Such a terminal keeps its WebGL renderer while another section is open: building it again on every return
+  // stopped the screen for a moment and drew the text with the DOM renderer's cells first, which wrap differently.
+  inPane?: boolean;
   focusRequest?: number;
   headerActions?: ReactNode;
   onSplit?: (edge: PaneEdge) => void;
@@ -146,6 +150,7 @@ export function TerminalView({
   session,
   searchShortcutActive,
   active = true,
+  inPane = true,
   focusRequest,
   headerActions,
   onSplit,
@@ -225,6 +230,8 @@ export function TerminalView({
   const drawnLive = useRef(false);
   const activeRef = useRef(active);
   activeRef.current = active;
+  const inPaneRef = useRef(inPane);
+  inPaneRef.current = inPane;
   const search = useTerminalSearch({
     shortcutActive: searchShortcutActive,
     region,
@@ -345,7 +352,9 @@ export function TerminalView({
     const { view, fit, searchAddon, serializeAddon, renderer } = parts;
     ligatureDrawing.current = parts.ligatureDrawing;
     const measured = () => container.clientWidth !== 0 && container.clientHeight !== 0;
-    renderer.shown(measured());
+    // A pane keeps its WebGL renderer while another section hides it (see inPane).
+    const wantsRenderer = () => measured() || inPaneRef.current;
+    renderer.shown(wantsRenderer());
     terminal.current = view;
 
     const unbindSearch = search.bind(view, searchAddon, container);
@@ -487,7 +496,7 @@ export function TerminalView({
     streamLinkController.current = linkController;
 
     const fitAndSync = () => {
-      renderer.shown(measured());
+      renderer.shown(wantsRenderer());
       if (!measured() || replaySizeHeld) return;
       try {
         fit.fit();
@@ -675,6 +684,11 @@ export function TerminalView({
     terminal.current.options.fontFamily = resolvedFontFamily;
     refit.current?.();
   }, [resolvedFontFamily]);
+
+  // A session that leaves the panes (kept behind them) gives its WebGL renderer back, even while the section is hidden.
+  useEffect(() => {
+    refit.current?.();
+  }, [inPane]);
 
   // A stream is attached as the link turns live, while the banner that says it is connecting still
   // takes a row or two above the screen. A size measured then would be followed by the right one
