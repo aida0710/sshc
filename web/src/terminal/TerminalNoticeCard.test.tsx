@@ -37,7 +37,7 @@ describe("TerminalNoticeCard", () => {
     const actions = recovery();
     const { onCloseSession } = renderCard(lost, actions);
     const card = screen.getByRole("region", { name: "The SSH connection was lost." });
-    expect(card).toHaveTextContent("Stopped");
+    expect(card).toHaveTextContent("The SSH connection was lost.");
     await userEvent.click(screen.getByRole("button", { name: "Reconnect" }));
     expect(actions.reconnect).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -64,7 +64,7 @@ describe("TerminalNoticeCard", () => {
       const actions = recovery();
       renderCard({ ...session, state: "reconnecting", reconnect: { attempt: 2, limit: 5, retryAt: "2026-11-02T09:31:08Z", problem: "reconnect_failed" } }, actions);
       expect(screen.getByText("Reconnecting (2/5)")).toBeVisible();
-      expect(screen.getByRole("region", { name: "The connection to web-01 was lost" })).toHaveTextContent("The next try starts in 8 s.");
+      expect(screen.getByRole("region", { name: "The connection to web-01 was lost" })).toHaveTextContent("Trying again in 8 s.");
       await act(async () => { screen.getByRole("button", { name: "Stop reconnecting" }).click(); });
       expect(actions.stopReconnecting).toHaveBeenCalledOnce();
     } finally {
