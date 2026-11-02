@@ -1,60 +1,14 @@
 import { useTranslate } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
 import { useEffect, useRef, useState } from "react";
-import { Icon, type IconName } from "../ui/icons";
+import { Icon } from "../ui/icons";
 import { isModifierHeld, modifierDoubleTapMilliseconds, type ModifierLatch, type ModifierName, type Modifiers } from "./modifierLatch";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { keepKeyboardAsIs } from "../ui/softKeyboard";
-
-// interruptKey は、キーバーに常に置く Ctrl+C の名前である。日本語のキーボードでは Ctrl のあとに打った c が
-// 変換の確定を待つので、いちばん使う組み合わせだけは1回のタップで送れるようにしてある。
-export const interruptKey = "^C";
-
-// sequences は、キーの名前から送る制御シーケンスを引く。矢印キーの名前は KeyboardEvent.key に合わせる。
-const sequences: Record<string, string> = {
-  Esc: "\x1b",
-  Tab: "\t",
-  [interruptKey]: "\x03",
-  ArrowUp: "\x1b[A",
-  ArrowDown: "\x1b[B",
-  ArrowRight: "\x1b[C",
-  ArrowLeft: "\x1b[D",
-};
-export function applyModifiers(data: string, ctrl: boolean, alt: boolean): string {
-  if (data.length !== 1) return data;
-
-  let body = data;
-  if (ctrl) {
-    const code = data.toLowerCase().charCodeAt(0);
-    if (code >= 97 && code <= 122) body = String.fromCharCode(code - 96);
-  }
-  return alt ? "\x1b" + body : body;
-}
-export function encodeKey(name: string, ctrl: boolean, alt: boolean): string {
-  const sequence = sequences[name];
-  if (sequence !== undefined) return alt ? "\x1b" + sequence : sequence;
-  return applyModifiers(name, ctrl, alt);
-}
-
-// BarKey は、キーバーに常に出すキーである。name は encodeKey に渡す名前である。^C のように字面が読み上げに
-// 向かないキーには、読み上げ用の名前（label）を付ける。矢印キーは、フォントによって形や大きさが変わる文字
-// ではなくアイコンで出す。
-type BarKey =
-  | { kind: "text"; name: string; label?: MessageKey }
-  | { kind: "arrow"; name: string; icon: IconName; label: MessageKey };
-
-// Ctrl は Tab のあと（keys の2つ目のあと）に入る。
-const keys: BarKey[] = [
-  { kind: "text", name: "Esc" },
-  { kind: "text", name: "Tab" },
-  { kind: "text", name: interruptKey, label: "terminal.keyInterrupt" },
-  { kind: "arrow", name: "ArrowLeft", icon: "arrowLeft", label: "terminal.keyArrowLeft" },
-  { kind: "arrow", name: "ArrowUp", icon: "arrowUp", label: "terminal.keyArrowUp" },
-  { kind: "arrow", name: "ArrowDown", icon: "arrowDown", label: "terminal.keyArrowDown" },
-  { kind: "arrow", name: "ArrowRight", icon: "arrowRight", label: "terminal.keyArrowRight" },
-];
-const extraKeys = ["|", "-", "~", "/"];
+import type { KeyBarLayout } from "../keybar/keyBarLayout";
+import { isModifierKey, type KeyBarKey } from "../keybar/keySequences";
+import { KeyFace, spokenKeyName } from "../keybar/KeyFace";
+import { keyBarRowColumns } from "../keybar/keyBarStyles";
 
 const keyShape =
   "h-11 min-w-0 rounded-[10px] font-mono text-[12.5px] active:bg-select-fill focus-visible:outline-2 focus-visible:outline-accent";
@@ -69,67 +23,76 @@ const latchColors: Record<ModifierLatch, string> = {
   locked: "bg-accent text-accent-ink",
 };
 
+const modifierNames = { Control: "ctrl", Alt: "alt" } as const satisfies Record<string, ModifierName>;
+
+// KeyBar is the phone's row of keys above its text box, laid out by the key bar preset in use. The keys after
+// 「…」 open above the row.
 export function KeyBar({
+  layout,
   modifiers,
   onTap,
   onKey,
 }: {
+  layout: KeyBarLayout;
   modifiers: Modifiers;
   onTap: (name: ModifierName) => void;
-  onKey: (name: string) => void;
+  onKey: (key: KeyBarKey) => void;
 }) {
   const t = useTranslate();
   const visible = useMediaQuery(mobileViewportQuery);
-  const [extraOpen, setExtraOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  const extraCloseTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(extraCloseTimer.current), []);
-  useDismissibleLayer({ open: visible && extraOpen, containerRefs: [root], onDismiss: () => setExtraOpen(false) });
+  const moreCloseTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(moreCloseTimer.current), []);
+  useDismissibleLayer({ open: visible && moreOpen, containerRefs: [root], onDismiss: () => setMoreOpen(false) });
   if (!visible) return null;
 
-  const press = (name: string) => {
-    onKey(name);
-    setExtraOpen(false);
+  const press = (key: KeyBarKey) => {
+    onKey(key);
+    setMoreOpen(false);
   };
-  // Alt sits in the popup, so the popup waits out the double tap window
-  // before closing; otherwise the second tap that locks Alt has nothing to hit.
-  const tapAlt = () => {
-    onTap("alt");
-    window.clearTimeout(extraCloseTimer.current);
-    extraCloseTimer.current = window.setTimeout(() => setExtraOpen(false), modifierDoubleTapMilliseconds);
+  // A modifier behind 「…」 keeps the keys open for the double tap window, or the second tap that locks it
+  // would have nothing to hit.
+  const tapModifierBehindMore = (name: ModifierName) => {
+    onTap(name);
+    window.clearTimeout(moreCloseTimer.current);
+    moreCloseTimer.current = window.setTimeout(() => setMoreOpen(false), modifierDoubleTapMilliseconds);
   };
+  // 「…」 says which modifier behind it is held, since the key itself is out of sight.
+  const heldBehindMore = layout.moreKeys.map((key) => key.key).find((name): name is "Control" | "Alt" =>
+    name !== undefined && isModifierKey(name) && isModifierHeld(modifiers[modifierNames[name]]));
+  const keyButton = (key: KeyBarKey, index: number, onModifier: (name: ModifierName) => void) => {
+    if (key.key !== undefined && isModifierKey(key.key)) {
+      const name = modifierNames[key.key];
+      return <ModifierKeyButton key={key.key} barKey={key} latch={modifiers[name]} onTap={() => onModifier(name)} />;
+    }
+    return <BarKeyButton key={key.key ?? `custom-${index}`} barKey={key} onPress={press} />;
+  };
+
   return (
-    <div
-      ref={root}
-      aria-label={t("terminal.keyBar")}
-      className="relative grid shrink-0 grid-cols-9 gap-1 px-2.5 pb-2 pt-2.5"
-    >
-      {keys.slice(0, 2).map((key) => (
-        <BarKeyButton key={key.name} barKey={key} onPress={press} />
-      ))}
-      <ModifierKeyButton label="Ctrl" latch={modifiers.ctrl} onTap={() => onTap("ctrl")} />
-      {keys.slice(2).map((key) => (
-        <BarKeyButton key={key.name} barKey={key} onPress={press} />
-      ))}
-      <button
-        type="button"
-        data-touch-compact
-        aria-label={t("terminal.extraKeys")}
-        title={t("terminal.extraKeys")}
-        aria-expanded={extraOpen}
-        onPointerDown={keepKeyboardAsIs}
-        onMouseDown={keepKeyboardAsIs}
-        onClick={() => setExtraOpen((current) => !current)}
-        className={`${keyShape} ${extraOpen ? pressedKey : latchColors[modifiers.alt]}`}
-      >
-        {isModifierHeld(modifiers.alt) ? "Alt" : <Icon name="moreHorizontal" className="mx-auto size-4" />}
-      </button>
-      {extraOpen ? (
-        <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-5 gap-1 rounded border border-line bg-toolbar p-1 shadow-float">
-          <ModifierKeyButton label="Alt" latch={modifiers.alt} onTap={tapAlt} />
-          {extraKeys.map((label) => (
-            <button key={label} type="button" onPointerDown={keepKeyboardAsIs} onMouseDown={keepKeyboardAsIs} onClick={() => press(label)} className={`${keyShape} ${idleKey}`}>{label}</button>
-          ))}
+    <div ref={root} aria-label={t("terminal.keyBar")} className="relative shrink-0 px-2.5 pb-2 pt-2.5">
+      {/* The row scrolls sideways inside its own box, so the keys behind 「…」 can open above it unclipped. */}
+      <div className={`${keyBarRowColumns} gap-1`}>
+        {layout.keys.map((key, index) => keyButton(key, index, onTap))}
+        {layout.moreKeys.length === 0 ? null : (
+          <button
+            type="button"
+            data-touch-compact
+            aria-label={t("terminal.extraKeys")}
+            title={t("terminal.extraKeys")}
+            aria-expanded={moreOpen}
+            onPointerDown={keepKeyboardAsIs}
+            onMouseDown={keepKeyboardAsIs}
+            onClick={() => setMoreOpen((current) => !current)}
+            className={`${keyShape} ${moreOpen ? pressedKey : heldBehindMore === undefined ? idleKey : latchColors[modifiers[modifierNames[heldBehindMore]]]}`}
+          >
+            {heldBehindMore === undefined ? <Icon name="moreHorizontal" className="mx-auto size-4" /> : <KeyFace barKey={{ key: heldBehindMore }} iconClassName="size-4" />}
+          </button>
+        )}
+      </div>
+      {moreOpen ? (
+        <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-6 gap-1 rounded border border-line bg-toolbar p-1 shadow-float">
+          {layout.moreKeys.map((key, index) => keyButton(key, index, tapModifierBehindMore))}
         </div>
       ) : null}
     </div>
@@ -138,38 +101,38 @@ export function KeyBar({
 
 // ModifierKeyButton is Ctrl or Alt. It reads as pressed while held, for one key
 // or locked, and is named "Ctrl (locked)" while locked.
-function ModifierKeyButton({ label, latch, onTap }: { label: string; latch: ModifierLatch; onTap: () => void }) {
+function ModifierKeyButton({ barKey, latch, onTap }: { barKey: KeyBarKey; latch: ModifierLatch; onTap: () => void }) {
   const t = useTranslate();
   return (
     <button
       type="button"
       data-touch-compact
       aria-pressed={isModifierHeld(latch)}
-      aria-label={latch === "locked" ? t("terminal.modifierLocked", { key: label }) : undefined}
+      aria-label={latch === "locked" ? t("terminal.modifierLocked", { key: barKey.key === "Control" ? "Ctrl" : "Alt" }) : undefined}
       onPointerDown={keepKeyboardAsIs}
       onMouseDown={keepKeyboardAsIs}
       onClick={onTap}
       className={`${keyShape} ${latchColors[latch]}`}
     >
-      {label}
+      <KeyFace barKey={barKey} iconClassName="size-[15px]" />
     </button>
   );
 }
 
-// BarKeyButton is one key of the bar that sends a sequence (not Ctrl, not the extra keys).
-function BarKeyButton({ barKey, onPress }: { barKey: BarKey; onPress: (name: string) => void }) {
+// BarKeyButton is a key that sends something when tapped: a named key or a key the person made.
+function BarKeyButton({ barKey, onPress }: { barKey: KeyBarKey; onPress: (key: KeyBarKey) => void }) {
   const t = useTranslate();
   return (
     <button
       type="button"
       data-touch-compact
-      aria-label={barKey.label === undefined ? undefined : t(barKey.label)}
+      aria-label={spokenKeyName(t, barKey)}
       onPointerDown={keepKeyboardAsIs}
       onMouseDown={keepKeyboardAsIs}
-      onClick={() => onPress(barKey.name)}
-      className={`${keyShape} ${idleKey}`}
+      onClick={() => onPress(barKey)}
+      className={`${keyShape} ${idleKey} truncate px-0.5`}
     >
-      {barKey.kind === "arrow" ? <Icon name={barKey.icon} className="mx-auto size-[15px]" /> : barKey.name}
+      <KeyFace barKey={barKey} iconClassName="size-[15px]" />
     </button>
   );
 }

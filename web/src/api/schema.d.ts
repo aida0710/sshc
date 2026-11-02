@@ -2041,6 +2041,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metadata/keybar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setKeyBarPresets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -4397,9 +4413,23 @@ export interface components {
                 sftp: string[];
             };
         };
+        KeyBarKey: {
+            /** @enum {string} */
+            key?: "Control" | "Alt" | "Escape" | "Tab" | "Enter" | "Backspace" | "Delete" | "Insert" | "ArrowLeft" | "ArrowUp" | "ArrowDown" | "ArrowRight" | "Home" | "End" | "PageUp" | "PageDown" | "Ctrl+C" | "Ctrl+D" | "Ctrl+Z" | "Ctrl+L" | "Ctrl+R" | "Ctrl+A" | "Ctrl+E" | "F1" | "F2" | "F3" | "F4" | "F5" | "F6" | "F7" | "F8" | "F9" | "F10" | "F11" | "F12";
+            label?: string;
+            text?: string;
+            enter?: boolean;
+        };
+        KeyBarPreset: {
+            id: string;
+            name: string;
+            keys: components["schemas"]["KeyBarKey"][];
+            moreKeys: components["schemas"]["KeyBarKey"][];
+        };
         Metadata: {
             schemaVersion: number;
             shortcutPresets?: components["schemas"]["ShortcutPreset"][];
+            keyBarPresets?: components["schemas"]["KeyBarPreset"][];
             groupsFile?: string;
             settings?: components["schemas"]["GlobalSettings"];
             presets: components["schemas"]["SettingsPreset"][];
@@ -4577,6 +4607,7 @@ export interface components {
             keepScreenAwake?: boolean;
             hideTouchLinkUnderlines?: boolean;
             shortcutPreset?: string;
+            keyBarPreset?: string;
         };
         NotificationSound: {
             /** @enum {string} */
@@ -9515,6 +9546,37 @@ export interface operations {
         };
         responses: {
             /** @description Saved shortcut presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSaveResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    setKeyBarPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    base: components["schemas"]["KeyBarPreset"][];
+                    presets: components["schemas"]["KeyBarPreset"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved key bar presets */
             200: {
                 headers: {
                     [name: string]: unknown;

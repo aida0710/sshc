@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { KeyConfig } from "../keyconfig/KeyConfig";
+import { KeyBarConfig } from "../keybar/KeyBarConfig";
 import { settingsApi, type SettingsApi } from "../api/settings";
 import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
@@ -94,6 +95,11 @@ export function SettingsPanel({
       {shows("Shortcuts") ? (
         <SettingsSection id="settings-shortcuts" label={t("shortcuts.heading")} icon="settings" showHeading={all}>
           <KeyConfig presetId={editingPreset} />
+        </SettingsSection>
+      ) : null}
+      {shows("KeyBar") ? (
+        <SettingsSection id="settings-key-bar" label={t("keyBar.heading")} icon="settings" showHeading={all}>
+          <KeyBarConfig presetId={editingPreset} />
         </SettingsSection>
       ) : null}
       {shows("Notifications") ? <NotificationSettingsSection presetId={editingPreset} showHeading={all} /> : null}

@@ -92,7 +92,10 @@ func write(root string) error {
 	if err := os.WriteFile(filepath.Join(directory, "corpus.generated.json"), append(body, '\n'), 0o644); err != nil {
 		return err
 	}
-	return writeShortcutRules(directory)
+	if err := writeShortcutRules(directory); err != nil {
+		return err
+	}
+	return writeKeyBarRules(directory)
 }
 
 func constants() string {

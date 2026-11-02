@@ -39,6 +39,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.POST("/api/v1/config/groups/delete", handlers.DeleteGroup)
 	engine.GET("/api/v1/metadata", handlers.Metadata)
 	engine.PUT("/api/v1/metadata/shortcuts", handlers.SetShortcuts)
+	engine.PUT("/api/v1/metadata/keybar", handlers.SetKeyBar)
 	registerSettingsRoutes(engine, handlers)
 	registerBackgroundRoutes(engine, handlers)
 	engine.GET("/api/v1/history", handlers.History)
@@ -251,9 +252,33 @@ func describePendingChanges(view application.PendingChangesView) api.PendingChan
 }
 
 func (h ConfigHandlers) SetShortcuts(c *echo.Context) error {
+	return setPresetLibrary(c, h.Service.SetShortcutPresets, presetLibraryProblems{
+		conflict: application.ErrShortcutConflict, conflictCode: "shortcut_presets_changed",
+		invalid: application.ErrShortcutPresets, invalidCode: "invalid_shortcut_presets",
+	})
+}
+
+func (h ConfigHandlers) SetKeyBar(c *echo.Context) error {
+	return setPresetLibrary(c, h.Service.SetKeyBarPresets, presetLibraryProblems{
+		conflict: application.ErrKeyBarConflict, conflictCode: "key_bar_presets_changed",
+		invalid: application.ErrKeyBarPresets, invalidCode: "invalid_key_bar_presets",
+	})
+}
+
+// presetLibraryProblems は、名前の付いたプリセットの一覧の保存が断られたときに返す問題の code である。
+type presetLibraryProblems struct {
+	conflict     error
+	conflictCode string
+	invalid      error
+	invalidCode  string
+}
+
+// setPresetLibrary は、名前の付いたプリセットの一覧（ショートカット、キーバー）を、画面が読んだときの
+// 一覧（base）と新しい一覧（presets）で置き換える要求を受ける。
+func setPresetLibrary[T any](c *echo.Context, save func(base, presets []T) (application.SaveResult, error), problems presetLibraryProblems) error {
 	var request struct {
-		Base    []application.ShortcutPreset `json:"base"`
-		Presets []application.ShortcutPreset `json:"presets"`
+		Base    []T `json:"base"`
+		Presets []T `json:"presets"`
 	}
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
@@ -261,12 +286,12 @@ func (h ConfigHandlers) SetShortcuts(c *echo.Context) error {
 	if request.Base == nil || request.Presets == nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	result, err := h.Service.SetShortcutPresets(request.Base, request.Presets)
-	if errors.Is(err, application.ErrShortcutConflict) {
-		return problem(c, http.StatusConflict, "shortcut_presets_changed")
+	result, err := save(request.Base, request.Presets)
+	if errors.Is(err, problems.conflict) {
+		return problem(c, http.StatusConflict, problems.conflictCode)
 	}
-	if errors.Is(err, application.ErrShortcutPresets) {
-		return problem(c, http.StatusBadRequest, "invalid_shortcut_presets")
+	if errors.Is(err, problems.invalid) {
+		return problem(c, http.StatusBadRequest, problems.invalidCode)
 	}
 	if err != nil {
 		return serviceProblem(c, err)
