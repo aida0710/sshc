@@ -964,6 +964,7 @@ export const ja = {
   "terminal.noticeCheckHostKey": "{target}のホスト鍵を確認してください",
   "terminal.hostKeyReject": "やめる",
   "terminal.hostKeyAccept": "接続する",
+  "terminal.notices": "お知らせ",
   "terminal.noticeDismiss": "このお知らせを消す",
   "terminal.noticeReconnecting": "再接続しています（{attempt}/{limit}）",
   "terminal.noticeConnectionLost": "{title}との接続が切れました",

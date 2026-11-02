@@ -4,6 +4,7 @@ import { exitText } from "./exitText";
 import { terminalProblemKey } from "./sessions";
 import { exitedAbnormally } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
+import { hostKeyQuestionOf, statusBannerRows } from "./statusBannerRows";
 import { useReconnectCountdown } from "./useReconnectCountdown";
 import type { HostKeyAnswer } from "./useHostKeyAnswer";
 import type { SessionRecovery } from "./useSessionRecovery";
@@ -47,11 +48,8 @@ function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect
   );
 }
 
-// The strip of one-line notices between the terminal header and the screen:
-// the engine's reconnect progress, the browser's own stream link, and how
-// the program ended. Each row only appears while it has something to say, and
-// one thing is said once: an ended session's reason (why reconnecting stopped,
-// why it could not connect) is its ended row, not a row of its own above it.
+// The strip of one-line notices between the terminal header and the screen: the engine's reconnect progress, the
+// browser's own stream link, and how the program ended. Which rows it shows is statusBannerRows.
 export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, recovery, hostKeyAnswer }: {
   session: TerminalSession;
   // A message from the view itself, such as a refused clipboard write.
@@ -65,22 +63,25 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
   hostKeyAnswer?: HostKeyAnswer;
 }) {
   const t = useTranslate();
-  const question = session.state === "connecting" || session.state === "reconnecting" ? session.hostKeyQuestion : undefined;
+  const question = hostKeyQuestionOf(session);
+  const rows = new Set(statusBannerRows({
+    session, problem, link, reconnectFailed: recovery?.reconnectFailed === true, answersHostKey: hostKeyAnswer?.answer !== undefined,
+  }));
 
   return (
     <>
-      {problem === "" ? null : (
+      {!rows.has("view-problem") ? null : (
         <p role="status" className={notice}>
           {problem}
         </p>
       )}
-      {recovery?.reconnectFailed === true ? (
+      {rows.has("reconnect-failed") ? (
         <p role="status" className={notice}>
           {t("terminal.manualReconnectFailed")}
         </p>
       ) : null}
 
-      {question === undefined || hostKeyAnswer?.answer === undefined ? null : (
+      {!rows.has("host-key") || question === undefined || hostKeyAnswer === undefined ? null : (
         <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
           <p className="min-w-0 grow">{t("terminal.noticeCheckHostKey", { target: question.alias || question.hostName })}</p>
           <Button small disabled={hostKeyAnswer.busy} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, false)} className={bannerButton}>
@@ -92,7 +93,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
         </div>
       )}
 
-      {session.state !== "reconnecting" ? null : (
+      {!rows.has("reconnecting") ? null : (
         <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
           <p className="min-w-0 grow">
             <ReconnectMessage reconnect={session.reconnect} />
@@ -105,13 +106,13 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
         </div>
       )}
 
-      {session.problem === "" || session.exited !== undefined ? null : (
+      {!rows.has("connection-problem") ? null : (
         <p role="alert" className={notice}>
           {t(terminalProblemKey(session.problem))}
         </p>
       )}
 
-      {link.phase === "live" ? null : (
+      {!rows.has("link") || link.phase === "live" ? null : (
         <div role="status" className={`flex items-center gap-2 ${notice}`}>
           <p className="min-w-0 grow">
             <StreamLinkMessage link={link} />
@@ -128,7 +129,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
           )}
         </div>
       )}
-      {session.exited === undefined ? null : (
+      {!rows.has("ended") || session.exited === undefined ? null : (
         <div role={session.problem === "" ? "status" : "alert"} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-card px-3 py-1.5 text-xs">
           <p className={`min-w-0 grow ${session.problem !== "" || exitedAbnormally(session) ? "text-danger" : "text-ink-muted"}`}>
             {session.problem === "" ? exitText(t, session.exited, session) : t(terminalProblemKey(session.problem))}
