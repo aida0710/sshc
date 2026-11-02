@@ -330,7 +330,8 @@ test("shows the version beside the brand in the mobile drawer", async ({ page, i
   expect(homeBox).not.toBeNull();
   expect(shellBox).not.toBeNull();
   if (homeBox !== null && shellBox !== null) {
-    expect(shellBox.height).toBeGreaterThanOrEqual(44);
+    // The workspace tree's rows are 36px on a phone, so that more sessions fit; Home keeps 44px.
+    expect(shellBox.height).toBeGreaterThanOrEqual(36);
     expect(homeBox.height).toBeGreaterThanOrEqual(44);
     // Between them sit only the Workspaces heading and its actions button.
     expect(shellBox.y - (homeBox.y + homeBox.height)).toBeLessThanOrEqual(96);

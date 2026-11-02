@@ -77,9 +77,10 @@ export function WorkspaceRow({
     >
       <button
         type="button"
+        data-touch-dense
         aria-expanded={expanded}
         onClick={onToggle}
-        className={`flex min-h-10 min-w-0 grow items-center gap-1 rounded-md px-0.5 text-left text-sm hover:bg-hover md:min-h-[26px] ${draggableCursor}`}
+        className={`flex min-h-9 min-w-0 grow items-center gap-1 rounded-md px-0.5 text-left text-sm hover:bg-hover md:min-h-[26px] ${draggableCursor}`}
       >
         <DisclosureChevron expanded={expanded} className="size-[13px] shrink-0 text-ink-faint" />
         {/* The workspace name labels its sessions, so it stays quieter than they are. */}
@@ -92,6 +93,7 @@ export function WorkspaceRow({
       </button>
       <button
         type="button"
+        data-touch-dense
         aria-label={t("workspace.newSessionIn", { name })}
         title={t("workspace.newSessionIn", { name })}
         disabled={!canOpenSession}
@@ -104,6 +106,7 @@ export function WorkspaceRow({
         label={t("workspace.actions", { name })}
         items={actions}
         triggerClassName={`flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5 ${revealOnHover}`}
+        triggerTouchDense
         iconClassName="size-3.5"
       />
     </div>

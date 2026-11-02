@@ -39,6 +39,9 @@ type ActionMenuProps = {
   items: readonly ActionMenuItem[];
   // Where the button sits decides its size and background.
   triggerClassName: string;
+  // triggerTouchDense gives the button the 36px touch target of a packed list (data-touch-dense in index.css)
+  // instead of the usual 44px.
+  triggerTouchDense?: boolean;
   iconClassName?: string;
   // 右クリックでも開くときは、開閉を呼び手が持つ。渡さなければこの部品が持つ。
   open?: boolean;
@@ -49,7 +52,7 @@ type ActionMenuProps = {
 // the temporary layer contract of useDismissibleLayer and the keys of
 // useMenuKeyboard, and is portaled so that a card's rounded corners or a
 // scrolling list do not clip it.
-export function ActionMenu({ label, items, triggerClassName, iconClassName = "size-4", open: controlledOpen, onOpenChange }: ActionMenuProps) {
+export function ActionMenu({ label, items, triggerClassName, triggerTouchDense = false, iconClassName = "size-4", open: controlledOpen, onOpenChange }: ActionMenuProps) {
   const [ownOpen, setOwnOpen] = useState(false);
   const open = controlledOpen ?? ownOpen;
   const setOpen = (next: boolean | ((current: boolean) => boolean)) => {
@@ -84,6 +87,7 @@ export function ActionMenu({ label, items, triggerClassName, iconClassName = "si
       <button
         ref={triggerRef}
         type="button"
+        {...(triggerTouchDense ? { "data-touch-dense": "" } : {})}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
