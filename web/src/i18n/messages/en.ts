@@ -926,6 +926,7 @@ export const en = {
     "A terminal cannot be opened in this folder because its path contains control characters.",
   "terminal.jumpDepthExceeded":
     "The ProxyJump chain exceeds the supported depth.",
+  "terminal.hostKeyDeclined": "The host key was not trusted, so sshc did not connect.",
   "terminal.hostKeyUnknown":
     "The host key is not trusted yet. Connect interactively after reviewing it.",
   "terminal.hostKeyChanged":

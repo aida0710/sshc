@@ -36,6 +36,8 @@ func connectProblem(err error) (string, bool) {
 		return "jump_depth_exceeded", true
 	case errors.Is(err, sshclient.ErrNoHostName):
 		return "alias_unresolvable", true
+	case errors.Is(err, sshclient.ErrHostKeyDeclined):
+		return "host_key_declined", true
 	case errors.Is(err, sshclient.ErrHostKeyUnknown):
 		return "host_key_unknown", true
 	case errors.Is(err, sshclient.ErrHostKeyChanged):

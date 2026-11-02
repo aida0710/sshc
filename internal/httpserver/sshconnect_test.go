@@ -16,6 +16,7 @@ func TestConnectProblemNamesFailuresThatNeedUserAction(t *testing.T) {
 		code string
 	}{
 		{sshclient.ErrHostKeyUnknown, "host_key_unknown"},
+		{fmt.Errorf("ssh: handshake failed: %w", sshclient.ErrHostKeyDeclined), "host_key_declined"},
 		{sshclient.ErrHostKeyChanged, "host_key_changed"},
 		{sshclient.ErrHostKeyRevoked, "host_key_revoked"},
 		{sshclient.ErrNoIdentity, "identity_unavailable"},
