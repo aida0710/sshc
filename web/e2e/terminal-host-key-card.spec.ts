@@ -1,4 +1,5 @@
 import { expect, openApplication, openSection, test } from "./support/environment";
+import { drawnRows } from "./support/terminal";
 
 // The e2e suite has no SSH server whose key is unknown, so the engine's side is played by the session list and the
 // answer it would give; the engine's side of the question is covered by the sshclient and httpserver tests.
@@ -69,4 +70,29 @@ test("answers the host key question from the strip above once the card is hidden
   await screen.getByRole("button", { name: "Cancel", exact: true }).click();
 
   await expect.poll(() => answers).toEqual([{ fingerprint: "SHA256:ZncdGvxXvUJOYNkbZuT4Ew+KkguCa24nYGfahfgoh+E", accept: false }]);
+});
+
+test("a question the engine wrote at 80 columns is wrapped again on a phone, not cut off", async ({ page, installation }) => {
+  // A session starts at 80 columns, so the engine's history of it is replayed at 80 and the phone's terminal is then
+  // narrowed to about 40. xterm.js does not wrap the line holding the cursor again, and nothing draws the question
+  // again the way a shell draws its prompt.
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/stream")) {
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: "wrap" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sessions: [asking], maxSessions: 12 }) });
+  });
+  const history = Buffer.from(prompt);
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => {
+    socket.send(JSON.stringify({ replay: { start: 0, next: 0, end: history.byteLength, truncated: false, sizes: [{ at: 0, cols: 80, rows: 24 }] } }));
+    socket.send(history);
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).first().click();
+  await page.getByRole("button", { name: /^web-01/ }).first().click();
+
+  await expect(drawnRows(page).filter({ visible: true })).toContainText("ting (yes/no)?");
 });
