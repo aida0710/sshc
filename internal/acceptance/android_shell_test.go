@@ -221,6 +221,8 @@ func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T
 		"webView.canGoBack()",
 		"webView.goBack()",
 		"moveTaskToBack(true)",
+		// ページがHomeで離れると答えたら、WebViewの履歴（pushStateも積まれる）を戻さずに背面へ送る。
+		`if ("false".equals(consumed)) {`,
 	} {
 		if !strings.Contains(manifest+activity, required) {
 			t.Errorf("Androidの戻る導線に %q が無い", required)

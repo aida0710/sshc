@@ -857,7 +857,13 @@ public final class MainActivity extends ComponentActivity {
                         + "})()",
                 consumed -> {
                     if ("true".equals(consumed)) return;
-                    // 将来、同一originの実ページ遷移を使う場合も通常のWebView履歴を失わない。
+                    // ページがHomeなので離れると答えた。WebViewの履歴にはpushStateも積まれて
+                    // いるので、ここでgoBack()すると前に開いた区画をさかのぼってしまう。
+                    if ("false".equals(consumed)) {
+                        moveTaskToBack(true);
+                        return;
+                    }
+                    // ページが答えなかった（読み込み前、エラーのページ）ときだけ、WebViewの履歴を使う。
                     if (webView.canGoBack()) webView.goBack();
                     else moveTaskToBack(true);
                 });
