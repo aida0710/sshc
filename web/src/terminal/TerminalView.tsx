@@ -21,6 +21,7 @@ import { attachTerminalShortcuts } from "./attachTerminalShortcuts";
 import { steppedFontSize } from "./fontSize";
 import { attachTouchScroll } from "./touchScroll";
 import { terminalTouchScrollTarget } from "./touchScrollTarget";
+import { createScrollbackOffset } from "./scrollbackOffset";
 import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
 import { useModifierKeys } from "./useModifierKeys";
 import type { ModifierName } from "./modifierLatch";
@@ -558,7 +559,9 @@ export function TerminalView({
     // observeTerminalSize makes the first fit, once the rest of the terminal is attached.
     refit.current = fitAndSync;
 
-    const detachTouchScroll = attachTouchScroll(container, terminalTouchScrollTarget(view), () => cellHeight(view, container), {
+    // A finger moves the scrollback by the pixel, as a page moves in a browser; xterm.js alone moves it a row at a time.
+    const scrollbackOffset = createScrollbackOffset(container, view);
+    const detachTouchScroll = attachTouchScroll(container, terminalTouchScrollTarget(view, scrollbackOffset), () => cellHeight(view, container), {
       selectionHeld: () => selectionHeldIn(container),
       reducedMotion: () => reducedMotionRef.current,
     });
@@ -628,6 +631,7 @@ export function TerminalView({
       stopObservingSize();
       stopWatchingShown();
       detachTouchScroll();
+      scrollbackOffset.dispose();
       detachFontZoom();
       detachShortcuts();
       detachClipboard();

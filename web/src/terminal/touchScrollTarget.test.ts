@@ -73,4 +73,18 @@ describe("terminalTouchScrollTarget", () => {
     target.scrollLines(3, onXterm);
     expect(wheels).toEqual([]);
   });
+
+  it("moves the shell's scrollback by the pixel, and a program that scrolls its own text a row at a time", () => {
+    const smooth = { room: () => ({ above: 0, below: 0 }), show: () => {} };
+    const shell = terminalTouchScrollTarget({ ...terminalView(), modes: { mouseTrackingMode: "none" }, buffer: { active: { type: "normal" } } }, smooth);
+    expect(shell.smoothScrollback?.(onOverlay)).toBe(smooth);
+    const vim = terminalTouchScrollTarget({ ...terminalView(), modes: { mouseTrackingMode: "none" }, buffer: { active: { type: "alternate" } } }, smooth);
+    expect(vim.smoothScrollback?.(onOverlay)).toBeNull();
+    const claude = terminalTouchScrollTarget({ ...terminalView(), modes: { mouseTrackingMode: "any" }, buffer: { active: { type: "normal" } } }, smooth);
+    expect(claude.smoothScrollback?.(onOverlay)).toBeNull();
+  });
 });
+
+function terminalView() {
+  return { element: document.createElement("div"), scrollLines: () => {} };
+}
