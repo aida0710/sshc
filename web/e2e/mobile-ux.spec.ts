@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, test, type Installation } from "./support/environment";
 import { samplePNG } from "./support/images";
-import { drawnRows, drawnRowsIn, drawnSpan } from "./support/terminal";
+import { drawnRowCount, drawnRows, drawnRowsIn, drawnSpan } from "./support/terminal";
 
 // All screenshots are opt-in and contain only the isolated installation's
 // example hosts and synthetic SFTP/terminal data. Never capture real servers.
@@ -383,6 +383,45 @@ test("Android back goes Home from any section of the bottom bar, and leaves the 
   expect(await pressAndroidBack(page)).toBe("handled");
   await expect(page).toHaveURL(/\/$/);
   expect(await pressAndroidBack(page)).toBe("left");
+});
+
+test("a phone keeps the notices behind a button, shows them over the terminal on a tap, and hides them with Back", async ({ page, installation }) => {
+  const lost = {
+    id: "notices-fixture", kind: "ssh", workspaceId: "default", alias: "gateway", title: "gateway",
+    startedAt: "2026-11-02T00:00:00Z", state: "exited", problem: "", forwards: [],
+    exited: { code: -1, signal: "", at: "2026-11-02T00:30:00Z", connectionLost: true },
+  };
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/stream")) {
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: "notices" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sessions: [lost], maxSessions: 12 }) });
+  });
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => { socket.send(Buffer.from("before the drop\r\n")); });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).first().tap();
+  await page.getByRole("button", { name: /^gateway/ }).first().tap();
+
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  const notices = screen.getByRole("button", { name: "Notices", exact: true });
+  await expect(notices).toBeVisible();
+  await expect(screen.getByText("The SSH connection was lost.")).toHaveCount(0);
+  const rows = await drawnRowCount(page);
+
+  await notices.tap();
+  const card = screen.getByRole("region", { name: "The SSH connection was lost." });
+  await expect(card).toBeFocused();
+  await expect(card.getByRole("button", { name: "Reconnect", exact: true })).toBeVisible();
+  // Shown over the terminal, the notices leave its rows as they were.
+  expect(await drawnRowCount(page)).toBe(rows);
+
+  const handled = await page.evaluate(() => !window.dispatchEvent(new Event("sshc-android-back", { cancelable: true })));
+  expect(handled).toBe(true);
+  await expect(card).toHaveCount(0);
+  await expect(notices).toHaveAttribute("aria-expanded", "false");
+  await expect(page).toHaveURL(/\/terminal$/);
 });
 
 test("coming back to the app after typing leaves the keyboard down", async ({ page, installation }) => {

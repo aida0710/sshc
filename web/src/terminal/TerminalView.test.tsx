@@ -384,6 +384,40 @@ describe("TerminalView", () => {
       expect(openNavigation).toHaveBeenCalledOnce();
     });
 
+    it("keeps a phone's notices behind a button in the top bar, and shows them when it is tapped", async () => {
+      render(<TerminalView session={{
+        ...session, kind: "ssh", alias: "bastion", title: "bastion", state: "exited",
+        exited: { code: -1, signal: "", at: "2026-08-26T01:00:00Z", connectionLost: true },
+      }} onReconnect={vi.fn().mockResolvedValue(true)} api={{ streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+
+      const button = screen.getByRole("button", { name: "Notices" });
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByText("The SSH connection was lost.")).toBeNull();
+      expect(screen.queryByRole("region", { name: "The SSH connection was lost." })).toBeNull();
+
+      await userEvent.click(button);
+      const card = screen.getByRole("region", { name: "The SSH connection was lost." });
+      expect(card).toHaveFocus();
+      expect(button).toHaveAttribute("aria-expanded", "true");
+      // The strip says it too, over the top of the terminal.
+      expect(screen.getAllByText("The SSH connection was lost.")).toHaveLength(2);
+
+      await userEvent.click(within(card).getByRole("button", { name: "Hide this notice" }));
+      expect(screen.queryByText("The SSH connection was lost.")).toBeNull();
+      expect(button).toHaveAttribute("aria-expanded", "false");
+
+      await userEvent.click(button);
+      await userEvent.keyboard("{Escape}");
+      expect(screen.queryByText("The SSH connection was lost.")).toBeNull();
+    });
+
+    it("shows no notices button while a phone's session has nothing to say", async () => {
+      renderView();
+      await waitFor(() => expect(streams).toHaveLength(1));
+      act(() => streams[0]!.handlers.onReplay({ start: 0, next: 0, end: 0, truncated: false }));
+      expect(screen.queryByRole("button", { name: "Notices" })).toBeNull();
+    });
+
     async function openComposer() {
       renderView();
       await waitFor(() => expect(streams).toHaveLength(1));

@@ -105,6 +105,21 @@ describe("attachSelectionOverlay", () => {
     detach();
   });
 
+  it("takes the rows' letter spacing again when it changes without the screen moving", () => {
+    const { overlay, detach, repaint, screen } = harness(["text"]);
+    const rows = screen.querySelector<HTMLElement>(".xterm-rows")!;
+    screen.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100 }) as DOMRect;
+    rows.style.letterSpacing = "0.5px";
+    repaint();
+    expect(overlay.style.letterSpacing).toBe("0.5px");
+
+    // The font loaded and the cells were measured again; the screen kept its place and size.
+    rows.style.letterSpacing = "0.25px";
+    repaint();
+    expect(overlay.style.letterSpacing).toBe("0.25px");
+    detach();
+  });
+
   it("leaves a selection it does not hold alone when the terminal is laid out again", () => {
     const { detach, repaint, screen } = harness(["before"]);
     const elsewhere = document.createElement("div");
