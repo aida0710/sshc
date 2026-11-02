@@ -53,7 +53,7 @@ import { useTerminalPathPreview } from "./useTerminalPathPreview";
 import { isTerminalShown, watchTerminalShown } from "./terminalVisibility";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
-import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
+import { isDismissibleLayerOpen, keyboardOwnerProps } from "../ui/useDismissibleLayer";
 import { useTerminalSearch } from "./useTerminalSearch";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
@@ -61,6 +61,7 @@ import { TerminalNoticeCard } from "./TerminalNoticeCard";
 import { forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
 import { terminalNoticeFor } from "./terminalNotice";
 import { useSessionRecovery } from "./useSessionRecovery";
+import { useHostKeyAnswer } from "./useHostKeyAnswer";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import { createStreamLink, type StreamLink, type StreamLinkController } from "./streamLink";
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
@@ -78,7 +79,7 @@ import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion"
 import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
-import { isTypingElsewhere } from "./terminalFocus";
+import { isInTerminalNotice, isTypingElsewhere } from "./terminalFocus";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -101,6 +102,8 @@ type TerminalViewProps = {
   onStopReconnect?: () => Promise<boolean>;
   // onCloseSession closes this session; an ended session's card offers it.
   onCloseSession?: () => void;
+  // onAnswerHostKey answers whether to trust the unknown host key the connection asks about (hostKeyQuestion).
+  onAnswerHostKey?: (fingerprint: string, accept: boolean) => Promise<boolean>;
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
@@ -167,6 +170,7 @@ export function TerminalView({
   onReconnect,
   onStopReconnect,
   onCloseSession,
+  onAnswerHostKey,
   copyOnSelect = true,
   fontSize,
   rightClickPaste = true,
@@ -237,6 +241,7 @@ export function TerminalView({
     onStopReconnect,
     onReconnected: () => streamLinkController.current?.connect(),
   });
+  const hostKeyAnswer = useHostKeyAnswer(onAnswerHostKey);
   const notice = terminalNoticeFor(session, link);
   const noticeDismissal = useTerminalNoticeDismissal(notice?.key ?? null);
   const working = session.state === "connected" && link.phase === "live";
@@ -480,7 +485,7 @@ export function TerminalView({
         output.abandonReplay();
         // A new stream starts as shown to the engine; it is told the truth at once.
         linkController.currentStream()?.reportShown(isTerminalShown(container));
-        if (activeRef.current && !touchTerminalRef.current && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current)) {
+        if (activeRef.current && !touchTerminalRef.current && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current) && !isInTerminalNotice()) {
           view.focus();
         }
         fitAndSync();
@@ -871,6 +876,7 @@ export function TerminalView({
         onLinkNow={() => streamLinkController.current?.connect()}
         onLinkStop={() => streamLinkController.current?.stopRetrying()}
         recovery={recovery}
+        hostKeyAnswer={hostKeyAnswer}
       />
 
       <div className={`relative min-h-0 flex-1 overflow-clip bg-term-bg ${mobile ? "mx-2 rounded-[14px] border border-line" : ""}`}>
@@ -909,10 +915,21 @@ export function TerminalView({
           // Low in the terminal, where the person's eyes are after the last line; the strip above keeps saying it.
           <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center mobile-layout:inset-x-2 mobile-layout:bottom-2">
             <TerminalNoticeCard
+              // A new notice is a new card, which takes the focus again.
+              key={notice.key}
               notice={notice}
               session={session}
               title={displayTitle}
               recovery={recovery}
+              hostKeyAnswer={hostKeyAnswer}
+              focus={{
+                // Only the terminal the person works in, and not from under a dialog or menu.
+                take: active && !isDismissibleLayerOpen(),
+                // A touch screen would raise its keyboard again for the terminal.
+                giveBack: () => {
+                  if (!touchTerminalRef.current) terminal.current?.focus();
+                },
+              }}
               onLinkNow={() => streamLinkController.current?.connect()}
               onCloseSession={onCloseSession}
               onDismiss={noticeDismissal.dismiss}

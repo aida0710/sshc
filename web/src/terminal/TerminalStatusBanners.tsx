@@ -5,6 +5,7 @@ import { terminalProblemKey } from "./sessions";
 import { exitedAbnormally } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
 import { useReconnectCountdown } from "./useReconnectCountdown";
+import type { HostKeyAnswer } from "./useHostKeyAnswer";
 import type { SessionRecovery } from "./useSessionRecovery";
 import { Button } from "../ui/surface";
 
@@ -51,7 +52,7 @@ function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect
 // the program ended. Each row only appears while it has something to say, and
 // one thing is said once: an ended session's reason (why reconnecting stopped,
 // why it could not connect) is its ended row, not a row of its own above it.
-export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, recovery }: {
+export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, recovery, hostKeyAnswer }: {
   session: TerminalSession;
   // A message from the view itself, such as a refused clipboard write.
   problem: string;
@@ -60,8 +61,11 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
   onLinkStop: () => void;
   // recovery reconnects an ended SSH session and stops the automatic reconnect; without it neither is offered.
   recovery?: SessionRecovery;
+  // hostKeyAnswer answers the question about an unknown host key; without it the terminal is the way to answer.
+  hostKeyAnswer?: HostKeyAnswer;
 }) {
   const t = useTranslate();
+  const question = session.state === "connecting" || session.state === "reconnecting" ? session.hostKeyQuestion : undefined;
 
   return (
     <>
@@ -75,6 +79,18 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
           {t("terminal.manualReconnectFailed")}
         </p>
       ) : null}
+
+      {question === undefined || hostKeyAnswer?.answer === undefined ? null : (
+        <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
+          <p className="min-w-0 grow">{t("terminal.noticeCheckHostKey", { target: question.alias || question.hostName })}</p>
+          <Button small disabled={hostKeyAnswer.busy} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, false)} className={bannerButton}>
+            {t("terminal.hostKeyReject")}
+          </Button>
+          <Button small disabled={hostKeyAnswer.busy} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, true)} className={bannerButton}>
+            {t("terminal.hostKeyAccept")}
+          </Button>
+        </div>
+      )}
 
       {session.state !== "reconnecting" ? null : (
         <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>

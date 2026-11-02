@@ -101,6 +101,35 @@ type ConnectionProgress struct {
 	User     string
 	Hop      int
 	Hops     int
+	// HostKey is the key this hop's host offered, while it is checked (Phase is
+	// ConnectionHostKey). An unknown key is asked about with it (HostKeyQuestion).
+	HostKey *OfferedHostKey
+}
+
+// OfferedHostKey is a host key as people compare it: its type and SHA256 fingerprint.
+type OfferedHostKey struct {
+	Type        string
+	Fingerprint string
+}
+
+// HostKeyQuestion is the question a connecting SSH session waits on: whether
+// to trust a host key that known_hosts does not have. The terminal asks it in
+// words too; the screen shows it with buttons.
+type HostKeyQuestion struct {
+	Alias       string
+	HostName    string
+	KeyType     string
+	Fingerprint string
+}
+
+// HostKeyQuestioning is implemented by SSH processes that can tell the
+// question they wait on and take its answer from a button rather than typing.
+type HostKeyQuestioning interface {
+	// HostKeyQuestion returns the open question, if any.
+	HostKeyQuestion() (HostKeyQuestion, bool)
+	// AnswerHostKey answers the question about the key of this fingerprint and
+	// reports true, if that question is still open; otherwise it does nothing.
+	AnswerHostKey(fingerprint string, accept bool) bool
 }
 
 const (
@@ -256,6 +285,9 @@ var (
 	// ErrReconnectUnavailable は、実行中または開き方を保持しないセッションの
 	// 明示再接続を拒否したことを報告する。
 	ErrReconnectUnavailable = errors.New("the terminal session cannot be reconnected")
+	// ErrNoHostKeyQuestion は、その鍵についての問いを待っていないセッションに答えようとした
+	// ことを表す。答える前に、利用者がターミナルで答えたか、接続が先へ進んだか、終わった。
+	ErrNoHostKeyQuestion = errors.New("the terminal session is not asking about this host key")
 	// ErrNotReconnecting は、自動再接続の待機中でないセッションを止めようとした
 	// ことを報告する。
 	ErrNotReconnecting = errors.New("the terminal session is not reconnecting")

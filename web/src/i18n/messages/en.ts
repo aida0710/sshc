@@ -955,6 +955,10 @@ export const en = {
     "The reconnect attempt failed. sshc will retry within the configured limit.",
   "terminal.reconnectExhausted":
     "The SSH connection was lost and did not come back within the reconnect attempts.",
+  "terminal.noticeFirstConnection": "First connection to this host",
+  "terminal.noticeCheckHostKey": "Check the host key of {target}",
+  "terminal.hostKeyReject": "Cancel",
+  "terminal.hostKeyAccept": "Connect",
   "terminal.noticeDismiss": "Hide this notice",
   "terminal.noticeReconnecting": "Reconnecting ({attempt}/{limit})",
   "terminal.noticeConnectionLost": "The connection to {title} was lost",

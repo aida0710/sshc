@@ -662,6 +662,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/engines/{alias}/terminal/sessions/{id}/host-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        post: operations["remoteEngineAnswerTerminalHostKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/engines/{alias}/terminal/sessions/{id}/title": {
         parameters: {
             query?: never;
@@ -971,6 +988,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["stopTerminalReconnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/sessions/{id}/host-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["answerTerminalHostKey"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3447,6 +3480,7 @@ export interface components {
             problem: string;
             reconnect?: components["schemas"]["TerminalReconnect"];
             progress?: components["schemas"]["TerminalConnectionProgress"];
+            hostKeyQuestion?: components["schemas"]["TerminalHostKeyQuestion"];
             programProgress?: components["schemas"]["TerminalProgramProgress"];
             programStatus?: components["schemas"]["TerminalProgramStatus"];
             exited?: components["schemas"]["TerminalExit"];
@@ -3653,6 +3687,16 @@ export interface components {
         };
         MoveTerminalSessionRequest: {
             workspaceId: string;
+        };
+        TerminalHostKeyQuestion: {
+            alias: string;
+            hostName: string;
+            keyType: string;
+            fingerprint: string;
+        };
+        TerminalHostKeyAnswer: {
+            fingerprint: string;
+            accept: boolean;
         };
         SetTerminalSessionTitleRequest: {
             title: string | null;
@@ -6729,6 +6773,40 @@ export interface operations {
             502: components["responses"]["Problem"];
         };
     };
+    remoteEngineAnswerTerminalHostKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalHostKeyAnswer"];
+            };
+        };
+        responses: {
+            /** @description The session list after answering the host key question */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
     remoteEngineSetTerminalSessionTitle: {
         parameters: {
             query?: never;
@@ -7349,6 +7427,38 @@ export interface operations {
                     "application/json": components["schemas"]["TerminalSessionList"];
                 };
             };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    answerTerminalHostKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalHostKeyAnswer"];
+            };
+        };
+        responses: {
+            /** @description The session list after answering the host key question */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];

@@ -7,3 +7,10 @@ export function isTypingElsewhere(terminalRegion: HTMLElement | null): boolean {
   if (!(active instanceof HTMLElement) || terminalRegion?.contains(active) === true) return false;
   return active.isContentEditable || active.matches("input, textarea, select");
 }
+
+// isInTerminalNotice is whether the focus sits in a card over the terminal (TerminalNoticeCard), which took it to be
+// acted on. The terminal attaching to its stream a moment later must not take it back.
+export function isInTerminalNotice(): boolean {
+  const active = document.activeElement;
+  return active instanceof Element && active.closest("[data-terminal-notice]") !== null;
+}
