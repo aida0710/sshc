@@ -49,7 +49,7 @@ test("keeps the Workspaces heading at the top of the sidebar while the workspace
 test.describe("touch sidebar", () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 800 } });
 
-  test("keeps workspace counts and actions visible without shrinking tap areas", async ({ page, installation }) => {
+  test("keeps workspace counts and actions visible, with 36px rows and buttons", async ({ page, installation }) => {
     await page.route("**/api/v1/terminal/sessions", (route) => route.fulfill({ json: {
       sessions: [{ id: "shell", kind: "shell", workspaceId: "default", title: "Local shell", state: "connected", problem: "", startedAt: "2026-10-23T00:00:00Z" }],
       maxSessions: 50,
@@ -60,9 +60,14 @@ test.describe("touch sidebar", () => {
     const main = navigation.getByRole("button", { name: /^Main/ });
     await expect(main.getByText("1", { exact: true })).toHaveCSS("opacity", "1");
     await expect(navigation.getByRole("button", { name: "Open a session in Main" })).toHaveCSS("opacity", "1");
-    expect((await main.boundingBox())?.height).toBeGreaterThanOrEqual(40);
+    expect((await main.boundingBox())?.height).toBe(36);
     const session = navigation.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
-    expect((await session.boundingBox())?.height).toBeGreaterThanOrEqual(40);
+    expect((await session.boundingBox())?.height).toBe(36);
+    for (const name of ["Open a session in Main", "Workspace actions for Main", "Actions for Local shell", "Close Local shell"]) {
+      const box = await navigation.getByRole("button", { name, exact: true }).boundingBox();
+      expect(box?.width, name).toBe(36);
+      expect(box?.height, name).toBe(36);
+    }
   });
 });
 
