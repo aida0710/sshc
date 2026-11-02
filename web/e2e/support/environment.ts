@@ -1,6 +1,6 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Theme } from "../../src/theme/theme";
@@ -119,6 +119,15 @@ async function restrictToThisUser(target: string): Promise<void> {
 // engineOutputKept is how much of what the engine wrote last is kept for the error when it stops early.
 const engineOutputKept = 2_000;
 
+// handoffPath is where a started engine writes how the CLI reaches it (internal/handoff FileName, in the state
+// directory). The engine writes it once it holds the engine lock and listens.
+function handoffPath(home: string): string {
+  return join(home, ".ssh", "sshc", "cli");
+}
+
+// handoffPollMs is how often the start waits for the handoff to appear.
+const handoffPollMs = 50;
+
 function startBinary(
   home: string,
 ): Promise<{ child: ChildProcess; url: string }> {
@@ -166,7 +175,19 @@ function startBinary(
       });
       asking.on("error", () => setTimeout(ask, 100));
     };
-    ask();
+    // sshc open starts an engine of its own when it finds none, and takes the engine lock for a moment to look. Run
+    // before the engine started here held the lock, it made that engine find the lock taken and exit ("holds the lock
+    // but left no readable handoff"), which failed a test now and then on a busy machine. So it asks once the engine
+    // wrote its handoff.
+    const waitForHandoff = () => {
+      if (exited) return;
+      if (Date.now() > deadline) {
+        rejectPromise(new Error("sshc wrote no handoff within 15s"));
+        return;
+      }
+      access(handoffPath(home)).then(ask, () => setTimeout(waitForHandoff, handoffPollMs));
+    };
+    waitForHandoff();
   });
 }
 
