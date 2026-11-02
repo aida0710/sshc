@@ -4415,7 +4415,7 @@ export interface components {
         };
         KeyBarKey: {
             /** @enum {string} */
-            key?: "Control" | "Alt" | "Escape" | "Tab" | "Enter" | "Backspace" | "Delete" | "Insert" | "ArrowLeft" | "ArrowUp" | "ArrowDown" | "ArrowRight" | "Home" | "End" | "PageUp" | "PageDown" | "Ctrl+C" | "Ctrl+D" | "Ctrl+Z" | "Ctrl+L" | "Ctrl+R" | "Ctrl+A" | "Ctrl+E" | "F1" | "F2" | "F3" | "F4" | "F5" | "F6" | "F7" | "F8" | "F9" | "F10" | "F11" | "F12";
+            key?: "DirectInput" | "Control" | "Alt" | "Escape" | "Tab" | "Enter" | "Backspace" | "Delete" | "Insert" | "ArrowLeft" | "ArrowUp" | "ArrowDown" | "ArrowRight" | "Home" | "End" | "PageUp" | "PageDown" | "Ctrl+C" | "Ctrl+D" | "Ctrl+Z" | "Ctrl+L" | "Ctrl+R" | "Ctrl+A" | "Ctrl+E" | "F1" | "F2" | "F3" | "F4" | "F5" | "F6" | "F7" | "F8" | "F9" | "F10" | "F11" | "F12";
             label?: string;
             text?: string;
             enter?: boolean;

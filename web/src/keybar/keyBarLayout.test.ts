@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { keyBarKeys, maxKeyBarKeys } from "../rules/keyBar.generated";
 import { paletteGroups } from "./keyBarCatalog";
-import { defaultKeyBarLayout, insertKey, isPlaced, moveKey, moveToOtherRow, removeKey, replaceKey, type KeyBarLayout } from "./keyBarLayout";
+import { defaultKeyBarLayout, insertKey, isPlaced, moveKey, moveToOtherRow, offersDirectInput, removeKey, replaceKey, type KeyBarLayout } from "./keyBarLayout";
 
 const layout: KeyBarLayout = {
   keys: [{ key: "Escape" }, { key: "Tab" }, { key: "Control" }],
@@ -42,6 +42,12 @@ describe("editing a key bar layout", () => {
     expect(isPlaced(layout, { label: "|", text: "|", enter: true })).toBe(false);
   });
 
+  it("tells whether the layout holds the key that switches where typing goes, in either row", () => {
+    expect(offersDirectInput(defaultKeyBarLayout)).toBe(true);
+    expect(offersDirectInput(layout)).toBe(false);
+    expect(offersDirectInput({ keys: [], moreKeys: [{ key: "DirectInput" }] })).toBe(true);
+  });
+
   it("removes a key and replaces an edited one", () => {
     expect(removeKey(layout, { row: "keys", index: 2 }).keys).toEqual([{ key: "Escape" }, { key: "Tab" }]);
     expect(replaceKey(layout, { row: "moreKeys", index: 1 }, { label: "pipe", text: "| less" }).moreKeys[1]).toEqual({ label: "pipe", text: "| less" });
@@ -55,7 +61,7 @@ describe("the keys on offer", () => {
   });
 
   it("starts from the layout the user chose (2026-11-02)", () => {
-    expect(defaultKeyBarLayout.keys.map((key) => key.key)).toEqual(["Escape", "Tab", "Control", "Ctrl+C", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"]);
+    expect(defaultKeyBarLayout.keys.map((key) => key.key)).toEqual(["DirectInput", "Escape", "Tab", "Control", "Ctrl+C", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"]);
     expect(defaultKeyBarLayout.moreKeys.map((key) => key.key ?? key.text)).toEqual(["Alt", "Backspace", "Home", "End", "PageUp", "PageDown", "|", "-", "~", "/"]);
   });
 });

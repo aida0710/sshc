@@ -7,7 +7,7 @@ import { modifierDoubleTapMilliseconds, releasedModifiers, type Modifiers } from
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); delete document.documentElement.dataset.keyboardOpen; });
 
-function showMobileKeyBar(modifiers: Modifiers = releasedModifiers, layout: KeyBarLayout = defaultKeyBarLayout) {
+function showMobileKeyBar(modifiers: Modifiers = releasedModifiers, layout: KeyBarLayout = defaultKeyBarLayout, directInput = false) {
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
     matches: query === mobileViewportQuery,
     media: query,
@@ -16,8 +16,9 @@ function showMobileKeyBar(modifiers: Modifiers = releasedModifiers, layout: KeyB
   })));
   const onKey = vi.fn();
   const onTap = vi.fn();
-  render(<KeyBar layout={layout} modifiers={modifiers} onKey={onKey} onTap={onTap} />);
-  return { onKey, onTap };
+  const onDirectInput = vi.fn();
+  render(<KeyBar layout={layout} modifiers={modifiers} directInput={directInput} onKey={onKey} onTap={onTap} onDirectInput={onDirectInput} />);
+  return { onKey, onTap, onDirectInput };
 }
 
 describe("mobile key bar", () => {
@@ -130,6 +131,16 @@ describe("mobile key bar", () => {
     showMobileKeyBar(releasedModifiers, { keys: [{ key: "Escape" }], moreKeys: [] });
     expect(screen.getByRole("button", { name: "Esc" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Extra keys" })).not.toBeInTheDocument();
+  });
+
+  it("switches where typing goes with the direct input key, which reads as pressed while typing goes to the terminal", () => {
+    const { onDirectInput, onKey } = showMobileKeyBar(releasedModifiers, defaultKeyBarLayout, true);
+    const toggle = screen.getByRole("button", { name: "Type into the terminal" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(fireEvent.pointerDown(toggle, { cancelable: true })).toBe(false);
+    fireEvent.click(toggle);
+    expect(onDirectInput).toHaveBeenCalledOnce();
+    expect(onKey).not.toHaveBeenCalled();
   });
 });
 

@@ -109,6 +109,7 @@ export const ja = {
   "keyBar.customAdd": "追加",
   "keyBar.customSave": "保存",
   "keyBar.backspace": "Backspace",
+  "keyBar.directInput": "ターミナルへ直接入力",
   "shell.title": "sshc",
   "shell.starting": "ローカルセッションを開始しています…",
   "shell.vaultChecking":

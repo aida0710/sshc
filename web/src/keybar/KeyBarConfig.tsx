@@ -82,8 +82,9 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
           {selectedKey !== undefined && selectedKey.key === undefined && slot !== null ? (
             <Button small disabled={unavailable} onClick={() => setEditing({ kind: "edit", slot })}>{t("keyBar.edit")}</Button>
           ) : null}
-          <Button small className="text-danger" disabled={unavailable || slot === null} onClick={() => { if (slot !== null) void save(removeKey(layout, slot), null); }}>
-            {t("keyBar.remove")}
+          <Button small disabled={unavailable || slot === null} onClick={() => { if (slot !== null) void save(removeKey(layout, slot), null); }}>
+            {/* The small button sets its own text colour; the span gives removing the danger colour, as drawn. */}
+            <span className="text-danger">{t("keyBar.remove")}</span>
           </Button>
         </div>
       </PageSection>

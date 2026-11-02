@@ -900,6 +900,34 @@ test("arranges the key bar in the settings, and the terminal's bar follows it", 
   await keys.getByRole("button", { name: "Ctrl+C", exact: true }).click();
 });
 
+test("types straight into the terminal after the direct input key, with the text box hidden, and back", async ({ page, installation }) => {
+  test.skip(
+    process.platform === "win32",
+    "on-screen keys are a touch affordance; make e2e on Linux or macOS covers this path",
+  );
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await openLocalShell(page);
+  const rows = drawnRows(page);
+  await expect(rows).toContainText(/[$#%>]/, { timeout: 20_000 });
+
+  const field = page.getByRole("textbox", { name: "Text to send to the terminal" });
+  const toggle = page.getByLabel("On-screen keys").getByRole("button", { name: "Type into the terminal", exact: true });
+  await expect(field).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(field).toHaveCount(0);
+
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("echo direct-$((3*7))");
+  await page.keyboard.press("Enter");
+  await expect(rows).toContainText("direct-21", { timeout: 20_000 });
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(field).toBeVisible();
+});
+
 test("sends what was typed in the phone's text box to the shell and empties the box", async ({ page, installation }) => {
   await openApplication(page, installation);
 
