@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { applyModifiers, encodeKey, interruptKey, KeyBar } from "./KeyBar";
+import { KeyBar } from "./KeyBar";
+import { defaultKeyBarLayout, type KeyBarLayout } from "../keybar/keyBarLayout";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { modifierDoubleTapMilliseconds, releasedModifiers, type Modifiers } from "./modifierLatch";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); delete document.documentElement.dataset.keyboardOpen; });
 
-function showMobileKeyBar(modifiers: Modifiers = releasedModifiers) {
+function showMobileKeyBar(modifiers: Modifiers = releasedModifiers, layout: KeyBarLayout = defaultKeyBarLayout) {
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
     matches: query === mobileViewportQuery,
     media: query,
@@ -15,7 +16,7 @@ function showMobileKeyBar(modifiers: Modifiers = releasedModifiers) {
   })));
   const onKey = vi.fn();
   const onTap = vi.fn();
-  render(<KeyBar modifiers={modifiers} onKey={onKey} onTap={onTap} />);
+  render(<KeyBar layout={layout} modifiers={modifiers} onKey={onKey} onTap={onTap} />);
   return { onKey, onTap };
 }
 
@@ -42,7 +43,7 @@ describe("mobile key bar", () => {
     const symbol = screen.getByRole("button", { name: "|" });
     expect(fireEvent.pointerDown(symbol, { cancelable: true })).toBe(false);
     fireEvent.click(symbol);
-    expect(onKey).toHaveBeenCalledWith("|");
+    expect(onKey).toHaveBeenCalledWith({ label: "|", text: "|" });
     expect(input).toHaveFocus();
     expect(more).toHaveAttribute("aria-expanded", "false");
     input.remove();
@@ -64,7 +65,7 @@ describe("mobile key bar", () => {
     const up = screen.getByRole("button", { name: "Up arrow" });
     fireEvent.pointerDown(up, { cancelable: true });
     fireEvent.click(up);
-    expect(onKey).toHaveBeenCalledWith("ArrowUp");
+    expect(onKey).toHaveBeenCalledWith({ key: "ArrowUp" });
     expect(input).not.toHaveFocus();
     expect(up).not.toHaveFocus();
     input.remove();
@@ -80,7 +81,7 @@ describe("mobile key bar", () => {
     expect(interrupt).toHaveTextContent("^C");
     expect(fireEvent.pointerDown(interrupt, { cancelable: true })).toBe(false);
     fireEvent.click(interrupt);
-    expect(onKey).toHaveBeenCalledWith(interruptKey);
+    expect(onKey).toHaveBeenCalledWith({ key: "Ctrl+C" });
     expect(onTap).not.toHaveBeenCalled();
     expect(input).not.toHaveFocus();
     input.remove();
@@ -107,73 +108,28 @@ describe("mobile key bar", () => {
     expect(screen.getByRole("button", { name: "Ctrl (locked)" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Extra keys" })).toHaveTextContent("Alt");
   });
-});
 
-describe("encodeKey", () => {
-  it("sends the control sequences the keys stand for", () => {
-    expect(encodeKey("Esc", false, false)).toBe("\x1b");
-    expect(encodeKey("Tab", false, false)).toBe("\t");
-    expect(encodeKey("ArrowUp", false, false)).toBe("\x1b[A");
-    expect(encodeKey("ArrowDown", false, false)).toBe("\x1b[B");
-    expect(encodeKey("ArrowRight", false, false)).toBe("\x1b[C");
-    expect(encodeKey("ArrowLeft", false, false)).toBe("\x1b[D");
-    expect(encodeKey(interruptKey, false, false)).toBe("\x03");
+  it("lays the keys out as the key bar preset says, with Ctrl and Alt anywhere", () => {
+    const { onKey, onTap } = showMobileKeyBar(releasedModifiers, {
+      keys: [{ key: "Alt" }, { key: "F5" }, { label: "git st", text: "git status", enter: true }],
+      moreKeys: [{ key: "Control" }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Alt" }));
+    expect(onTap).toHaveBeenCalledWith("alt");
+    fireEvent.click(screen.getByRole("button", { name: "F5" }));
+    expect(onKey).toHaveBeenCalledWith({ key: "F5" });
+    fireEvent.click(screen.getByRole("button", { name: "git st" }));
+    expect(onKey).toHaveBeenCalledWith({ label: "git st", text: "git status", enter: true });
+    expect(screen.queryByRole("button", { name: "Esc" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Extra keys" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ctrl" }));
+    expect(onTap).toHaveBeenCalledWith("ctrl");
   });
 
-  it("passes literal characters through", () => {
-    expect(encodeKey("|", false, false)).toBe("|");
-    expect(encodeKey("~", false, false)).toBe("~");
-  });
-
-  it("folds ctrl into the control range", () => {
-    expect(encodeKey("c", true, false)).toBe("\x03");
-    expect(encodeKey("C", true, false)).toBe("\x03");
-    expect(encodeKey("d", true, false)).toBe("\x04");
-  });
-
-  it("prefixes alt with escape", () => {
-    expect(encodeKey("b", false, true)).toBe("\x1bb");
-  });
-
-  it("puts the escape before the control character", () => {
-    expect(encodeKey("c", true, true)).toBe("\x1b\x03");
-  });
-
-  it("leaves the special sequences alone when ctrl is held", () => {
-    expect(encodeKey("ArrowUp", true, false)).toBe("\x1b[A");
-    expect(encodeKey(interruptKey, true, false)).toBe("\x03");
-    expect(encodeKey(interruptKey, false, true)).toBe("\x1b\x03");
-  });
-
-  it("sends the plain character when ctrl has no meaning for it", () => {
-    expect(encodeKey("|", true, false)).toBe("|");
+  it("leaves out 「…」 when no key sits behind it", () => {
+    showMobileKeyBar(releasedModifiers, { keys: [{ key: "Escape" }], moreKeys: [] });
+    expect(screen.getByRole("button", { name: "Esc" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Extra keys" })).not.toBeInTheDocument();
   });
 });
 
-describe("encodeKey and things that are not one keystroke", () => {
-  it("leaves a pasted run alone even when ctrl is armed", () => {
-    expect(encodeKey("cd /etc", true, false)).toBe("cd /etc");
-  });
-
-  it("leaves an assembled control sequence alone", () => {
-    expect(encodeKey("\x1b[A", true, false)).toBe("\x1b[A");
-  });
-});
-
-describe("the two doors are not the same door", () => {
-  it("turns a pressed key into its sequence even with no modifier", () => {
-    expect(encodeKey("Esc", false, false)).toBe("\x1b");
-    expect(encodeKey("Tab", false, false)).toBe("\t");
-    expect(encodeKey("ArrowUp", false, false)).toBe("\x1b[A");
-  });
-
-  it("leaves typed text alone even when it spells a key name", () => {
-    expect(applyModifiers("Esc", false, false)).toBe("Esc");
-    expect(applyModifiers("Tab", true, false)).toBe("Tab");
-  });
-
-  it("still folds ctrl into a single typed character", () => {
-    expect(applyModifiers("c", true, false)).toBe("\x03");
-    expect(applyModifiers("a", false, false)).toBe("a");
-  });
-});

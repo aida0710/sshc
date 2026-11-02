@@ -7,6 +7,7 @@ export const settingsPages = [
   "Terminal",
   "SFTP",
   "Shortcuts",
+  "KeyBar",
   "Notifications",
   "Vault",
   "Machines",
@@ -57,6 +58,13 @@ export const settingsPageMeta: Record<
     label: "shortcuts.heading",
     description: "shortcuts.description",
     icon: "keyboard",
+    group: "preset",
+  },
+  KeyBar: {
+    path: "/settings/keybar",
+    label: "keyBar.heading",
+    description: "keyBar.description",
+    icon: "otp",
     group: "preset",
   },
   Notifications: {

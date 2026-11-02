@@ -97,7 +97,7 @@ describe("SettingsPanel", () => {
     expect(within(navigation).getByRole("combobox", { name: "Preset to edit" })).toHaveValue("default");
     expect(within(navigation).getByText("In use here")).toBeVisible();
     expect(within(navigation).getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "General", "Appearance", "Terminal", "SFTP", "Keyboard shortcuts", "Notifications", "Vault", "Machines", "Open connections",
+      "General", "Appearance", "Terminal", "SFTP", "Keyboard shortcuts", "Key bar", "Notifications", "Vault", "Machines", "Open connections",
     ]);
   });
 

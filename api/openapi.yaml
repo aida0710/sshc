@@ -3408,6 +3408,30 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/metadata/keybar:
+    put:
+      operationId: setKeyBarPresets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [base, presets]
+              properties:
+                base: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/KeyBarPreset" } }
+                presets: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/KeyBarPreset" } }
+      responses:
+        "200":
+          description: Saved key bar presets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/settings:
     # 設定の画面が読むもの全部。全体の設定・プリセット・同期でつながっているマシンの一覧・
     # このマシンの今の状態。
@@ -6726,6 +6750,33 @@ components:
             toggleNavigation: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             home: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             sftp: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+    # スマホのキーバーの1つのキー。用意したキー（key）か、自作のキー（label と text）のどちらか一方。
+    # 名前の一覧と上限の正本は internal/validate/keybar.go。
+    KeyBarKey:
+      type: object
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+          enum: [Control, Alt, Escape, Tab, Enter, Backspace, Delete, Insert, ArrowLeft, ArrowUp, ArrowDown, ArrowRight, Home, End, PageUp, PageDown, "Ctrl+C", "Ctrl+D", "Ctrl+Z", "Ctrl+L", "Ctrl+R", "Ctrl+A", "Ctrl+E", F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12]
+        # 自作のキーに出す文字。
+        label: { type: string, minLength: 1, maxLength: 8 }
+        # 自作のキーが送る内容。Tab と改行のほかの制御文字は送れない。
+        text: { type: string, minLength: 1, maxLength: 1000 }
+        # 自作のキーが text を送ったあと Enter を押すか。
+        enter: { type: boolean }
+    # 名前の付いたキーバーの並び。どれを使うかは設定のプリセット（InterfaceSettings.keyBarPreset）が選ぶ。
+    KeyBarPreset:
+      type: object
+      additionalProperties: false
+      required: [id, name, keys, moreKeys]
+      properties:
+        id: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        # いつも出す段。
+        keys: { type: array, maxItems: 16, items: { $ref: "#/components/schemas/KeyBarKey" } }
+        # 「…」を押すと出るキー。空なら「…」を出さない。
+        moreKeys: { type: array, maxItems: 48, items: { $ref: "#/components/schemas/KeyBarKey" } }
     Metadata:
       type: object
       additionalProperties: false
@@ -6733,6 +6784,7 @@ components:
       properties:
         schemaVersion: { type: integer }
         shortcutPresets: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ShortcutPreset" } }
+        keyBarPresets: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/KeyBarPreset" } }
         groupsFile: { type: string }
         # 全体の設定とプリセット。どのマシンがどのプリセットを使うかは /api/v1/settings にある。
         settings: { $ref: "#/components/schemas/GlobalSettings" }
@@ -7077,6 +7129,8 @@ components:
         hideTouchLinkUnderlines: { type: boolean }
         # 使うショートカットのプリセットの id。省略は既定の割り当て。
         shortcutPreset: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
+        # スマホで使うキーバーのプリセットの id。省略は既定の並び。
+        keyBarPreset: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
     NotificationSound:
       type: object
       additionalProperties: false
