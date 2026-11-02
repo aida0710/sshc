@@ -424,6 +424,49 @@ test("a phone keeps the notices behind a button, shows them over the terminal on
   await expect(page).toHaveURL(/\/terminal$/);
 });
 
+test("a finger moves the shell's scrollback by the pixel and settles it on a row", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await openShellFromNavigation(page);
+  await expect(drawnRows(page).filter({ visible: true })).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const screenBox = (await drawnRows(page).filter({ visible: true }).boundingBox())!;
+  await page.touchscreen.tap(screenBox.x + screenBox.width / 2, screenBox.y + screenBox.height / 2);
+  const textBox = page.getByLabel("Text to send to the terminal", { exact: true });
+  await textBox.fill("seq 1 200");
+  await page.getByRole("button", { name: "Send", exact: true }).tap();
+  await expect(drawnRows(page).filter({ visible: true })).toContainText("200");
+
+  // A finger pulls the text down by a third of a row: older lines, the rows drawn that far down.
+  const host = page.locator("[data-terminal-host]").first();
+  const moved = await page.evaluate(() => {
+    const surface = document.querySelector<HTMLElement>(".sshc-select-overlay")!;
+    const rows = Number.parseFloat(getComputedStyle(surface).lineHeight);
+    const touch = (type: string, y: number) => {
+      const finger = new Touch({ identifier: 1, target: surface, clientX: 200, clientY: y });
+      surface.dispatchEvent(new TouchEvent(type, { touches: type === "touchend" ? [] : [finger], changedTouches: [finger], bubbles: true, cancelable: true }));
+    };
+    const bottomRow = (surface.textContent ?? "").split("\n").filter((line) => line.trim() !== "").at(-1)?.trimEnd() ?? "";
+    touch("touchstart", 400);
+    touch("touchmove", 400 + rows / 3);
+    const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
+    const edge = host.querySelector<HTMLElement>("[data-scrollback-edge-row]")!;
+    return { rows, bottomRow, transform: host.style.transform, edge: edge.style.display === "block" ? edge.textContent : null };
+  });
+  // The rows from the one before, drawn two thirds of a row up: the text sits a third of a row lower, as the finger
+  // moved it. The row that was at the bottom is now the one under the rows, drawn there.
+  expect(moved.transform).toBe(`translateY(${-(moved.rows * 2) / 3}px)`);
+  expect(moved.edge).toBe(moved.bottomRow);
+
+  // Let go slowly: the rows settle on the nearer one.
+  await page.waitForTimeout(150);
+  await page.evaluate(() => {
+    const surface = document.querySelector<HTMLElement>(".sshc-select-overlay")!;
+    const finger = new Touch({ identifier: 1, target: surface, clientX: 200, clientY: 410 });
+    surface.dispatchEvent(new TouchEvent("touchend", { touches: [], changedTouches: [finger], bubbles: true, cancelable: true }));
+  });
+  await expect(host).toHaveAttribute("style", /^(?!.*translateY)/);
+});
+
 test("coming back to the app after typing leaves the keyboard down", async ({ page, installation }) => {
   await page.setViewportSize({ width: 390, height: 640 });
   await openApplication(page, installation);
