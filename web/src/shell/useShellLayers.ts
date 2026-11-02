@@ -62,10 +62,10 @@ export function useShellLayers({ mobileLayout, ready, section, onBackWithoutLaye
     setInspector(null);
   }, [section]);
 
+  // Kept as the page was last drawn, not as an effect after it: a Back pressed between the drawing and the effect would
+  // otherwise reach the handler of the drawing before (one that still saw the app starting, and did nothing).
   const backWithoutLayer = useRef(onBackWithoutLayer);
-  useEffect(() => {
-    backWithoutLayer.current = onBackWithoutLayer;
-  });
+  backWithoutLayer.current = onBackWithoutLayer;
 
   useEffect(() => {
     function closeTopLayer(event: Event) {
