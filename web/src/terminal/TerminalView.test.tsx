@@ -20,7 +20,16 @@ vi.mock("./TerminalQuickCommands", () => ({
   TerminalQuickCommands: () => <div role="dialog" aria-label="Quick Commands panel">Server-backed commands</div>,
 }));
 
+// keyBarLayout is the key bar in force; a test may choose one without some keys.
+const { defaultKeyBarLayout } = await import("../keybar/keyBarLayout");
+let keyBarLayout = defaultKeyBarLayout;
+vi.mock("../keybar/keyBarPresets", async (original) => ({
+  ...(await original<typeof import("../keybar/keyBarPresets")>()),
+  useKeyBarLayout: () => keyBarLayout,
+}));
+
 const { TerminalView } = await import("./TerminalView");
+const { setDirectInput } = await import("./useDirectInput");
 
 const session: TerminalSession = {
   id: "a", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-08-14T09:00:00Z", state: "connected", problem: "",
@@ -240,6 +249,55 @@ describe("TerminalView", () => {
     } finally {
       delete document.documentElement.dataset.keyboardOpen;
       focus.mockRestore();
+    }
+  });
+
+  it("types straight into the terminal after the key bar's direct input key, with the text box hidden, and back", async () => {
+    touchScreen({ phone: true });
+    const focus = vi.spyOn(Terminal.prototype, "focus");
+    document.documentElement.dataset.keyboardOpen = "true";
+    try {
+      renderView();
+      await waitFor(() => expect(streams).toHaveLength(1));
+      const field = screen.getByRole("textbox", { name: "Text to send to the terminal" });
+      await waitFor(() => expect(field).toBeEnabled());
+      tap(document.querySelector(".sshc-select-overlay")!);
+      expect(field).toHaveFocus();
+
+      // The keyboard stays up: the focus goes from the text box to the terminal, and the box goes away.
+      const toggle = screen.getByRole("button", { name: "Type into the terminal" });
+      fireEvent.pointerDown(toggle);
+      fireEvent.click(toggle);
+      expect(focus).toHaveBeenCalledOnce();
+      expect(toggle).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByRole("textbox", { name: "Text to send to the terminal" })).not.toBeInTheDocument();
+      tap(document.querySelector(".sshc-select-overlay")!);
+      expect(focus).toHaveBeenCalledTimes(2);
+
+      // Back to the text box, which takes the focus from the terminal.
+      document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")?.focus();
+      fireEvent.click(toggle);
+      expect(screen.getByRole("textbox", { name: "Text to send to the terminal" })).toHaveFocus();
+      expect(toggle).toHaveAttribute("aria-pressed", "false");
+    } finally {
+      setDirectInput(false);
+      delete document.documentElement.dataset.keyboardOpen;
+      focus.mockRestore();
+    }
+  });
+
+  it("keeps the text box where the key bar in force has no key to switch back to it", async () => {
+    touchScreen({ phone: true });
+    setDirectInput(true);
+    keyBarLayout = { keys: [{ key: "Escape" }], moreKeys: [] };
+    try {
+      renderView();
+      await waitFor(() => expect(streams).toHaveLength(1));
+      expect(screen.getByRole("textbox", { name: "Text to send to the terminal" })).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Type into the terminal" })).not.toBeInTheDocument();
+    } finally {
+      setDirectInput(false);
+      keyBarLayout = defaultKeyBarLayout;
     }
   });
 

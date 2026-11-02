@@ -32,7 +32,7 @@ describe("arranging the key bar", () => {
     fireEvent.click(shownRow().getByRole("button", { name: "Tab" }));
     fireEvent.click(screen.getByRole("button", { name: "Later" }));
 
-    await waitFor(() => expect(savedKeys()).toEqual(["Escape", "Control", "Tab", "Ctrl+C", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"]));
+    await waitFor(() => expect(savedKeys()).toEqual(["DirectInput", "Escape", "Control", "Tab", "Ctrl+C", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"]));
     expect(presets[0]?.name).toBe("My key bar");
     expect(server.document().presets[0]?.interface?.keyBarPreset).toBe(presets[0]?.id);
     // The moved key stays selected, so it can be moved again.
@@ -44,7 +44,7 @@ describe("arranging the key bar", () => {
     fireEvent.click(shownRow().getByRole("button", { name: "Esc" }));
     fireEvent.click(offered("Function keys").getByRole("button", { name: "F5" }));
 
-    await waitFor(() => expect(savedKeys()?.slice(0, 3)).toEqual(["Escape", "F5", "Tab"]));
+    await waitFor(() => expect(savedKeys()?.slice(1, 4)).toEqual(["Escape", "F5", "Tab"]));
     expect(offered("Function keys").getByRole("button", { name: "F5" })).toBeDisabled();
     expect(offered("Input and modifiers").getByRole("button", { name: "Esc" })).toBeDisabled();
   });

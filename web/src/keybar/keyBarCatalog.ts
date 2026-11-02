@@ -18,6 +18,7 @@ const text = (value: string): KeyFace => ({ kind: "text", text: value });
 const ctrlCombination = (letter: string): KeyLook => ({ face: text(`^${letter}`), spoken: { text: `Ctrl+${letter}` } });
 
 const looks: Record<KeyBarKeyName, KeyLook> = {
+  DirectInput: { face: { kind: "icon", icon: "keyboard" }, spoken: { message: "keyBar.directInput" } },
   Control: { face: text("Ctrl") },
   Alt: { face: text("Alt") },
   Escape: { face: text("Esc") },
@@ -69,7 +70,7 @@ const named = (...names: KeyBarKeyName[]): KeyBarKey[] => names.map((key) => ({ 
 const symbols = ["|", "-", "~", "/", "\\", "_", ":", ";", "`", "*", "&", "$"];
 
 export const paletteGroups: PaletteGroup[] = [
-  { heading: "keyBar.groupInput", keys: named("Control", "Alt", "Escape", "Tab", "Enter") },
+  { heading: "keyBar.groupInput", keys: named("DirectInput", "Control", "Alt", "Escape", "Tab", "Enter") },
   { heading: "keyBar.groupEditing", keys: named("Backspace", "Delete", "Insert", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight", "Home", "End", "PageUp", "PageDown") },
   { heading: "keyBar.groupControl", keys: named("Ctrl+C", "Ctrl+D", "Ctrl+Z", "Ctrl+L", "Ctrl+R", "Ctrl+A", "Ctrl+E") },
   { heading: "keyBar.groupFunction", keys: named("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12") },
