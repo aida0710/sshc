@@ -358,6 +358,8 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.localWorkingDirectoryUnavailable";
     case "jump_depth_exceeded":
       return "terminal.jumpDepthExceeded";
+    case "host_key_declined":
+      return "terminal.hostKeyDeclined";
     case "host_key_unknown":
       return "terminal.hostKeyUnknown";
     case "host_key_changed":

@@ -24,6 +24,11 @@ var (
 	ErrHostKeyChanged = errors.New("the host key does not match the one in known_hosts")
 	// ErrHostKeyUnknown は、未知のホストを受け入れなかったことを報告する。
 	ErrHostKeyUnknown = errors.New("this host is not in known_hosts")
+	// ErrHostKeyDeclined は、未知のホストの鍵を、利用者が問いに no と答えて受け入れなかったことを
+	// 報告する。ErrHostKeyUnknown でもある（known_hosts に無いホストであることは変わらない）。画面は、
+	// 利用者が自分で断ったことを、確かめる手段の無い接続で断られたこと（対話で接続し直すよう勧める）と
+	// 分けて伝える。
+	ErrHostKeyDeclined = fmt.Errorf("%w; its host key was not trusted", ErrHostKeyUnknown)
 	// ErrHostKeyRevoked は、@revoked と印の付いた鍵を断る。
 	ErrHostKeyRevoked = errors.New("this host key is marked revoked in known_hosts")
 	// ErrHostKeyChangedDuringRekey は、接続中の鍵の再交換（rekey）で、最初の鍵交換と
@@ -382,7 +387,7 @@ func (h HostKeys) accept(target Target, key ssh.PublicKey, offered string, promp
 		return 0, "", err
 	}
 	if !accepted {
-		return 0, "", ErrHostKeyUnknown
+		return 0, "", ErrHostKeyDeclined
 	}
 	rememberedIn, err := h.remember(target, key, offered)
 	return hostKeyConfirmed, rememberedIn, err

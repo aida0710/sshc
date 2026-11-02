@@ -640,6 +640,11 @@ describe("useTerminalSessions", () => {
 });
 
 describe("terminalProblemKey", () => {
+  it("tells a host key the person declined from one a non-interactive connection could not ask about", () => {
+    expect(terminalProblemKey("host_key_declined")).toBe("terminal.hostKeyDeclined");
+    expect(terminalProblemKey("host_key_unknown")).toBe("terminal.hostKeyUnknown");
+  });
+
   it("says the VPN route is why reconnecting stopped, not that the terminal failed to open", () => {
     expect(terminalProblemKey("vpn_route_refused")).toBe("terminal.vpnRouteRefused");
   });
