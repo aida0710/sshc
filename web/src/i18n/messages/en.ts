@@ -928,7 +928,7 @@ export const en = {
     "The ProxyJump chain exceeds the supported depth.",
   "terminal.hostKeyDeclined": "The host key was not trusted, so sshc did not connect.",
   "terminal.hostKeyUnknown":
-    "The host key is not trusted yet. Connect interactively after reviewing it.",
+    "This host key is not in known_hosts. Review its fingerprint and add it to known_hosts, then connect again.",
   "terminal.hostKeyChanged":
     "The host key changed. Review Known Hosts before connecting again.",
   "terminal.hostKeyRevoked":
@@ -963,11 +963,10 @@ export const en = {
   "terminal.noticeDismiss": "Hide this notice",
   "terminal.noticeReconnecting": "Reconnecting ({attempt}/{limit})",
   "terminal.noticeConnectionLost": "The connection to {title} was lost",
-  "terminal.noticeNextTry": "The next try starts in {seconds} s.",
-  "terminal.noticeTryingNow": "Trying to connect now.",
-  "terminal.noticeStopped": "Stopped",
+  "terminal.noticeNextTry": "Trying again in {seconds} s.",
+  "terminal.noticeTryingNow": "Connecting again now.",
   "terminal.noticeCloseSession": "Close",
-  "terminal.noticeLinkLost": "This screen lost its connection to the sshc engine",
+  "terminal.noticeLinkLost": "The connection to the sshc engine was lost",
   "terminal.manualReconnect": "Reconnect",
   "terminal.stopReconnect": "Stop reconnecting",
   "terminal.reconnectStopped": "The SSH connection was lost and automatic reconnecting was stopped.",
