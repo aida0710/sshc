@@ -139,8 +139,10 @@ func TestAnUnknownHostIsRefusedWhenTheUserSaysNo(t *testing.T) {
 	recorder.answer = false
 	target := sshclient.Target{HostName: "203.0.113.10", Port: "22", KnownHosts: testKnownHosts}
 
-	if err := verify(recorder.HostKeys, target, host.PublicKey(), recorder); !errors.Is(err, sshclient.ErrHostKeyUnknown) {
-		t.Fatalf("verify = %v, want ErrHostKeyUnknown", err)
+	err := verify(recorder.HostKeys, target, host.PublicKey(), recorder)
+	// Declined by the person, and still a host known_hosts does not have.
+	if !errors.Is(err, sshclient.ErrHostKeyDeclined) || !errors.Is(err, sshclient.ErrHostKeyUnknown) {
+		t.Fatalf("verify = %v, want ErrHostKeyDeclined", err)
 	}
 	if len(recorder.added) != 0 {
 		t.Fatalf("a refused host key was written: %#v", recorder.added)

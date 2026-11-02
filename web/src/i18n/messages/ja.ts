@@ -930,6 +930,7 @@ export const ja = {
   "terminal.remoteWorkingDirectoryUnsupported":
     "このフォルダではターミナルを開けません。フォルダのパスに制御文字が含まれています。",
   "terminal.jumpDepthExceeded": "ProxyJumpの階層が上限を超えています。",
+  "terminal.hostKeyDeclined": "ホスト鍵を受け入れなかったので、接続しませんでした。",
   "terminal.hostKeyUnknown":
     "このホスト鍵はまだ信頼済みとして登録されていません。フィンガープリントを確認してから、対話モードで接続してください。",
   "terminal.hostKeyChanged":
