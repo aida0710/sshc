@@ -234,15 +234,17 @@ export function WorkspaceTree({
   return (
     <div className="flex flex-col gap-0.5">
       {/* The heading stays at the top of the sidebar's list while the sessions scroll under it, so its
-          buttons are always in reach. On a phone they are 44px touch targets, which already space it from
-          the first workspace. */}
-      <div className="sticky top-0 z-[2] mt-3.5 flex items-center bg-sidebar pr-1 pt-1 md:pb-2.5">
+          buttons are always in reach.
+          On a phone, the tree's rows and their buttons (this heading, the workspaces and the sessions) are 36px
+          rather than the usual 44px, so that more sessions fit on the screen (data-touch-dense in index.css). */}
+      <div className="sticky top-0 z-[2] mt-3.5 flex items-center bg-sidebar pr-1 md:pb-2.5 md:pt-1">
         <span aria-hidden="true" className="block grow px-2 text-xs text-ink-faint">
           {t("workspace.heading")}
         </span>
         {unreadInOrder.length === 0 ? null : (
           <button
             type="button"
+            data-touch-dense
             title={t("terminal.openNextUnread")}
             onClick={openNextUnread}
             className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-notice px-1.5 text-[11px] text-notice-ink hover:brightness-110 md:min-h-5"
@@ -253,6 +255,7 @@ export function WorkspaceTree({
         )}
         <button
           type="button"
+          data-touch-dense
           aria-label={t("workspace.create")}
           title={t("workspace.create")}
           disabled={workspaces.maxWorkspaces > 0 && workspaces.workspaces.length >= workspaces.maxWorkspaces}
@@ -265,6 +268,7 @@ export function WorkspaceTree({
           label={t("workspace.headingActions")}
           items={headingActions}
           triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5"
+          triggerTouchDense
           iconClassName="size-3.5"
         />
       </div>
@@ -281,7 +285,7 @@ export function WorkspaceTree({
             <li
               key={workspace.id}
               {...workspaceDrag.dropTargetProps(workspace.id)}
-              className={`relative not-first:mt-1.5 ${held ? "opacity-40" : workspace.hidden ? "opacity-60" : ""}`}
+              className={`relative not-first:mt-0.5 md:not-first:mt-1.5 ${held ? "opacity-40" : workspace.hidden ? "opacity-60" : ""}`}
             >
               {/* The line sits in the gap between workspaces, where the dragged one would go. */}
               {dropSide === null ? null : (
@@ -289,8 +293,8 @@ export function WorkspaceTree({
               )}
               {/* Like the group headings of the connection list, a workspace's name stays under the Workspaces
                   heading while its sessions scroll by, and gives way to the next workspace's. The offset is the
-                  heading's height (48px on a phone, where its buttons are 44px touch targets). */}
-              <div className="sticky top-12 z-[1] bg-sidebar md:top-[34px]">
+                  heading's height (36px on a phone). */}
+              <div className="sticky top-9 z-[1] bg-sidebar md:top-[34px]">
               <WorkspaceRow
                 name={name}
                 sessionCount={members.length}
