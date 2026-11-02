@@ -16,7 +16,7 @@ const rowLimits: Record<KeyBarRow, number> = { keys: maxKeyBarKeys, moreKeys: ma
 // 2026-11-02).
 export const defaultKeyBarLayout: KeyBarLayout = {
   keys: [
-    { key: "Escape" }, { key: "Tab" }, { key: "Control" }, { key: "Ctrl+C" },
+    { key: "DirectInput" }, { key: "Escape" }, { key: "Tab" }, { key: "Control" }, { key: "Ctrl+C" },
     { key: "ArrowLeft" }, { key: "ArrowUp" }, { key: "ArrowDown" }, { key: "ArrowRight" },
   ],
   moreKeys: [

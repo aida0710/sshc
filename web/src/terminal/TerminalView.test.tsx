@@ -21,6 +21,7 @@ vi.mock("./TerminalQuickCommands", () => ({
 }));
 
 const { TerminalView } = await import("./TerminalView");
+const { setDirectInput } = await import("./useDirectInput");
 
 const session: TerminalSession = {
   id: "a", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-08-14T09:00:00Z", state: "connected", problem: "",
@@ -238,6 +239,40 @@ describe("TerminalView", () => {
       fireEvent.click(ctrl);
       expect(focus).toHaveBeenCalledOnce();
     } finally {
+      delete document.documentElement.dataset.keyboardOpen;
+      focus.mockRestore();
+    }
+  });
+
+  it("types straight into the terminal after the key bar's direct input key, with the text box hidden, and back", async () => {
+    touchScreen({ phone: true });
+    const focus = vi.spyOn(Terminal.prototype, "focus");
+    document.documentElement.dataset.keyboardOpen = "true";
+    try {
+      renderView();
+      await waitFor(() => expect(streams).toHaveLength(1));
+      const field = screen.getByRole("textbox", { name: "Text to send to the terminal" });
+      await waitFor(() => expect(field).toBeEnabled());
+      tap(document.querySelector(".sshc-select-overlay")!);
+      expect(field).toHaveFocus();
+
+      // The keyboard stays up: the focus goes from the text box to the terminal, and the box goes away.
+      const toggle = screen.getByRole("button", { name: "Type into the terminal" });
+      fireEvent.pointerDown(toggle);
+      fireEvent.click(toggle);
+      expect(focus).toHaveBeenCalledOnce();
+      expect(toggle).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByRole("textbox", { name: "Text to send to the terminal" })).not.toBeInTheDocument();
+      tap(document.querySelector(".sshc-select-overlay")!);
+      expect(focus).toHaveBeenCalledTimes(2);
+
+      // Back to the text box, which takes the focus from the terminal.
+      document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")?.focus();
+      fireEvent.click(toggle);
+      expect(screen.getByRole("textbox", { name: "Text to send to the terminal" })).toHaveFocus();
+      expect(toggle).toHaveAttribute("aria-pressed", "false");
+    } finally {
+      setDirectInput(false);
       delete document.documentElement.dataset.keyboardOpen;
       focus.mockRestore();
     }

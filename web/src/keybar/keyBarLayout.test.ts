@@ -55,7 +55,7 @@ describe("the keys on offer", () => {
   });
 
   it("starts from the layout the user chose (2026-11-02)", () => {
-    expect(defaultKeyBarLayout.keys.map((key) => key.key)).toEqual(["Escape", "Tab", "Control", "Ctrl+C", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"]);
+    expect(defaultKeyBarLayout.keys.map((key) => key.key)).toEqual(["DirectInput", "Escape", "Tab", "Control", "Ctrl+C", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"]);
     expect(defaultKeyBarLayout.moreKeys.map((key) => key.key ?? key.text)).toEqual(["Alt", "Backspace", "Home", "End", "PageUp", "PageDown", "|", "-", "~", "/"]);
   });
 });

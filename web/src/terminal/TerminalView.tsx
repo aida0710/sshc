@@ -22,9 +22,11 @@ import { steppedFontSize } from "./fontSize";
 import { attachTouchScroll } from "./touchScroll";
 import { terminalTouchScrollTarget } from "./touchScrollTarget";
 import { createScrollbackOffset } from "./scrollbackOffset";
+import { flushSync } from "react-dom";
 import { KeyBar } from "./KeyBar";
 import { keyBarInput, withModifiers, type KeyBarKey } from "../keybar/keySequences";
 import { useKeyBarLayout } from "../keybar/keyBarPresets";
+import { setDirectInput, useDirectInput } from "./useDirectInput";
 import { useModifierKeys } from "./useModifierKeys";
 import type { ModifierName } from "./modifierLatch";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
@@ -351,6 +353,7 @@ export function TerminalView({
 
   const { modifiers, tap: tapModifier, takeModifiers } = useModifierKeys();
   const keyBarLayout = useKeyBarLayout();
+  const directInput = useDirectInput();
   // The phone's text box, while it is shown (TerminalComposer).
   const composerField = useRef<HTMLTextAreaElement>(null);
   // sendKey sends a key of the key bar.
@@ -785,6 +788,19 @@ export function TerminalView({
     tapModifier(name);
   }
 
+  // switchDirectInput moves where a phone types, keeping an open keyboard open: the focus goes from the text
+  // box to the terminal, or back to the text box, which comes back first (flushSync) so it can take the focus.
+  function switchDirectInput() {
+    if (!directInput) {
+      if (document.activeElement === composerField.current) terminal.current?.focus();
+      setDirectInput(true);
+      return;
+    }
+    const typingInTerminal = terminal.current?.textarea !== undefined && document.activeElement === terminal.current.textarea;
+    flushSync(() => setDirectInput(false));
+    if (typingInTerminal) composerField.current?.focus();
+  }
+
   function submitComposer() {
     const plan = planComposerSend(composerText, { bracketedPaste: terminal.current?.modes.bracketedPasteMode ?? false });
     if (plan.kind === "confirm") {
@@ -1050,16 +1066,18 @@ export function TerminalView({
         modifiers={modifiers}
         onTap={holdModifier}
         layout={keyBarLayout}
+        directInput={directInput}
         onKey={(key) => sendKey.current(key)}
+        onDirectInput={switchDirectInput}
       />
-      <TerminalComposer
+      {directInput ? null : <TerminalComposer
         value={composerText}
         disabled={link.phase !== "live"}
         enterSends={composerEnterSends}
         fieldRef={composerField}
         onChange={setComposerText}
         onSubmit={submitComposer}
-      />
+      />}
     </section>
   );
 }

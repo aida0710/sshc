@@ -4,7 +4,7 @@ import type { KeyBarLayout, KeyBarRow, KeySlot } from "./keyBarLayout";
 import { KeyFace, spokenKeyName } from "./KeyFace";
 import { keyBarRowColumns } from "./keyBarStyles";
 
-const keyShape = "h-10 min-w-0 truncate rounded-[9px] px-0.5 font-mono text-[12px]";
+const keyShape = "h-10 min-w-0 truncate rounded-[9px] font-mono text-[11px]";
 
 // KeyBarPreview shows a layout as the key bar shows it, with the keys behind 「…」 under it. A tap selects a key
 // (a second tap lets go of it) for the buttons beside it to move.

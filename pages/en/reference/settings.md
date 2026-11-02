@@ -58,7 +58,7 @@ Paste defaults to Ctrl+V (⌘V on Mac); Ctrl+Shift+V also remains available.
 
 ## Key bar
 
-Open **Menu → Key bar** to arrange the key bar shown under the terminal on a phone. Tap a key under **Order** to select it, then move it with **Earlier** and **Later**, put it behind 「…」 with **Behind 「…」**, bring it back with **Always shown**, or take it off with **Remove**. Tapping a key under **Keys to place** puts it after the selected key (at the end of the row always shown when none is selected). The keys on offer are Ctrl, Alt, Esc, Tab, Enter; Backspace, Del, Ins, the arrows, Home, End, PgUp, PgDn; ^C, ^D, ^Z, ^L, ^R, ^A, ^E; F1 to F12; and symbols.
+Open **Menu → Key bar** to arrange the key bar shown under the terminal on a phone. Tap a key under **Order** to select it, then move it with **Earlier** and **Later**, put it behind 「…」 with **Behind 「…」**, bring it back with **Always shown**, or take it off with **Remove**. Tapping a key under **Keys to place** puts it after the selected key (at the end of the row always shown when none is selected). The keys on offer are the input switch (the keyboard icon), Ctrl, Alt, Esc, Tab, Enter; Backspace, Del, Ins, the arrows, Home, End, PgUp, PgDn; ^C, ^D, ^Z, ^L, ^R, ^A, ^E; F1 to F12; and symbols.
 
 **Make a key** makes a key that sends a fixed text or command in one tap. Give the text to show on the key (up to 8 characters) and what it sends; **Press Enter after sending** runs the command at once. The text is sent as if typed, with a line break sent as Enter. Control characters other than tabs and line breaks cannot be sent. Select a key you made and use **Edit** to change it.
 

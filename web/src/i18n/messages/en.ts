@@ -107,6 +107,7 @@ export const en = {
   "keyBar.customAdd": "Add",
   "keyBar.customSave": "Save",
   "keyBar.backspace": "Backspace",
+  "keyBar.directInput": "Type into the terminal",
   "shell.title": "sshc",
   "shell.starting": "Starting secure local session…",
   "shell.vaultChecking":

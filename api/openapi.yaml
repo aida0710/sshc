@@ -6758,7 +6758,7 @@ components:
       properties:
         key:
           type: string
-          enum: [Control, Alt, Escape, Tab, Enter, Backspace, Delete, Insert, ArrowLeft, ArrowUp, ArrowDown, ArrowRight, Home, End, PageUp, PageDown, "Ctrl+C", "Ctrl+D", "Ctrl+Z", "Ctrl+L", "Ctrl+R", "Ctrl+A", "Ctrl+E", F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12]
+          enum: [DirectInput, Control, Alt, Escape, Tab, Enter, Backspace, Delete, Insert, ArrowLeft, ArrowUp, ArrowDown, ArrowRight, Home, End, PageUp, PageDown, "Ctrl+C", "Ctrl+D", "Ctrl+Z", "Ctrl+L", "Ctrl+R", "Ctrl+A", "Ctrl+E", F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12]
         # 自作のキーに出す文字。
         label: { type: string, minLength: 1, maxLength: 8 }
         # 自作のキーが送る内容。Tab と改行のほかの制御文字は送れない。

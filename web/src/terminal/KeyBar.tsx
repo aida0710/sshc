@@ -30,13 +30,18 @@ const modifierNames = { Control: "ctrl", Alt: "alt" } as const satisfies Record<
 export function KeyBar({
   layout,
   modifiers,
+  directInput,
   onTap,
   onKey,
+  onDirectInput,
 }: {
   layout: KeyBarLayout;
   modifiers: Modifiers;
+  // directInput is whether typing goes straight into the terminal (useDirectInput.ts).
+  directInput: boolean;
   onTap: (name: ModifierName) => void;
   onKey: (key: KeyBarKey) => void;
+  onDirectInput: () => void;
 }) {
   const t = useTranslate();
   const visible = useMediaQuery(mobileViewportQuery);
@@ -65,6 +70,9 @@ export function KeyBar({
     if (key.key !== undefined && isModifierKey(key.key)) {
       const name = modifierNames[key.key];
       return <ModifierKeyButton key={key.key} barKey={key} latch={modifiers[name]} onTap={() => onModifier(name)} />;
+    }
+    if (key.key === "DirectInput") {
+      return <DirectInputButton key={key.key} on={directInput} onTap={() => { onDirectInput(); setMoreOpen(false); }} />;
     }
     return <BarKeyButton key={key.key ?? `custom-${index}`} barKey={key} onPress={press} />;
   };
@@ -115,6 +123,27 @@ function ModifierKeyButton({ barKey, latch, onTap }: { barKey: KeyBarKey; latch:
       className={`${keyShape} ${latchColors[latch]}`}
     >
       <KeyFace barKey={barKey} iconClassName="size-[15px]" />
+    </button>
+  );
+}
+
+// DirectInputButton switches where typing goes. It takes the accent while typing goes straight into the
+// terminal, as a locked modifier does.
+function DirectInputButton({ on, onTap }: { on: boolean; onTap: () => void }) {
+  const t = useTranslate();
+  return (
+    <button
+      type="button"
+      data-touch-compact
+      aria-pressed={on}
+      aria-label={t("keyBar.directInput")}
+      title={t("keyBar.directInput")}
+      onPointerDown={keepKeyboardAsIs}
+      onMouseDown={keepKeyboardAsIs}
+      onClick={onTap}
+      className={`${keyShape} ${on ? latchColors.locked : idleKey}`}
+    >
+      <KeyFace barKey={{ key: "DirectInput" }} iconClassName="size-[15px]" />
     </button>
   );
 }
