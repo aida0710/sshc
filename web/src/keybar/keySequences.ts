@@ -65,13 +65,17 @@ function modifierParameter({ ctrl, alt }: KeyModifiers): number {
   return 1 + (alt ? 2 : 0) + (ctrl ? 4 : 0);
 }
 
+// SentKeyName is a key that sends something when tapped: not Ctrl or Alt, which are held for the next key, and
+// not DirectInput, which switches where typing goes.
+type SentKeyName = Exclude<KeyBarKeyName, "Control" | "Alt" | "DirectInput">;
+
 // isModifierKey is whether the key holds Ctrl or Alt for the next key instead of sending anything.
 export function isModifierKey(name: KeyBarKeyName): name is "Control" | "Alt" {
   return name === "Control" || name === "Alt";
 }
 
 // keySequence is what a key that is not a modifier sends, with the modifiers held for it.
-function keySequence(name: Exclude<KeyBarKeyName, "Control" | "Alt">, modifiers: KeyModifiers, modes: TerminalKeyModes): string {
+function keySequence(name: SentKeyName, modifiers: KeyModifiers, modes: TerminalKeyModes): string {
   const held = modifiers.ctrl || modifiers.alt;
   const letter = letterKeys[name];
   if (letter !== undefined) {
@@ -105,10 +109,10 @@ function customKeyInput({ text, enter }: { text: string; enter: boolean }, modif
   return enter ? `${typed}\r` : typed;
 }
 
-// keyBarInput is what tapping a key of the key bar sends, with the Ctrl and Alt held for it. Ctrl and Alt
-// themselves send nothing: they are held for the next key.
+// keyBarInput is what tapping a key of the key bar sends, with the Ctrl and Alt held for it. Ctrl, Alt and
+// DirectInput themselves send nothing.
 export function keyBarInput(key: KeyBarKey, modifiers: KeyModifiers, modes: TerminalKeyModes): string {
   if (key.key === undefined) return customKeyInput({ text: key.text ?? "", enter: key.enter ?? false }, modifiers);
-  if (isModifierKey(key.key)) return "";
+  if (isModifierKey(key.key) || key.key === "DirectInput") return "";
   return keySequence(key.key, modifiers, modes);
 }

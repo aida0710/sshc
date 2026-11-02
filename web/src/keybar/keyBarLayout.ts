@@ -16,7 +16,7 @@ const rowLimits: Record<KeyBarRow, number> = { keys: maxKeyBarKeys, moreKeys: ma
 // 2026-11-02).
 export const defaultKeyBarLayout: KeyBarLayout = {
   keys: [
-    { key: "Escape" }, { key: "Tab" }, { key: "Control" }, { key: "Ctrl+C" },
+    { key: "DirectInput" }, { key: "Escape" }, { key: "Tab" }, { key: "Control" }, { key: "Ctrl+C" },
     { key: "ArrowLeft" }, { key: "ArrowUp" }, { key: "ArrowDown" }, { key: "ArrowRight" },
   ],
   moreKeys: [
@@ -84,4 +84,10 @@ export function insertKey(layout: KeyBarLayout, after: KeySlot | null, key: KeyB
 // replaceKey puts an edited key the person made in place of the old one.
 export function replaceKey(layout: KeyBarLayout, slot: KeySlot, key: KeyBarKey): KeyBarLayout {
   return withRow(layout, slot.row, layout[slot.row].map((placed, index) => index === slot.index ? key : placed));
+}
+
+// offersDirectInput is whether the layout holds the key that switches where typing goes. Without it, typing
+// goes to the text box: the switch is how a person gets back to it.
+export function offersDirectInput(layout: KeyBarLayout): boolean {
+  return isPlaced(layout, { key: "DirectInput" });
 }
