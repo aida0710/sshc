@@ -193,7 +193,7 @@ export function AppNavigation({
       {/* The Workspaces heading and the workspace's name under it stick to the top of this list (see
           WorkspaceTree). The scroll padding is their height, so a row brought into view by the keyboard stops
           below them rather than under them. */}
-      <div data-navigation-scroll className="min-h-0 flex-1 scroll-pt-[92px] overflow-y-auto pr-0.5 md:scroll-pt-[60px]">
+      <div data-navigation-scroll className="min-h-0 flex-1 scroll-pt-[72px] overflow-y-auto pr-0.5 md:scroll-pt-[60px]">
         <SplitGroupList groups={splitView.groups} sessions={orderedSessions}
           selected={section === "Terminal" ? splitView.activeGroupNumber : null}
           unreadBySession={unreadBySession}

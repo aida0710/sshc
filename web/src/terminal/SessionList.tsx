@@ -236,7 +236,7 @@ export function SessionList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`group/row relative flex items-start gap-2.5 rounded-[7px] py-1.5 pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[3px] ${
+                  className={`group/row relative flex items-start gap-2.5 rounded-[7px] pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[3px] ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : isSelected ? "bg-select-fill" : "hover:bg-hover"
@@ -276,11 +276,12 @@ export function SessionList({
                   ) : (
                     <button
                       type="button"
+                      data-touch-dense
                       aria-label={displayTitle}
                       aria-describedby={statusId}
                       aria-current={isSelected ? "true" : undefined}
                       onClick={() => onSelect(session.id)}
-                      className={`flex min-w-0 grow items-start gap-2.5 text-left after:absolute after:inset-0 after:rounded-[7px] ${rowCursor}`}
+                      className={`flex min-w-0 grow items-start gap-2.5 py-0.5 text-left after:absolute after:inset-0 after:rounded-[7px] md:py-0 ${rowCursor}`}
                     >
                       {marker}
                       <span className="min-w-0 grow">
@@ -310,6 +311,7 @@ export function SessionList({
                     <button
                       type="button"
                       data-session-menu-trigger
+                      data-touch-dense
                       aria-label={t("terminal.rowMenu", { title: session.title })}
                       aria-expanded={menuFor === session.id}
                       onClick={(event) => {
@@ -320,12 +322,13 @@ export function SessionList({
                         }
                         setMenuFor(session.id);
                       }}
-                      className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
+                      className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-5"
                     >
                       <Icon name="moreHorizontal" className="size-3.5" />
                     </button>
                     <button
                       type="button"
+                      data-touch-dense
                       aria-label={t("terminal.closeSession", { title: session.title })}
                       onClick={(event) => {
                         if (session.exited !== undefined || event.shiftKey || shiftPressed) {
@@ -334,7 +337,7 @@ export function SessionList({
                         }
                         setClosing(session);
                       }}
-                      className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:mt-0 md:size-5"
+                      className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-5"
                     >
                       <Icon name="close" className="size-3.5" />
                     </button>

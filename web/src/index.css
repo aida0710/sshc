@@ -703,9 +703,17 @@ select:not([multiple]):not([size]) {
 @media (max-width: 767px), (pointer: coarse) and (max-width: 1023px) {
   /* Compact icon artwork keeps its size; the touch target is large enough. The top bar's page actions
      reach 44px another way (below). */
-  :where(button:not([data-touch-compact]), [role="button"], [role="menuitem"], nav a):not(.monaco-editor *):not(.xterm *):not([data-page-actions] *) {
+  :where(button:not([data-touch-compact]):not([data-touch-dense]), [role="button"], [role="menuitem"], nav a):not(.monaco-editor *):not(.xterm *):not([data-page-actions] *) {
     min-height: 44px;
     min-width: 44px;
+    touch-action: manipulation;
+  }
+  /* A packed list of rows (the sidebar's workspace tree) uses 36px, so that more rows fit on the screen. The
+     minimum stays here, rather than in the rows' classes, because a touch screen 768px to 1023px wide is laid
+     out as a phone while the md: classes already draw the PC's 20px buttons. */
+  :where(button[data-touch-dense]) {
+    min-height: 36px;
+    min-width: 36px;
     touch-action: manipulation;
   }
   :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):not(.monaco-editor *):not(.xterm *) {
