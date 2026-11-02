@@ -146,6 +146,32 @@ func (s *Session) Prompter() Prompter {
 // 回答として受理される。terminal registryはそれ以外の先行入力を捨てる。
 func (s *Session) AwaitingPrompt() bool { return s.input.awaitingPrompt() }
 
+// HostKeyQuestion returns the question this connection waits on, if it waits
+// on whether to trust a host key that known_hosts does not have. The offered
+// key comes from the progress; the question must still be open in the input,
+// or a key already answered (by typing) would be asked about again.
+func (s *Session) HostKeyQuestion() (terminal.HostKeyQuestion, bool) {
+	s.mutex.Lock()
+	progress := s.progress
+	s.mutex.Unlock()
+	if progress.Phase != terminal.ConnectionHostKey || progress.HostKey == nil {
+		return terminal.HostKeyQuestion{}, false
+	}
+	if !strings.Contains(s.input.openConfirmation(), progress.HostKey.Fingerprint) {
+		return terminal.HostKeyQuestion{}, false
+	}
+	return terminal.HostKeyQuestion{
+		Alias: progress.Alias, HostName: progress.HostName,
+		KeyType: progress.HostKey.Type, Fingerprint: progress.HostKey.Fingerprint,
+	}, true
+}
+
+// AnswerHostKey answers the question about the key of this fingerprint, if it
+// is still the one the connection waits on.
+func (s *Session) AnswerHostKey(fingerprint string, accept bool) bool {
+	return s.input.answerConfirmation(fingerprint, accept)
+}
+
 // ConnectionProgress returns a snapshot of the current SSH connection step.
 // The terminal registry polls this while the asynchronous handshake is still
 // running, so ProxyJump failures can be attributed to the correct hop.

@@ -112,6 +112,9 @@ type View struct {
 	Reconnect *ReconnectView
 	// Progress is present while an SSH process is connecting or reconnecting.
 	Progress *ConnectionProgress
+	// HostKeyQuestion is present while the connection waits on whether to
+	// trust a host key that known_hosts does not have.
+	HostKeyQuestion *HostKeyQuestion
 	// ProgramProgress is the current program's OSC 9;4 report, independent of SSH connection progress.
 	ProgramProgress *ProgramProgress
 	// ProgramStatus is the OSC 7501 record to show, or nil when there is none.
@@ -230,6 +233,12 @@ func (s *Session) View() View {
 			view.Progress = &progress
 		}
 	}
+	if questioning, ok := s.process.(HostKeyQuestioning); ok &&
+		(s.state == StateConnecting || s.state == StateReconnecting) {
+		if question, asking := questioning.HostKeyQuestion(); asking {
+			view.HostKeyQuestion = &question
+		}
+	}
 	return view
 }
 
@@ -254,6 +263,27 @@ func (s *Session) Write(p []byte) (int, error) {
 		}
 	}
 	return process.Write(p)
+}
+
+// AnswerHostKey answers the host key question the connection waits on, if it
+// is still about the key of this fingerprint. A button pressed after the person
+// answered by typing, or after the connection moved on, answers nothing: the
+// answer is only ever written into that question, never into a later prompt
+// or the shell.
+func (s *Session) AnswerHostKey(fingerprint string, accept bool) error {
+	s.inputMutex.Lock()
+	defer s.inputMutex.Unlock()
+	s.mutex.Lock()
+	process, state := s.process, s.state
+	s.mutex.Unlock()
+	questioning, ok := process.(HostKeyQuestioning)
+	if !ok || (state != StateConnecting && state != StateReconnecting) {
+		return ErrNoHostKeyQuestion
+	}
+	if !questioning.AnswerHostKey(fingerprint, accept) {
+		return ErrNoHostKeyQuestion
+	}
+	return nil
 }
 
 // CommandTarget returns a binding only for a connected Process capable of exact
