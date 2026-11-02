@@ -116,6 +116,9 @@ async function restrictToThisUser(target: string): Promise<void> {
   });
 }
 
+// engineOutputKept is how much of what the engine wrote last is kept for the error when it stops early.
+const engineOutputKept = 2_000;
+
 function startBinary(
   home: string,
 ): Promise<{ child: ChildProcess; url: string }> {
@@ -125,9 +128,17 @@ function startBinary(
       stdio: ["ignore", "pipe", "pipe"],
     });
     let exited = false;
+    // What the engine wrote last says why it stopped; without it a start that fails only under load cannot be told
+    // apart from any other.
+    let written = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      written = (written + chunk.toString("utf8")).slice(-engineOutputKept);
+    });
+    // Read and drop what it prints otherwise: a pipe left unread fills, and the engine then stops at its next line.
+    child.stdout?.resume();
     child.on("exit", (code) => {
       exited = true;
-      rejectPromise(new Error(`sshc engine exited with ${String(code)}`));
+      rejectPromise(new Error(`sshc engine exited with ${String(code)}: ${written.trim()}`));
     });
 
     const deadline = Date.now() + 15_000;
