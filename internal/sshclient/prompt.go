@@ -65,9 +65,10 @@ type StreamPrompter struct {
 	Out io.Writer
 	In  io.Reader
 	// begin と end は、非同期SSH sessionが通常入力と認証回答を区別するための
-	// 内部hookである。公開Prompterの利用者は設定しなくてよい。
-	begin func()
-	end   func()
+	// 内部hookである。公開Prompterの利用者は設定しなくてよい。confirmation は、
+	// yes/no の問い（Confirm）のときだけその問いの文で、ほかの問いでは空である。
+	begin func(confirmation string)
+	end   func(confirmation string)
 }
 
 type promptEcho uint8
@@ -78,11 +79,11 @@ const (
 )
 
 func (p StreamPrompter) Line(prompt string) (string, error) {
-	return p.read(prompt, promptEchoVisible)
+	return p.read(prompt, promptEchoVisible, "")
 }
 
 func (p StreamPrompter) Secret(prompt string) (string, error) {
-	return p.read(prompt, promptEchoMasked)
+	return p.read(prompt, promptEchoMasked, "")
 }
 
 // Confirm は yes か no だけを受ける。
@@ -90,8 +91,10 @@ func (p StreamPrompter) Secret(prompt string) (string, error) {
 // OpenSSH と同じで、y も Enter も結果にならない。ホスト鍵を受け入れるかどうかは
 // 打ち間違いで通ってよい問いではない。
 func (p StreamPrompter) Confirm(prompt string) (bool, error) {
+	// 問い直すときは文を書き直さないが、答えを待っている問いは同じである。
+	question := prompt
 	for attempt := 0; attempt < maxConfirmAttempts; attempt++ {
-		answer, err := p.read(prompt, promptEchoVisible)
+		answer, err := p.read(prompt, promptEchoVisible, question)
 		if err != nil {
 			return false, err
 		}
@@ -116,12 +119,12 @@ const maxConfirmAttempts = 3
 // maxAnswer は、ひとつの結果の長さの上限である。
 const maxAnswer = 1024
 
-func (p StreamPrompter) read(prompt string, echo promptEcho) (string, error) {
+func (p StreamPrompter) read(prompt string, echo promptEcho, confirmation string) (string, error) {
 	if p.begin != nil {
-		p.begin()
+		p.begin(confirmation)
 	}
 	if p.end != nil {
-		defer p.end()
+		defer p.end(confirmation)
 	}
 	if prompt != "" {
 		if _, err := io.WriteString(p.Out, prompt); err != nil {
@@ -248,6 +251,9 @@ type InputBuffer struct {
 	gated   bool
 	usable  bool
 	prompts int
+	// confirmation は、いま答えを待っている yes/no の問い（StreamPrompter.Confirm）の文である。
+	// 待っていなければ空。画面のボタンからの答え（answerConfirmation）は、この問いにだけ渡す。
+	confirmation string
 }
 
 // MaxBufferedInput は、問いが出ていない間に溜める量の上限である。
@@ -322,18 +328,56 @@ func (b *InputBuffer) enablePromptGate() {
 	b.mutex.Unlock()
 }
 
-func (b *InputBuffer) beginPrompt() {
+func (b *InputBuffer) beginPrompt(confirmation string) {
 	b.mutex.Lock()
 	b.prompts++
+	if confirmation != "" {
+		b.confirmation = confirmation
+	}
 	b.mutex.Unlock()
 }
 
-func (b *InputBuffer) endPrompt() {
+func (b *InputBuffer) endPrompt(confirmation string) {
 	b.mutex.Lock()
 	if b.prompts > 0 {
 		b.prompts--
 	}
+	if confirmation != "" && b.confirmation == confirmation {
+		b.confirmation = ""
+	}
 	b.mutex.Unlock()
+}
+
+// openConfirmation は、答えを待っている yes/no の問いの文を返す。待っていなければ空。
+func (b *InputBuffer) openConfirmation() string {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	if b.closed || b.usable {
+		return ""
+	}
+	return b.confirmation
+}
+
+// answerConfirmation は、about を含む yes/no の問いが答えを待っていれば、yes か no を答えて
+// true を返す。待っていなければ何も書かずに false を返す。
+//
+// 問いを確かめるのと書くのを同じロックの中でするのは、そのあいだに問いが閉じると、答えが
+// 次の問い（パスワードなど）や、つながったあとのシェルへ入るからである。シェルへ入った yes は
+// コマンドとして動く。打ちかけの文字は、先に送る Ctrl-U で消える（StreamPrompter.read）。
+func (b *InputBuffer) answerConfirmation(about string, accept bool) bool {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	if b.closed || b.usable || b.confirmation == "" || about == "" || !strings.Contains(b.confirmation, about) {
+		return false
+	}
+	answer := "no"
+	if accept {
+		answer = "yes"
+	}
+	b.data = append(b.data, 0x15)
+	b.data = append(b.data, answer+"\r"...)
+	b.ready.Broadcast()
+	return true
 }
 
 func (b *InputBuffer) markUsable() {

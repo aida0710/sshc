@@ -3,8 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import { forgetAllDismissedTerminalNotices, forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
-import { TerminalNoticeCard } from "./TerminalNoticeCard";
+import { TerminalNoticeCard, type NoticeFocus } from "./TerminalNoticeCard";
 import { terminalNoticeFor } from "./terminalNotice";
+import type { HostKeyAnswer } from "./useHostKeyAnswer";
 import type { SessionRecovery } from "./useSessionRecovery";
 
 afterEach(() => forgetAllDismissedTerminalNotices());
@@ -18,11 +19,17 @@ function recovery(overrides: Partial<SessionRecovery> = {}): SessionRecovery {
   return { reconnect: vi.fn(), reconnectBusy: false, reconnectFailed: false, stopReconnecting: vi.fn(), stopBusy: false, ...overrides };
 }
 
-function renderCard(shown: TerminalSession, actions: SessionRecovery, onCloseSession = vi.fn(), onDismiss = vi.fn()) {
+type CardOptions = { onCloseSession?: () => void; onDismiss?: () => void; answers?: HostKeyAnswer; focus?: NoticeFocus };
+
+function renderCard(
+  shown: TerminalSession,
+  actions: SessionRecovery,
+  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: false, giveBack: vi.fn() } }: CardOptions = {},
+) {
   const notice = terminalNoticeFor(shown, { phase: "live" });
   if (notice === null) throw new Error("no card for this session");
-  render(<TerminalNoticeCard notice={notice} session={shown} title="web-01" recovery={actions} onLinkNow={vi.fn()} onCloseSession={onCloseSession} onDismiss={onDismiss} />);
-  return { onCloseSession, onDismiss };
+  const view = render(<TerminalNoticeCard notice={notice} session={shown} title="web-01" recovery={actions} hostKeyAnswer={answers} focus={focus} onLinkNow={vi.fn()} onCloseSession={onCloseSession} onDismiss={onDismiss} />);
+  return { onCloseSession, onDismiss, answers, focus, view };
 }
 
 describe("TerminalNoticeCard", () => {
@@ -65,10 +72,51 @@ describe("TerminalNoticeCard", () => {
     }
   });
 
+  it("asks about an unknown host key with its fingerprint, and answers with the fingerprint asked about", async () => {
+    const asking: TerminalSession = {
+      ...session, state: "connecting",
+      hostKeyQuestion: { alias: "web-01", hostName: "10.0.2.15", keyType: "ssh-ed25519", fingerprint: "SHA256:ZncdGvxXvUJOYNkbZuT4Ew" },
+    };
+    const { answers } = renderCard(asking, recovery());
+    const card = screen.getByRole("region", { name: "Check the host key of web-01" });
+    expect(card).toHaveTextContent("First connection to this host");
+    expect(card).toHaveTextContent("ED25519 SHA256:ZncdGvxXvUJOYNkbZuT4Ew");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(answers.answer).toHaveBeenLastCalledWith("SHA256:ZncdGvxXvUJOYNkbZuT4Ew", false);
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(answers.answer).toHaveBeenLastCalledWith("SHA256:ZncdGvxXvUJOYNkbZuT4Ew", true);
+  });
+
   it("hides with its own button", async () => {
     const { onDismiss } = renderCard(lost, recovery());
     await userEvent.click(screen.getByRole("button", { name: "Hide this notice" }));
     expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it("takes the focus itself when it appears, not a button an Enter would press", () => {
+    renderCard(lost, recovery(), { focus: { take: true, giveBack: vi.fn() } });
+    expect(screen.getByRole("region", { name: "The SSH connection was lost." })).toHaveFocus();
+  });
+
+  it("leaves the focus where it is when told not to take it", () => {
+    renderCard(lost, recovery());
+    expect(screen.getByRole("region", { name: "The SSH connection was lost." })).not.toHaveFocus();
+  });
+
+  it("hides with Escape and gives the focus back when it goes away with the focus in it", async () => {
+    const giveBack = vi.fn();
+    const { onDismiss, view } = renderCard(lost, recovery(), { focus: { take: true, giveBack } });
+    await userEvent.keyboard("{Escape}");
+    expect(onDismiss).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(giveBack).toHaveBeenCalledOnce();
+  });
+
+  it("does not take the focus back to give away when the card goes without it", () => {
+    const giveBack = vi.fn();
+    const { view } = renderCard(lost, recovery(), { focus: { take: false, giveBack } });
+    view.unmount();
+    expect(giveBack).not.toHaveBeenCalled();
   });
 });
 

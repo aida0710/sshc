@@ -959,6 +959,10 @@ export const ja = {
     "再接続に失敗しました。設定された上限まで再試行します。",
   "terminal.reconnectExhausted":
     "SSHの接続が切れ、再接続できる回数の上限まで試してもつながりませんでした。",
+  "terminal.noticeFirstConnection": "初めて接続する相手です",
+  "terminal.noticeCheckHostKey": "{target}のホスト鍵を確かめてください",
+  "terminal.hostKeyReject": "やめる",
+  "terminal.hostKeyAccept": "接続する",
   "terminal.noticeDismiss": "この知らせを消す",
   "terminal.noticeReconnecting": "再接続しています（{attempt}/{limit}）",
   "terminal.noticeConnectionLost": "{title}との接続が切れました",

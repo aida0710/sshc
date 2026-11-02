@@ -11,6 +11,8 @@ test("a shell that fails puts a card over the terminal that can be hidden, and i
 
   const card = screen.getByRole("region", { name: "The program exited with status 3." });
   await expect(card).toBeVisible();
+  // The card takes the focus, so the keyboard reaches its buttons.
+  await expect(card).toBeFocused();
   // The strip above says it too, so hiding the card loses nothing.
   await expect(screen.getByText("The program exited with status 3.")).toHaveCount(2);
   await card.getByRole("button", { name: "Hide this notice" }).click();
@@ -48,4 +50,21 @@ test("a clean exit stays in the strip above, without a card", async ({ page, ins
 
   await expect(screen.getByText("The program exited with status 0.")).toBeVisible();
   await expect(screen.getByRole("button", { name: "Hide this notice" })).toHaveCount(0);
+});
+
+test("Escape hides the card that took the focus and gives the focus back to the terminal", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await terminalKeyboard(page).first().focus();
+  await page.keyboard.type("exit 3\n");
+
+  const card = screen.getByRole("region", { name: "The program exited with status 3." });
+  await expect(card).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(card.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(card).toBeHidden();
+  await expect(terminalKeyboard(page).first()).toBeFocused();
 });

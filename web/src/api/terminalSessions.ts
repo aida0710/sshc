@@ -13,6 +13,8 @@ export type StartTerminalForwardRequest = components["schemas"]["StartTerminalFo
 export type TerminalStreamTicket = components["schemas"]["TerminalStreamTicket"];
 export type TerminalDirectory = components["schemas"]["TerminalDirectory"];
 export type LocalShellProfileList = components["schemas"]["LocalShellProfileList"];
+export type TerminalHostKeyQuestion = components["schemas"]["TerminalHostKeyQuestion"];
+export type TerminalHostKeyAnswer = components["schemas"]["TerminalHostKeyAnswer"];
 
 export type TerminalSessionsApi = {
   // streamPath is the WebSocket path a stream ticket from this API is redeemed at.
@@ -24,6 +26,8 @@ export type TerminalSessionsApi = {
   terminalStreamTicket(id: string, cursor?: number): Promise<TerminalStreamTicket>;
   reconnectTerminalSession(id: string): Promise<TerminalSessionList>;
   stopTerminalReconnect(id: string): Promise<TerminalSessionList>;
+  // answerTerminalHostKey answers the session's hostKeyQuestion, as typing yes or no in the terminal would.
+  answerTerminalHostKey(id: string, answer: TerminalHostKeyAnswer): Promise<TerminalSessionList>;
   startTerminalForward(
     id: string,
     request: StartTerminalForwardRequest,
@@ -105,6 +109,14 @@ export function createTerminalSessionsApi(base: string, streamPath: string): Ter
       return validateTerminalSessionList(
         await postEmpty<unknown>(
           `${base}/sessions/${encodeURIComponent(id)}/reconnect/stop`,
+        ),
+      );
+    },
+    async answerTerminalHostKey(id, answer) {
+      return validateTerminalSessionList(
+        await postJSON<unknown>(
+          `${base}/sessions/${encodeURIComponent(id)}/host-key`,
+          answer,
         ),
       );
     },

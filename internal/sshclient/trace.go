@@ -180,6 +180,19 @@ func (t *tracer) stage(phase string, target Target, hop, hops int) {
 	})
 }
 
+// checkingHostKey は、この段の接続がホスト鍵を確かめている段階に入ったことを知らせる。受け取った
+// 鍵も添える。known_hosts に無い鍵を利用者に尋ねるとき、画面がその鍵を示せるようにするためである。
+func (t *tracer) checkingHostKey(target Target, hop, hops int, key ssh.PublicKey) {
+	if t == nil || t.progress == nil {
+		return
+	}
+	t.progress(terminal.ConnectionProgress{
+		Phase: terminal.ConnectionHostKey, Alias: target.Alias, HostName: target.HostName,
+		User: target.User, Hop: hop, Hops: hops,
+		HostKey: &terminal.OfferedHostKey{Type: key.Type(), Fingerprint: ssh.FingerprintSHA256(key)},
+	})
+}
+
 // describeKey は、鍵を種類と SHA256 指紋で言う。
 //
 // `ssh -v` が鍵を言うときと同じ形である。指紋があれば、ユーザーは

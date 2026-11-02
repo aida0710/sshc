@@ -15,7 +15,7 @@ export const sessionListPollIntervalMs = 2_000;
 export type TerminalSessionsApi = Pick<
   SessionsApi,
   "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "setTerminalSessionTitle"
-  | "stopTerminalReconnect" | "moveTerminalSession"
+  | "stopTerminalReconnect" | "answerTerminalHostKey" | "moveTerminalSession"
 >;
 
 export type TerminalSessionsState = {
@@ -42,6 +42,8 @@ export type TerminalSessionsState = {
   open: (request: OpenTerminalSessionRequest) => Promise<TerminalSession | null>;
   reconnect: (id: string) => Promise<boolean>;
   stopReconnect: (id: string) => Promise<boolean>;
+  // answerHostKey answers whether to trust the key a connecting session asks about (its hostKeyQuestion).
+  answerHostKey: (id: string, fingerprint: string, accept: boolean) => Promise<boolean>;
   close: (id: string) => Promise<void>;
   closeAll: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -265,6 +267,21 @@ export function useTerminalSessions(
     [api, applyMutation, reportConnectionFailure],
   );
 
+  const answerHostKey = useCallback(
+    async (id: string, fingerprint: string, accept: boolean): Promise<boolean> => {
+      setProblem("");
+      return applyMutation(() => api.answerTerminalHostKey(id, { fingerprint, accept }), async (error) => {
+        // The question closed first (answered in the terminal, or the connection went on); the list shows where it is.
+        if (failureCode(error) === "terminal_no_host_key_question") {
+          await refresh();
+          return;
+        }
+        await reportConnectionFailure(error);
+      });
+    },
+    [api, applyMutation, refresh, reportConnectionFailure],
+  );
+
   const closeAll = useCallback(async () => {
     beginOperation();
     try {
@@ -325,7 +342,7 @@ export function useTerminalSessions(
   return {
     sessions: loaded ? sessions : noSessions,
     maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
-    rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited, moveToWorkspace,
+    rename, unpinTitle, open, reconnect, stopReconnect, answerHostKey, close, closeAll, refresh, markExited, moveToWorkspace,
   };
 }
 
