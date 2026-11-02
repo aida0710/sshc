@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { keyBarKeys, maxKeyBarKeys } from "../rules/keyBar.generated";
 import { paletteGroups } from "./keyBarCatalog";
-import { defaultKeyBarLayout, insertKey, isPlaced, moveKey, moveToOtherRow, removeKey, replaceKey, type KeyBarLayout } from "./keyBarLayout";
+import { defaultKeyBarLayout, insertKey, isPlaced, moveKey, moveToOtherRow, offersDirectInput, removeKey, replaceKey, type KeyBarLayout } from "./keyBarLayout";
 
 const layout: KeyBarLayout = {
   keys: [{ key: "Escape" }, { key: "Tab" }, { key: "Control" }],
@@ -40,6 +40,12 @@ describe("editing a key bar layout", () => {
     expect(insertKey(layout, null, { label: "|", text: "|" })?.layout.keys.at(-1)).toEqual({ label: "|", text: "|" });
     expect(isPlaced(layout, { key: "Tab" })).toBe(true);
     expect(isPlaced(layout, { label: "|", text: "|", enter: true })).toBe(false);
+  });
+
+  it("tells whether the layout holds the key that switches where typing goes, in either row", () => {
+    expect(offersDirectInput(defaultKeyBarLayout)).toBe(true);
+    expect(offersDirectInput(layout)).toBe(false);
+    expect(offersDirectInput({ keys: [], moreKeys: [{ key: "DirectInput" }] })).toBe(true);
   });
 
   it("removes a key and replaces an edited one", () => {

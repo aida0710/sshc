@@ -26,6 +26,7 @@ import { flushSync } from "react-dom";
 import { KeyBar } from "./KeyBar";
 import { keyBarInput, withModifiers, type KeyBarKey } from "../keybar/keySequences";
 import { useKeyBarLayout } from "../keybar/keyBarPresets";
+import { offersDirectInput } from "../keybar/keyBarLayout";
 import { setDirectInput, useDirectInput } from "./useDirectInput";
 import { useModifierKeys } from "./useModifierKeys";
 import type { ModifierName } from "./modifierLatch";
@@ -353,7 +354,9 @@ export function TerminalView({
 
   const { modifiers, tap: tapModifier, takeModifiers } = useModifierKeys();
   const keyBarLayout = useKeyBarLayout();
-  const directInput = useDirectInput();
+  // Direct input holds only while the key bar offers the key that switches it back: a key bar preset without the
+  // key would otherwise leave the text box hidden with no way to bring it back.
+  const directInput = useDirectInput() && offersDirectInput(keyBarLayout);
   // The phone's text box, while it is shown (TerminalComposer).
   const composerField = useRef<HTMLTextAreaElement>(null);
   // sendKey sends a key of the key bar.

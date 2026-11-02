@@ -85,3 +85,9 @@ export function insertKey(layout: KeyBarLayout, after: KeySlot | null, key: KeyB
 export function replaceKey(layout: KeyBarLayout, slot: KeySlot, key: KeyBarKey): KeyBarLayout {
   return withRow(layout, slot.row, layout[slot.row].map((placed, index) => index === slot.index ? key : placed));
 }
+
+// offersDirectInput is whether the layout holds the key that switches where typing goes. Without it, typing
+// goes to the text box: the switch is how a person gets back to it.
+export function offersDirectInput(layout: KeyBarLayout): boolean {
+  return isPlaced(layout, { key: "DirectInput" });
+}

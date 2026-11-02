@@ -20,6 +20,14 @@ vi.mock("./TerminalQuickCommands", () => ({
   TerminalQuickCommands: () => <div role="dialog" aria-label="Quick Commands panel">Server-backed commands</div>,
 }));
 
+// keyBarLayout is the key bar in force; a test may choose one without some keys.
+const { defaultKeyBarLayout } = await import("../keybar/keyBarLayout");
+let keyBarLayout = defaultKeyBarLayout;
+vi.mock("../keybar/keyBarPresets", async (original) => ({
+  ...(await original<typeof import("../keybar/keyBarPresets")>()),
+  useKeyBarLayout: () => keyBarLayout,
+}));
+
 const { TerminalView } = await import("./TerminalView");
 const { setDirectInput } = await import("./useDirectInput");
 
@@ -275,6 +283,21 @@ describe("TerminalView", () => {
       setDirectInput(false);
       delete document.documentElement.dataset.keyboardOpen;
       focus.mockRestore();
+    }
+  });
+
+  it("keeps the text box where the key bar in force has no key to switch back to it", async () => {
+    touchScreen({ phone: true });
+    setDirectInput(true);
+    keyBarLayout = { keys: [{ key: "Escape" }], moreKeys: [] };
+    try {
+      renderView();
+      await waitFor(() => expect(streams).toHaveLength(1));
+      expect(screen.getByRole("textbox", { name: "Text to send to the terminal" })).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Type into the terminal" })).not.toBeInTheDocument();
+    } finally {
+      setDirectInput(false);
+      keyBarLayout = defaultKeyBarLayout;
     }
   });
 
