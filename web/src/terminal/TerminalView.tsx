@@ -58,6 +58,9 @@ import { useTerminalSearch } from "./useTerminalSearch";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
 import { TerminalNoticeCard } from "./TerminalNoticeCard";
+import { TerminalNoticesButton } from "./TerminalNoticesButton";
+import { noticeSeverity, statusBannerRows } from "./statusBannerRows";
+import { useMobileNotices } from "./useMobileNotices";
 import { forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
 import { terminalNoticeFor } from "./terminalNotice";
 import { useSessionRecovery } from "./useSessionRecovery";
@@ -245,6 +248,20 @@ export function TerminalView({
   const hostKeyAnswer = useHostKeyAnswer(onAnswerHostKey);
   const notice = terminalNoticeFor(session, link);
   const noticeDismissal = useTerminalNoticeDismissal(notice?.key ?? null);
+  const noticeRows = statusBannerRows({
+    session, problem, link, reconnectFailed: recovery.reconnectFailed, answersHostKey: hostKeyAnswer.answer !== undefined,
+  });
+  const noticesSeverity = noticeSeverity(noticeRows, { session, link });
+  const noticesButton = useRef<HTMLButtonElement>(null);
+  const noticesStrip = useRef<HTMLDivElement>(null);
+  const noticeCardFrame = useRef<HTMLDivElement>(null);
+  // A phone keeps its notices behind a button in the top bar, so they cover neither the terminal nor its rows.
+  const mobileNotices = useMobileNotices({
+    enabled: mobile,
+    present: noticesSeverity !== null || notice !== null,
+    containerRefs: [noticesButton, noticesStrip, noticeCardFrame],
+  });
+  const cardShown = notice !== null && (mobile ? mobileNotices.open : !noticeDismissal.dismissed);
   const working = session.state === "connected" && link.phase === "live";
   useEffect(() => {
     if (working) forgetDismissedTerminalNotices(session.id);
@@ -772,6 +789,18 @@ export function TerminalView({
     setComposerText("");
   }
 
+  const statusBanners = (
+    <TerminalStatusBanners
+      session={session}
+      problem={problem}
+      link={link}
+      onLinkNow={() => streamLinkController.current?.connect()}
+      onLinkStop={() => streamLinkController.current?.stopRetrying()}
+      recovery={recovery}
+      hostKeyAnswer={hostKeyAnswer}
+    />
+  );
+
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
       {/* The header follows the design: a 40px row on a desktop, the screen's top bar on a phone
@@ -829,6 +858,9 @@ export function TerminalView({
             <Icon name="search" className="size-[15px]" />
           </button>
         )}
+        {mobile && noticesSeverity !== null ? (
+          <TerminalNoticesButton severity={noticesSeverity} expanded={mobileNotices.open} onToggle={mobileNotices.toggle} buttonRef={noticesButton} />
+        ) : null}
         <button
           ref={overflowTrigger}
           type="button"
@@ -875,15 +907,7 @@ export function TerminalView({
         ) : null}
         <TerminalProgressBar progress={programProgress} />
       </div>
-      <TerminalStatusBanners
-        session={session}
-        problem={problem}
-        link={link}
-        onLinkNow={() => streamLinkController.current?.connect()}
-        onLinkStop={() => streamLinkController.current?.stopRetrying()}
-        recovery={recovery}
-        hostKeyAnswer={hostKeyAnswer}
-      />
+      {mobile ? null : statusBanners}
 
       <div className={`relative min-h-0 flex-1 overflow-clip bg-term-bg ${mobile ? "mx-2 rounded-[14px] border border-line" : ""}`}>
         <div
@@ -917,9 +941,15 @@ export function TerminalView({
           <TerminalCommandHeader block={topCommand} onGoTo={() => terminal.current?.scrollToLine(topCommand.start.line)} />
         ) : null}
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
-        {notice === null || noticeDismissal.dismissed ? null : (
+        {mobile && mobileNotices.open ? (
+          // Over the top of the terminal, not above it: the terminal keeps its rows, and its program does not draw again.
+          <div ref={noticesStrip} tabIndex={-1} className="absolute inset-x-0 top-0 z-20 bg-canvas shadow-float outline-none">
+            {statusBanners}
+          </div>
+        ) : null}
+        {notice === null || !cardShown ? null : (
           // Low in the terminal, where the person's eyes are after the last line; the strip above keeps saying it.
-          <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center mobile-layout:inset-x-2 mobile-layout:bottom-2">
+          <div ref={noticeCardFrame} className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center mobile-layout:inset-x-2 mobile-layout:bottom-2">
             <TerminalNoticeCard
               // A new notice is a new card, which takes the focus again.
               key={notice.key}
@@ -929,8 +959,9 @@ export function TerminalView({
               recovery={recovery}
               hostKeyAnswer={hostKeyAnswer}
               focus={{
-                // Only the terminal the person works in, and not from under a dialog or menu.
-                take: active && !isDismissibleLayerOpen(),
+                // Only the terminal the person works in, and not from under a dialog or menu. A phone shows it when the
+                // person asks for the notices, so it always takes the focus there.
+                take: mobile || (active && !isDismissibleLayerOpen()),
                 // A touch screen would raise its keyboard again for the terminal.
                 giveBack: () => {
                   if (!touchTerminalRef.current) terminal.current?.focus();
@@ -938,7 +969,7 @@ export function TerminalView({
               }}
               onLinkNow={() => streamLinkController.current?.connect()}
               onCloseSession={onCloseSession}
-              onDismiss={noticeDismissal.dismiss}
+              onDismiss={mobile ? mobileNotices.close : noticeDismissal.dismiss}
             />
           </div>
         )}
