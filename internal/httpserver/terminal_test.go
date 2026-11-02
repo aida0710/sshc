@@ -138,6 +138,35 @@ func (p *readinessPTY) finishOpen(err error) {
 	close(p.connected)
 }
 
+// askingReadinessPTY is an SSH connection that waits on whether to trust an
+// unknown host key, until it is answered.
+type askingReadinessPTY struct {
+	*readinessPTY
+	mutex    sync.Mutex
+	question *terminal.HostKeyQuestion
+	answers  []bool
+}
+
+func (p *askingReadinessPTY) HostKeyQuestion() (terminal.HostKeyQuestion, bool) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	if p.question == nil {
+		return terminal.HostKeyQuestion{}, false
+	}
+	return *p.question, true
+}
+
+func (p *askingReadinessPTY) AnswerHostKey(fingerprint string, accept bool) bool {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	if p.question == nil || p.question.Fingerprint != fingerprint {
+		return false
+	}
+	p.answers = append(p.answers, accept)
+	p.question = nil
+	return true
+}
+
 type forwardingReadinessPTY struct {
 	*readinessPTY
 	forwards []terminal.Forward
@@ -207,6 +236,9 @@ type terminalFixture struct {
 	sshReady   []*readinessPTY
 	asyncSSH   bool
 	forwarding bool
+	// askingHostKey makes the next SSH connections wait on a host key question.
+	askingHostKey bool
+	asking        []*askingReadinessPTY
 	// forwardBindFailure は、次に作る転送できるセッションの StartForward が返す失敗である。
 	forwardBindFailure error
 	forwarders         []*forwardingReadinessPTY
@@ -225,6 +257,13 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 		f.forwarders = append(f.forwarders, forwarder)
 		ready.finishOpen(nil)
 		return forwarder
+	}
+	if f.askingHostKey {
+		asking := &askingReadinessPTY{readinessPTY: newReadinessPTY(process), question: &terminal.HostKeyQuestion{
+			Alias: alias, HostName: "192.0.2.10", KeyType: "ssh-ed25519", Fingerprint: "SHA256:offered",
+		}}
+		f.asking = append(f.asking, asking)
+		return asking
 	}
 	if f.asyncSSH {
 		ready := newReadinessPTY(process)
@@ -624,6 +663,64 @@ func TestDescribeSessionIncludesSSHConnectionProgress(t *testing.T) {
 	if described.Progress == nil || described.Progress.Phase != api.Authenticating ||
 		described.Progress.Alias != "bastion" || described.Progress.Hop != 1 || described.Progress.Hops != 2 {
 		t.Fatalf("progress = %+v", described.Progress)
+	}
+}
+
+func TestAHostKeyQuestionIsListedAndAnsweredFromTheAPI(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	fixture.askingHostKey = true
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"web-01"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	var opened api.OpenTerminalSessionResponse
+	if err := json.Unmarshal([]byte(body), &opened); err != nil {
+		t.Fatal(err)
+	}
+	_, body = fixture.do(t, http.MethodGet, "/api/v1/terminal/sessions", "")
+	var listed api.TerminalSessionList
+	if err := json.Unmarshal([]byte(body), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if question := listed.Sessions[0].HostKeyQuestion; question == nil || question.Alias != "web-01" ||
+		question.KeyType != "ssh-ed25519" || question.Fingerprint != "SHA256:offered" {
+		t.Fatalf("question = %+v", question)
+	}
+
+	path := "/api/v1/terminal/sessions/" + opened.Session.Id + "/host-key"
+	// A button left over from another key (the previous hop of a ProxyJump) answers nothing.
+	response, body = fixture.do(t, http.MethodPost, path, `{"fingerprint":"SHA256:another","accept":true}`)
+	if response.StatusCode != http.StatusConflict || !strings.Contains(body, "terminal_no_host_key_question") {
+		t.Fatalf("answer about another key = %d: %s", response.StatusCode, body)
+	}
+	// An answer without accept is not read as a no.
+	response, _ = fixture.do(t, http.MethodPost, path, `{"fingerprint":"SHA256:offered"}`)
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("answer without accept = %d", response.StatusCode)
+	}
+	fixture.mutex.Lock()
+	asking := fixture.asking[0]
+	fixture.mutex.Unlock()
+	// The registry waits for the connection to finish before the fixture can shut it down.
+	t.Cleanup(func() { asking.finishOpen(nil) })
+	if len(asking.answers) != 0 {
+		t.Fatalf("answered before the right answer: %v", asking.answers)
+	}
+
+	response, body = fixture.do(t, http.MethodPost, path, `{"fingerprint":"SHA256:offered","accept":true}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("answer = %d: %s", response.StatusCode, body)
+	}
+	var answered api.TerminalSessionList
+	if err := json.Unmarshal([]byte(body), &answered); err != nil {
+		t.Fatal(err)
+	}
+	if len(asking.answers) != 1 || !asking.answers[0] || answered.Sessions[0].HostKeyQuestion != nil {
+		t.Fatalf("answers = %v, question after = %+v", asking.answers, answered.Sessions[0].HostKeyQuestion)
+	}
+	response, _ = fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions/absent/host-key", `{"fingerprint":"SHA256:offered","accept":true}`)
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("answer for an unknown session = %d", response.StatusCode)
 	}
 }
 

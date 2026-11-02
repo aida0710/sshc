@@ -6,6 +6,7 @@ import type { StreamLink } from "./streamLink";
 // state the person is likely to act on. key names the occurrence, so a card hidden by the person stays hidden until
 // the state happens again.
 export type TerminalNotice =
+  | { kind: "host-key"; key: string }
   | { kind: "ended"; key: string }
   | { kind: "reconnecting"; key: string }
   | { kind: "link-stopped"; key: string };
@@ -16,6 +17,10 @@ export function terminalNoticeFor(session: TerminalSession, link: StreamLink): T
   if (session.state === "exited" && session.exited !== undefined) {
     if (session.problem === "" && !exitedAbnormally(session)) return null;
     return { kind: "ended", key: `${noticeKeyPrefix(session.id)}ended:${session.exited.at}` };
+  }
+  const question = session.hostKeyQuestion;
+  if (question !== undefined && (session.state === "connecting" || session.state === "reconnecting")) {
+    return { kind: "host-key", key: `${noticeKeyPrefix(session.id)}host-key:${question.fingerprint}` };
   }
   if (session.state === "reconnecting") return { kind: "reconnecting", key: `${noticeKeyPrefix(session.id)}reconnecting` };
   if (link.phase === "stopped" && !link.gone) return { kind: "link-stopped", key: `${noticeKeyPrefix(session.id)}link-stopped` };

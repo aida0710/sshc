@@ -2224,6 +2224,20 @@ type TerminalForward struct {
 	To        string `json:"to"`
 }
 
+// TerminalHostKeyAnswer defines model for TerminalHostKeyAnswer.
+type TerminalHostKeyAnswer struct {
+	Accept      bool   `json:"accept"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+// TerminalHostKeyQuestion defines model for TerminalHostKeyQuestion.
+type TerminalHostKeyQuestion struct {
+	Alias       string `json:"alias"`
+	Fingerprint string `json:"fingerprint"`
+	HostName    string `json:"hostName"`
+	KeyType     string `json:"keyType"`
+}
+
 // TerminalIndeterminateProgress defines model for TerminalIndeterminateProgress.
 type TerminalIndeterminateProgress struct {
 	State TerminalIndeterminateProgressState `json:"state"`
@@ -2306,6 +2320,7 @@ type TerminalSession struct {
 	Alias               *string                     `json:"alias,omitempty"`
 	Exited              *TerminalExit               `json:"exited,omitempty"`
 	Forwards            *[]TerminalForward          `json:"forwards,omitempty"`
+	HostKeyQuestion     *TerminalHostKeyQuestion    `json:"hostKeyQuestion,omitempty"`
 	Id                  string                      `json:"id"`
 	Kind                TerminalSessionKind         `json:"kind"`
 	LastNotification    *TerminalNotification       `json:"lastNotification,omitempty"`

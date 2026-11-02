@@ -340,7 +340,7 @@ func (d Dialer) connectOne(ctx context.Context, request hopConnection) (*ssh.Cli
 		Auth:         authMethods,
 		AuthCallback: traceAuthentication(trace),
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			trace.stage(terminal.ConnectionHostKey, target, hop, hops)
+			trace.checkingHostKey(target, hop, hops, key)
 			trace.say(connectionlog.Full, "鍵交換が終わり、ホスト鍵を受け取りました（%s）。", connectionlog.Elapsed(trace.since(started)))
 			err := verifyHostKey(hostname, remote, key)
 			if err == nil {

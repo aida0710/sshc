@@ -13,6 +13,7 @@ function api(overrides: Partial<TerminalSessionsApi> = {}): TerminalSessionsApi 
     openTerminalSession: vi.fn(),
     reconnectTerminalSession: vi.fn().mockResolvedValue(list),
     stopTerminalReconnect: vi.fn().mockResolvedValue(list),
+    answerTerminalHostKey: vi.fn().mockResolvedValue(list),
     closeTerminalSession: vi.fn().mockResolvedValue(list),
     setTerminalSessionTitle: vi.fn().mockResolvedValue(list),
     moveTerminalSession: vi.fn().mockResolvedValue(list),
@@ -133,6 +134,29 @@ describe("useTerminalSessions", () => {
       await result.current.open({ kind: "shell" });
     });
     expect(result.current.problem).toBe("terminal.openFailed");
+  });
+
+  it("answers a host key question, and says nothing when the question was already answered in the terminal", async () => {
+    const answerTerminalHostKey = vi
+      .fn()
+      .mockResolvedValueOnce(list)
+      .mockRejectedValueOnce(new ApiError("terminal_no_host_key_question", 409, { code: "terminal_no_host_key_question", message: "closed" }));
+    const terminalSessions = vi.fn().mockResolvedValue(list);
+    const inlineClient = api({ answerTerminalHostKey, terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(inlineClient, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      expect(await result.current.answerHostKey("a", "SHA256:offered", true)).toBe(true);
+    });
+    expect(answerTerminalHostKey).toHaveBeenLastCalledWith("a", { fingerprint: "SHA256:offered", accept: true });
+
+    const listings = terminalSessions.mock.calls.length;
+    await act(async () => {
+      expect(await result.current.answerHostKey("a", "SHA256:offered", false)).toBe(false);
+    });
+    expect(result.current.problem).toBe("");
+    expect(terminalSessions.mock.calls.length).toBeGreaterThan(listings);
   });
 
   it("stays busy until every parallel session open has finished", async () => {

@@ -1279,6 +1279,52 @@ paths:
         '502':
           $ref: '#/components/responses/Problem'
       description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/sessions/{id}/host-key:
+    post:
+      operationId: remoteEngineAnswerTerminalHostKey
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TerminalHostKeyAnswer'
+      responses:
+        '200':
+          description: The session list after answering the host key question
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalSessionList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
   /api/v1/engines/{alias}/terminal/sessions/{id}/title:
     put:
       operationId: remoteEngineSetTerminalSessionTitle
@@ -1908,6 +1954,34 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/sessions/{id}/host-key:
+    post:
+      operationId: answerTerminalHostKey
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalHostKeyAnswer" }
+      responses:
+        "200":
+          # 接続中のセッションが待っている、known_hosts に無いホスト鍵の問い（hostKeyQuestion）に
+          # 答える。ターミナルで yes／no と打つのと同じ。その鍵についての問いをもう待っていなければ
+          # （ターミナルで答えた、接続が先へ進んだ、終わった）、何も書かずに 409 を返す。
+          description: The session list after answering the host key question
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
@@ -5126,6 +5200,9 @@ components:
         problem: { type: string }
         reconnect: { $ref: "#/components/schemas/TerminalReconnect" }
         progress: { $ref: "#/components/schemas/TerminalConnectionProgress" }
+        # 接続が known_hosts に無いホスト鍵を受け入れるかの答えを待っているあいだだけある。
+        # 答えは POST /sessions/{id}/host-key か、ターミナルで yes／no と打つ。
+        hostKeyQuestion: { $ref: "#/components/schemas/TerminalHostKeyQuestion" }
         # プログラムの OSC 9;4。消去時は省略する。SSH 接続の段階とは独立。
         programProgress: { $ref: "#/components/schemas/TerminalProgramProgress" }
         # プログラムが OSC 7501 で知らせた状態のうち、いちばん利用者の手を要するもの。無ければ省略する。
@@ -5488,6 +5565,26 @@ components:
       required: [workspaceId]
       properties:
         workspaceId: { type: string, minLength: 1, maxLength: 64 }
+    TerminalHostKeyQuestion:
+      type: object
+      additionalProperties: false
+      required: [alias, hostName, keyType, fingerprint]
+      properties:
+        # この問いを出した段の接続先。ProxyJump では踏み台のこともある。
+        alias: { type: string }
+        hostName: { type: string }
+        # 鍵の種類（ssh-ed25519 など）と、OpenSSH と同じ SHA256 のフィンガープリント。
+        keyType: { type: string }
+        fingerprint: { type: string }
+    TerminalHostKeyAnswer:
+      type: object
+      additionalProperties: false
+      required: [fingerprint, accept]
+      properties:
+        # 答える問いの鍵。画面が古い問いを見ているあいだに次の段が別の鍵を尋ねていれば、
+        # その問いには答えない。
+        fingerprint: { type: string, minLength: 1, maxLength: 128 }
+        accept: { type: boolean }
     SetTerminalSessionTitleRequest:
       type: object
       additionalProperties: false

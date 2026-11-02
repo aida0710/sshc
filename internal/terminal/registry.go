@@ -407,6 +407,16 @@ func (r *Registry) StopReconnecting(ctx context.Context, id string) error {
 	}
 }
 
+// AnswerHostKey は、接続中のセッションが待っている、known_hosts に無いホスト鍵の問いに答える。
+// 問いがその鍵についてのものでなくなっていれば ErrNoHostKeyQuestion を返す。
+func (r *Registry) AnswerHostKey(id, fingerprint string, accept bool) error {
+	session, ok := r.Lookup(id)
+	if !ok {
+		return ErrNotFound
+	}
+	return session.AnswerHostKey(fingerprint, accept)
+}
+
 // Reconnect は終了済みのSSHセッションを同じIDとscrollbackのまま開き直す。
 // 新規Openと同じ上限に数え、closeやengine停止が先行したProcessは公開しない。
 func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {

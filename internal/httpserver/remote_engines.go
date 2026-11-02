@@ -92,6 +92,7 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.POST("/api/v1/engines/:alias/terminal/sessions/:id/stream", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/sessions/:id/reconnect", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/sessions/:id/reconnect/stop", handlers.ForwardTerminal)
+	engine.POST("/api/v1/engines/:alias/terminal/sessions/:id/host-key", handlers.ForwardTerminal)
 	engine.PUT("/api/v1/engines/:alias/terminal/sessions/:id/title", handlers.ForwardTerminal)
 	engine.PUT("/api/v1/engines/:alias/terminal/sessions/:id/workspace", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/sessions/:id/directory", handlers.ForwardTerminal)
