@@ -72,12 +72,21 @@ test("stops the automatic reconnect loop from the pane", async ({ page, installa
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/reconnect-stop-banner.png`, fullPage: true });
   }
-  await page.getByRole("button", { name: "Stop reconnecting" }).click();
+  // The card over the terminal says it larger and offers the same action as the strip above.
+  const reconnectingCard = screen.getByRole("region", { name: "The connection to gateway was lost" });
+  await expect(reconnectingCard).toContainText("Reconnecting (3/5)");
+  await reconnectingCard.getByRole("button", { name: "Stop reconnecting" }).click();
 
   await expect.poll(() => stopRequests).toBe(1);
-  await expect(screen.getByText("The SSH connection was lost and automatic reconnecting was stopped.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Reconnect", exact: true })).toBeVisible();
+  const stoppedCard = screen.getByRole("region", { name: "The SSH connection was lost and automatic reconnecting was stopped." });
+  await expect(stoppedCard.getByRole("button", { name: "Reconnect", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reconnect", exact: true })).toHaveCount(2);
   await expect(page.getByRole("button", { name: "Stop reconnecting" })).toHaveCount(0);
+  // Hidden to read the log under it, the card leaves the strip above to act from.
+  await stoppedCard.getByRole("button", { name: "Hide this notice" }).click();
+  await expect(stoppedCard).toBeHidden();
+  await expect(page.getByRole("button", { name: "Reconnect", exact: true })).toHaveCount(1);
+  await expect(screen.getByText("The SSH connection was lost and automatic reconnecting was stopped.")).toBeVisible();
   await expect(screen).toContainText("再接続を停止しました");
   const list = page.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Open sessions" });
   await expect(list.getByRole("listitem")).toHaveCount(1);
@@ -99,8 +108,8 @@ test("does not start the automatic reconnect loop when the first connection fail
   const screen = page.getByRole("region", { name: /^Terminal for / });
   // A loop would keep the pane reconnecting for about 40 seconds before it
   // offered a manual reconnect.
-  await expect(screen.getByRole("button", { name: "Reconnect", exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(screen.getByText(/^The connection could not be established\./)).toBeVisible();
+  await expect(screen.getByRole("button", { name: "Reconnect", exact: true }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(screen.getByText(/^The connection could not be established\./).first()).toBeVisible();
   await expect(screen.getByText(/^reconnecting \d/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Stop reconnecting" })).toHaveCount(0);
 });

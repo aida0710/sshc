@@ -61,7 +61,7 @@ test("reconnects an exited SSH terminal in the same view", async ({ page, instal
   await openSection(page, "Terminal");
   const terminal = page.getByRole("region", { name: "Terminal for production-api" });
   await expect(terminal).toContainText("before disconnect");
-  const reconnect = terminal.getByRole("button", { name: "Reconnect", exact: true });
+  const reconnect = terminal.getByRole("region", { name: "The program exited with status 255." }).getByRole("button", { name: "Reconnect", exact: true });
   await expect(reconnect).toBeVisible();
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;

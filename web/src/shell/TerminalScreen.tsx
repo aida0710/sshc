@@ -129,6 +129,7 @@ export function TerminalScreen({
           onExit={(exit) => terminalSessions.markExited(session.id, exit)}
           onReconnect={() => terminalSessions.reconnect(session.id)}
           onStopReconnect={() => terminalSessions.stopReconnect(session.id)}
+          onCloseSession={() => void terminalSessions.close(session.id)}
           onOpenRemotePath={onOpenRemotePath}
           onOpenNavigation={onOpenNavigation}
         />
