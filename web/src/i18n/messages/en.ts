@@ -960,6 +960,7 @@ export const en = {
   "terminal.noticeCheckHostKey": "Check the host key of {target}",
   "terminal.hostKeyReject": "Cancel",
   "terminal.hostKeyAccept": "Connect",
+  "terminal.notices": "Notices",
   "terminal.noticeDismiss": "Hide this notice",
   "terminal.noticeReconnecting": "Reconnecting ({attempt}/{limit})",
   "terminal.noticeConnectionLost": "The connection to {title} was lost",

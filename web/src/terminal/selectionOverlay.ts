@@ -50,10 +50,13 @@ export function attachSelectionOverlay(
     const cells = measureCells(view);
     const base = container.getBoundingClientRect();
 
+    // The font is part of the layout: the rows' letter spacing changes once the font has loaded and the cells were
+    // measured again, without the screen moving, and the layer's text must keep lying over the drawn text.
     const shape =
       cells === null
         ? laidOut
-        : `${cells.rect.left - base.left} ${cells.rect.top - base.top} ${cells.rect.width} ${cells.rect.height}`;
+        : `${cells.rect.left - base.left} ${cells.rect.top - base.top} ${cells.rect.width} ${cells.rect.height} ` +
+          `${cells.font.family} ${cells.font.size} ${cells.font.weight} ${cells.font.letterSpacing}`;
     const relaidOut = shape !== laidOut;
 
     const held = selectionHeldIn(overlay);
