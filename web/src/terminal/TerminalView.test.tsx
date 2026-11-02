@@ -560,7 +560,10 @@ describe("TerminalView", () => {
     }} api={{ streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} onStopReconnect={onStopReconnect} />);
 
     expect(screen.getByText("reconnecting 2/5 · connecting")).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Stop reconnecting" }));
+    // The card over the terminal offers it larger; the strip above keeps it for a person who hid the card.
+    expect(screen.getAllByRole("button", { name: "Stop reconnecting" })).toHaveLength(2);
+    const card = screen.getByRole("region", { name: "The connection to tv was lost" });
+    await userEvent.click(within(card).getByRole("button", { name: "Stop reconnecting" }));
     expect(onStopReconnect).toHaveBeenCalledOnce();
   });
 
@@ -626,11 +629,13 @@ describe("TerminalView", () => {
     streams[0]!.handlers.onClose();
     await userEvent.click(await screen.findByRole("button", { name: "Stop retrying" }));
 
-    expect(screen.getByText(/Retrying has stopped/)).toBeVisible();
+    // Said in the strip above and in the card over the terminal.
+    expect(screen.getAllByText(/Retrying has stopped/)).toHaveLength(2);
     await vi.advanceTimersByTimeAsync(30_000);
     expect(ticket).toHaveBeenCalledTimes(1);
 
-    await userEvent.click(screen.getByRole("button", { name: "Connect now" }));
+    const card = screen.getByRole("region", { name: "This screen lost its connection to the sshc engine" });
+    await userEvent.click(within(card).getByRole("button", { name: "Connect now" }));
     await waitFor(() => expect(ticket).toHaveBeenCalledTimes(2));
   });
 
@@ -661,7 +666,8 @@ describe("TerminalView", () => {
     render(<TerminalView session={{ ...session, kind: "ssh", alias: "bastion", title: "bastion", state: "exited", exited: { code: 255, signal: "", at: "2026-08-26T01:00:00Z" } }} api={{ streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: ticket }} onReconnect={onReconnect} />);
     await waitFor(() => expect(ticket).toHaveBeenCalledTimes(1));
 
-    await userEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+    const card = screen.getByRole("region", { name: "The program exited with status 255." });
+    await userEvent.click(within(card).getByRole("button", { name: "Reconnect" }));
 
     expect(onReconnect).toHaveBeenCalledOnce();
     await waitFor(() => expect(ticket).toHaveBeenCalledTimes(2));
@@ -671,10 +677,12 @@ describe("TerminalView", () => {
     const onReconnect = vi.fn().mockResolvedValue(false);
     render(<TerminalView session={{ ...session, kind: "ssh", alias: "bastion", title: "bastion", state: "exited", exited: { code: 255, signal: "", at: "2026-08-26T01:00:00Z" } }} onReconnect={onReconnect} />);
 
-    await userEvent.click(await screen.findByRole("button", { name: "Reconnect" }));
+    const strip = await screen.findAllByRole("button", { name: "Reconnect" });
+    await userEvent.click(strip[0]!);
 
-    expect(await screen.findByText(/could not be reconnected/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Reconnect" })).toBeEnabled();
+    // The strip and the card share the attempt: both say it failed and offer Reconnect again.
+    expect(await screen.findAllByText(/could not be reconnected/)).toHaveLength(2);
+    for (const button of screen.getAllByRole("button", { name: "Reconnect" })) expect(button).toBeEnabled();
   });
 
   it("does not offer SSH reconnect for an exited local shell", () => {

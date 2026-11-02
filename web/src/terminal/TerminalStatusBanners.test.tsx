@@ -3,6 +3,11 @@ import { expect, it, vi } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
 import type { StreamLink } from "./streamLink";
+import type { SessionRecovery } from "./useSessionRecovery";
+
+const idleRecovery: SessionRecovery = {
+  reconnect: () => undefined, reconnectBusy: false, reconnectFailed: false, stopReconnecting: () => undefined, stopBusy: false,
+};
 
 const session: TerminalSession = {
   id: "a", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-08-14T09:00:00Z", state: "connected", problem: "",
@@ -75,7 +80,7 @@ it("says why an ended session stopped reconnecting once, in its ended row", () =
       ...session, kind: "ssh", alias: "bastion", state: "exited", problem,
       exited: { code: -1, signal: "", at: "2026-10-28T09:00:00Z", connectionLost: true },
     };
-    const { unmount } = render(<TerminalStatusBanners session={ended} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} onReconnect={async () => true} />);
+    const { unmount } = render(<TerminalStatusBanners session={ended} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} recovery={idleRecovery} />);
     expect(screen.getByRole("alert")).toHaveTextContent(reason);
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(screen.queryByText(/^The SSH connection was lost\.$/)).toBeNull();
