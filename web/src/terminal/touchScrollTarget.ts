@@ -1,6 +1,6 @@
 import type { IBuffer, IModes, Terminal } from "@xterm/xterm";
 import { overlayClass } from "./selectionOverlay";
-import type { Finger, TouchScrollTarget } from "./touchScroll";
+import type { Finger, SmoothScrollback, TouchScrollTarget } from "./touchScroll";
 
 type ScrolledTerminal = Pick<Terminal, "scrollLines"> & {
   readonly element: HTMLElement | undefined;
@@ -29,7 +29,10 @@ function programScrollsItself(view: ScrolledTerminal): boolean {
 // up and down keys (in application cursor mode when the program set it). A touch that xterm.js receives itself (no overlay, as on a
 // PC with both a touch screen and a mouse) already reaches the program through xterm.js, so for it sshc only moves
 // the scrollback.
-export function terminalTouchScrollTarget(view: ScrolledTerminal): TouchScrollTarget {
+//
+// smooth, when given, is the scrollback drawn moved by the pixel (createScrollbackOffset): a finger moves through the
+// scrollback with it, and a program that scrolls its own text, a row at a time as it draws, without it.
+export function terminalTouchScrollTarget(view: ScrolledTerminal, smooth?: SmoothScrollback): TouchScrollTarget {
   // The rows the finger has moved toward the next reported wheel step, signed like the amount.
   let rowsTowardStep = 0;
   const wheelSteps = (amount: number): number => {
@@ -41,6 +44,9 @@ export function terminalTouchScrollTarget(view: ScrolledTerminal): TouchScrollTa
     return steps;
   };
   return {
+    smoothScrollback() {
+      return smooth === undefined || programScrollsItself(view) ? null : smooth;
+    },
     scrollLines(amount: number, finger: Finger) {
       const element = view.element;
       if (!startedOnOverlay(finger) || !programScrollsItself(view) || element === undefined) {
