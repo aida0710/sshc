@@ -930,9 +930,9 @@ export const ja = {
   "terminal.remoteWorkingDirectoryUnsupported":
     "このフォルダではターミナルを開けません。フォルダのパスに制御文字が含まれています。",
   "terminal.jumpDepthExceeded": "ProxyJumpの階層が上限を超えています。",
-  "terminal.hostKeyDeclined": "ホスト鍵を受け入れなかったので、接続しませんでした。",
+  "terminal.hostKeyDeclined": "ホスト鍵を受け入れなかったため、接続しませんでした。",
   "terminal.hostKeyUnknown":
-    "このホスト鍵はまだ信頼済みとして登録されていません。フィンガープリントを確認してから、対話モードで接続してください。",
+    "このホスト鍵はknown_hostsにありません。フィンガープリントを確認してknown_hostsに登録してから、接続し直してください。",
   "terminal.hostKeyChanged":
     "ホスト鍵が変わりました。Known Hostsを確認してから接続し直してください。",
   "terminal.hostKeyRevoked":
@@ -960,18 +960,17 @@ export const ja = {
     "再接続に失敗しました。設定された上限まで再試行します。",
   "terminal.reconnectExhausted":
     "SSHの接続が切れ、再接続できる回数の上限まで試してもつながりませんでした。",
-  "terminal.noticeFirstConnection": "初めて接続する相手です",
-  "terminal.noticeCheckHostKey": "{target}のホスト鍵を確かめてください",
+  "terminal.noticeFirstConnection": "初めての接続先です",
+  "terminal.noticeCheckHostKey": "{target}のホスト鍵を確認してください",
   "terminal.hostKeyReject": "やめる",
   "terminal.hostKeyAccept": "接続する",
-  "terminal.noticeDismiss": "この知らせを消す",
+  "terminal.noticeDismiss": "このお知らせを消す",
   "terminal.noticeReconnecting": "再接続しています（{attempt}/{limit}）",
   "terminal.noticeConnectionLost": "{title}との接続が切れました",
-  "terminal.noticeNextTry": "あと{seconds}秒で次を試します。",
-  "terminal.noticeTryingNow": "いま接続を試しています。",
-  "terminal.noticeStopped": "止まりました",
+  "terminal.noticeNextTry": "{seconds}秒後にもう一度試します。",
+  "terminal.noticeTryingNow": "接続し直しています。",
   "terminal.noticeCloseSession": "閉じる",
-  "terminal.noticeLinkLost": "この画面とsshcエンジンとの接続が切れました",
+  "terminal.noticeLinkLost": "sshcエンジンとの接続が切れました",
   "terminal.manualReconnect": "再接続",
   "terminal.stopReconnect": "再接続を停止",
   "terminal.reconnectStopped": "SSHの接続が切れ、自動再接続を停止しました。",
