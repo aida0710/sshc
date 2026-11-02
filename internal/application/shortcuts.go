@@ -2,10 +2,6 @@ package application
 
 import (
 	"errors"
-	"reflect"
-	"regexp"
-	"strings"
-	"unicode/utf8"
 
 	"sshc/internal/validate"
 )
@@ -18,7 +14,6 @@ type ShortcutPreset struct {
 
 var ErrShortcutPresets = errors.New("invalid shortcut presets")
 var ErrShortcutConflict = errors.New("shortcut presets changed; reload before saving")
-var shortcutID = regexp.MustCompile(`^[a-zA-Z0-9-]{1,64}$`)
 
 // validateShortcutPresets uses the chord grammar, action list and limits of
 // internal/validate, which the settings screen receives through rulegen, so a
@@ -40,7 +35,7 @@ func validateShortcutPresets(presets []ShortcutPreset) error {
 // validShortcutPreset says whether p names itself properly and binds every
 // action, each to chords the screen records and none twice.
 func validShortcutPreset(p ShortcutPreset) bool {
-	if !shortcutID.MatchString(p.ID) || p.ID == "default" || strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > validate.MaxShortcutPresetNameLength || strings.ContainsAny(p.Name, "\r\n\x00") || len(p.Bindings) != len(validate.ShortcutActions) {
+	if !validPresetLibraryEntry(p.ID, p.Name, validate.MaxShortcutPresetNameLength) || len(p.Bindings) != len(validate.ShortcutActions) {
 		return false
 	}
 	seen := map[string]bool{}
@@ -99,12 +94,5 @@ func (s *Service) SetShortcutPresets(base, presets []ShortcutPreset) (SaveResult
 	if err := validateShortcutPresets(presets); err != nil {
 		return SaveResult{}, err
 	}
-	return s.changeMetadata("shortcuts.presets", func(stored *Metadata) error {
-		// Empty and absent libraries describe the same initial state.
-		if !(len(base) == 0 && len(stored.ShortcutPresets) == 0) && !reflect.DeepEqual(base, stored.ShortcutPresets) {
-			return ErrShortcutConflict
-		}
-		stored.ShortcutPresets = presets
-		return nil
-	})
+	return replacePresetLibrary(s, "shortcuts.presets", base, presets, func(stored *Metadata) *[]ShortcutPreset { return &stored.ShortcutPresets }, ErrShortcutConflict)
 }

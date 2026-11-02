@@ -123,6 +123,11 @@ var servedStringEnums = map[string]func(string) bool{
 	"NotificationSound.sound": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
 		preset.Interface = &application.InterfaceSettings{NotificationSound: &application.NotificationSound{Sound: value}}
 	}),
+	"KeyBarKey.key": func(value string) bool {
+		metadata := application.NewMetadata()
+		metadata.KeyBarPresets = []application.KeyBarPreset{{ID: "phone", Name: "Phone", Keys: []application.KeyBarKey{{Key: value}}, MoreKeys: []application.KeyBarKey{}}}
+		return application.ValidateMetadata(metadata) == nil
+	},
 	"GlobalSettings.language": func(value string) bool {
 		metadata := application.NewMetadata()
 		metadata.Settings = &application.GlobalSettings{Language: value}

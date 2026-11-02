@@ -1,4 +1,5 @@
-import { useBindings, usePresetSync } from "./keyconfig/presets";
+import { useBindings } from "./keyconfig/presets";
+import { usePresetLibrarySync } from "./settings/presetLibrary";
 import { useSettingsSync } from "./settings/settingsStore";
 import { useTerminalSettings } from "./settings/terminalSettings";
 import { opensInThisPage } from "./ui/linkClick";
@@ -102,7 +103,7 @@ export function App({
     requestFailure,
     vaultMigration,
   } = session;
-  usePresetSync(state === "ready");
+  usePresetLibrarySync(state === "ready");
   // The settings come with the engine being ready; the shell waits for them (settingsLoaded) so the screens
   // open with the widths and views this machine chose rather than the defaults first.
   const settingsLoaded = useSettingsSync(state === "ready");

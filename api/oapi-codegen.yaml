@@ -16,6 +16,7 @@ output-options:
   # 引き続き生成される。
   exclude-operation-ids:
     - setShortcutPresets
+    - setKeyBarPresets
     - getSettings
     - setGlobalSettings
     - setPresets
@@ -65,6 +66,8 @@ output-options:
     - SFTPMediaTicket
     - SFTPMediaTicketRequest
     - ShortcutPreset
+    - KeyBarPreset
+    - KeyBarKey
     # 設定（全体の設定・プリセット・マシン）は metadata とマシンごとのファイルの形のまま運ぶ。
     - AppearanceSettings
     - GlobalSettings

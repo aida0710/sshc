@@ -186,8 +186,10 @@ type EmbeddedTerminal struct {
 // （machine_settings.go）にあり、ここには無い。
 type Metadata struct {
 	ShortcutPresets []ShortcutPreset `json:"shortcutPresets,omitempty"`
-	SchemaVersion   int              `json:"schemaVersion"`
-	GroupsFile      string           `json:"groupsFile,omitempty"`
+	// KeyBarPresets は、スマホのキーバーの並びの一覧である。
+	KeyBarPresets []KeyBarPreset `json:"keyBarPresets,omitempty"`
+	SchemaVersion int            `json:"schemaVersion"`
+	GroupsFile    string         `json:"groupsFile,omitempty"`
 	// Settings は全体の設定である。
 	Settings *GlobalSettings `json:"settings,omitempty"`
 	// Presets はプリセットの一覧である。先頭は必ず標準のプリセット（DefaultPresetID）で、
@@ -236,6 +238,7 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	}
 	withoutUnreadableGlobalSettings(&metadata)
 	withoutUnreadableShortcutPresets(&metadata)
+	withoutUnreadableKeyBarPresets(&metadata)
 	withoutUnreadablePresets(&metadata)
 	return metadata, nil
 }
@@ -275,6 +278,9 @@ func EncodeMetadata(metadata Metadata) ([]byte, error) {
 // ValidateMetadata は設計の不変条件を破る文書を拒否する。
 func ValidateMetadata(metadata Metadata) error {
 	if err := validateShortcutPresets(metadata.ShortcutPresets); err != nil {
+		return err
+	}
+	if err := validateKeyBarPresets(metadata.KeyBarPresets); err != nil {
 		return err
 	}
 	if err := validateGlobalSettings(metadata.Settings); err != nil {
