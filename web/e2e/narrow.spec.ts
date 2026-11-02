@@ -857,6 +857,49 @@ test("keeps Ctrl held after a double tap until it is tapped again", async ({ pag
   await expect(rows).toContainText("ctrl-42", { timeout: 20_000 });
 });
 
+test("arranges the key bar in the settings, and the terminal's bar follows it", async ({ page, installation }) => {
+  test.skip(
+    process.platform === "win32",
+    "on-screen keys are a touch affordance; make e2e on Linux or macOS covers this path",
+  );
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Menu", exact: true }).click();
+  await page.getByRole("link", { name: "Open Key bar" }).click();
+
+  // Editing the default layout makes a key bar of one's own: F5 goes after the selected Esc.
+  const order = page.getByRole("group", { name: "Keys always shown" });
+  await order.getByRole("button", { name: "Esc", exact: true }).click();
+  await page.getByRole("group", { name: "Function keys" }).getByRole("button", { name: "F5", exact: true }).click();
+  await expect(order.getByRole("button", { name: "F5", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("combobox", { name: "Key bar preset" }).locator("option:checked")).toHaveText("My key bar");
+
+  await page.getByRole("button", { name: "Make a key" }).click();
+  const making = page.getByRole("dialog", { name: "Your own key" });
+  await making.getByLabel("Text on the key").fill("hi");
+  await making.getByLabel("What it sends").fill("echo keybar-$((40+2))");
+  await making.getByLabel("Press Enter after sending").check();
+  await making.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(order.getByRole("button", { name: "hi", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await openLocalShell(page);
+  const rows = drawnRows(page);
+  await expect(rows).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const keys = page.getByLabel("On-screen keys");
+  await keys.getByRole("button", { name: "hi", exact: true }).click();
+  await expect(rows).toContainText("keybar-42", { timeout: 20_000 });
+
+  // F5 reaches the program as the key itself: cat -v prints what it read.
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("cat -v");
+  await page.keyboard.press("Enter");
+  await keys.getByRole("button", { name: "F5", exact: true }).click();
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Enter");
+  await expect(rows).toContainText("^[[15~", { timeout: 20_000 });
+  await keys.getByRole("button", { name: "Ctrl+C", exact: true }).click();
+});
+
 test("sends what was typed in the phone's text box to the shell and empties the box", async ({ page, installation }) => {
   await openApplication(page, installation);
 

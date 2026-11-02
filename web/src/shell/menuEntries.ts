@@ -28,6 +28,7 @@ const settingsDescriptions: Record<SettingsPage, MessageKey> = {
   Terminal: "menu.terminalDescription",
   SFTP: "menu.sftpDescription",
   Shortcuts: "menu.shortcutsDescription",
+  KeyBar: "menu.keyBarDescription",
   Notifications: "menu.notificationsDescription",
   Vault: "menu.vaultDescription",
   Machines: "menu.machinesDescription",

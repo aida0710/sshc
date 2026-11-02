@@ -38,6 +38,8 @@ type InterfaceSettings struct {
 	HideTouchLinkUnderlines bool `json:"hideTouchLinkUnderlines,omitempty"`
 	// ShortcutPreset は、使うショートカットのプリセットの ID である。空は既定の割り当て。
 	ShortcutPreset string `json:"shortcutPreset,omitempty"`
+	// KeyBarPreset は、スマホで使うキーバーのプリセットの ID である。空は既定の並び。
+	KeyBarPreset string `json:"keyBarPreset,omitempty"`
 }
 
 // NotificationSound は、通知のときに鳴らす音の種類と大きさである。
@@ -147,6 +149,9 @@ func validateInterfaceSettings(settings *InterfaceSettings) error {
 	}
 	if settings.ShortcutPreset != "" && !presetIDPattern.MatchString(settings.ShortcutPreset) {
 		return fmt.Errorf("%w: shortcutPreset", ErrPresets)
+	}
+	if settings.KeyBarPreset != "" && !presetIDPattern.MatchString(settings.KeyBarPreset) {
+		return fmt.Errorf("%w: keyBarPreset", ErrPresets)
 	}
 	return nil
 }

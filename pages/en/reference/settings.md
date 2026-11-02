@@ -8,7 +8,7 @@ description: Global settings, presets, and settings for each machine.
 Settings fall into three groups, and the list on the left of each settings page shows them under these three headings:
 
 - Global: **General**. The same values on every machine, whichever preset it uses.
-- Presets: **Appearance**, **Terminal**, **SFTP**, **Keyboard shortcuts**, **Notifications**, and **Vault**. They edit the preset chosen under **Preset to edit** above the list.
+- Presets: **Appearance**, **Terminal**, **SFTP**, **Keyboard shortcuts**, **Key bar**, **Notifications**, and **Vault**. They edit the preset chosen under **Preset to edit** above the list.
 - Machines: **Machines**. Each machine that syncs chooses the preset it uses and its port.
 
 Every setting is stored under `~/.ssh/sshc` and synced to your other machines. **Open connections** is not a setting: it closes the connections open on this machine.
@@ -55,6 +55,14 @@ Duplicate bindings are rejected. Use **Clear** to disable an action or **Restore
 Bindings are kept in shortcut presets: save named ones, duplicate, rename, edit or delete them. Shortcut presets are synced and shared by every machine; each settings preset chooses the one it uses. Editing the default shortcuts creates a personal shortcut preset. When an sshc update adds actions to assign, the presets you made keep working; the new actions come in without keys, to assign if you use them. Hiding the navigation on a PC leaves only a narrow column with **Show the navigation**; each browser remembers whether it is hidden. Deleting the selected shortcut preset restores the defaults. Reload after a concurrent edit conflict. Browser or OS shortcuts may take priority. Native browser paste remains available.
 
 Paste defaults to Ctrl+V (⌘V on Mac); Ctrl+Shift+V also remains available.
+
+## Key bar
+
+Open **Menu → Key bar** to arrange the key bar shown under the terminal on a phone. Tap a key under **Order** to select it, then move it with **Earlier** and **Later**, put it behind 「…」 with **Behind 「…」**, bring it back with **Always shown**, or take it off with **Remove**. Tapping a key under **Keys to place** puts it after the selected key (at the end of the row always shown when none is selected). The keys on offer are Ctrl, Alt, Esc, Tab, Enter; Backspace, Del, Ins, the arrows, Home, End, PgUp, PgDn; ^C, ^D, ^Z, ^L, ^R, ^A, ^E; F1 to F12; and symbols.
+
+**Make a key** makes a key that sends a fixed text or command in one tap. Give the text to show on the key (up to 8 characters) and what it sends; **Press Enter after sending** runs the command at once. The text is sent as if typed, with a line break sent as Enter. Control characters other than tabs and line breaks cannot be sent. Select a key you made and use **Edit** to change it.
+
+Orders are kept in key bar presets: save a copy under a name, rename or delete one, or go **Back to the default order**. Key bar presets are synced and shared by every machine; each settings preset chooses the one it uses. Changing the default order creates a key bar preset of your own. Update every synced machine before using key bar presets: an older sshc that saves the settings again drops them.
 
 ## Appearance
 

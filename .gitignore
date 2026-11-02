@@ -36,4 +36,4 @@
 /android/app/build/
 
 # rulegen は `go run` で起こす。実体をコミットしない。
-rulegen
+/rulegen

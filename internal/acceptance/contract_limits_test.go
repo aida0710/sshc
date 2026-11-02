@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -102,6 +103,13 @@ func TestAPILimitsMatchTheGoLimits(t *testing.T) {
 		{"ShortcutPreset", "name", "maxLength", validate.MaxShortcutPresetNameLength},
 		{"ShortcutPreset", "bindings.palette", "maxItems", validate.MaxShortcutKeysPerAction},
 
+		{"Metadata", "keyBarPresets", "maxItems", validate.MaxKeyBarPresets},
+		{"KeyBarPreset", "name", "maxLength", validate.MaxKeyBarPresetNameLength},
+		{"KeyBarPreset", "keys", "maxItems", validate.MaxKeyBarKeys},
+		{"KeyBarPreset", "moreKeys", "maxItems", validate.MaxKeyBarMoreKeys},
+		{"KeyBarKey", "label", "maxLength", validate.MaxKeyBarLabelLength},
+		{"KeyBarKey", "text", "maxLength", validate.MaxKeyBarTextLength},
+
 		{"FileTransferSettings", "maxConcurrent", "maximum", sftp.MaxTransferConcurrency},
 		{"FileTransferSettings", "largeFileThresholdBytes", "minimum", sftp.MinLargeFileThreshold},
 		{"FileTransferSettings", "largeFileThresholdBytes", "maximum", sftp.MaxLargeFileThreshold},
@@ -187,5 +195,19 @@ func TestAPIVPNProfileLimitsMatchTheSharedCases(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Fatal("共有の表に上限の例が無い。読んでいる表が違う")
+	}
+}
+
+// キーバーに置ける用意したキーの正本は validate.KeyBarKeys で、openapi.yaml の KeyBarKey.key はその写しである。
+// 片方にだけ足すと、画面が並べたキーをサーバーが断るか、サーバーが返す並びを画面が断る。
+func TestAPIKeyBarKeysMatchTheGoList(t *testing.T) {
+	t.Parallel()
+	enum, _ := openAPIProperty(t, openAPISpec(t), "KeyBarKey", "key")["enum"].([]any)
+	names := make([]string, len(enum))
+	for index, value := range enum {
+		names[index], _ = value.(string)
+	}
+	if !slices.Equal(names, validate.KeyBarKeys) {
+		t.Errorf("openapi.yaml の KeyBarKey.key = %v、Go の一覧は %v", names, validate.KeyBarKeys)
 	}
 }

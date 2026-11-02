@@ -22,7 +22,9 @@ import { steppedFontSize } from "./fontSize";
 import { attachTouchScroll } from "./touchScroll";
 import { terminalTouchScrollTarget } from "./touchScrollTarget";
 import { createScrollbackOffset } from "./scrollbackOffset";
-import { KeyBar, applyModifiers, encodeKey } from "./KeyBar";
+import { KeyBar } from "./KeyBar";
+import { keyBarInput, withModifiers, type KeyBarKey } from "../keybar/keySequences";
+import { useKeyBarLayout } from "../keybar/keyBarPresets";
 import { useModifierKeys } from "./useModifierKeys";
 import type { ModifierName } from "./modifierLatch";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
@@ -348,9 +350,11 @@ export function TerminalView({
   const streamLinkController = useRef<StreamLinkController | null>(null);
 
   const { modifiers, tap: tapModifier, takeModifiers } = useModifierKeys();
+  const keyBarLayout = useKeyBarLayout();
   // The phone's text box, while it is shown (TerminalComposer).
   const composerField = useRef<HTMLTextAreaElement>(null);
-  const send = useRef<(name: string) => void>(() => {});
+  // sendKey sends a key of the key bar.
+  const sendKey = useRef<(key: KeyBarKey) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
   const promptCursor = useRef<PromptCursor | null>(null);
   const promptJump = useRef<PromptJump | null>(null);
@@ -583,13 +587,12 @@ export function TerminalView({
       // kitty image checks) as if they were new. The program that asked has
       // long had its answer; this one would land in the shell as typed text.
       if (output.isReplaying()) return;
-      const { ctrl, alt } = takeModifiers();
-      sendInput.current(applyModifiers(data, ctrl, alt));
+      sendInput.current(withModifiers(data, takeModifiers()));
     };
     sendInput.current = (text) => linkController.currentStream()?.send(text);
-    send.current = (name: string) => {
-      const { ctrl, alt } = takeModifiers();
-      linkController.currentStream()?.send(encodeKey(name, ctrl, alt));
+    sendKey.current = (key: KeyBarKey) => {
+      const input = keyBarInput(key, takeModifiers(), { applicationCursorKeys: view.modes.applicationCursorKeysMode });
+      linkController.currentStream()?.send(input);
     };
     view.onData(typed);
     // A program that turns on mouse reports without SGR (1006) gets them in the
@@ -1046,7 +1049,8 @@ export function TerminalView({
       <KeyBar
         modifiers={modifiers}
         onTap={holdModifier}
-        onKey={(name) => send.current(name)}
+        layout={keyBarLayout}
+        onKey={(key) => sendKey.current(key)}
       />
       <TerminalComposer
         value={composerText}
