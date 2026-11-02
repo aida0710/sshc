@@ -48,6 +48,8 @@ test("keeps the Workspaces heading at the top of the sidebar while the workspace
 
 test.describe("touch sidebar", () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 800 } });
+  // The height of a row and the size of its buttons on a touch screen, which a finger can still hit.
+  const rowSize = 36;
 
   test("keeps workspace counts and actions visible, with 36px rows and buttons", async ({ page, installation }) => {
     await page.route("**/api/v1/terminal/sessions", (route) => route.fulfill({ json: {
@@ -60,13 +62,15 @@ test.describe("touch sidebar", () => {
     const main = navigation.getByRole("button", { name: /^Main/ });
     await expect(main.getByText("1", { exact: true })).toHaveCSS("opacity", "1");
     await expect(navigation.getByRole("button", { name: "Open a session in Main" })).toHaveCSS("opacity", "1");
-    expect((await main.boundingBox())?.height).toBe(36);
+    // The browser lays the drawer out at fractions of a pixel (36.0000076px), so the sizes are compared to a
+    // hundredth of a pixel rather than exactly.
+    expect((await main.boundingBox())?.height).toBeCloseTo(rowSize, 2);
     const session = navigation.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
-    expect((await session.boundingBox())?.height).toBe(36);
+    expect((await session.boundingBox())?.height).toBeCloseTo(rowSize, 2);
     for (const name of ["Open a session in Main", "Workspace actions for Main", "Actions for Local shell", "Close Local shell"]) {
       const box = await navigation.getByRole("button", { name, exact: true }).boundingBox();
-      expect(box?.width, name).toBe(36);
-      expect(box?.height, name).toBe(36);
+      expect(box?.width, name).toBeCloseTo(rowSize, 2);
+      expect(box?.height, name).toBeCloseTo(rowSize, 2);
     }
   });
 });
