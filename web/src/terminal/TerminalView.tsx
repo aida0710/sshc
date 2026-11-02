@@ -80,6 +80,7 @@ import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
 import { isInTerminalNotice, isTypingElsewhere } from "./terminalFocus";
+import { resizeRewritingCursorLine } from "./cursorLineRewrite";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -253,6 +254,10 @@ export function TerminalView({
   const drawnLive = useRef(false);
   const activeRef = useRef(active);
   activeRef.current = active;
+  // askingRef is whether the engine is still connecting: the line holding the cursor is then the engine's own question
+  // (a host key, a password), which nothing draws again at a new width (resizeRewritingCursorLine).
+  const askingRef = useRef(false);
+  askingRef.current = session.state === "connecting" || session.state === "reconnecting";
   const inPaneRef = useRef(inPane);
   inPaneRef.current = inPane;
   const search = useTerminalSearch({
@@ -522,7 +527,8 @@ export function TerminalView({
       renderer.shown(wantsRenderer());
       if (!measured() || replaySizeHeld) return;
       try {
-        fit.fit();
+        if (askingRef.current) resizeRewritingCursorLine(view, () => fit.fit());
+        else fit.fit();
         if (touchTerminalRef.current) syncTerminalInputPosition(view);
       } catch {
         return;
