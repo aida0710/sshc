@@ -90,22 +90,33 @@ function startFilePreview({ alias, path, show }: { alias: string; path: string; 
   return () => { active = false; };
 }
 
+// ShownPreview is a preview together with the file it was read from.
+type ShownPreview = { alias: string; path: string; preview: FilePreviewState };
+
 // useFilePreview shows the file at path on alias: audio and video play, and
 // other files are read as an image or as text. A null path reads nothing.
+//
+// A preview read for another file is never returned: on the render that moves to a new path, before the effect
+// starts reading it, the file is loading. Otherwise the previous picture would show for a moment under the new
+// name, and be replaced under a finger that had started to swipe it. A read that is stopped forgets what it
+// showed, so that coming back to a file reads it again rather than showing a player whose ticket was revoked.
 export function useFilePreview(alias: string, path: string | null): FilePreviewState {
-  const [preview, setPreview] = useState<FilePreviewState>({ kind: "idle" });
+  const [shown, setShown] = useState<ShownPreview | null>(null);
 
   useEffect(() => {
-    if (path === null) {
-      setPreview({ kind: "idle" });
-      return;
-    }
-    setPreview({ kind: "loading" });
+    if (path === null) return;
+    const show = (preview: FilePreviewState) => setShown({ alias, path, preview });
     const element = playableMediaKind(path);
-    return element === null
-      ? startFilePreview({ alias, path, show: setPreview })
-      : startMediaPreview({ alias, path, element, show: setPreview });
+    const stop = element === null
+      ? startFilePreview({ alias, path, show })
+      : startMediaPreview({ alias, path, element, show });
+    return () => {
+      stop();
+      setShown(null);
+    };
   }, [alias, path]);
 
-  return preview;
+  if (path === null) return { kind: "idle" };
+  if (shown === null || shown.alias !== alias || shown.path !== path) return { kind: "loading" };
+  return shown.preview;
 }
