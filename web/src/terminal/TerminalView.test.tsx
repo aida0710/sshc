@@ -634,7 +634,7 @@ describe("TerminalView", () => {
     await vi.advanceTimersByTimeAsync(30_000);
     expect(ticket).toHaveBeenCalledTimes(1);
 
-    const card = screen.getByRole("region", { name: "This screen lost its connection to the sshc engine" });
+    const card = screen.getByRole("region", { name: "The connection to the sshc engine was lost" });
     await userEvent.click(within(card).getByRole("button", { name: "Connect now" }));
     await waitFor(() => expect(ticket).toHaveBeenCalledTimes(2));
   });

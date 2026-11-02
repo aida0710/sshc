@@ -129,7 +129,6 @@ function EndedCard({ session, recovery, onCloseSession, frame }: {
   return (
     <NoticeFrame
       tone="ended"
-      kicker={t("terminal.noticeStopped")}
       title={reason}
       body={recovery.reconnectFailed ? t("terminal.manualReconnectFailed") : undefined}
       frame={frame}
@@ -145,7 +144,7 @@ function EndedCard({ session, recovery, onCloseSession, frame }: {
 function LinkStoppedCard({ onLinkNow, frame }: { onLinkNow: () => void; frame: FrameBehaviour }) {
   const t = useTranslate();
   return (
-    <NoticeFrame tone="notice" kicker={t("terminal.noticeStopped")} title={t("terminal.noticeLinkLost")} body={t("terminal.linkStopped")} frame={frame}>
+    <NoticeFrame tone="notice" title={t("terminal.noticeLinkLost")} body={t("terminal.linkStopped")} frame={frame}>
       <Button kind="primary" onClick={onLinkNow} className={cardButton}>{t("terminal.linkNow")}</Button>
     </NoticeFrame>
   );
@@ -153,7 +152,9 @@ function LinkStoppedCard({ onLinkNow, frame }: { onLinkNow: () => void; frame: F
 
 function NoticeFrame({ tone, kicker, title, body, detail, frame, children }: {
   tone: NoticeTone;
-  kicker: ReactNode;
+  // kicker is a line over the title for a state the title alone does not say (how far a reconnect is); a card that has
+  // stopped says what happened in its title and the colour of its frame.
+  kicker?: ReactNode;
   title: string;
   body?: string | undefined;
   // detail is shown under the body as it is, for what is not a sentence (a fingerprint).
@@ -196,8 +197,8 @@ function NoticeFrame({ tone, kicker, title, body, detail, frame, children }: {
       }}
       className={`pointer-events-auto relative w-full max-w-[560px] rounded-xl border p-4 pr-12 shadow-float outline-none focus-visible:ring-2 focus-visible:ring-accent ${colours.frame}`}
     >
-      <p className={`flex items-center gap-2 text-xs font-semibold ${colours.kicker}`}>{kicker}</p>
-      <h2 id={titleId} className="mt-1 break-words text-sm font-semibold text-ink mobile-layout:text-[15px]">{title}</h2>
+      {kicker === undefined ? null : <p className={`mb-1 flex items-center gap-2 text-xs font-semibold ${colours.kicker}`}>{kicker}</p>}
+      <h2 id={titleId} className="break-words text-sm font-semibold text-ink mobile-layout:text-[15px]">{title}</h2>
       {body === undefined ? null : <p className="mt-1 break-words text-[13px] leading-5 text-ink-muted">{body}</p>}
       {detail}
       {/* The actions sit under the words, inside the card (the way of every notice in sshc). */}
