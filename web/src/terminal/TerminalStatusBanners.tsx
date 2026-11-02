@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
+import { exitText } from "./exitText";
 import { terminalProblemKey } from "./sessions";
-import { endedRightAway, exitedAbnormally } from "./sessionStatus";
+import { exitedAbnormally } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
+import { useReconnectCountdown } from "./useReconnectCountdown";
+import type { SessionRecovery } from "./useSessionRecovery";
 import { Button } from "../ui/surface";
 
 // 帯は、ターミナルの上に1行ずつ重なる。共通の Notice のように操作を文の下に置くと、帯ごとに1行増えて
@@ -29,25 +31,12 @@ function StreamLinkMessage({ link }: { link: Exclude<StreamLink, { phase: "live"
   );
 }
 
-// The countdown to the next reconnect attempt is redrawn this often.
-const reconnectCountdownTickMs = 1_000;
-
-// ReconnectMessage says which attempt the engine is on and whether it is
-// waiting for the next one (with the seconds left) or connecting now. A
-// connection attempt can take until the SSH timeout, so "waiting" and
-// "connecting" are told apart rather than shown as one count.
+// ReconnectMessage says which attempt the engine is on and whether it is waiting for the next one (with the seconds
+// left) or connecting now.
 function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect"] }) {
   const t = useTranslate();
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), reconnectCountdownTickMs);
-    return () => window.clearInterval(timer);
-  }, []);
-  const attempt = String(reconnect?.attempt ?? 1);
-  const limit = String(reconnect?.limit ?? 1);
-  const retryAt = reconnect === undefined ? Number.NaN : Date.parse(reconnect.retryAt);
-  const seconds = Math.ceil((retryAt - now) / 1_000);
-  if (!Number.isFinite(seconds) || seconds <= 0) return t("terminal.reconnectingNow", { attempt, limit });
+  const { attempt, limit, seconds } = useReconnectCountdown(reconnect);
+  if (seconds === null) return t("terminal.reconnectingNow", { attempt, limit });
   // 秒読みは毎秒変わるので読み上げず、試行の回数が変わったときだけ読み上げる。
   return (
     <>
@@ -57,64 +46,22 @@ function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect
   );
 }
 
-// exitText says how the program ended, in a sentence for the ended row.
-function exitText(t: ReturnType<typeof useTranslate>, exited: NonNullable<TerminalSession["exited"]>, session: TerminalSession): string {
-  if (exited.connectionLost === true) return t("terminal.exitedWithConnectionLost");
-  if (exited.signal !== "") return t("terminal.exitedWithSignal", { signal: exited.signal });
-  if (exited.code === 0 && endedRightAway(session)) return t("terminal.exitedWithCodeRightAway");
-  if (exited.code === exitCodeUnknown) return t("terminal.exitedWithUnknownCode");
-  return t("terminal.exitedWithCode", { code: String(exited.code) });
-}
-
-// exitCodeUnknown is the engine's code for an exit whose status it could not learn (terminal.ExitCodeUnknown).
-const exitCodeUnknown = -1;
-
 // The strip of one-line notices between the terminal header and the screen:
 // the engine's reconnect progress, the browser's own stream link, and how
 // the program ended. Each row only appears while it has something to say, and
 // one thing is said once: an ended session's reason (why reconnecting stopped,
 // why it could not connect) is its ended row, not a row of its own above it.
-export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, onStopReconnect, onReconnect }: {
+export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, recovery }: {
   session: TerminalSession;
   // A message from the view itself, such as a refused clipboard write.
   problem: string;
   link: StreamLink;
   onLinkNow: () => void;
   onLinkStop: () => void;
-  onStopReconnect?: () => Promise<boolean>;
-  // Resolves true once the engine reattached the SSH session; the stream is
-  // reopened right away in that case.
-  onReconnect?: () => Promise<boolean>;
+  // recovery reconnects an ended SSH session and stops the automatic reconnect; without it neither is offered.
+  recovery?: SessionRecovery;
 }) {
   const t = useTranslate();
-  const [reconnectBusy, setReconnectBusy] = useState(false);
-  const [reconnectFailed, setReconnectFailed] = useState(false);
-  const [stopBusy, setStopBusy] = useState(false);
-
-  async function stopReconnecting() {
-    if (onStopReconnect === undefined || stopBusy) return;
-    setStopBusy(true);
-    try {
-      await onStopReconnect();
-    } finally {
-      setStopBusy(false);
-    }
-  }
-
-  async function reconnectExitedSession() {
-    if (onReconnect === undefined || reconnectBusy) return;
-    setReconnectBusy(true);
-    setReconnectFailed(false);
-    try {
-      if (await onReconnect()) {
-        onLinkNow();
-        return;
-      }
-      setReconnectFailed(true);
-    } finally {
-      setReconnectBusy(false);
-    }
-  }
 
   return (
     <>
@@ -123,7 +70,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
           {problem}
         </p>
       )}
-      {reconnectFailed ? (
+      {recovery?.reconnectFailed === true ? (
         <p role="status" className={notice}>
           {t("terminal.manualReconnectFailed")}
         </p>
@@ -134,8 +81,8 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
           <p className="min-w-0 grow">
             <ReconnectMessage reconnect={session.reconnect} />
           </p>
-          {onStopReconnect === undefined ? null : (
-            <Button small disabled={stopBusy} onClick={() => void stopReconnecting()} className={bannerButton}>
+          {recovery?.stopReconnecting === undefined ? null : (
+            <Button small disabled={recovery.stopBusy} onClick={recovery.stopReconnecting} className={bannerButton}>
               {t("terminal.stopReconnect")}
             </Button>
           )}
@@ -170,9 +117,9 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
           <p className={`min-w-0 grow ${session.problem !== "" || exitedAbnormally(session) ? "text-danger" : "text-ink-muted"}`}>
             {session.problem === "" ? exitText(t, session.exited, session) : t(terminalProblemKey(session.problem))}
           </p>
-          {session.kind !== "ssh" || session.alias === undefined || onReconnect === undefined ? null : (
-            <Button small disabled={reconnectBusy} onClick={() => void reconnectExitedSession()} className={bannerButton}>
-              {t(reconnectBusy ? "terminal.manualReconnecting" : "terminal.manualReconnect")}
+          {session.kind !== "ssh" || session.alias === undefined || recovery?.reconnect === undefined ? null : (
+            <Button small disabled={recovery.reconnectBusy} onClick={recovery.reconnect} className={bannerButton}>
+              {t(recovery.reconnectBusy ? "terminal.manualReconnecting" : "terminal.manualReconnect")}
             </Button>
           )}
         </div>

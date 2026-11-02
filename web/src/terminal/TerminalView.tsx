@@ -57,6 +57,10 @@ import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
 import { useTerminalSearch } from "./useTerminalSearch";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
+import { TerminalNoticeCard } from "./TerminalNoticeCard";
+import { forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
+import { terminalNoticeFor } from "./terminalNotice";
+import { useSessionRecovery } from "./useSessionRecovery";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import { createStreamLink, type StreamLink, type StreamLinkController } from "./streamLink";
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
@@ -95,6 +99,8 @@ type TerminalViewProps = {
   onExit?: (exit: ExitReport) => void;
   onReconnect?: () => Promise<boolean>;
   onStopReconnect?: () => Promise<boolean>;
+  // onCloseSession closes this session; an ended session's card offers it.
+  onCloseSession?: () => void;
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
@@ -160,6 +166,7 @@ export function TerminalView({
   onExit,
   onReconnect,
   onStopReconnect,
+  onCloseSession,
   copyOnSelect = true,
   fontSize,
   rightClickPaste = true,
@@ -225,6 +232,17 @@ export function TerminalView({
   clipboardSettings.current = { copyOnSelect, rightClickPaste };
   const [problem, setProblem] = useState("");
   const [link, setLink] = useState<StreamLink>({ phase: "connecting", attempt: 1 });
+  const recovery = useSessionRecovery({
+    onReconnect,
+    onStopReconnect,
+    onReconnected: () => streamLinkController.current?.connect(),
+  });
+  const notice = terminalNoticeFor(session, link);
+  const noticeDismissal = useTerminalNoticeDismissal(notice?.key ?? null);
+  const working = session.state === "connected" && link.phase === "live";
+  useEffect(() => {
+    if (working) forgetDismissedTerminalNotices(session.id);
+  }, [session.id, working]);
   // drawnLive tells whether the screen is drawn as it is while the link is live, without the banner
   // above it that says the link is connecting (see the layout effect below).
   const drawnLive = useRef(false);
@@ -852,8 +870,7 @@ export function TerminalView({
         link={link}
         onLinkNow={() => streamLinkController.current?.connect()}
         onLinkStop={() => streamLinkController.current?.stopRetrying()}
-        {...(onStopReconnect === undefined ? {} : { onStopReconnect })}
-        {...(onReconnect === undefined ? {} : { onReconnect })}
+        recovery={recovery}
       />
 
       <div className={`relative min-h-0 flex-1 overflow-clip bg-term-bg ${mobile ? "mx-2 rounded-[14px] border border-line" : ""}`}>
@@ -888,6 +905,20 @@ export function TerminalView({
           <TerminalCommandHeader block={topCommand} onGoTo={() => terminal.current?.scrollToLine(topCommand.start.line)} />
         ) : null}
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
+        {notice === null || noticeDismissal.dismissed ? null : (
+          // Low in the terminal, where the person's eyes are after the last line; the strip above keeps saying it.
+          <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center mobile-layout:inset-x-2 mobile-layout:bottom-2">
+            <TerminalNoticeCard
+              notice={notice}
+              session={session}
+              title={displayTitle}
+              recovery={recovery}
+              onLinkNow={() => streamLinkController.current?.connect()}
+              onCloseSession={onCloseSession}
+              onDismiss={noticeDismissal.dismiss}
+            />
+          </div>
+        )}
         {terminalNotice === "" ? null : (
           <ToastMessage role="status" className="absolute bottom-3 right-3 z-20 max-w-[min(24rem,calc(100%-1.5rem))]">
             {terminalNotice}
