@@ -20,6 +20,8 @@ type SFTPHandlers struct {
 	Attempts *connectionattempt.Registry
 	// MediaTickets は、プレビューの再生部品が CSRF の見出し無しで読める音声・動画を預かる。
 	MediaTickets *mediaTickets
+	// Thumbnails は、一覧に出す画像のサムネイルを作り、メモリに持つ。
+	Thumbnails *sshcSFTP.Thumbnailer
 }
 
 func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
@@ -36,6 +38,7 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.GET("/api/v1/sftp/local/text", handlers.ReadLocalText)
 	engine.PUT("/api/v1/sftp/local/text", handlers.SaveLocalText)
 	engine.GET("/api/v1/sftp/local/preview", handlers.PreviewLocal)
+	engine.GET("/api/v1/sftp/local/thumbnail", handlers.ThumbnailLocal)
 	engine.GET("/api/v1/sftp/local/download", handlers.DownloadLocal)
 	engine.POST("/api/v1/sftp/media-tickets", handlers.IssueMediaTicket)
 	engine.DELETE("/api/v1/sftp/media-tickets/:ticket", handlers.RevokeMediaTicket)
@@ -50,6 +53,7 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.POST("/api/v1/sftp/:alias/entries", handlers.CreateEntry)
 	engine.GET("/api/v1/sftp/:alias/stats", handlers.DirectoryStats)
 	engine.GET("/api/v1/sftp/:alias/preview", handlers.Preview)
+	engine.GET("/api/v1/sftp/:alias/thumbnail", handlers.Thumbnail)
 	engine.GET("/api/v1/sftp/:alias/search", handlers.Search)
 	engine.GET("/api/v1/sftp/:alias/text", handlers.ReadText)
 	engine.PUT("/api/v1/sftp/:alias/text", handlers.SaveText)

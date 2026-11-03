@@ -148,7 +148,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		}, nil
 	})
 	sftpPool := sshcSFTP.NewRemotePool(inProcessSSH.sftp())
-	sftpService := &sshcSFTP.Service{Open: sftpPool.Open, ConnectionLimit: sftpConnectionLimit(vault, inProcessSSH.target)}
+	sftpService := &sshcSFTP.Service{Open: sftpPool.Open, Borrow: sftpPool.Borrow, ConnectionLimit: sftpConnectionLimit(vault, inProcessSSH.target)}
 	probe := dependencies.Probe
 	if probe == nil {
 		probe = inProcessSSH.probe()

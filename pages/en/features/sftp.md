@@ -63,6 +63,22 @@ Drag files or folders from the currently visible tab on one side to the visible 
 
 An uploaded file is given the modification time of its source (browser uploads, the CLI's `put`, host-to-host copies and transfers with the engine's disk). A newly created file gets the server's default permissions (its umask); a replaced file keeps its own.
 
+## Thumbnails and the grid
+
+Image rows in the list carry a small thumbnail. **List | Grid** above the list switches to a grid of larger pictures, and each tab remembers its choice. In the grid, a tap, a long press, a click, a right click and the keyboard do what they do in the list, and the arrow keys move to the neighbour on each side.
+
+The sshc engine reads an image and shrinks it. It does so only for PNG, JPEG and GIF files in rows in view, and a row that scrolls out of view cancels its read. Files are read one at a time on the SFTP connection already in use, so no connection is added; if that connection has closed after going unused, one is opened (never for a host answered with a one-time code). A photo with a small picture in its Exif header costs its first 68 KiB or so, and any other image is read whole, up to 4 MiB. Thumbnails stay in memory only.
+
+These keep the icon of their kind:
+
+- Files over 4 MiB with no picture in their Exif header
+- Images that would take more than 128 MiB of memory to decode
+- SVG, WebP, BMP, HEIC and every other format but PNG, JPEG and GIF, and video and audio
+- Symlinks
+- Images in a folder of more than 1000 of them
+
+In the phone app the sshc engine runs on the phone, so what it reads for thumbnails counts as mobile data. **Show thumbnails of images** in Settings > SFTP turns them off. It is a preset's setting, so it can be off on the phone alone.
+
 Symlinks are listed as `name → target`. A link to a directory opens as that directory; a link to a file is what details, preview, edit and download act on. Saving an edited file rewrites the file the link points to and leaves the link in place. A link whose target cannot be found is marked `(not found)` and cannot be opened. Copy, move, delete, compare and transfers with the engine's disk take the link itself and never follow it. A pane showing the engine's disk lists links the same way: a link opens even when its target is an absolute path, but the link itself cannot be transferred with the engine.
 
 ![The two-pane SFTP view with independent tabs on each side](/images/sftp-two-pane-en.png)

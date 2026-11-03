@@ -13,7 +13,7 @@ import (
 )
 
 func sftpProblem(c *echo.Context, err error) error {
-	if sshcSFTP.ConnectionLost(err) {
+	if sshcSFTP.ConnectionLost(err) || errors.Is(err, sshcSFTP.ErrNoOpenConnection) {
 		return problem(c, http.StatusBadGateway, "sftp_connection_lost")
 	}
 	// ホスト鍵で接続しなかったときは、ターミナルと同じ語で返す。画面は同じ文で理由と対処を言う。

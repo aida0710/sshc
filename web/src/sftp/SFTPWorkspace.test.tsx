@@ -72,7 +72,7 @@ function currentPath(): HTMLElement {
 // The remembered layout in the shape the workspace stores it in this machine's state: the panes from
 // left to right, each with its tabs and the position of the selected tab.
 type StoredPane = {
-  tabs: { alias: string; path: string; sortKey?: string; sortDirection?: string }[];
+  tabs: { alias: string; path: string; sortKey?: string; sortDirection?: string; view?: string }[];
   activeIndex?: number;
 };
 
@@ -477,6 +477,25 @@ describe("SFTP tabs", () => {
     render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
     const restored = await screen.findByRole("table");
     expect(within(restored).getByRole("columnheader", { name: /Size/ })).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("keeps a tab's grid with the tab, across leaving and coming back", async () => {
+    vi.mocked(api.list).mockResolvedValue({
+      path: "/home/edge",
+      entries: [{ name: "notes.txt", path: "/home/edge/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "2026-09-15T00:00:00Z", revision: "r1" }],
+    });
+    const first = render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
+    await chooseHost("edge");
+    await screen.findByRole("table");
+    await userEvent.click(screen.getByRole("button", { name: "Grid" }));
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByRole("list", { name: "File list" })).toBeVisible();
+    expect(storedPanes()[0]?.tabs[0]).toMatchObject({ view: "grid" });
+
+    first.unmount();
+    render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
+    expect(await screen.findByRole("list", { name: "File list" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Grid" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("ignores remembered tabs whose host is no longer declared", async () => {
@@ -954,8 +973,8 @@ describe("SFTP tabs", () => {
       expect(within(second).getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
       expect(api.list).toHaveBeenCalledOnce();
       expect(storedPanes()).toEqual([
-        { tabs: [{ alias: "", path: "", sortKey: "name", sortDirection: "ascending" }], activeIndex: 0 },
-        { tabs: [{ alias: "miyabi", path: "/srv", sortKey: "name", sortDirection: "ascending" }], activeIndex: 0 },
+        { tabs: [{ alias: "", path: "", sortKey: "name", sortDirection: "ascending", view: "list" }], activeIndex: 0 },
+        { tabs: [{ alias: "miyabi", path: "/srv", sortKey: "name", sortDirection: "ascending", view: "list" }], activeIndex: 0 },
       ]);
       workspace.rerender(<SFTPWorkspace title="SFTP" aliases={["edge", "miyabi"]} target={{ alias: "edge", path: "/var/log/report.txt", action: "browse", request: 1 }} />);
       await waitFor(() => expect(api.list).toHaveBeenLastCalledWith("edge", "/var/log", connecting));

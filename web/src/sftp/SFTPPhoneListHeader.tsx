@@ -4,8 +4,10 @@ import { iconAction } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { nextSort } from "../ui/tableSort";
 import { SFTPActionSheet } from "./SFTPActionSheet";
+import { SFTPEntryViewSwitch } from "./SFTPEntryViewSwitch";
 import type { SFTPSort, SFTPSortState } from "./sftpEntrySort";
 import { sortColumnLabelKeys } from "./sftpMessageKeys";
+import type { SFTPEntryView } from "./sftpPanes";
 import { phoneMenuItemClass } from "./SFTPMenuActionList";
 
 function sortArrow({ direction }: SFTPSortState) {
@@ -13,11 +15,13 @@ function sortArrow({ direction }: SFTPSortState) {
 }
 
 // The head of the list on a phone, which has no table to sort by its columns: the order the rows are in, which opens
-// the other orders, and a way to read the folder again.
-export function SFTPPhoneListHeader({ sort, columns, onSort, onRefresh, refreshDisabled }: {
+// the other orders, how the rows are drawn, and a way to read the folder again.
+export function SFTPPhoneListHeader({ sort, columns, onSort, entryView, onEntryViewChange, onRefresh, refreshDisabled }: {
   sort: SFTPSortState;
   columns: readonly SFTPSort[];
   onSort: (key: SFTPSort) => void;
+  entryView: SFTPEntryView;
+  onEntryViewChange: (view: SFTPEntryView) => void;
   onRefresh: () => void;
   refreshDisabled: boolean;
 }) {
@@ -39,9 +43,12 @@ export function SFTPPhoneListHeader({ sort, columns, onSort, onRefresh, refreshD
         {t(sortColumnLabelKeys[sort.key])}
         <Icon name={sortArrow(sort)} className="size-3.5 text-accent" />
       </button>
-      <button type="button" aria-label={t("sftp.refreshDirectory")} disabled={refreshDisabled} onClick={onRefresh} className={`${iconAction} size-11 active:bg-select-fill`}>
-        <Icon name="sync" className="size-4" />
-      </button>
+      <div className="flex items-center gap-1">
+        <SFTPEntryViewSwitch view={entryView} onChange={onEntryViewChange} touchCompact />
+        <button type="button" aria-label={t("sftp.refreshDirectory")} disabled={refreshDisabled} onClick={onRefresh} className={`${iconAction} size-11 active:bg-select-fill`}>
+          <Icon name="sync" className="size-4" />
+        </button>
+      </div>
       {choosing ? (
         <SFTPActionSheet heading={t("sftp.sortMenu")} onDismiss={() => setChoosing(false)} returnFocusRef={trigger}>
           {columns.map((column) => {

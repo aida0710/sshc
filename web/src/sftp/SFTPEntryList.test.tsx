@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { RemoteEntry } from "./api";
 import { SFTPEntryList } from "./SFTPEntryList";
+import type { SFTPEntryView } from "./sftpPanes";
 import { useSFTPEntryList } from "./useSFTPEntryList";
 
 const entries: RemoteEntry[] = [
@@ -10,11 +11,14 @@ const entries: RemoteEntry[] = [
   { name: "notes.txt", path: "/home/edge/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "2026-09-01T07:00:00Z", revision: "notes" },
 ];
 
-function LockedList({ mobileInteraction, locked = true, onActivate, onOpenParent }: {
+function LockedList({ mobileInteraction, locked = true, view = "list", draggable, onActivate, onOpenParent, onContextMenu }: {
   mobileInteraction: boolean;
   locked?: boolean;
+  view?: SFTPEntryView;
+  draggable?: (entry: RemoteEntry) => boolean;
   onActivate: (entry: RemoteEntry) => void;
   onOpenParent: () => void;
+  onContextMenu?: (entry: RemoteEntry, x: number, y: number) => void;
 }) {
   const model = useSFTPEntryList({
     entries,
@@ -25,6 +29,7 @@ function LockedList({ mobileInteraction, locked = true, onActivate, onOpenParent
     mobileInteraction,
     onActivate,
     onOpenParent,
+    ...(onContextMenu === undefined ? {} : { onContextMenu }),
   });
   return (
     <div onKeyDown={model.handleListKeys}>
@@ -37,6 +42,8 @@ function LockedList({ mobileInteraction, locked = true, onActivate, onOpenParent
         busy={false}
         locked={locked}
         parentRowVisible={!mobileInteraction}
+        view={view}
+        {...(draggable === undefined ? {} : { draggable })}
       />
     </div>
   );
@@ -139,5 +146,71 @@ describe("SFTPEntryList", () => {
     expect(screen.getByRole("button", { name: "notes.txt" })).toHaveAttribute("aria-pressed", "true");
     expect(project).toHaveAttribute("aria-pressed", "true");
     expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  describe("as a grid", () => {
+    it("opens a cell with a tap on a phone, and a long press starts choosing", async () => {
+      const onActivate = vi.fn();
+      render(<LockedList mobileInteraction locked={false} view="grid" onActivate={onActivate} onOpenParent={vi.fn()} />);
+      const notes = screen.getByRole("button", { name: "notes.txt" });
+      expect(screen.queryByRole("checkbox")).toBeNull();
+
+      await holdRow(notes, "Select notes.txt");
+      expect(onActivate).not.toHaveBeenCalled();
+      expect(notes).toHaveAttribute("aria-pressed", "true");
+
+      // While rows are chosen, a tap chooses another rather than opening it.
+      await userEvent.click(screen.getByRole("button", { name: "project" }));
+      expect(onActivate).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "project" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("can be dragged out on a pointer's screen, and leaves a held finger to the long press on a phone", () => {
+      const pointer = render(<LockedList mobileInteraction={false} locked={false} view="grid" draggable={() => true} onActivate={vi.fn()} onOpenParent={vi.fn()} />);
+      expect(screen.getByRole("button", { name: "notes.txt" }).closest("li")).toHaveAttribute("draggable", "true");
+      pointer.unmount();
+      render(<LockedList mobileInteraction locked={false} view="grid" draggable={() => true} onActivate={vi.fn()} onOpenParent={vi.fn()} />);
+      expect(screen.getByRole("button", { name: "notes.txt" }).closest("li")).toHaveAttribute("draggable", "false");
+    });
+
+    it("selects a cell with a click and opens it with a double click on a pointer's screen", async () => {
+      const onActivate = vi.fn();
+      render(<LockedList mobileInteraction={false} locked={false} view="grid" onActivate={onActivate} onOpenParent={vi.fn()} />);
+      const notes = screen.getByRole("button", { name: "notes.txt" });
+      await userEvent.click(notes);
+      expect(notes).toHaveAttribute("aria-pressed", "true");
+      expect(onActivate).not.toHaveBeenCalled();
+      await userEvent.dblClick(notes);
+      expect(onActivate).toHaveBeenCalledOnce();
+    });
+
+    it("gives a right click the row's menu", () => {
+      const onContextMenu = vi.fn();
+      render(<LockedList mobileInteraction={false} locked={false} view="grid" onActivate={vi.fn()} onOpenParent={vi.fn()} onContextMenu={onContextMenu} />);
+      fireEvent.contextMenu(screen.getByRole("button", { name: "notes.txt" }), { clientX: 30, clientY: 40 });
+      expect(onContextMenu).toHaveBeenCalledWith(expect.objectContaining({ name: "notes.txt" }), 30, 40);
+    });
+
+    it("moves with the arrow keys and opens with Enter", async () => {
+      const onActivate = vi.fn();
+      render(<LockedList mobileInteraction={false} locked={false} view="grid" onActivate={onActivate} onOpenParent={vi.fn()} />);
+      const project = screen.getByRole("button", { name: "project" });
+      project.focus();
+      await userEvent.keyboard("{ArrowRight}");
+      const notes = screen.getByRole("button", { name: "notes.txt" });
+      expect(notes).toHaveFocus();
+      expect(notes).toHaveAttribute("aria-pressed", "true");
+      await userEvent.keyboard("{ArrowLeft}");
+      expect(project).toHaveFocus();
+      await userEvent.keyboard("{Enter}");
+      expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ name: "project" }));
+    });
+
+    it("keeps the parent as the first cell, and it goes up", async () => {
+      const onOpenParent = vi.fn();
+      render(<LockedList mobileInteraction={false} locked={false} view="grid" onActivate={vi.fn()} onOpenParent={onOpenParent} />);
+      await userEvent.click(screen.getByRole("button", { name: "Parent directory" }));
+      expect(onOpenParent).toHaveBeenCalledOnce();
+    });
   });
 });

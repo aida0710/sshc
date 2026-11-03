@@ -27,6 +27,35 @@ export function ordered<T>(items: readonly T[], compare: (left: T, right: T) => 
     .map(({ item }) => item);
 }
 
+type SortColumnProps<Key extends string> = {
+  column: Key;
+  activeColumn: Key;
+  direction: SortDirection;
+  onSort: (column: Key) => void;
+  children: ReactNode;
+};
+
+// SortButton is a column's name that sorts by it, with an arrow saying how the rows are sorted now.
+export function SortButton<Key extends string>({ column, activeColumn, direction, onSort, className = "", children }: SortColumnProps<Key> & { className?: string }) {
+  const t = useTranslate();
+  const active = column === activeColumn;
+  const nextDirection = nextSort(activeColumn, direction, column).direction;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(column)}
+      className={`inline-flex items-center gap-1 text-inherit transition-colors duration-150 hover:text-ink ${className}`}
+    >
+      <span>{children}</span>
+      <Icon
+        name={active ? (direction === "ascending" ? "arrowUp" : "arrowDown") : "arrowUpDown"}
+        className={`size-3.5 ${active ? "text-accent" : "text-ink-faint"}`}
+      />
+      <span className="sr-only">{t(nextDirection === "ascending" ? "table.sortAscending" : "table.sortDescending")}</span>
+    </button>
+  );
+}
+
 export function SortableTableHeader<Key extends string>({
   column,
   activeColumn,
@@ -35,32 +64,13 @@ export function SortableTableHeader<Key extends string>({
   className = "",
   buttonClassName = "",
   children,
-}: {
-  column: Key;
-  activeColumn: Key;
-  direction: SortDirection;
-  onSort: (column: Key) => void;
+}: SortColumnProps<Key> & {
   className?: string;
   buttonClassName?: string;
-  children: ReactNode;
 }) {
-  const t = useTranslate();
-  const active = column === activeColumn;
-  const nextDirection = nextSort(activeColumn, direction, column).direction;
   return (
-    <th scope="col" aria-sort={active ? direction : "none"} className={className}>
-      <button
-        type="button"
-        onClick={() => onSort(column)}
-        className={`inline-flex w-full items-center gap-1 text-inherit transition-colors duration-150 hover:text-ink ${buttonClassName}`}
-      >
-        <span>{children}</span>
-        <Icon
-          name={active ? (direction === "ascending" ? "arrowUp" : "arrowDown") : "arrowUpDown"}
-          className={`size-3.5 ${active ? "text-accent" : "text-ink-faint"}`}
-        />
-        <span className="sr-only">{t(nextDirection === "ascending" ? "table.sortAscending" : "table.sortDescending")}</span>
-      </button>
+    <th scope="col" aria-sort={column === activeColumn ? direction : "none"} className={className}>
+      <SortButton column={column} activeColumn={activeColumn} direction={direction} onSort={onSort} className={`w-full ${buttonClassName}`}>{children}</SortButton>
     </th>
   );
 }
