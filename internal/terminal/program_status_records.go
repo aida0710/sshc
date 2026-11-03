@@ -139,6 +139,7 @@ func (s *Session) acceptProgramStatus(generation uint64, report programStatusRep
 	}
 	if !report.query {
 		s.programStatus.apply(report)
+		s.reportBlockedProgramLocked()
 	}
 	s.mutex.Unlock()
 	if report.query {
@@ -160,6 +161,7 @@ func (s *Session) acceptPromptStarted(generation uint64) {
 		return
 	}
 	s.endActiveProgramStatusLocked()
+	s.reportBlockedProgramLocked()
 }
 
 // acceptTerminalReset follows RIS, which removes every record.
@@ -170,4 +172,5 @@ func (s *Session) acceptTerminalReset(generation uint64) {
 		return
 	}
 	s.programStatus.clear("")
+	s.reportBlockedProgramLocked()
 }

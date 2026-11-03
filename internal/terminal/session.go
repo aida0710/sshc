@@ -52,6 +52,11 @@ type Session struct {
 	programProgress     *ProgramProgress
 	// programStatus holds the OSC 7501 records. See program_status_records.go.
 	programStatus programStatusRecords
+	// programBlocked hears when the session's program starts or stops waiting
+	// for the person; nil when nobody listens. blockedReported is what it heard
+	// last. See blocked_program.go.
+	programBlocked  func(BlockedProgramChange)
+	blockedReported bool
 	// visibilityReports is whether the program turned visibility reports
 	// (mode 2033) on; visible is whether any attached browser may show the
 	// session. replies holds the answers on their way to the program. See
@@ -640,6 +645,7 @@ func (s *Session) finish(info ExitInfo) {
 	s.exited = &info
 	s.state = StateExited
 	s.reconnectView = nil
+	s.reportBlockedProgramLocked()
 	s.closeStreamsLocked()
 	if s.cleanup != nil {
 		cleanup := s.cleanup
