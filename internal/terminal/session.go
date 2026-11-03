@@ -74,6 +74,7 @@ type Session struct {
 	reopen         func(ctx context.Context, size Size) (Process, error)
 	reconnectError func(error) (retry bool, problem string)
 	stopNotice     func(problem string) string
+	reopenFailure  func(error) string
 	startup        func() Startup
 	size           Size
 	// reconnectAttempts は、今の切断から試した自動再接続の回数である。

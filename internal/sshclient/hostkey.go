@@ -82,6 +82,7 @@ type HostKeys struct {
 // known_hosts と照合し直さず、最初の鍵交換で受け入れた鍵と同じかだけを見る。
 // 読んだ行には、その接続で確認して受け入れた鍵が入っていない。照合し直すと、
 // rekey のたびにセッションの途中で同じ問いを出し、利用者の打鍵を答えとして読む。
+// 答えを待つ間に切られてつなぎ直すときも、同じ lookup を使うので同じ問いを出さない。
 type hostKeyLookup struct {
 	keys   HostKeys
 	target Target
@@ -95,6 +96,9 @@ type hostKeyLookup struct {
 	// firstKey は、最初の鍵交換で受け入れたホスト鍵（SSH の wire 形式）である。
 	// まだ受け入れていなければ nil。
 	firstKey []byte
+	// confirmedByPerson は、firstKey を利用者が問いに答えて受け入れたかである。答えを
+	// 待つ間にサーバーが接続を切っていたら、つなぎ直す（Dialer.connectOne）。
+	confirmedByPerson bool
 }
 
 func (h HostKeys) lookup(target Target) *hostKeyLookup {
@@ -131,7 +135,7 @@ func (lookup *hostKeyLookup) callback(prompt Prompter, trace *tracer) ssh.HostKe
 		case hostKeyKnown:
 			trace.say(connectionlog.Detailed, "ホスト鍵は%sの%d行目と一致しました。", verdict.matched.path, verdict.matched.number)
 		case hostKeyUnchanged:
-			trace.say(connectionlog.Detailed, "鍵の再交換：ホスト鍵は最初の鍵交換と同じです。")
+			trace.say(connectionlog.Detailed, "ホスト鍵は、この接続で最初に受け入れた鍵と同じです。")
 		case hostKeyTrusted:
 			trace.say(connectionlog.Detailed, "known_hostsに無いホストを、StrictHostKeyChecking %sに従って受け入れました。", target.Strict)
 		case hostKeyConfirmed:
@@ -325,8 +329,19 @@ func (lookup *hostKeyLookup) verify(key ssh.PublicKey, prompt Prompter) (hostKey
 	verdict, err := lookup.verifyAgainstKnownHosts(key, prompt)
 	if err == nil {
 		lookup.firstKey = key.Marshal()
+		lookup.confirmedByPerson = verdict.outcome == hostKeyConfirmed
 	}
 	return verdict, err
+}
+
+// tookConfirmation は、利用者が答えて受け入れた鍵があるかを返し、その印を消す。つなぎ直すのを
+// 1回だけにするためである。
+func (lookup *hostKeyLookup) tookConfirmation() bool {
+	lookup.mutex.Lock()
+	defer lookup.mutex.Unlock()
+	confirmed := lookup.confirmedByPerson
+	lookup.confirmedByPerson = false
+	return confirmed
 }
 
 // verifyAgainstKnownHosts は、提示された鍵を known_hosts のすべてのファイルと照合する。
