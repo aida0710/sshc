@@ -18,14 +18,19 @@ beforeEach(() => {
   }));
 });
 
-function renderComposer({ value = "", sendable = true, enterSends = false } = {}) {
+function renderComposer({ value = "", sendable = true, enterSends = false, placeholder = undefined as string | undefined } = {}) {
   const onSubmit = vi.fn();
   const onChange = vi.fn();
-  render(<TerminalComposer value={value} sendable={sendable} enterSends={enterSends} onChange={onChange} onSubmit={onSubmit} />);
+  render(<TerminalComposer value={value} sendable={sendable} enterSends={enterSends} placeholder={placeholder} onChange={onChange} onSubmit={onSubmit} />);
   return { onSubmit, onChange, field: screen.queryByRole("textbox", { name: "Text to send to the terminal" }) };
 }
 
 describe("TerminalComposer", () => {
+  it("says what sending does when it does not send text", () => {
+    const { field } = renderComposer({ placeholder: "Send to reconnect" });
+    expect(field).toHaveAttribute("placeholder", "Send to reconnect");
+  });
+
   it("is not shown on a desktop width", () => {
     phone = false;
 

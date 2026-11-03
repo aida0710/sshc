@@ -5,7 +5,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
-import { exitedAbnormally, sessionStateText, sessionStatusTone } from "./sessionStatus";
+import { exitedAbnormally, reconnectsOnEnter, sessionStateText, sessionStatusTone } from "./sessionStatus";
 import { useTerminalFont } from "./useTerminalFont";
 import { defaultTint } from "./appearance";
 import { useBackgroundImage } from "./backgroundImage";
@@ -264,6 +264,11 @@ export function TerminalView({
     onStopReconnect,
     onReconnected: () => streamLinkController.current?.connect(),
   });
+  // reconnectByEnter is how to connect again while the engine's line says Enter does it; null while keys go to the
+  // session. It is read when a key arrives, long after the effect that sets up the terminal ran.
+  const reconnectByEnter = useRef<(() => void) | null>(null);
+  reconnectByEnter.current = reconnectsOnEnter(session) ? recovery.reconnect ?? null : null;
+  const composerReconnects = reconnectByEnter.current !== null;
   const hostKeyAnswer = useHostKeyAnswer(onAnswerHostKey);
   const notificationPermission = useNotificationPermissionNotice(session);
   const savedConnection = savedConnectionOf(session);
@@ -611,10 +616,16 @@ export function TerminalView({
       if (output.isReplaying()) return;
       sendInput.current(withModifiers(data, takeModifiers()));
     };
-    sendInput.current = (text) => linkController.currentStream()?.send(text);
+    sendInput.current = (text) => {
+      // The other keys go nowhere: typed into the reconnected shell, they would run as a command.
+      if (reconnectByEnter.current !== null) {
+        if (text === "\r") reconnectByEnter.current();
+        return;
+      }
+      linkController.currentStream()?.send(text);
+    };
     sendKey.current = (key: KeyBarKey) => {
-      const input = keyBarInput(key, takeModifiers(), { applicationCursorKeys: view.modes.applicationCursorKeysMode });
-      linkController.currentStream()?.send(input);
+      sendInput.current(keyBarInput(key, takeModifiers(), { applicationCursorKeys: view.modes.applicationCursorKeysMode }));
     };
     view.onData(typed);
     // A program that turns on mouse reports without SGR (1006) gets them in the
@@ -821,6 +832,11 @@ export function TerminalView({
   const sendBlock = composerSendBlock(session, link);
 
   function submitComposer() {
+    // What is typed in the box stays there, to send to the reconnected shell.
+    if (reconnectByEnter.current !== null) {
+      reconnectByEnter.current();
+      return;
+    }
     if (sendBlock !== null) {
       setTerminalNotice(t(composerSendBlockMessages[sendBlock]));
       return;
@@ -1097,7 +1113,8 @@ export function TerminalView({
       />
       {directInput ? null : <TerminalComposer
         value={composerText}
-        sendable={sendBlock === null}
+        sendable={sendBlock === null || composerReconnects}
+        placeholder={composerReconnects ? t("terminal.composerReconnectPlaceholder") : undefined}
         enterSends={composerEnterSends}
         fieldRef={composerField}
         onChange={setComposerText}

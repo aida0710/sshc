@@ -22,8 +22,14 @@ describe("terminalNoticeFor", () => {
 
   it("names each ending apart, so a card hidden for one ending shows for the next", () => {
     const first = terminalNoticeFor(ended({ code: 3, signal: "", at: "2026-11-02T09:30:00Z" }), live);
-    const second = terminalNoticeFor(ended({ code: 3, signal: "", at: "2026-11-02T10:30:00Z" }), live);
-    expect(first?.key).not.toBe(second?.key);
+    const reconnectedByHand = { ...ended({ code: 3, signal: "", at: "2026-11-02T10:30:00Z" }), startedAt: "2026-11-02T10:00:00Z" };
+    expect(first?.key).not.toBe(terminalNoticeFor(reconnectedByHand, live)?.key);
+  });
+
+  it("keeps one card while the list catches up with the stream that reported the end", () => {
+    const reported = terminalNoticeFor(ended({ code: 3, signal: "", at: "" }), live);
+    const listed = terminalNoticeFor(ended({ code: 3, signal: "", at: "2026-11-02T09:30:00Z" }), live);
+    expect(reported?.key).toBe(listed?.key);
   });
 
   it("keeps one card through every attempt of an automatic reconnect", () => {

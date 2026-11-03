@@ -133,13 +133,17 @@ func identifierParam(c *echo.Context, name string) (string, bool) {
 	return id, id != "" && len(id) <= maxSessionIdentifier
 }
 
+// sessionTimeFormat は、セッションの始まりと終わりの時刻の書き方である。画面はこの差でシェルが開いて
+// すぐ終わったか（250 ms 未満）を見るので、秒まででは同じ秒の中で終わったセッションがみな該当してしまう。
+const sessionTimeFormat = "2006-01-02T15:04:05.000Z07:00"
+
 func describeSession(view terminal.View) api.TerminalSession {
 	described := api.TerminalSession{
 		Id:          view.ID,
 		Kind:        api.TerminalSessionKind(view.Kind),
 		Title:       view.Title,
 		WorkspaceId: view.Workspace,
-		StartedAt:   view.Started.UTC().Format(time.RFC3339),
+		StartedAt:   view.Started.UTC().Format(sessionTimeFormat),
 		State:       api.TerminalSessionState(view.State),
 		Problem:     view.Problem,
 		Presentation: &api.TerminalPresentation{
@@ -223,7 +227,7 @@ func describeSession(view terminal.View) api.TerminalSession {
 		described.Exited = &api.TerminalExit{
 			Code:   view.Exited.Code,
 			Signal: view.Exited.Signal,
-			At:     view.Exited.At.UTC().Format(time.RFC3339),
+			At:     view.Exited.At.UTC().Format(sessionTimeFormat),
 		}
 		if view.Exited.TransportLost {
 			connectionLost := true
@@ -451,12 +455,12 @@ func (h TerminalHandlers) opener() terminalopen.Opener {
 }
 
 // reconnectError は、再接続の失敗のうち、利用者の操作が要るもの（設定を直すなど）では
-// 再接続をやめ、その理由の語を返す。
+// 再接続をやめ、その理由の語を返す。ほかの失敗は試し直す。
 func reconnectError(err error) (bool, string) {
 	if code, requiresAction := connectProblem(err); requiresAction {
 		return false, code
 	}
-	return true, terminal.ProblemReconnectFailed
+	return true, connectFailureProblem(err)
 }
 
 func (h TerminalHandlers) ListShellProfiles(c *echo.Context) error {

@@ -25,7 +25,7 @@ export type NoticeFocus = {
 // NoticeFrame is the card a notice that waits on the person is shown in, in the terminal (TerminalNoticeCard) and in an
 // SFTP tab (the host key question): the words, then the actions under them inside the card (the way of every notice
 // in sshc). It is not a live region; where it repeats a line read out elsewhere, that line is read once.
-export function NoticeFrame({ tone, kicker, title, body, detail, focus, onDismiss, children }: {
+export function NoticeFrame({ tone, kicker, title, body, detail, focus, onDismiss, onEnter, children }: {
   tone: NoticeTone;
   // kicker is a line over the title for a state the title alone does not say (how far a reconnect is); a card that has
   // stopped says what happened in its title and the colour of its frame.
@@ -37,6 +37,9 @@ export function NoticeFrame({ tone, kicker, title, body, detail, focus, onDismis
   focus: NoticeFocus;
   // onDismiss hides the card (its × and Escape). A card with nothing under it to read has no way to hide.
   onDismiss?: (() => void) | undefined;
+  // onEnter is what an Enter pressed on the card itself does, for a card whose main action is safe to take by accident
+  // (connecting again). Without it an Enter does nothing, as the comment on the focus below says.
+  onEnter?: (() => void) | undefined;
   children: ReactNode;
 }) {
   const t = useTranslate();
@@ -67,6 +70,11 @@ export function NoticeFrame({ tone, kicker, title, body, detail, focus, onDismis
       aria-labelledby={titleId}
       data-notice-card={tone}
       onKeyDown={(event) => {
+        if (event.key === "Enter" && event.target === section.current && onEnter !== undefined) {
+          event.preventDefault();
+          onEnter();
+          return;
+        }
         if (event.key !== "Escape" || onDismiss === undefined) return;
         event.stopPropagation();
         onDismiss();

@@ -691,6 +691,12 @@ describe("terminalProblemKey", () => {
 
   it("says a connection that never connected failed, not that it is reconnecting", () => {
     expect(terminalProblemKey("connect_failed")).toBe("terminal.connectFailed");
+    expect(terminalProblemKey("connect_refused")).toBe("terminal.connectRefused");
+    expect(terminalProblemKey("connect_timed_out")).toBe("terminal.connectTimedOut");
+    expect(terminalProblemKey("connect_host_not_found")).toBe("terminal.connectHostNotFound");
+    expect(terminalProblemKey("connect_no_network")).toBe("terminal.connectNoNetwork");
+    expect(terminalProblemKey("connect_host_unreachable")).toBe("terminal.connectHostUnreachable");
+    expect(terminalProblemKey("connect_closed")).toBe("terminal.connectClosed");
   });
 
   it("says the server rejected authentication, not that the terminal failed to open", () => {
