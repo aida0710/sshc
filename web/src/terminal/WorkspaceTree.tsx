@@ -6,7 +6,7 @@ import type { LocalShellProfile } from "../api/settings";
 import type { TerminalSession } from "../api/terminalSessions";
 import { defaultWorkspaceId, type TerminalWorkspace } from "../api/terminalWorkspaces";
 import { useTranslate } from "../i18n/context";
-import { HostPickerDialog, type LocalChoice } from "../shell/HostPickerDialog";
+import { HostPickerDialog } from "../shell/HostPickerDialog";
 import type { DirectDestinationActions } from "../shell/useDirectDestinationActions";
 import type { SessionShortcutRequest } from "../shell/useAppShortcuts";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
@@ -14,6 +14,7 @@ import { keepMachineState, keepMachineStateJSON, parseMachineStateJSON } from ".
 import { interfaceState, useSettings } from "../settings/settingsStore";
 import { Icon } from "../ui/icons";
 import { Notice } from "../ui/surface";
+import { localShellChoices } from "./localShellChoices";
 import { commandTargetsForWorkspace } from "./commands/workspaceCommandTargets";
 import { terminalCommandApiFor } from "./commands/commandApi";
 import { WorkspaceCommandCenter } from "./commands/WorkspaceCommandCenter";
@@ -190,13 +191,7 @@ export function WorkspaceTree({
     void terminalSessions.moveToWorkspace(sessionId, workspaceId);
   }
 
-  const localChoices = useMemo<LocalChoice[]>(() => {
-    const profiles = localShellProfiles.filter((profile) => profile.id !== "default");
-    return [
-      { id: "default", label: t("terminal.openShell"), detail: runTarget ?? t("terminal.localhost") },
-      ...profiles.map((profile) => ({ id: profile.id, label: `${t("terminal.openShell")} · ${profile.label}`, detail: profile.path })),
-    ];
-  }, [localShellProfiles, runTarget, t]);
+  const localChoices = useMemo(() => localShellChoices(t, localShellProfiles, runTarget), [localShellProfiles, runTarget, t]);
 
   function toggleShowHidden() {
     keepMachineState("showHiddenTerminalWorkspaces", showHidden ? "" : "true");

@@ -5,7 +5,9 @@ import { presetInterfaceOf } from "../settings/presetInterface";
 import { currentSettings } from "../settings/settingsStore";
 import { fakeSettingsServer } from "../testing/settingsServer";
 import { defaultBindings } from "./bindings";
-import { currentBindings, refreshPresets, savePresetBindings, selectPreset, updatePresets, usePresets, type Preset } from "./presets";
+import { currentBindings, refreshPresets, savePresetBindings, shortcutPresetLibrary, usePresets, type Preset } from "./presets";
+
+const { select: selectPreset, update: updatePresets } = shortcutPresetLibrary;
 
 let remote: Preset[];
 let server: ReturnType<typeof fakeSettingsServer>;
@@ -67,7 +69,7 @@ it("follows remote edits and falls back to the defaults when the chosen preset i
 });
 
 it("rejects stale edits without overwriting remote presets or current bindings", async () => {
-  await savePresetBindings({ ...defaultBindings, home: ["Alt+H"] });
+  await savePresetBindings({ ...defaultBindings, home: ["Alt+H"] }, "Mine");
   const snapshot = structuredClone(remote);
   remote[0]!.name = "Changed elsewhere";
   await expect(updatePresets(snapshot, snapshot[0]!.id)).rejects.toThrow("conflict");
@@ -80,7 +82,7 @@ it("does not let an older refresh response undo a completed save", async () => {
   let finish!: (value: unknown) => void;
   vi.mocked(apiClient.read).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   const pending = refreshPresets();
-  await savePresetBindings({ ...defaultBindings, home: ["Alt+H"] });
+  await savePresetBindings({ ...defaultBindings, home: ["Alt+H"] }, "Mine");
   finish({ schemaVersion: 10, presets: [{ id: "default" }], shortcutPresets: [] });
   await pending;
   expect(currentBindings().home).toEqual(["Alt+H"]);

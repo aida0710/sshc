@@ -178,6 +178,19 @@ for (const appearance of everyTheme) {
   });
 }
 
+test("the keys in the key bar's settings stand out from what is behind them in every theme", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  for (const appearance of everyTheme) {
+    await chooseTheme(page, appearance);
+    await openSection(page, "Key bar");
+    const colours = await page.locator("[data-key-bar-preview]").evaluate((preview) => ({
+      behind: getComputedStyle(preview).backgroundColor,
+      key: getComputedStyle(preview.querySelector("button")!).backgroundColor,
+    }));
+    expect(colours.key, appearance).not.toBe(colours.behind);
+  }
+});
+
 test("the connections controls are legible in light", async ({ page, installation }) => {
   await openApplication(page, installation);
   await chooseTheme(page, "light");

@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { changeDisplayLanguage, expect, openApplication, openLocalShell, test } from "./support/environment";
+import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 import { drawnRowsIn, terminalHostBottomOverflow, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
 
 function pane(page: Page, sessionId: string): Locator {
@@ -252,6 +252,78 @@ test("preserves terminal mounts through swaps, focus mode, sidebar selection and
   await expect(search).toHaveValue("mount-canary");
   await first.getByRole("button", { name: "Swap Build pane" }).dragTo(second);
   expect((await first.boundingBox())!.x).toBeGreaterThan((await second.boundingBox())!.x);
+});
+
+test("opens a new session beside the only session from the terminal's menu", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const first = await openNamedShell(page, "Build");
+  await pane(page, first).getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Show in split view on the right", exact: true }).click();
+
+  const choice = page.getByRole("dialog", { name: "New session on the right" });
+  await choice.getByRole("button", { name: /^Duplicate session, Build/ }).click();
+  await expect(choice).toBeHidden();
+
+  const panes = page.locator("[data-split-view-pane]");
+  await expect(panes).toHaveCount(2);
+  const opened = await panes.nth(1).getAttribute("data-split-view-pane");
+  expect(opened).not.toBe(first);
+  expect((await panes.nth(1).boundingBox())!.x).toBeGreaterThan((await pane(page, first).boundingBox())!.x);
+  // The new pane takes the keyboard, and what is typed reaches its own shell.
+  await expect.poll(() => focusedPane(page)).toBe(opened);
+  await expect(panes.nth(1).getByRole("region")).toContainText(/[$#%>]/);
+  await page.keyboard.type("echo BESIDE:$((6 * 7))");
+  await page.keyboard.press("Enter");
+  await expect(panes.nth(1)).toContainText("BESIDE:42");
+  await expect(pane(page, first)).not.toContainText("BESIDE:42");
+});
+
+test("goes back to the terminal when the choice of a new session is closed", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const first = await openNamedShell(page, "Build");
+  await pane(page, first).getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Show in split view below", exact: true }).click();
+  const choice = page.getByRole("dialog", { name: "New session below" });
+  await expect(choice).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(choice).toBeHidden();
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(1);
+  await expect.poll(() => focusedPane(page)).toBe(first);
+});
+
+test("offers a new session after the sessions to choose from, and splits on a shortcut", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Keyboard shortcuts");
+  const assign = page.getByRole("button", { name: "Assign shortcut: Split below", exact: true });
+  await expect(assign).toHaveText("Unassigned");
+  await assign.click();
+  await page.keyboard.press("Alt+d");
+  await expect(assign).toHaveText("Alt+D");
+
+  const first = await openNamedShell(page, "Build");
+  await openNamedShell(page, "Logs");
+  await page.getByRole("button", { name: "Build", exact: true }).click();
+  await expect.poll(() => focusedPane(page)).toBe(first);
+  await page.keyboard.press("Alt+d");
+
+  const sessions = page.getByRole("dialog", { name: "Choose a session to split" });
+  await expect(sessions.getByRole("button", { name: "Logs", exact: true })).toBeVisible();
+  await sessions.getByRole("button", { name: "New session", exact: true }).click();
+  const choice = page.getByRole("dialog", { name: "New session below" });
+  await choice.getByRole("button", { name: /^Local shell, localhost/ }).click();
+
+  const panes = page.locator("[data-split-view-pane]");
+  await expect(panes).toHaveCount(2);
+  await expect(pane(page, first)).toBeVisible();
+  expect((await panes.nth(1).boundingBox())!.y).toBeGreaterThan((await pane(page, first).boundingBox())!.y);
+});
+
+test("asks what goes beside the session shown from its row in the sidebar", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openNamedShell(page, "Build");
+  await page.getByRole("button", { name: "Actions for Build", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Show in split view on the right", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "New session on the right" })).toBeVisible();
 });
 
 test("gives the keyboard to the pane whose header is clicked and frames that pane in the sidebar", async ({ page, installation }) => {

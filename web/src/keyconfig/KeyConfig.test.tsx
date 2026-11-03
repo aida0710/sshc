@@ -43,7 +43,8 @@ describe("application shortcuts", () => {
     expect(assign()).toHaveTextContent("Ctrl+Shift+P");
     fireEvent.click(screen.getByRole("button", { name: "Clear shortcut: Command search" }));
     await waitFor(() => expect(currentBindings().palette).toEqual([]));
-    fireEvent.click(screen.getByRole("button", { name: "Restore defaults" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for My key bindings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Back to the default bindings" }));
     await waitFor(() => expect(currentBindings()).toEqual(defaultBindings));
   });
 
@@ -78,7 +79,7 @@ describe("application shortcuts", () => {
     presets = [{ id: "work", name: "Work", bindings: { ...defaultBindings, palette: ["Alt+K"] } }];
     await act(async () => {
       await refreshPresets();
-      fireEvent.change(screen.getByRole("combobox", { name: "Shortcut preset" }), { target: { value: "work" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "Key bindings" }), { target: { value: "work" } });
     });
     await waitFor(() => expect(screen.getByRole("button", { name: "Assign shortcut: Command search" })).toHaveTextContent("Alt+K"));
   });

@@ -4,7 +4,7 @@ import type { MessageKey } from "../i18n/messages";
 import { control } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { Notice } from "../ui/surface";
-import { SettingsSection } from "./SettingsSection";
+import { PageSectionFrame } from "../ui/page";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { updatePreset, useSettings, type SettingsPreset } from "./settingsStore";
 import { useCommitOnChange } from "../ui/useCommitOnChange";
@@ -33,9 +33,8 @@ function draftOf(preset: SettingsPreset | undefined): AutoLockDraft {
 // How long the vault stays open unattended, in the preset being edited. Every machine that uses the preset
 // follows it. The engine never locks a passwordless vault, so there the saved choice stays visible but cannot
 // be changed until a master password is set.
-export function VaultAutoLockSection({ presetId, showHeading, passwordless }: {
+export function VaultAutoLockSection({ presetId, passwordless }: {
   presetId: string;
-  showHeading: boolean;
   passwordless: boolean;
 }) {
   const t = useTranslate();
@@ -48,7 +47,7 @@ export function VaultAutoLockSection({ presetId, showHeading, passwordless }: {
   const edited = useRef(false);
   // latestDraft is the draft as the last edit left it, for the save a typed number makes when it is left.
   const latestDraft = useRef(draft);
-  const fields = useRef<HTMLDivElement>(null);
+  const fields = useRef<HTMLElement>(null);
   useCommitOnChange(fields, () => {
     if (edited.current) void submit(latestDraft.current);
   });
@@ -95,8 +94,8 @@ export function VaultAutoLockSection({ presetId, showHeading, passwordless }: {
     ? "settings.vaultAutoLockPasswordless"
     : draft.mode === "restart" ? "settings.vaultAutoLockRestartWarning" : null;
   return (
-    <SettingsSection id="settings-vault-auto-lock" label={t("settings.vaultAutoLockLabel")} icon="secrets" showHeading={showHeading}>
-      <div ref={fields}>
+    <PageSectionFrame>
+      <section ref={fields} aria-label={t("settings.vaultAutoLockLabel")}>
         <FieldRow label={t("settings.vaultAutoLockLabel")} hint={t("settings.vaultAutoLockHint")}>
           <select className={control} value={draft.mode} disabled={disabled}
             onChange={(event) => choose({ mode: event.target.value as "idle" | "restart" })}>
@@ -121,7 +120,7 @@ export function VaultAutoLockSection({ presetId, showHeading, passwordless }: {
         {save.error !== "" ? <div className="mt-2"><Notice tone="danger">{save.error}</Notice></div>
           : !loaded ? <p role="status" className="mt-2 text-sm text-ink-muted">{t("settings.vaultAutoLockLoading")}</p>
           : null}
-      </div>
-    </SettingsSection>
+      </section>
+    </PageSectionFrame>
   );
 }

@@ -60,6 +60,10 @@ export function prepareTerminalPaste(text: string, bracketed: boolean): string {
   return `\u001b[200~${normalized.replace(/\u001b/g, "\u241b")}\u001b[201~`;
 }
 
+// What attaching the clipboard to a terminal leaves: what the copy and paste shortcuts do, for the command palette
+// to run too, and what detaches it.
+export type TerminalClipboardAttachment = { copySelection: () => void; paste: () => void; detach: () => void };
+
 export function attachTerminalClipboard({
   container,
   terminal,
@@ -74,7 +78,7 @@ export function attachTerminalClipboard({
   enhancedKey,
   sendEnhancedKey,
   selectionIsSearchMatch = () => false,
-}: TerminalClipboardOptions): () => void {
+}: TerminalClipboardOptions): TerminalClipboardAttachment {
   let active = true;
   const copySelection = ({ announce }: { announce: boolean }) => {
     if (!terminal.hasSelection()) return;
@@ -169,11 +173,15 @@ export function attachTerminalClipboard({
   container.addEventListener("beforeinput", onBeforeInput, { capture: true });
   container.addEventListener("contextmenu", onContextMenu);
 
-  return () => {
-    active = false;
-    selection.dispose();
-    container.removeEventListener("paste", onPaste, { capture: true });
-    container.removeEventListener("beforeinput", onBeforeInput, { capture: true });
-    container.removeEventListener("contextmenu", onContextMenu);
+  return {
+    copySelection: () => copySelection({ announce: true }),
+    paste: readAndPaste,
+    detach: () => {
+      active = false;
+      selection.dispose();
+      container.removeEventListener("paste", onPaste, { capture: true });
+      container.removeEventListener("beforeinput", onBeforeInput, { capture: true });
+      container.removeEventListener("contextmenu", onContextMenu);
+    },
   };
 }
