@@ -1,6 +1,6 @@
 import type { Translate } from "../i18n/context";
 import { shortcutActions, type Bindings, type ShortcutAction } from "../keyconfig/bindings";
-import { shortcutActionLabels } from "../keyconfig/shortcutLabels";
+import { shortcutActionLabels } from "../keyconfig/shortcutActionLabels";
 import { terminalActionNames, type TerminalAction } from "../terminal/terminalActions";
 import type { PaletteCommand } from "./CommandPalette";
 

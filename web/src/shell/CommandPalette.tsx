@@ -4,6 +4,7 @@ import { snippetsApi, type Snippet } from "../snippets/api";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
+import { shortcutLabel } from "../keyconfig/shortcutLabel";
 import { Icon } from "../ui/icons";
 import type { TerminalSession } from "../api/terminalSessions";
 import { terminalDisplayTitle, terminalSubtitle } from "../terminal/terminalPresentation";
@@ -293,7 +294,7 @@ export function CommandPalette({
                 {item.detail === "" ? null : <span className="col-start-2 truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>}
                 {/* A phone has no keys to press, and its width goes to the name. */}
                 {item.keys?.[0] === undefined ? null : (
-                  <kbd title={item.keys.join(" / ")} className="col-start-3 row-span-2 row-start-1 hidden border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted md:block">{item.keys[0]}</kbd>
+                  <kbd title={item.keys.map(shortcutLabel).join(" / ")} className="col-start-3 row-span-2 row-start-1 hidden border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted md:block">{shortcutLabel(item.keys[0])}</kbd>
                 )}
               </button>
               {item.host === undefined ? null : (

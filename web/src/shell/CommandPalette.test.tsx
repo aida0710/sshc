@@ -93,12 +93,12 @@ describe("CommandPalette", () => {
   });
 
   it("shows the first key assigned to a command beside it, all of them in its title, and no second line without details", () => {
-    renderPalette({ laterCommands: [{ id: "paste", label: "Paste", detail: "", search: "", keys: ["Ctrl+V", "Meta+V"], run: vi.fn() }] });
+    renderPalette({ laterCommands: [{ id: "paste", label: "Paste", detail: "", search: "", keys: ["Ctrl+Shift+ArrowUp", "Meta+ArrowUp"], run: vi.fn() }] });
 
     const option = screen.getByRole("option", { name: /Paste/ });
     const key = option.querySelector("kbd");
-    expect(key).toHaveTextContent("Ctrl+V");
-    expect(key).toHaveAttribute("title", "Ctrl+V / Meta+V");
+    expect(key).toHaveTextContent("Ctrl+Shift+↑");
+    expect(key).toHaveAttribute("title", "Ctrl+Shift+↑ / Win+↑");
     expect(option.querySelectorAll("span")).toHaveLength(2);
   });
 

@@ -939,7 +939,7 @@ test("offers a key bar for Claude Code, whose keys reach the program as the keys
   await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Menu", exact: true }).click();
   await page.getByRole("link", { name: "Open Key bar" }).click();
 
-  const preset = page.getByRole("combobox", { name: "Key bar preset" });
+  const preset = page.getByRole("combobox", { name: "Key order" });
   await preset.selectOption({ label: "Claude Code" });
   const order = page.getByRole("group", { name: "Keys always shown" });
   await expect(order.getByRole("button", { name: "Shift+Tab", exact: true })).toBeVisible();

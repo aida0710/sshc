@@ -8,7 +8,7 @@ import { PageSection } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { shortcutLabel } from "./shortcutLabel";
 import { defaultBindings, shortcutActions, shortcutKey, type Bindings, type ShortcutAction } from "./bindings";
-import { shortcutActionLabels } from "./shortcutLabels";
+import { shortcutActionLabels } from "./shortcutActionLabels";
 import { maxShortcutPresetNameLength, maxShortcutPresets } from "../rules/shortcuts.generated";
 import { LibraryPresetChooser } from "../settings/LibraryPresetChooser";
 import { isImeComposing } from "../ui/imeComposition";
