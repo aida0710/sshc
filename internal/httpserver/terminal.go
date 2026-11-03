@@ -476,7 +476,8 @@ func (h TerminalHandlers) ListShellProfiles(c *echo.Context) error {
 	for _, profile := range profiles {
 		answer.Profiles = append(answer.Profiles, api.LocalShellProfile{
 			Id: profile.ID, Label: profile.Label, Path: profile.Path,
-			Arguments: append([]string(nil), profile.Arguments...), Default: profile.ID == chosen,
+			// API は配列を約束する。引数の無いシェルを null で返すと、画面は一覧ごと断る。
+			Arguments: append([]string{}, profile.Arguments...), Default: profile.ID == chosen,
 		})
 	}
 	return c.JSON(http.StatusOK, answer)
