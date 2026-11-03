@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import { configApi, type FileNode, type HostEntry, type HostMetadata } from "../api/config";
+import { useCallback, useEffect, useState } from "react";
+import { configApi, type FileNode, type HostEntry, type HostMetadata, type Overview } from "../api/config";
 import type { TerminalAppearance } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
 
-// What the SSH configuration declares, read once per section: the groups,
+// What the SSH configuration declares, read once per section and when asked: the groups,
 // the hosts (with the appearance and VPN route each one asked for) and the config files. Sections take these instead of reading the
 // overview themselves.
 export function useDeclaredConfig(enabled: boolean, section: Section | null) {
@@ -13,6 +13,23 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null) {
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
   const [hosts, setHosts] = useState<HostEntry[]>([]);
   const [files, setFiles] = useState<FileNode[]>([]);
+  const [readCount, setReadCount] = useState(0);
+
+  const adoptOverview = useCallback((overview: Overview) => {
+    setGroups((overview.metadata.groups ?? []).map((group) => group.name));
+    const hostMetadata = overview.metadata.hosts ?? [];
+    setHostAppearance(hostSettingByAlias(hostMetadata, (host) => host.appearance));
+    setHostVPN(hostSettingByAlias(hostMetadata, (host) => host.vpn === "" ? undefined : host.vpn));
+    setKnownAliases([
+      ...new Set(
+        overview.hosts
+          .map((host) => host.identity.alias)
+          .filter((alias) => alias !== ""),
+      ),
+    ]);
+    setHosts(overview.hosts.filter((host) => host.identity.alias !== ""));
+    setFiles(overview.files);
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -20,28 +37,21 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null) {
     void configApi
       .overview()
       .then((overview) => {
-        if (!active) return;
-        setGroups((overview.metadata.groups ?? []).map((group) => group.name));
-        const hostMetadata = overview.metadata.hosts ?? [];
-        setHostAppearance(hostSettingByAlias(hostMetadata, (host) => host.appearance));
-        setHostVPN(hostSettingByAlias(hostMetadata, (host) => host.vpn === "" ? undefined : host.vpn));
-        setKnownAliases([
-          ...new Set(
-            overview.hosts
-              .map((host) => host.identity.alias)
-              .filter((alias) => alias !== ""),
-          ),
-        ]);
-        setHosts(overview.hosts.filter((host) => host.identity.alias !== ""));
-        setFiles(overview.files);
+        if (active) adoptOverview(overview);
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
-  }, [enabled, section]);
+  }, [enabled, section, readCount, adoptOverview]);
 
-  return { groups, hostAppearance, hostVPN, knownAliases, hosts, files };
+  return {
+    groups, hostAppearance, hostVPN, knownAliases, hosts, files,
+    // adoptOverview takes an overview a section read after changing the connections, without leaving that section.
+    adoptOverview,
+    // readAgain is for a change made outside the sections.
+    readAgain: () => setReadCount((count) => count + 1),
+  };
 }
 
 // hostSettingByAlias は、alias の付いた接続のうち pick が値を返したものだけを、

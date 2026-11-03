@@ -591,6 +591,7 @@ func newTerminalHandlers(options Options, actions ActionHandlers, host string) T
 		Actions:             actions,
 		Connect:             options.Connect,
 		ResolveTarget:       options.ResolveTarget,
+		TypedPasswords:      options.Config,
 		Shell:               options.LoginShell,
 		ShellProfiles:       options.LocalShellProfiles,
 		DefaultShellProfile: options.TerminalLocalShellProfile,

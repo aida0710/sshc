@@ -42,7 +42,8 @@ type StartupSnippet struct {
 // Request は、開くセッションひとつ分の指定である。
 type Request struct {
 	Kind terminal.Kind
-	// Alias は SSH のセッションの接続名である。シェルでは使わない。
+	// Alias は SSH のセッションの接続名か、保存していない接続先（validate.DirectDestination）
+	// である。シェルでは使わない。
 	Alias string
 	// ShellProfile は、シェルのプロファイルの ID である。nil なら設定の既定を使う。
 	ShellProfile *string
@@ -149,7 +150,8 @@ func (o Opener) open(ctx context.Context, spec terminal.Spec) (*terminal.Session
 	if err != nil {
 		return nil, err
 	}
-	if spec.Kind == terminal.KindSSH && o.Connected != nil {
+	// 保存していない接続先は、接続履歴に残さない。履歴の一覧は接続名で引く。
+	if _, direct := validate.ParseDirectDestination(spec.Alias); spec.Kind == terminal.KindSSH && o.Connected != nil && !direct {
 		alias := spec.Alias
 		session.WhenConnected(func() { o.Connected(alias) })
 	}
@@ -169,9 +171,10 @@ func (o Opener) sshSpec(request Request) (terminal.Spec, error) {
 	if target == "" {
 		return terminal.Spec{}, ErrMissingAlias
 	}
-	if err := validate.Alias(target); err != nil {
+	if err := validate.SessionTarget(target); err != nil {
 		return terminal.Spec{}, err
 	}
+	_, direct := validate.ParseDirectDestination(target)
 	if o.Connect == nil {
 		return terminal.Spec{}, terminal.ErrNoStarter
 	}
@@ -208,8 +211,9 @@ func (o Opener) sshSpec(request Request) (terminal.Spec, error) {
 			if command, ok := terminal.ChangeRemoteDirectoryCommand(initialDirectory); initialDirectory != "" && ok {
 				commands = append(commands, command)
 			}
+			// 起動スニペットは接続名に割り当てるものである。
 			var startup StartupSnippet
-			if o.Startup != nil {
+			if o.Startup != nil && !direct {
 				startup = o.Startup(target)
 			}
 			if startup.Command != "" {

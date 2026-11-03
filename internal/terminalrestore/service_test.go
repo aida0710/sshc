@@ -54,6 +54,17 @@ func TestTheNextEngineOffersTheSessionsOpenAtStop(t *testing.T) {
 	}
 }
 
+func TestASessionOnADestinationThatWasNotSavedIsOfferedLikeAnyOther(t *testing.T) {
+	workspace := newWorkspace(t)
+	direct := terminalrestore.Session{Kind: terminal.KindSSH, Alias: "deploy@10.0.0.5:2222", Workspace: "default"}
+	if err := newService(t, workspace).Save([]terminalrestore.Session{direct}); err != nil {
+		t.Fatal(err)
+	}
+	if offer := newService(t, workspace).Offer(); !reflect.DeepEqual(offer, []terminalrestore.Session{direct}) {
+		t.Fatalf("offer = %+v", offer)
+	}
+}
+
 func TestAnsweringEndsTheOfferForEveryLaterStart(t *testing.T) {
 	for name, answer := range map[string]func(*terminalrestore.Service) error{
 		"take":    func(service *terminalrestore.Service) error { _, err := service.Take(); return err },

@@ -1,5 +1,6 @@
 import type { TerminalSession } from "../api/terminalSessions";
 import { localHostAlias } from "../sftp/localHost";
+import { savedConnectionOf } from "./terminalPresentation";
 
 // pathPreviewAlias names the machine whose files a session's shell sees, as an
 // alias this machine can read files from. A path a program prints is a path there:
@@ -15,5 +16,5 @@ export function pathPreviewAlias(
 ): string | undefined {
   if (session.kind === "shell") return runTarget ?? localHostAlias;
   if (runTarget !== undefined && !sameDestination) return undefined;
-  return session.alias;
+  return savedConnectionOf(session);
 }

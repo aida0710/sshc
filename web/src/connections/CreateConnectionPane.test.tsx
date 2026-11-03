@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/client";
 import { vaultStatus } from "../testing/vaultStatus";
 import type { CreateConnectionRequest, CreateConnectionResponse, Overview } from "../api/config";
 import type { KeyInventoryResponse, KeysApi } from "../keys/api";
@@ -71,6 +72,7 @@ type PaneOverrides = {
   initialiseVault?: ConnectionSecretsApi["initialiseVault"];
   unlockVault?: ConnectionSecretsApi["unlockVault"];
   groups?: Overview["groups"];
+  aliases?: readonly string[];
   initialDraft?: CreateConnectionDraft;
   onOpenPrerequisite?: (section: CreationPrerequisite, draft: CreateConnectionDraft) => void;
   onCancel?: () => void;
@@ -99,6 +101,7 @@ function renderPane(overrides: PaneOverrides = {}) {
   const rendered = render(
     <CreateConnectionPane
       groups={overrides.groups ?? groups}
+      aliases={overrides.aliases}
       initialDraft={overrides.initialDraft}
       config={{ createConnection }}
       keys={{ inventory: keyInventory }}
@@ -360,14 +363,132 @@ describe("CreateConnectionPane", () => {
     expect(screen.getByLabelText("Connection name")).toHaveValue("lab-node");
   });
 
+  it("names a connection after its host when the name stays empty", async () => {
+    const user = userEvent.setup();
+    const harness = renderPane({ aliases: ["10-0-0-5"] });
+    await chooseAuthentication(user, "SSH private key");
+    const name = screen.getByLabelText("Connection name");
+    await user.type(screen.getByLabelText("Host name or IP address"), "10.0.0.5");
+    expect(name).toHaveValue("");
+    expect(name).toHaveAttribute("placeholder", "10-0-0-5-2");
+
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+    await waitFor(() => expect(harness.createConnection).toHaveBeenCalledWith(expect.objectContaining({ alias: "10-0-0-5-2" })));
+  });
+
+  it("keeps the name that was typed, and offers none until there is a host name", async () => {
+    const user = userEvent.setup();
+    const harness = renderPane();
+    await chooseAuthentication(user, "SSH private key");
+    expect(screen.getByRole("button", { name: "Create connection" })).toBeDisabled();
+    expect(screen.getByLabelText("Connection name")).toHaveAttribute("placeholder", "");
+
+    await user.type(screen.getByLabelText("Host name or IP address"), "web.example.com");
+    expect(screen.getByLabelText("Connection name")).toHaveAttribute("placeholder", "web");
+    await user.type(screen.getByLabelText("Connection name"), "front");
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+    await waitFor(() => expect(harness.createConnection).toHaveBeenCalledWith(expect.objectContaining({ alias: "front" })));
+  });
+
+  it("asks for no password and no Vault when the password is typed on connecting", async () => {
+    const user = userEvent.setup();
+    const harness = renderPane({ passwordVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })) });
+    await user.type(screen.getByLabelText("Host name or IP address"), "web.example.com");
+    await chooseAuthentication(user, "Enter when connecting");
+
+    expect(screen.queryByLabelText("Master password")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Connection password")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+    await waitFor(() => expect(harness.createConnection).toHaveBeenCalledWith(expect.objectContaining({
+      alias: "web",
+      authentication: { kind: "ask_on_connect" },
+    })));
+  });
+
+  it("connects directly unless another connection is chosen to go through", async () => {
+    const user = userEvent.setup();
+    const harness = renderPane({ aliases: ["bastion", "web"] });
+    await chooseAuthentication(user, "SSH private key");
+    const jump = screen.getByLabelText("Connect through");
+    expect(jump).toHaveDisplayValue("None (connect directly)");
+    await user.type(screen.getByLabelText("Host name or IP address"), "web.example.com");
+    // The name it would get is taken by another, so that other is still offered; its own name never is.
+    await user.type(screen.getByLabelText("Connection name"), "web");
+    expect(screen.queryByRole("option", { name: "web" })).not.toBeInTheDocument();
+
+    await user.selectOptions(jump, "bastion");
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+    await waitFor(() => expect(harness.createConnection).toHaveBeenCalledWith(expect.objectContaining({ proxyJump: "bastion" })));
+  });
+
+  it("writes no jump by default, so a group's jump is inherited, and can opt out of it", async () => {
+    const user = userEvent.setup();
+    const withJump: Overview["groups"] = [{
+      ...groups[0]!, settings: [{ keyword: "ProxyJump", values: ["bastion"] }],
+    }];
+    const harness = renderPane({ groups: withJump, aliases: ["bastion"] });
+    await chooseAuthentication(user, "SSH private key");
+    await user.selectOptions(screen.getByLabelText("Group"), "home-lab");
+    await user.type(screen.getByLabelText("Host name or IP address"), "web.example.com");
+
+    const jump = screen.getByLabelText("Connect through");
+    expect(jump).toHaveDisplayValue("Group default (bastion)");
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+    await waitFor(() => expect(harness.createConnection).toHaveBeenCalledOnce());
+    expect(harness.createConnection).toHaveBeenCalledWith(expect.not.objectContaining({ proxyJump: expect.anything() }));
+
+    await user.selectOptions(jump, "None (connect directly)");
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+    await waitFor(() => expect(harness.createConnection).toHaveBeenLastCalledWith(expect.objectContaining({ proxyJump: "none" })));
+
+    // "none" is an answer to the group's jump: without a group there is nothing to opt out of, and nothing is written.
+    await user.selectOptions(screen.getByLabelText("Group"), "No group");
+    expect(jump).toHaveDisplayValue("None (connect directly)");
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+    await waitFor(() => expect(harness.createConnection).toHaveBeenCalledTimes(3));
+    expect(harness.createConnection).toHaveBeenLastCalledWith(expect.not.objectContaining({ proxyJump: expect.anything() }));
+  });
+
+  it("does not send a connection to go through that the selection no longer offers", async () => {
+    const user = userEvent.setup();
+    const harness = renderPane({ aliases: ["bastion"] });
+    await chooseAuthentication(user, "SSH private key");
+    await user.type(screen.getByLabelText("Host name or IP address"), "web.example.com");
+    await user.selectOptions(screen.getByLabelText("Connect through"), "bastion");
+    await user.type(screen.getByLabelText("Connection name"), "bastion");
+    expect(screen.getByLabelText("Connect through")).toHaveDisplayValue("None (connect directly)");
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+    await waitFor(() => expect(harness.createConnection).toHaveBeenCalledOnce());
+    expect(harness.createConnection).toHaveBeenCalledWith(expect.not.objectContaining({ proxyJump: expect.anything() }));
+  });
+
+  it("lists each connection to go through once, by name", async () => {
+    renderPane({ aliases: ["web", "bastion", "web"] });
+    const options = await screen.findAllByRole("option", { name: /^(web|bastion)$/ });
+    expect(options.map((option) => option.textContent)).toEqual(["bastion", "web"]);
+  });
+
+  it("says when the connection to go through is gone", async () => {
+    const user = userEvent.setup();
+    const refusal = new ApiError("proxy_jump_invalid", 422, { code: "proxy_jump_invalid", message: "gone" });
+    renderPane({ aliases: ["bastion"], createConnection: vi.fn().mockRejectedValue(refusal) });
+    await chooseAuthentication(user, "SSH private key");
+    await user.type(screen.getByLabelText("Host name or IP address"), "web.example.com");
+    await user.selectOptions(screen.getByLabelText("Connect through"), "bastion");
+    await user.click(screen.getByRole("button", { name: "Create connection" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The connection to go through was not found.");
+  });
+
   it("restores a safe draft and explains why creation is disabled", async () => {
     renderPane({
+      aliases: ["bastion"],
       initialDraft: {
         alias: "lab-node",
         group: "home-lab/others",
         hostName: "host.example",
         user: "root",
         port: "2202",
+        proxyJump: "bastion",
         authentication: "dedicated_password",
         savedCredential: "office",
         newCredential: "",
@@ -380,6 +501,7 @@ describe("CreateConnectionPane", () => {
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("host.example");
     expect(screen.getByLabelText("User")).toHaveValue("root");
     expect(screen.getByLabelText("Port")).toHaveValue(2202);
+    expect(screen.getByLabelText("Connect through")).toHaveValue("bastion");
     expect(await screen.findByText("Enter a connection password to continue.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create connection" })).toBeDisabled();
   });

@@ -66,7 +66,7 @@ func (s Session) valid() bool {
 	}
 	switch s.Kind {
 	case terminal.KindSSH:
-		return validate.Alias(s.Alias) == nil
+		return validate.SessionTarget(s.Alias) == nil
 	case terminal.KindShell:
 		return s.Alias == ""
 	}

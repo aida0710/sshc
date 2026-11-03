@@ -115,6 +115,7 @@ export function SectionView(props: SectionViewProps) {
         onPreferredKeyApplied={props.handoff.onConnectionKeyApplied}
         onOpenSSHSession={props.shell.onOpenSSHSession}
         onOpenLocalShell={props.shell.onOpenLocalShell}
+        onOverviewRead={props.shell.onOverviewRead}
       />
     );
   }

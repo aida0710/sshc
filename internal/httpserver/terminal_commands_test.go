@@ -318,3 +318,30 @@ func TestTerminalCommandRefusesAnActionWhenTheDisplayedPreviewChanged(t *testing
 		t.Fatalf("changed review wrote %q", got)
 	}
 }
+
+func TestTerminalCommandPreviewIncludesASessionOnADestinationThatWasNotSaved(t *testing.T) {
+	engine, credentials, registry, _, _ := newTerminalCommandServer(t)
+	opened, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "deploy@10.0.0.5:2222", Title: "deploy@10.0.0.5:2222",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) { return newScriptedPTY(), nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := terminalCommandPreviewRequest{
+		Command: stringPointer("pwd"), Inputs: map[string]string{},
+		Targets: []terminalCommandTargetRequest{{TargetId: "pane-a", SessionId: opened.ID()}},
+	}
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost,
+		"/api/v1/terminal/commands/preview", mustMarshal(t, request), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("preview = %d: %s", response.Code, response.Body.String())
+	}
+	var preview terminalCommandPreviewResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Targets) != 1 || preview.Targets[0].Alias != "deploy@10.0.0.5:2222" {
+		t.Fatalf("preview = %#v", preview)
+	}
+}

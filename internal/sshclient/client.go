@@ -51,6 +51,9 @@ type Dialer struct {
 	// `sshc ssh` は CLI の英語の案内を、端末に書くこの文で出す。Open は握手を待たずに
 	// 返るので、呼び出し側が Open の戻り値で失敗を受け取って書き換えることはできない。
 	DescribeFailure func(error) error
+	// OfferPasswordSave は、打ったパスワードで認証が通ったあとに、Vault に保存するかを
+	// 尋ねてよい接続かを返す。nil なら、打ったパスワードを覚えない。
+	OfferPasswordSave func(Target) bool
 }
 
 // Open は、この alias のセッションをひとつ返す。
@@ -78,6 +81,10 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	session.trace = trace
 	session.closingTrace = trace.writingTo(&session.closingLog)
 	started := trace.now()
+	// d は値で受け取った写しなので、ほかの接続の Auth には届かない。
+	if d.OfferPasswordSave != nil {
+		d.Auth.typedPasswords = newTypedPasswordRecorder(target)
+	}
 
 	client, closers, err := d.chain(ctx, target, prompt, trace)
 	if err != nil {
@@ -131,6 +138,12 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 				observed(name)
 			}
 		}()
+	}
+	// Ready より先に置く。接続できたと一覧に出るときに、問いも一緒に出る。
+	if password, typed := d.Auth.typedPasswords.accepted(); typed && d.OfferPasswordSave(target) {
+		session.offerPasswordSave(terminal.TypedPassword{
+			Alias: target.Alias, Binding: target.AuthenticationBinding(), Password: password,
+		})
 	}
 	session.markReady(nil)
 	trace.say(connectionlog.Brief, "セッションを開始しました。")

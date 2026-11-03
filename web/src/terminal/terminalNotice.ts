@@ -10,6 +10,7 @@ export type TerminalNotice =
   | { kind: "ended"; key: string }
   | { kind: "reconnecting"; key: string }
   | { kind: "link-stopped"; key: string }
+  | { kind: "password-save"; key: string }
   | { kind: "notification-permission"; key: string };
 
 // terminalNoticeFor picks the card for a session, if any. A clean exit (the person typed exit) and a link to the engine
@@ -26,6 +27,7 @@ export function terminalNoticeFor(session: TerminalSession, link: StreamLink, as
   }
   if (session.state === "reconnecting") return { kind: "reconnecting", key: `${noticeKeyPrefix(session.id)}reconnecting` };
   if (link.phase === "stopped" && !link.gone) return { kind: "link-stopped", key: `${noticeKeyPrefix(session.id)}link-stopped` };
+  if (session.passwordSaveQuestion === true) return { kind: "password-save", key: `${noticeKeyPrefix(session.id)}password-save` };
   if (asksNotificationPermission) return { kind: "notification-permission", key: `${noticeKeyPrefix(session.id)}notification-permission` };
   return null;
 }

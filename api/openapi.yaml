@@ -1325,6 +1325,52 @@ paths:
         '502':
           $ref: '#/components/responses/Problem'
       description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/sessions/{id}/password-save:
+    post:
+      operationId: remoteEngineAnswerTerminalPasswordSave
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TerminalPasswordSaveAnswer'
+      responses:
+        '200':
+          description: The session list after answering
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminalSessionList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
   /api/v1/engines/{alias}/terminal/sessions/{id}/title:
     put:
       operationId: remoteEngineSetTerminalSessionTitle
@@ -1978,6 +2024,34 @@ paths:
           # 答える。ターミナルで yes／no と打つのと同じ。その鍵についての問いをもう待っていなければ
           # （ターミナルで答えた、接続が先へ進んだ、終わった）、何も書かずに 409 を返す。
           description: The session list after answering the host key question
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/sessions/{id}/password-save:
+    post:
+      operationId: answerTerminalPasswordSave
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalPasswordSaveAnswer" }
+      responses:
+        "200":
+          # 打ったパスワードを Vault に保存するかの問い（passwordSaveQuestion）に答える。もう待って
+          # いなければ（答えた、時間が過ぎた、終わった）409 を返す。Vault がロックされているなどで
+          # 保存できなければ、問いは開いたままである。
+          description: The session list after answering
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TerminalSessionList" }
@@ -5254,6 +5328,9 @@ components:
         # 接続が認証の問い（パスワードなど）への入力を待っているあいだだけ true。接続の途中で届く入力のうち、
         # エンジンが捨てないのはこの答えだけなので、スマホの入力欄はこれを見て送れるかを決める。
         awaitingPrompt: { type: boolean }
+        # このセッションのターミナルで打ったパスワードで認証が通り、Vault に保存するかの答えを
+        # 待っている。パスワードの値は API に出さない。答えは POST .../password-save。
+        passwordSaveQuestion: { type: boolean }
         # プログラムの OSC 9;4。消去時は省略する。SSH 接続の段階とは独立。
         programProgress: { $ref: "#/components/schemas/TerminalProgramProgress" }
         # プログラムが OSC 7501 で知らせた状態のうち、いちばん利用者の手を要するもの。無ければ省略する。
@@ -5467,6 +5544,9 @@ components:
       properties:
         kind: { type: string, enum: [ssh, shell] }
         alias: { type: string, minLength: 1, maxLength: 64 }
+        # ssh kind only: 保存していない接続先 user@host[:port]（ssh コマンドと同じ形）。alias の代わりに
+        # 渡す。開いたセッションの alias にはこの形がそのまま入る。上限は validate.MaxDirectDestinationLength。
+        destination: { type: string, minLength: 1, maxLength: 519 }
         # Directory to start in: for ssh, absolute POSIX on the SSH server or
         # under the remote home (`~`, `~/src`); for shell, absolute, native or
         # forward-slashed, on the engine machine.
@@ -5627,6 +5707,12 @@ components:
         # 鍵の種類（ssh-ed25519 など）と、OpenSSH と同じ SHA256 のフィンガープリント。
         keyType: { type: string }
         fingerprint: { type: string }
+    TerminalPasswordSaveAnswer:
+      type: object
+      additionalProperties: false
+      required: [save]
+      properties:
+        save: { type: boolean }
     TerminalHostKeyAnswer:
       type: object
       additionalProperties: false
@@ -6225,6 +6311,8 @@ components:
         hostName: { type: string, minLength: 1, maxLength: 255 }
         user: { type: string, maxLength: 255 }
         port: { type: integer, minimum: 1, maximum: 65535 }
+        # 経由する接続先の接続名か none（グループの既定の踏み台を受け継がない）。省略すると行を書かない。
+        proxyJump: { type: string, minLength: 1, maxLength: 64 }
         authentication: { $ref: "#/components/schemas/CreateConnectionAuthentication" }
     CreateConnectionAuthentication:
       # TypeScript keeps the discriminated union below. Go receives the raw
@@ -6237,6 +6325,7 @@ components:
         - $ref: "#/components/schemas/CreateSavedPasswordAuthentication"
         - $ref: "#/components/schemas/CreateNewSharedPasswordAuthentication"
         - $ref: "#/components/schemas/CreateIdentityFileAuthentication"
+        - $ref: "#/components/schemas/CreateAskOnConnectAuthentication"
       discriminator:
         propertyName: kind
         mapping:
@@ -6244,6 +6333,14 @@ components:
           saved_password: "#/components/schemas/CreateSavedPasswordAuthentication"
           new_shared_password: "#/components/schemas/CreateNewSharedPasswordAuthentication"
           identity_file: "#/components/schemas/CreateIdentityFileAuthentication"
+          ask_on_connect: "#/components/schemas/CreateAskOnConnectAuthentication"
+    # 認証の情報を保存しない。接続のときにターミナルがパスワードを尋ねる。
+    CreateAskOnConnectAuthentication:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [ask_on_connect], x-go-type: string }
     CreateDedicatedPasswordAuthentication:
       type: object
       additionalProperties: false
@@ -6694,6 +6791,8 @@ components:
           enum: ['', server, linux, amazonlinux, ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, alpine, opensuse, freebsd, macos, windows]
           description: Last operating system detected after connecting.
         detectedOSBinding: { type: string, maxLength: 64 }
+        # ターミナルで打ったパスワードを保存しないと答えたときの認証先。engine が書く。
+        passwordSaveDeclinedBinding: { type: string, maxLength: 64 }
         colour: { type: string }
         order: { type: integer }
         orphan: { type: boolean }
