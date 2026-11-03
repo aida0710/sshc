@@ -2,12 +2,14 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import type { KeyBarLayout, KeyBarRow, KeySlot } from "./keyBarLayout";
 import { KeyFace, spokenKeyName } from "./KeyFace";
-import { keyBarRowColumns } from "./keyBarStyles";
+import { keyBarKeyGap } from "./keyBarStyles";
 
-const keyShape = "h-10 min-w-0 truncate rounded-[9px] font-mono text-[11px]";
+const keyShape = `h-11 min-w-0 truncate rounded-[9px] font-mono text-[11px] ${keyBarKeyGap}`;
+// The row wraps instead of scrolling as on the bar: to arrange the keys, all of them must be in sight and 44px wide.
+const keyGrid = "grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-y-1";
 
-// KeyBarPreview shows a layout as the key bar shows it, with the keys behind 「…」 under it. A tap selects a key
-// (a second tap lets go of it) for the buttons beside it to move.
+// KeyBarPreview shows a layout in the key bar's order, with the keys behind 「…」 under it. A tap selects a key (a second
+// tap lets go of it) for the buttons beside it to move.
 export function KeyBarPreview({ layout, selected, onSelect, disabled }: {
   layout: KeyBarLayout;
   selected: KeySlot | null;
@@ -28,7 +30,7 @@ export function KeyBarPreview({ layout, selected, onSelect, disabled }: {
   });
   return (
     <div data-key-bar-preview className="flex flex-col gap-2 rounded-[10px] bg-term-bg p-2">
-      <div role="group" aria-label={t("keyBar.keysRow")} className={`${keyBarRowColumns} gap-1`}>
+      <div role="group" aria-label={t("keyBar.keysRow")} className={keyGrid}>
         {row("keys")}
         {layout.moreKeys.length === 0 ? null : (
           <span aria-hidden="true" className={`${keyShape} flex items-center justify-center bg-card text-ink-faint`}>
@@ -37,8 +39,8 @@ export function KeyBarPreview({ layout, selected, onSelect, disabled }: {
         )}
       </div>
       <span className="px-0.5 text-[11.5px] text-ink-faint">{t("keyBar.moreRow")}</span>
-      <div role="group" aria-label={t("keyBar.moreRow")} className="grid grid-cols-6 gap-1">
-        {layout.moreKeys.length === 0 ? <span className="col-span-6 px-0.5 text-xs text-ink-faint">{t("keyBar.moreRowEmpty")}</span> : row("moreKeys")}
+      <div role="group" aria-label={t("keyBar.moreRow")} className={keyGrid}>
+        {layout.moreKeys.length === 0 ? <span className="col-span-full px-0.5 text-xs text-ink-faint">{t("keyBar.moreRowEmpty")}</span> : row("moreKeys")}
       </div>
     </div>
   );

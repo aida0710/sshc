@@ -8,6 +8,7 @@ import { EntryPreferences } from "../ui/EntryPreferences";
 import { EntryScreen } from "../ui/EntryScreen";
 import { Icon } from "../ui/icons";
 import { PasswordField } from "../ui/PasswordField";
+import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { Button, Notice } from "../ui/surface";
 import { ErrorDiagnosticNotice } from "../shell/ErrorDiagnosticNotice";
 import { SignOutButton } from "../session/SignOutButton";
@@ -248,7 +249,7 @@ export function LockScreen({
         )}
         {exists ? null : <PasswordlessSwitch checked={withoutPassword} onChange={setWithoutPassword} />}
         {noPassword ? (exists ? <p className="text-sm text-ink-muted">{t("lock.withoutPasswordHint")}</p> : null) : <>
-          <PasswordField label={t("lock.password")} value={password} onChange={setPassword} autoFocus inputClassName={largeField} />
+          <PasswordField label={t("lock.password")} value={password} onChange={setPassword} autoFocus={!hasOnScreenKeyboard()} inputClassName={largeField} />
           {exists ? null : (
             <PasswordField label={t("lock.confirm")} value={confirmation} onChange={setConfirmation} inputClassName={largeField} />
           )}

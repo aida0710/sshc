@@ -11,6 +11,7 @@ import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
 import { isImeComposing } from "../ui/imeComposition";
+import { hasOnScreenKeyboard, literalTextEntry } from "../ui/softKeyboard";
 import { parseDirectDestination } from "../connections/directDestination";
 import type { DirectDestinationActions } from "./useDirectDestinationActions";
 import { searchPalette } from "./paletteSearch";
@@ -95,7 +96,7 @@ export function CommandPalette({
     if (!open) return;
     setQuery("");
     setSelected(0);
-    window.requestAnimationFrame(() => input.current?.focus());
+    if (!hasOnScreenKeyboard()) window.requestAnimationFrame(() => input.current?.focus());
     let active = true;
     setLoading(true);
     void snippetsApi.library()
@@ -237,7 +238,7 @@ export function CommandPalette({
         <label className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
           <Icon name="search" className="h-4 w-4 text-ink-muted" />
           <span className="sr-only">{t("palette.heading")}</span>
-          <input
+          <input {...literalTextEntry}
             ref={input}
             type="search"
             aria-label={t("palette.heading")}

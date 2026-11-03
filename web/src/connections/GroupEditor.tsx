@@ -4,8 +4,10 @@ import type { GroupMetadata } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";
+import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
 import { Button, Card, Notice } from "../ui/surface";
 import { useToast } from "../ui/useToast";
 import { DraftSaveBar } from "./DraftSaveBar";
@@ -120,7 +122,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
               label={t(field.label)}
               {...(repeated.has(field.keyword) ? { hint: t("groupEditor.repeatedField") } : {})}
             >
-              <input
+              <input {...asciiTextEntry}
                 value={draft.defaults[field.keyword] ?? ""}
                 disabled={repeated.has(field.keyword)}
                 placeholder={repeated.has(field.keyword) ? "" : t("groupEditor.example", { value: field.placeholder })}
@@ -133,7 +135,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
       </div>
 
       <details className="border-t border-line pt-4" open={draft.other.length > 0}>
-        <summary className={`cursor-pointer ${sectionHeading}`}>{t("groupEditor.other")}</summary>
+        <DisclosureSummary className={sectionHeading}>{t("groupEditor.other")}</DisclosureSummary>
         <ul className="mt-3 flex flex-col gap-1.5">
           {draft.other.map((setting, index) => (
             <li key={`${setting.keyword}-${index}`} className="flex items-center gap-2 rounded-md bg-surface-subtle px-2 py-1.5 font-mono text-xs text-ink">
@@ -152,12 +154,12 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="min-w-40 flex-1">
             <Field label={t("groupEditor.keyword")}>
-              <input value={newKeyword} placeholder="ServerAliveInterval" onChange={(event) => setNewKeyword(event.currentTarget.value)} className={control} />
+              <input {...asciiTextEntry} value={newKeyword} placeholder="ServerAliveInterval" onChange={(event) => setNewKeyword(event.currentTarget.value)} className={control} />
             </Field>
           </div>
           <div className="min-w-32 flex-1">
             <Field label={t("groupEditor.value")}>
-              <input value={newValue} placeholder="30" onChange={(event) => setNewValue(event.currentTarget.value)} className={control} />
+              <input {...literalTextEntry} value={newValue} placeholder="30" onChange={(event) => setNewValue(event.currentTarget.value)} className={control} />
             </Field>
           </div>
           <Button disabled={newKeyword.trim() === ""} onClick={addOther}>{t("groupEditor.addOther")}</Button>

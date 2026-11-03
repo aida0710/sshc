@@ -8,10 +8,17 @@ import { keepKeyboardAsIs } from "../ui/softKeyboard";
 import type { KeyBarLayout } from "../keybar/keyBarLayout";
 import { isModifierKey, type KeyBarKey } from "../keybar/keySequences";
 import { KeyFace, spokenKeyName } from "../keybar/KeyFace";
-import { keyBarRowColumns } from "../keybar/keyBarStyles";
+import { keyBarKeyGap } from "../keybar/keyBarStyles";
 
 const keyShape =
-  "h-11 min-w-0 rounded-[10px] font-mono text-[12.5px] active:bg-select-fill focus-visible:outline-2 focus-visible:outline-accent";
+  `h-11 min-w-0 rounded-[10px] font-mono text-[12.5px] active:bg-select-fill focus-visible:outline-2 focus-visible:outline-accent ${keyBarKeyGap}`;
+// The row always shown: the keys share the width, each at least 39px, and past that the row scrolls sideways. 39px is
+// the most that shows all ten keys of the default row on a phone 412px wide (1080 pixels at 420dpi); the 44px of a
+// place to press elsewhere would hide a key there, and these are what a person reaches for while a program waits.
+// The key cut off at the edge of a narrower phone shows there is more, so the row needs no scrollbar.
+const keyRowColumns = "grid min-w-0 flex-1 grid-flow-col auto-cols-[minmax(2.4375rem,1fr)] overflow-x-auto [scrollbar-width:none]";
+// 「…」 stays at the end of the row, where a row that scrolls cannot take it out of sight.
+const moreKeyWidth = "w-[2.4375rem] shrink-0";
 const idleKey = "bg-card text-ink";
 const pressedKey = "bg-select-fill text-ink";
 
@@ -79,9 +86,11 @@ export function KeyBar({
 
   return (
     <div ref={root} aria-label={t("terminal.keyBar")} className="relative shrink-0 px-2.5 pb-2 pt-2.5">
-      {/* The row scrolls sideways inside its own box, so the keys behind 「…」 can open above it unclipped. */}
-      <div className={`${keyBarRowColumns} gap-1`}>
-        {layout.keys.map((key, index) => keyButton(key, index, onTap))}
+      <div className="flex">
+        {/* The row scrolls sideways inside its own box, so the keys behind 「…」 can open above it unclipped. */}
+        <div className={keyRowColumns}>
+          {layout.keys.map((key, index) => keyButton(key, index, onTap))}
+        </div>
         {layout.moreKeys.length === 0 ? null : (
           <button
             type="button"
@@ -92,14 +101,14 @@ export function KeyBar({
             onPointerDown={keepKeyboardAsIs}
             onMouseDown={keepKeyboardAsIs}
             onClick={() => setMoreOpen((current) => !current)}
-            className={`${keyShape} ${moreOpen ? pressedKey : heldBehindMore === undefined ? idleKey : latchColors[modifiers[modifierNames[heldBehindMore]]]}`}
+            className={`${keyShape} ${moreKeyWidth} ${moreOpen ? pressedKey : heldBehindMore === undefined ? idleKey : latchColors[modifiers[modifierNames[heldBehindMore]]]}`}
           >
             {heldBehindMore === undefined ? <Icon name="moreHorizontal" className="mx-auto size-4" /> : <KeyFace barKey={{ key: heldBehindMore }} iconClassName="size-4" />}
           </button>
         )}
       </div>
       {moreOpen ? (
-        <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-6 gap-1 rounded border border-line bg-toolbar p-1 shadow-float">
+        <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-6 gap-y-1 rounded border border-line bg-toolbar p-1 shadow-float">
           {layout.moreKeys.map((key, index) => keyButton(key, index, tapModifierBehindMore))}
         </div>
       ) : null}

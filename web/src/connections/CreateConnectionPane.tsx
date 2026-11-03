@@ -12,7 +12,7 @@ import { groupDefaultValue } from "./groupDefaults";
 import { NewGroupField } from "./NewGroupField";
 import { useCreateConnectionForm, type CreateConnectionFormOptions } from "./useCreateConnectionForm";
 import { useReportDirty } from "./useReportDirty";
-import { asciiTextEntry } from "../ui/softKeyboard";
+import { asciiTextEntry, hasOnScreenKeyboard } from "../ui/softKeyboard";
 
 const authenticationChoices: readonly [CreateConnectionAuthenticationKind, MessageKey][] = [
   ["identity_file", "conn.createIdentityFile"],
@@ -97,7 +97,7 @@ export function CreateConnectionPane({
               <Field label={t("conn.createName")}>
                 <input {...asciiTextEntry}
                   id="create-connection-name"
-                  autoFocus
+                  autoFocus={!hasOnScreenKeyboard()}
                   value={values.alias}
                   placeholder={form.suggestedAlias}
                   onChange={(event) => form.setAlias(event.target.value)}

@@ -170,6 +170,13 @@ test("shows Basic save actions only after a change and keeps them in the form", 
   }
 });
 
+test("a new connection on a PC opens with the focus in its name", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await page.goto(new URL("/connections", page.url()).href);
+  await page.getByRole("button", { name: "Add connection" }).click();
+  await expect(page.getByRole("form", { name: "New connection" }).getByLabel("Connection name")).toBeFocused();
+});
+
 test("creates a key-authenticated connection in an empty nested declared group", async ({
   page,
   installation,

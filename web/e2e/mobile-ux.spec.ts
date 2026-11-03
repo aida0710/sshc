@@ -761,6 +761,145 @@ test("a new connection takes the phone's screen in place of the list and opens i
   await expect(form).toHaveCount(0);
 });
 
+// textFieldFocused says a phone's keyboard would be up, or come up on the next tap anywhere.
+async function textFieldFocused(page: Page): Promise<boolean> {
+  return page.evaluate(() => document.activeElement?.matches("input:not([type=checkbox]):not([type=radio]), textarea") === true);
+}
+
+test("a new connection opens with the keyboard down and its fields ask for Latin letters", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await page.goto(new URL("/connections", page.url()).href);
+  await page.locator("[data-app-header]").getByRole("button", { name: "Add connection", exact: true }).tap();
+  const form = page.getByRole("form", { name: "New connection" });
+  await expect(form).toBeVisible();
+  expect(await textFieldFocused(page)).toBe(false);
+
+  const name = form.getByLabel("Connection name");
+  for (const field of [name, form.getByLabel("Host name or IP address"), form.getByLabel("User", { exact: true })]) {
+    await expect(field).toHaveAttribute("inputmode", "email");
+    await expect(field).toHaveAttribute("autocapitalize", "off");
+  }
+  await name.tap();
+  await expect(name).toBeFocused();
+});
+
+test("a form or a dialog opens with the keyboard down and closes without bringing it up", async ({ page, installation }) => {
+  await openApplication(page, installation);
+
+  // A form in the page.
+  await page.goto(new URL("/vault/passwords", page.url()).href);
+  await page.locator("[data-app-header]").getByRole("button", { name: "Add", exact: true }).tap();
+  const credential = page.getByRole("region", { name: "Add an account password" });
+  await expect(credential).toBeVisible();
+  expect(await textFieldFocused(page)).toBe(false);
+
+  // A dialog whose first control is a search field.
+  await page.getByRole("button", { name: "Navigation", exact: true }).first().tap();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Search everything" }).tap();
+  const palette = page.getByRole("dialog", { name: /^Search sessions/ });
+  await expect(palette).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
+  expect(await textFieldFocused(page)).toBe(false);
+
+  // A dialog that asks for a value on its own: the field takes a tap.
+  await page.goto(new URL("/settings/keybar", page.url()).href);
+  await page.getByRole("button", { name: "Make a key", exact: true }).tap();
+  const making = page.getByRole("dialog", { name: "Your own key" });
+  await expect(making).toBeFocused();
+  await making.getByLabel("Text on the key").tap();
+  await expect(making.getByLabel("Text on the key")).toBeFocused();
+});
+
+test("a control that turns into its field on a tap still takes the focus", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await page.goto(new URL("/connections", page.url()).href);
+  await page.locator("[data-app-header]").getByRole("button", { name: "Add connection", exact: true }).tap();
+  await page.getByRole("button", { name: "New group", exact: true }).tap();
+  await expect(page.getByLabel("Name of the new group")).toBeFocused();
+});
+
+// The widest a key can be with all ten keys of the default row on a phone 412px wide (KeyBar.tsx).
+const keyBarKeyMinimumWidth = 39;
+
+test("all the keys of the key bar show on a phone 412px wide, each as tall as a finger", async ({ page, installation }) => {
+  await mockTerminalSession(page, "$ ");
+  await page.setViewportSize({ width: 412, height: 800 });
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  const keys = page.getByLabel("On-screen keys", { exact: true });
+  await expect(keys).toBeVisible();
+  const buttons = await keys.getByRole("button").all();
+  expect(buttons).toHaveLength(10);
+  for (const button of buttons) {
+    await expectInside(page, button);
+    const box = (await button.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(keyBarKeyMinimumWidth);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+  // Nothing is hidden behind 「…」, which the row would run under if it were too wide for the screen.
+  const more = (await keys.getByRole("button", { name: "Extra keys", exact: true }).boundingBox())!;
+  const right = (await keys.getByRole("button", { name: "Right arrow", exact: true }).boundingBox())!;
+  expect(right.x + right.width).toBeLessThanOrEqual(more.x + 1);
+});
+
+test("on a narrower phone the row of keys scrolls sideways and 「…」 stays in sight", async ({ page, installation }) => {
+  const messages = await mockTerminalSession(page, "Mobile terminal demo\r\n$ ");
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  const keys = page.getByLabel("On-screen keys", { exact: true });
+  await expect(keys).toBeVisible();
+  for (const button of await keys.getByRole("button").all()) {
+    expect((await button.boundingBox())!.width).toBeGreaterThanOrEqual(keyBarKeyMinimumWidth);
+  }
+  const more = keys.getByRole("button", { name: "Extra keys", exact: true });
+  await expectInside(page, more);
+
+  // The row keeps the swipe for itself: the navigation stays closed, 「…」 stays put, and the hidden key comes into sight.
+  const right = keys.getByRole("button", { name: "Right arrow", exact: true });
+  const moreBefore = (await more.boundingBox())!;
+  const rightBefore = (await right.boundingBox())!;
+  expect(rightBefore.x + rightBefore.width).toBeGreaterThan(moreBefore.x);
+  const y = (await keys.boundingBox())!.y + 30;
+  await swipe(page, { x: 250, y }, { x: 40, y });
+  await expect(page.locator("[data-app-navigation]")).toHaveAttribute("data-navigation-open", "false");
+  await expect.poll(async () => { const box = (await right.boundingBox())!; return box.x + box.width; }).toBeLessThanOrEqual(moreBefore.x + 1);
+  expect((await more.boundingBox())!.x).toBe(moreBefore.x);
+
+  await right.tap();
+  await expect.poll(() => messages.some((message) => message.includes("\u001b[C"))).toBe(true);
+});
+
+test("the Connection layout switch answers a tap just outside what is drawn", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const list = page.getByRole("button", { name: "List", exact: true });
+  const box = (await list.boundingBox())!;
+  expect(box.height).toBeLessThan(30);
+  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height + 8);
+  await expect(list).toHaveAttribute("aria-pressed", "true");
+  const panels = page.getByRole("button", { name: "Panels", exact: true });
+  const panelsBox = (await panels.boundingBox())!;
+  await page.touchscreen.tap(panelsBox.x + panelsBox.width / 2, panelsBox.y - 8);
+  await expect(panels).toHaveAttribute("aria-pressed", "true");
+});
+
+test("More details and a slider are as tall as a finger", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await page.goto(new URL("/settings/vault", page.url()).href);
+  const summary = page.getByText("More details", { exact: true }).first();
+  await expect(summary).toBeVisible();
+  const box = (await summary.boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await summary.tap();
+  await expect(summary.locator("xpath=ancestor::details")).toHaveAttribute("open", "");
+
+  await page.goto(new URL("/settings/notifications", page.url()).href);
+  const slider = page.getByRole("slider").first();
+  await expect(slider).toBeVisible();
+  expect((await slider.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+});
+
 test("a tap on the line being typed at a prompt moves the shell's cursor there", async ({ page, installation }) => {
   // Shell integration marks where the prompt and the typed text begin (OSC 133;A and B).
   const messages = await mockTerminalSession(page, "\x1b]133;A\x07$ \x1b]133;B\x07echo 0123456789");

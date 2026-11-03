@@ -71,9 +71,15 @@ describe("HostPickerDialog", () => {
   });
 
   it("follows the focus the caller asks for", async () => {
+    phoneScreen(false);
+    openPicker("close");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close host picker" })).toHaveFocus());
+  });
+
+  it("keeps the keyboard down on a phone even when the caller asks for the search", async () => {
     phoneScreen(true);
     openPicker("search");
-    await waitFor(() => expect(screen.getByRole("searchbox", { name: "Search connections" })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveFocus());
   });
 
   it("offers to connect to what was typed, or to save it first", async () => {
