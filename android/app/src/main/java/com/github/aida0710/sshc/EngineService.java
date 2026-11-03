@@ -107,6 +107,7 @@ public final class EngineService extends Service {
         // startForegroundService の制限時間内に通知を開始してから engine を起動する。
         startForeground(NOTIFICATION_ID, notification());
 
+        BlockedProgramWatcher.ensureStarted(this);
         ENGINE.execute(this::startEngine);
     }
 

@@ -1,6 +1,7 @@
 import type { components } from "../api/schema";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
+import { programStatusText } from "./programStatus";
 import { terminalDisplayTitle } from "./terminalPresentation";
 
 // What the engine recorded on the session: a program inside the terminal asked
@@ -28,15 +29,26 @@ export function nextTerminalNotification(
   if (previousVersion === undefined || (session.notificationVersion ?? 0) <= previousVersion) return null;
   const last = session.lastNotification;
   if (last === undefined) return null;
+  return { title: notificationSubject(session), body: notificationText(t, last) };
+}
+
+// blockedProgramNotification is what a notification says about a program waiting
+// for the person (OSC 7501), or null when the session's program does not wait.
+export function blockedProgramNotification(t: Translate, session: TerminalSession): TerminalNotification | null {
+  const status = session.programStatus;
+  if (status?.state !== "blocked") return null;
+  return { title: notificationSubject(session), body: programStatusText(t, { ...status, state: "blocked" }) };
+}
+
+// The connection alias leads the heading because it is the only part the
+// server cannot choose: the pane title follows the program's OSC title, so a
+// hostile server could otherwise word the whole notification like sshc's own.
+// The pane title still follows so several agents on one host stay apart, and
+// the program's own title becomes the first line of the body.
+function notificationSubject(session: TerminalSession): string {
   const displayTitle = terminalDisplayTitle(session);
   const alias = session.kind === "ssh" ? session.alias : undefined;
-  // The connection alias leads the heading because it is the only part the
-  // server cannot choose: the pane title follows the program's OSC title, so a
-  // hostile server could otherwise word the whole notification like sshc's own.
-  // The pane title still follows so several agents on one host stay apart, and
-  // the program's own title becomes the first line of the body.
-  const subject = alias === undefined || alias === displayTitle ? displayTitle : `${alias}（${displayTitle}）`;
-  return { title: subject, body: notificationText(t, last) };
+  return alias === undefined || alias === displayTitle ? displayTitle : `${alias}（${displayTitle}）`;
 }
 
 // notificationText is what a terminal notification says: how a long command

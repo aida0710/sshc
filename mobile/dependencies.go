@@ -34,6 +34,8 @@ type dependencyOptions struct {
 	cache    string
 	logger   *slog.Logger
 	announce func(app.Readiness) error
+	// programBlocked は、プログラムが利用者を待ち始めた・待つのをやめたことを Android の通知へ渡す。
+	programBlocked func(terminal.BlockedProgramChange)
 }
 
 // newDependencies はモバイル環境用の依存を組み立てる。自己更新、ssh-keygen、
@@ -57,8 +59,9 @@ func newDependencies(options dependencyOptions) (app.Dependencies, error) {
 		Toolchain: nil,
 		KeyAgent:  nil,
 		// モバイルアプリの SHELL 環境変数には依存しない。
-		Lookup:  func(string) (string, bool) { return "", false },
-		Environ: mobileEnvironment(options.goos, options.home, options.cache),
+		Lookup:         func(string) (string, bool) { return "", false },
+		Environ:        mobileEnvironment(options.goos, options.home, options.cache),
+		ProgramBlocked: options.programBlocked,
 		// モバイルアプリはバイナリを置換できないので SelfUpdate は無い。新しいリリースは調べて、
 		// 画面がリリースページへ案内する。
 		Updates: releasewatch.NewForVersion(options.ctx, version),

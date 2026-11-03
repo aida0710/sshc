@@ -252,6 +252,18 @@ public final class MainActivity extends ComponentActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        AppVisibility.set(true);
+    }
+
+    @Override
+    protected void onStop() {
+        AppVisibility.set(false);
+        super.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
         if (fileChooser != null) {
             fileChooser.onReceiveValue(null);

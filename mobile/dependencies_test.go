@@ -10,6 +10,7 @@ import (
 
 	"sshc/internal/app"
 	"sshc/internal/handoff"
+	"sshc/internal/terminal"
 )
 
 func build(t *testing.T) app.Dependencies {
@@ -17,6 +18,7 @@ func build(t *testing.T) app.Dependencies {
 	dependencies, err := newDependencies(dependencyOptions{
 		ctx: t.Context(), goos: "android", home: "/data/user/0/app/files", cache: "/data/user/0/app/cache",
 		logger: slog.Default(), announce: func(app.Readiness) error { return nil },
+		programBlocked: func(terminal.BlockedProgramChange) {},
 	})
 	if err != nil {
 		t.Fatalf("newDependencies = %v", err)
@@ -101,6 +103,8 @@ var androidFieldIntent = map[string]string{
 	"PID":         "wired: このプロセス",
 	"Lookup":      "wired: 常に未検出を返し、SHELL の値には依存しない",
 	"Environ":     "wired: 固定の環境。Android アプリの環境に有用な PATH が無い",
+
+	"ProgramBlocked": "wired: プログラムが利用者を待っていることを Android の通知へ渡す",
 
 	"SFTPDownloadSpoolRoot": "wired: アプリの cacheDir の下。アプリのプロセスには HOME が無い",
 	"Updates":               "wired: 新しいリリースを調べる。入れるのはリリースページの APK から",

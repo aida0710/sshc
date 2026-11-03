@@ -42,7 +42,9 @@ import { useNavigationSwipe } from "./shell/useNavigationSwipe";
 import { SectionNotices } from "./shell/SectionNotices";
 import { usePaletteCommands } from "./shell/usePaletteCommands";
 import { setAndroidAppearance } from "./android/native";
+import { useBlockedProgramNotifications } from "./terminal/useBlockedProgramNotifications";
 import { useTerminalNotifications } from "./terminal/useTerminalNotifications";
+import { notificationsComeFromAndroid } from "./ui/browserNotifications";
 import { useSeenProgramStatus } from "./terminal/useSeenProgramStatus";
 import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
@@ -311,6 +313,10 @@ export function App({
     t,
     showSession,
   );
+  useBlockedProgramNotifications(terminalSessions.sessions, {
+    enabled: runTargets.selected !== null && notificationsComeFromAndroid(),
+    t,
+  });
   const seenProgramStatus = useSeenProgramStatus(terminalSessions.sessions, terminalFace ? activeSessionId : null);
 
 

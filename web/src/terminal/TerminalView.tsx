@@ -67,6 +67,7 @@ import { TerminalNoticeCard } from "./TerminalNoticeCard";
 import { TerminalNoticesButton } from "./TerminalNoticesButton";
 import { noticeSeverity, statusBannerRows } from "./statusBannerRows";
 import { useMobileNotices } from "./useMobileNotices";
+import { useNotificationPermissionNotice } from "./useNotificationPermissionNotice";
 import { forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
 import { terminalNoticeFor } from "./terminalNotice";
 import { useSessionRecovery } from "./useSessionRecovery";
@@ -252,12 +253,14 @@ export function TerminalView({
     onReconnected: () => streamLinkController.current?.connect(),
   });
   const hostKeyAnswer = useHostKeyAnswer(onAnswerHostKey);
-  const notice = terminalNoticeFor(session, link);
+  const notificationPermission = useNotificationPermissionNotice(session);
+  const notice = terminalNoticeFor(session, link, notificationPermission.due);
   const noticeDismissal = useTerminalNoticeDismissal(notice?.key ?? null);
   const noticeRows = statusBannerRows({
     session, problem, link, reconnectFailed: recovery.reconnectFailed, answersHostKey: hostKeyAnswer.answer !== undefined,
   });
-  const noticesSeverity = noticeSeverity(noticeRows, { session, link });
+  // The strip has nothing to say about the notification permission, which only has a card.
+  const noticesSeverity = noticeSeverity(noticeRows, { session, link }) ?? (notice?.kind === "notification-permission" ? "notice" : null);
   const noticesButton = useRef<HTMLButtonElement>(null);
   const noticesStrip = useRef<HTMLDivElement>(null);
   const noticeCardFrame = useRef<HTMLDivElement>(null);
@@ -984,6 +987,7 @@ export function TerminalView({
               title={displayTitle}
               recovery={recovery}
               hostKeyAnswer={hostKeyAnswer}
+              notificationPermission={notificationPermission}
               focus={{
                 // Only the terminal the person works in, and not from under a dialog or menu. A phone shows it when the
                 // person asks for the notices, so it always takes the focus there.

@@ -9,11 +9,13 @@ export type TerminalNotice =
   | { kind: "host-key"; key: string }
   | { kind: "ended"; key: string }
   | { kind: "reconnecting"; key: string }
-  | { kind: "link-stopped"; key: string };
+  | { kind: "link-stopped"; key: string }
+  | { kind: "notification-permission"; key: string };
 
 // terminalNoticeFor picks the card for a session, if any. A clean exit (the person typed exit) and a link to the engine
-// that is still retrying by itself stay in the strip alone.
-export function terminalNoticeFor(session: TerminalSession, link: StreamLink): TerminalNotice | null {
+// that is still retrying by itself stay in the strip alone. asksNotificationPermission (the app has a reason to ask now,
+// see useNotificationPermissionNotice) comes last: what is wrong with the session goes first.
+export function terminalNoticeFor(session: TerminalSession, link: StreamLink, asksNotificationPermission = false): TerminalNotice | null {
   if (session.state === "exited" && session.exited !== undefined) {
     if (session.problem === "" && !exitedAbnormally(session)) return null;
     return { kind: "ended", key: `${noticeKeyPrefix(session.id)}ended:${session.exited.at}` };
@@ -24,6 +26,7 @@ export function terminalNoticeFor(session: TerminalSession, link: StreamLink): T
   }
   if (session.state === "reconnecting") return { kind: "reconnecting", key: `${noticeKeyPrefix(session.id)}reconnecting` };
   if (link.phase === "stopped" && !link.gone) return { kind: "link-stopped", key: `${noticeKeyPrefix(session.id)}link-stopped` };
+  if (asksNotificationPermission) return { kind: "notification-permission", key: `${noticeKeyPrefix(session.id)}notification-permission` };
   return null;
 }
 

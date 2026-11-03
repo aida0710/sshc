@@ -105,6 +105,7 @@ func startWith(home, cache string, run engineRunner, probe entranceProbe) (strin
 			entrance <- readiness.Entrance
 			return nil
 		},
+		programBlocked: blockedPrograms.add,
 	})
 	if err != nil {
 		return "", fail(KindUnknown, err)

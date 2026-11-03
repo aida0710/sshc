@@ -132,7 +132,10 @@ export function NotificationSettingsSection({ presetId, showHeading }: { presetI
           </ActionArea>
         ) : null}
         <div className="border-t border-line pt-5">
-          <FieldRow label={t("terminal.notificationSound")} hint={t("terminal.notificationSoundHint")}>
+          <FieldRow
+            label={t("terminal.notificationSound")}
+            hint={t(notificationsComeFromAndroid() ? "terminal.androidNotificationSoundHint" : "terminal.notificationSoundHint")}
+          >
             <div className="flex gap-2">
               <select
                 className={control}
