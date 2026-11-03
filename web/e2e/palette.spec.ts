@@ -97,6 +97,8 @@ test("runs the actions of a terminal by name, each with its key beside it, and t
   await page.evaluate(() => navigator.clipboard.writeText("echo PASTED:$((6 * 7))"));
   await terminalKeyboard(page).focus();
   await choose(page, "paste", /^Action\s*Paste/);
+  // The clipboard is read asynchronously, so Enter waits for the text: pressed first, it runs an empty line.
+  await expect(rows).toContainText("echo PASTED:");
   await terminalKeyboard(page).focus();
   await page.keyboard.press("Enter");
   await expect(rows).toContainText("PASTED:42");
@@ -146,7 +148,9 @@ test("changes the theme and OSC 52 by name, and says which is in use", async ({ 
   await page.keyboard.press("Control+k");
   await palette(page).getByRole("searchbox").fill("theme");
   await expect(palette(page).getByRole("option", { name: /Theme: White blue/ })).toContainText("In use");
-  await expect(palette(page).getByRole("option", { name: /Theme: Dark$/ })).not.toContainText("In use");
+  const dark = palette(page).getByRole("option", { name: /Theme: Dark( In use)?$/ });
+  await expect(dark).toHaveCount(1);
+  await expect(dark).not.toContainText("In use");
   await page.keyboard.press("Escape");
 
   await choose(page, "osc 52", /Turn OSC 52 on/);
