@@ -27,7 +27,8 @@ import { useTranslate } from "../i18n/context";
 import { primaryAction } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { Icon } from "../ui/icons";
-import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
+import { PageHeader, PageSection, PageSectionFrame, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
+import { StartTiles } from "../ui/StartTiles";
 import { PanelState } from "../ui/PanelState";
 import { keysApi, type KeyItem, type KeysApi, type RelocateKeyResponse } from "./api";
 import type {
@@ -69,6 +70,7 @@ type KeysScreenProps = {
   onInstallGeneratedKey?: (key: GeneratedPublicKeyHandoff) => void;
   // about tells which system the engine runs on, for the ssh-agent advice.
   about?: AboutApi;
+  onOpenSync?: () => void;
 };
 
 // Certificate expiry is shown to the minute, so the clock only needs to move
@@ -76,6 +78,7 @@ type KeysScreenProps = {
 const certificateClockRefreshMs = 60_000;
 
 export function KeysScreen({
+  onOpenSync,
   onInspector,
   onShowInspector,
   api = keysApi,
@@ -304,6 +307,9 @@ export function KeysScreen({
 
   const searching = keyQuery.trim() !== "";
   const shown = shownItems(inventory.items, listFilter);
+  // The other files in ~/.ssh have pages of their own (SSH Config, Known Hosts), and a key in the trash can still
+  // be restored from the list, so what counts as nothing here is no key anywhere.
+  const noKeys = shownItems(inventory.items, "keys").length === 0 && trash.entries.length === 0;
   const rows = folderRows(shown, groups, trash.entries.length);
   const visibleItems = searchKeyItems(itemsInFolder(shown, folder), keyQuery);
   const keyAttention =
@@ -367,11 +373,13 @@ export function KeysScreen({
           </button>
         }
       />
-      <SummaryStats>
-        <SummaryStat label={t("keys.metricFiles")} value={inventory.items.length} />
-        <SummaryStat label={t("keys.metricPrivate")} value={inventory.items.filter((item) => item.kind === "private_key").length} />
-        <SummaryStat label={t("keys.metricAttention")} value={keyAttention} attention={keyAttention > 0} />
-      </SummaryStats>
+      {noKeys ? null : (
+        <SummaryStats>
+          <SummaryStat label={t("keys.metricFiles")} value={inventory.items.length} />
+          <SummaryStat label={t("keys.metricPrivate")} value={inventory.items.filter((item) => item.kind === "private_key").length} />
+          <SummaryStat label={t("keys.metricAttention")} value={keyAttention} attention={keyAttention > 0} />
+        </SummaryStats>
+      )}
       {failure !== "" && <Notice tone="danger">{failure}</Notice>}
 
       {creating ? (
@@ -400,7 +408,20 @@ export function KeysScreen({
       {moveOutcome === null ? null : <KeyMoveOutcomeNotice outcome={moveOutcome} />}
       {relocateForm.relocating === null ? <RelocateResult result={relocated} onClose={() => setRelocated(null)} /> : null}
 
-      <PageSection
+      {noKeys ? (
+        creating ? null : (
+          <PageSectionFrame>
+            <StartTiles
+              heading={t("keys.emptyHeading")}
+              inPage
+              tiles={[
+                { icon: "keys", title: t("keys.createHeading"), note: t("keys.createNote"), primary: true, onSelect: () => setCreating(true) },
+                { icon: "sync", title: t("start.receiveSync"), note: t("start.receiveSyncNote"), onSelect: () => onOpenSync?.() },
+              ]}
+            />
+          </PageSectionFrame>
+        )
+      ) : <PageSection
         heading={t("keys.listHeading")}
         meta="~/.ssh"
         actions={folder.kind === "trash" ? undefined : (
@@ -444,7 +465,7 @@ export function KeysScreen({
             </div>
           </div>
         </div>
-      </PageSection>
+      </PageSection>}
 
       <KeyTrashConfirmation
         item={pendingTrash}

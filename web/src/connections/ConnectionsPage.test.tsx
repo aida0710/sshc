@@ -124,7 +124,7 @@ describe("ConnectionsPage", () => {
       const user = userEvent.setup();
       vi.mocked(configApi.overview).mockResolvedValue(twoInConfig);
       vi.mocked(configApi.file).mockResolvedValue({ ...detail.file, contents: configContents });
-      render(<ToastProvider><ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} /></ToastProvider>);
+      render(<ToastProvider><ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} /></ToastProvider>);
       await user.click(await screen.findByRole("button", { name: "bastion" }));
       fireEvent.click(screen.getByRole("button", { name: "edge" }), { ctrlKey: true });
       const bar = await screen.findByRole("toolbar", { name: "2 selected" });
@@ -193,7 +193,7 @@ describe("ConnectionsPage", () => {
     const saved = { transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.groups", diffs: [] } };
 
     async function renderPage() {
-      render(<ToastProvider><ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} /></ToastProvider>);
+      render(<ToastProvider><ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} /></ToastProvider>);
       return within(await screen.findByRole("navigation", { name: "Groups" }));
     }
 
@@ -301,7 +301,7 @@ describe("ConnectionsPage", () => {
       ],
     });
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "" }}
@@ -318,7 +318,7 @@ describe("ConnectionsPage", () => {
   it("replaces the bare section URL with the default server browser and discards old query state", async () => {
     const onNavigateLocation = vi.fn();
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections", search: "?tab=raw" }}
@@ -333,7 +333,7 @@ describe("ConnectionsPage", () => {
 
   it("offers a resizable divider between the connection list and the open connection", async () => {
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "?path=config&host=bastion&panel=basic" }}
@@ -356,7 +356,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(recentConnectionsApi.recentConnections).mockResolvedValue({
       connections: [{ alias: "bastion", lastConnectedAt: new Date().toISOString() }],
     } as never);
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     const row = await screen.findByRole("button", { name: "bastion" });
     await waitFor(() => expect(row).toHaveTextContent(/Last connected today/i));
@@ -369,7 +369,7 @@ describe("ConnectionsPage", () => {
       ...overview,
       notices: [{ code: "include_missing", severity: "warning", path: "config", message: "Include points at a missing file" }],
     } as never);
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     expect(await screen.findByRole("separator", { name: "Resize the connection list" })).toBeInTheDocument();
     expect(recentConnectionsApi.recentConnections).not.toHaveBeenCalled();
@@ -377,7 +377,7 @@ describe("ConnectionsPage", () => {
 
   it("opens a connection and tab from the URL", async () => {
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{
@@ -396,7 +396,7 @@ describe("ConnectionsPage", () => {
   it("keeps an open connection visible when the selected tree item is clicked again", async () => {
     const user = userEvent.setup();
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{
@@ -420,7 +420,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     const onNavigateLocation = vi.fn();
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "" }}
@@ -454,7 +454,7 @@ describe("ConnectionsPage", () => {
       }],
     } as never);
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{
@@ -482,7 +482,7 @@ describe("ConnectionsPage", () => {
   it("recovers from invalid connection URLs, including removed group routes", async () => {
     const onNavigateLocation = vi.fn();
     const harness = render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/files", search: "" }}
@@ -495,7 +495,7 @@ describe("ConnectionsPage", () => {
     expect(onNavigateLocation).toHaveBeenCalledWith("/connections/servers", { replace: true });
 
     harness.rerender(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/groups/gone", search: "" }}
@@ -510,7 +510,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     vi.mocked(configApi.host).mockRejectedValue(new Error("not found"));
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "?path=config&host=gone&panel=basic" }}
@@ -532,7 +532,7 @@ describe("ConnectionsPage", () => {
       ],
     });
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     expect(await screen.findByText(/Another block declares the same alias/)).toBeInTheDocument();
     expect(screen.queryByText(/catch-all block can override/)).not.toBeInTheDocument();
@@ -549,7 +549,7 @@ describe("ConnectionsPage", () => {
         { code: "duplicate_alias", path: "config", line: 9, detail: "edge", related: { path: "conf.d/edge.conf", line: 1 } },
       ],
     });
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} onNavigateLocation={vi.fn()} />);
     await user.click(await screen.findByRole("button", { name: "bastion" }));
 
     expect(await screen.findByText(/^bastion is declared in both config:1 and conf\.d\/extra\.conf:4/)).toBeInTheDocument();
@@ -563,7 +563,7 @@ describe("ConnectionsPage", () => {
       transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
     });
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     const input = await screen.findByLabelText("Port");
@@ -584,7 +584,7 @@ describe("ConnectionsPage", () => {
 
   it("shares one committed resource load between the summary and persistent Basic editor", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     expect(await screen.findByText("bastion:22")).toBeInTheDocument();
@@ -611,7 +611,7 @@ describe("ConnectionsPage", () => {
 
   it("keeps a single action panel while the page renders again with it open", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await chooseConnectionAction(user, "bastion", "Rename");
@@ -628,7 +628,7 @@ describe("ConnectionsPage", () => {
       blocker = next;
     });
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigationBlockerChange={onNavigationBlockerChange}
@@ -687,7 +687,7 @@ describe("ConnectionsPage", () => {
       return blocker?.({ pathname: next.pathname, search: next.search }) ?? true;
     });
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -724,7 +724,7 @@ describe("ConnectionsPage", () => {
       .mockResolvedValueOnce(detail as never)
       .mockRejectedValueOnce(new Error("reload failed"));
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     const input = await screen.findByLabelText("Port");
@@ -773,7 +773,7 @@ describe("ConnectionsPage", () => {
       .mockResolvedValue(edgeDetail as never);
     const failure = "The settings were saved, but the updated connection could not be loaded. Reload this connection.";
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -793,7 +793,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     const onOpenSSHSession = vi.fn(async () => undefined);
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onOpenSSHSession={onOpenSSHSession}
         onInspector={() => undefined}
@@ -811,7 +811,7 @@ describe("ConnectionsPage", () => {
   it("keeps connection-specific display settings in the fourth editor tab", async () => {
     const user = userEvent.setup();
     const inspector = vi.fn();
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={inspector} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={inspector} />);
 
     await waitFor(() => expect(inspector).toHaveBeenCalled());
     expect(inspector.mock.calls.every(([content]) => content === null)).toBe(true);
@@ -833,7 +833,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.host)
       .mockResolvedValueOnce(detail as never)
       .mockResolvedValue(savedDetail as never);
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
@@ -875,7 +875,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "config.save", diffs: [] },
     });
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
     return { finishListReload: () => finishListReload() };
   }
 
@@ -962,7 +962,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
     });
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
@@ -983,7 +983,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
     });
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
@@ -1001,7 +1001,7 @@ describe("ConnectionsPage", () => {
       code: "metadata_invalid",
       message: "request rejected",
     }));
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
@@ -1022,7 +1022,7 @@ describe("ConnectionsPage", () => {
       code: "metadata_changed",
       message: "metadata changed since it was loaded; reload before saving",
     }));
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
@@ -1044,7 +1044,7 @@ describe("ConnectionsPage", () => {
       code: "metadata_changed",
       message: "metadata changed since it was loaded; reload before saving",
     }));
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "Discard retired settings" }));
 
@@ -1057,7 +1057,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     const edgeHost = { ...overview.hosts[0], identity: { path: "config", alias: "edge" }, patterns: ["edge"], line: 4 };
     vi.mocked(configApi.overview).mockResolvedValue({ ...overview, hosts: [...overview.hosts, edgeHost] } as never);
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
@@ -1072,7 +1072,7 @@ describe("ConnectionsPage", () => {
 
   it("keeps global terminal editing out of connection detail", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: "bastion" }));
 
     expect(screen.queryByLabelText("Open with")).not.toBeInTheDocument();
@@ -1098,7 +1098,7 @@ describe("ConnectionsPage", () => {
       },
     });
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     const input = await screen.findByLabelText("Port");
@@ -1136,7 +1136,7 @@ describe("ConnectionsPage", () => {
       },
     });
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     const input = await screen.findByLabelText("Port");
@@ -1168,7 +1168,7 @@ describe("ConnectionsPage", () => {
       return await new Promise(() => undefined);
     });
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     expect(await screen.findByRole("heading", { name: /^bastion$/ })).toBeInTheDocument();
 
@@ -1193,7 +1193,7 @@ describe("ConnectionsPage", () => {
       ],
     });
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     expect(await screen.findByRole("button", { name: "bastion" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Host \*/ })).not.toBeInTheDocument();
@@ -1214,7 +1214,7 @@ describe("ConnectionsPage", () => {
       },
     }));
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     const input = await screen.findByLabelText("Port");
@@ -1233,7 +1233,7 @@ describe("ConnectionsPage", () => {
       code: "alias_already_declared",
       message: "request rejected",
     }));
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await chooseConnectionAction(user, "bastion", "Rename");
@@ -1251,7 +1251,7 @@ describe("ConnectionsPage", () => {
       code: "alias_already_declared",
       message: "request rejected",
     }));
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await chooseConnectionAction(user, "bastion", "Duplicate");
@@ -1287,7 +1287,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.host).mockResolvedValue(createdDetail as never);
 
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -1319,7 +1319,7 @@ describe("ConnectionsPage", () => {
 
   it("opens a new connection in the right area, not a dialog, and asks before a typed draft is dropped for another connection", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "Add connection" }));
     expect(await screen.findByRole("form", { name: "New connection" })).toBeInTheDocument();
@@ -1336,7 +1336,7 @@ describe("ConnectionsPage", () => {
 
   it("closes an untouched new connection without asking when another connection is opened", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "Add connection" }));
     await screen.findByRole("form", { name: "New connection" });
@@ -1349,7 +1349,7 @@ describe("ConnectionsPage", () => {
 
   it("goes back to the empty right area when a new connection is cancelled", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: "Add connection" }));
     const form = await screen.findByRole("form", { name: "New connection" });
@@ -1367,7 +1367,7 @@ describe("ConnectionsPage", () => {
       transactionId: "t-rename", written: ["config"], preview: { operation: "config.rename", diffs: [] },
     });
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -1396,7 +1396,7 @@ describe("ConnectionsPage", () => {
       transactionId: "t-rename", written: ["config"], preview: { operation: "config.rename", diffs: [] },
     });
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -1436,7 +1436,7 @@ describe("ConnectionsPage", () => {
     });
 
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -1480,7 +1480,7 @@ describe("ConnectionsPage", () => {
     });
     vi.mocked(configApi.save).mockRejectedValue(new Error("move conflict"));
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -1507,7 +1507,7 @@ describe("ConnectionsPage", () => {
     });
 
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -1531,7 +1531,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     vi.mocked(configApi.save).mockRejectedValue(new Error("delete conflict"));
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -1567,7 +1567,7 @@ describe("taking a connection out of every group", () => {
       transactionId: "tx", written: [], preview: { operation: "config.move", diffs: [] },
     });
 
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await chooseConnectionAction(user, "bastion", "Move to group…");
     await user.selectOptions(await screen.findByLabelText("Primary group"), "");
@@ -1640,7 +1640,7 @@ describe("dropping in the tree", () => {
   });
 
   it("moves a direct connection into a visible child group", async () => {
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
     const row = await screen.findByRole("button", { name: "nas" });
 
     drag(row, screen.getByRole("button", { name: "home/eu" }), {
@@ -1674,7 +1674,7 @@ describe("dropping in the tree", () => {
       .mockResolvedValue(moved as never);
 
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -1693,7 +1693,7 @@ describe("dropping in the tree", () => {
   });
 
   it("moves a connection out of every group by sending it to the entry file", async () => {
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
     const row = await screen.findByRole("button", { name: "nas" });
 
     drag(row, screen.getByRole("button", { name: "Ungrouped" }), {
@@ -1711,7 +1711,7 @@ describe("dropping in the tree", () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     });
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: "nas" });
     const source = screen.getByRole("button", { name: "work" });
 
@@ -1760,7 +1760,7 @@ describe("dropping in the tree", () => {
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     });
     render(
-      <ConnectionsPage
+      <ConnectionsPage onOpenLocalShell={vi.fn()}
         {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
@@ -1783,7 +1783,7 @@ describe("dropping in the tree", () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     });
-    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: "nas" });
     const source = screen.getByRole("button", { name: "home/eu" });
 

@@ -161,9 +161,7 @@ export function SessionList({
 
   return (
     <div className="flex flex-col gap-2">
-      {sessions.length === 0 ? (
-        <p className="px-2 text-xs text-ink-muted">{t("terminal.noSessions")}</p>
-      ) : (
+      {sessions.length === 0 ? null : (
         <ul
           aria-label={t("terminal.sessionList")}
           className="flex flex-col gap-0.5"

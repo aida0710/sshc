@@ -64,6 +64,24 @@ const fingerprintField = /Fingerprint verified through another channel/;
 const acknowledgement = /accept the risk/;
 
 describe("KnownHostsPanel", () => {
+  it("offers only the scan while nothing is trusted, and shows the page's usual shape once a scan answers", async () => {
+    const api = buildApi({
+      knownHosts: vi.fn().mockResolvedValue({ path: "~/.ssh/known_hosts", entries: [] }),
+    });
+    render(<ToastProvider><KnownHostsPanel api={api} /></ToastProvider>);
+
+    await screen.findByRole("heading", { name: "No trusted host keys yet" });
+    expect(screen.queryByRole("heading", { name: "Scan a host" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Search")).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Host to scan"), "new.example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Scan" }));
+
+    await screen.findByRole("row", { name: /new\.example\.com/ });
+    expect(screen.getByRole("heading", { name: "Scan a host" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No trusted host keys yet" })).not.toBeInTheDocument();
+  });
+
   it("lists entries with their fingerprints", async () => {
     render(<KnownHostsPanel api={buildApi()} />);
 

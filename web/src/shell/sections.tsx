@@ -114,6 +114,7 @@ export function SectionView(props: SectionViewProps) {
         preferredKey={props.handoff.connectionKey}
         onPreferredKeyApplied={props.handoff.onConnectionKeyApplied}
         onOpenSSHSession={props.shell.onOpenSSHSession}
+        onOpenLocalShell={props.shell.onOpenLocalShell}
       />
     );
   }
@@ -125,6 +126,8 @@ export function SectionView(props: SectionViewProps) {
           onNavigate={props.navigation.onNavigate}
           onNavigateLocation={props.navigation.onNavigateLocation}
           onSessionOpened={props.shell.onShowSession}
+          onAddConnection={props.shell.onAddConnection}
+          onOpenLocalShell={props.shell.onOpenLocalShell}
         />
       </div>
     );
@@ -158,7 +161,8 @@ export function SectionView(props: SectionViewProps) {
   }
   return (
     <div className={pageScroller}>
-      <PageBoard>
+      {/* Known Hosts puts its empty state in the middle of the card. */}
+      <PageBoard stretch={props.section === "Known Hosts"}>
         <SectionPage {...props} />
       </PageBoard>
     </div>
@@ -265,6 +269,7 @@ function SectionPage({
         groups={declared.groups}
         onAssignGeneratedKey={handoff.onAssignGeneratedKey}
         onInstallGeneratedKey={handoff.onInstallGeneratedKey}
+        onOpenSync={() => navigation.onNavigate("Sync")}
       />
     );
   }
