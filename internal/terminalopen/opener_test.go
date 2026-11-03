@@ -51,6 +51,40 @@ func TestAShellOpensWithTheStoredDefaultUnlessTheRequestNamesAnother(t *testing.
 	}
 }
 
+func TestAShellSessionIsNamedAfterItsProfile(t *testing.T) {
+	const windowsPowerShell = `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
+	opener := Opener{
+		ShellProfiles: func() []platform.ShellProfile {
+			return []platform.ShellProfile{
+				{ID: "default", Label: "powershell.exe (default)", Path: windowsPowerShell},
+				{ID: "windows-powershell", Label: "Windows PowerShell", Path: windowsPowerShell},
+				{ID: "cmd", Label: "Command Prompt", Path: `C:\Windows\System32\cmd.exe`},
+			}
+		},
+	}
+	for profile, want := range map[string]string{"default": "Windows PowerShell", "windows-powershell": "Windows PowerShell", "cmd": "Command Prompt"} {
+		spec, err := opener.shellSpec(Request{Kind: terminal.KindShell, ShellProfile: &profile})
+		if err != nil || spec.Title != want {
+			t.Errorf("profile %s title = %q, %v, want %q", profile, spec.Title, err, want)
+		}
+	}
+}
+
+func TestADefaultShellWithoutANamedProfileIsNamedAfterItsProgram(t *testing.T) {
+	opener := Opener{
+		ShellProfiles: func() []platform.ShellProfile {
+			return []platform.ShellProfile{
+				{ID: "default", Label: "fish (default)", Path: "/opt/homebrew/bin/fish"},
+				{ID: "fish", Label: "fish", Path: "/usr/bin/fish"},
+			}
+		},
+	}
+	spec, err := opener.shellSpec(Request{Kind: terminal.KindShell})
+	if err != nil || spec.Title != "fish" {
+		t.Fatalf("title = %q, %v", spec.Title, err)
+	}
+}
+
 func TestAnSSHSessionChangesToTheRequestedDirectoryAndThenRunsTheStartupSnippet(t *testing.T) {
 	opener := Opener{
 		Connect: func(context.Context, string, terminal.Size) (terminal.Process, error) { return connectedProcess{}, nil },

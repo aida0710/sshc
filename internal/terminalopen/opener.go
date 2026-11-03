@@ -235,7 +235,7 @@ func (o Opener) shellSpec(request Request) (terminal.Spec, error) {
 		}
 	}
 	return terminal.Spec{
-		Kind: terminal.KindShell, ShellProfile: profile.ID, Title: shellTitle(profile.Path), Size: request.Size,
+		Kind: terminal.KindShell, ShellProfile: profile.ID, Title: o.shellSessionTitle(profile), Size: request.Size,
 		Command: terminal.Command{
 			Path: profile.Path, Argv0: profile.Argv0,
 			Arguments: append([]string(nil), profile.Arguments...), Env: o.environment(),
@@ -251,6 +251,23 @@ func (o Opener) shellSpec(request Request) (terminal.Spec, error) {
 // 数えると、Windows のタブには `C:\Windows\System32\...\powershell.exe` が
 // まるごと並ぶ。
 func shellTitle(shell string) string { return filepath.Base(shell) }
+
+// shellSessionTitle は、プログラムが題名を付けていないシェルのセッションの名前である。Windows Terminal と
+// 同じくプロファイルの名前を使う。既定のプロファイルの名前（powershell.exe (default)）は一覧の中で既定を
+// 示すためのものなので、同じシェルを指す名前付きのプロファイル（Windows PowerShell）があればそちらを使う。
+func (o Opener) shellSessionTitle(profile platform.ShellProfile) string {
+	if profile.ID != "default" {
+		return profile.Label
+	}
+	if o.ShellProfiles != nil {
+		for _, candidate := range o.ShellProfiles() {
+			if candidate.ID != "default" && candidate.Path == profile.Path {
+				return candidate.Label
+			}
+		}
+	}
+	return shellTitle(profile.Path)
+}
 
 // ShellProfileChoices は、新しいシェルのメニューに出すプロファイルと、既定として
 // 印を付ける ID を返す。保存した既定がこのマシンに無ければ、このマシンの既定に印を付ける。

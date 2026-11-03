@@ -351,6 +351,33 @@ func TestLogonTaskPropagatesReadinessFailureAndSerializesMutations(t *testing.T)
 	}
 }
 
+func TestLogonTaskEngineCountsAsExitedOnlyOnceTheTaskHasStopped(t *testing.T) {
+	manager, scheduler := newTestTaskManager(t)
+	definition := testTaskDefinition(t)
+	for state, wantExited := range map[scheduledTaskState]bool{
+		taskRunning:  false,
+		taskQueued:   false,
+		taskUnknown:  false,
+		taskReady:    true,
+		taskDisabled: true,
+	} {
+		scheduler.snapshot = serviceTaskSnapshot{exists: true, state: state, definition: definition}
+		if err := manager.engineExited(context.Background()); errors.Is(err, errTaskEngineExited) != wantExited {
+			t.Errorf("state %d: exited = %v, want %v", state, err, wantExited)
+		}
+	}
+	scheduler.snapshot = serviceTaskSnapshot{}
+	if err := manager.engineExited(context.Background()); !errors.Is(err, errTaskEngineExited) {
+		t.Errorf("deleted task: exited = %v", err)
+	}
+	manager.readTask = func(context.Context, string) (serviceTaskSnapshot, error) {
+		return serviceTaskSnapshot{}, errors.New("Task Scheduler did not answer")
+	}
+	if err := manager.engineExited(context.Background()); err != nil {
+		t.Errorf("a failed read says nothing about the engine: %v", err)
+	}
+}
+
 func TestLogonTaskReinstallUpdatesOnlyAManagedDefinition(t *testing.T) {
 	manager, scheduler := newTestTaskManager(t)
 	scheduler.snapshot = serviceTaskSnapshot{exists: true, state: taskDisabled, definition: testTaskDefinition(t)}

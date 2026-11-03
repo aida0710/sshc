@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defaultStack, fontStack } from "./fonts";
+import { defaultStack, fontStack } from "../ui/monospaceFonts";
 import { useTerminalFont } from "./useTerminalFont";
 
 const originalFonts = Object.getOwnPropertyDescriptor(document, "fonts");

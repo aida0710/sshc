@@ -355,6 +355,7 @@ export async function changeDisplayLanguage(
     .getByRole("region", { name: "Menu" })
     .getByLabel("Language", { exact: true })
     .selectOption(locale);
+  await expect(page.locator("html")).toHaveAttribute("lang", locale);
   await page.goBack();
   await expect(page).toHaveURL(returnURL);
 }
