@@ -2,7 +2,9 @@
 // 架空のデータだけを入れた一時 HOME で sshc engine を起動し、フォームファクタごとに各画面を撮る。
 // 画像と一緒に、画面ごとの数値（横のはみ出し、小さい押す場所、切れた文字、主の領域の幅）を manifest.json に残す。
 //
-// 使い方: node scripts/ux-audit/capture-screens.mjs <出力先> [撮る段: all|entry|routes|states|lock|options]
+// 使い方: node scripts/ux-audit/capture-screens.mjs <出力先> [撮る段: all|entry|routes|states|lock|options|themes|loading]
+// データの組は UX_AUDIT_DATA で選ぶ: clean（既定。整った架空のデータ）、rough（件数が多い・名前が長い・警告と失敗が
+// 多い荒れた状態）、empty（~/.ssh に何も無い初めての状態）。
 // options の段は UX_OPTIONS（案の定義のモジュール）を読んで撮る。all には含めず、options と書いたときだけ流す。
 // 前提: bin/sshc を作ってあること。docker のイメージ sshc-ux-audit-sshd:2026-10-30 を作ってあること。
 import { execFileSync, spawn } from "node:child_process";
@@ -24,6 +26,8 @@ const enginePort = process.env.UX_AUDIT_ENGINE_PORT ?? "46420";
 const sshdPort = process.env.UX_AUDIT_SSHD_PORT ?? "2299";
 const sshdImage = "sshc-ux-audit-sshd:2026-10-30";
 const sshdContainer = process.env.UX_AUDIT_SSHD_CONTAINER ?? "sshc-ux-audit-sshd";
+const dataSet = process.env.UX_AUDIT_DATA ?? "clean";
+if (!["clean", "rough", "empty"].includes(dataSet)) throw new Error(`UX_AUDIT_DATA must be clean, rough or empty, not ${dataSet}`);
 
 mkdirSync(out, { recursive: true });
 
@@ -46,6 +50,17 @@ function startSSHServer(home) {
   run("docker", ["run", "-d", "--name", sshdContainer, "--hostname", "web-01", "-p", `127.0.0.1:${sshdPort}:22`, sshdImage]);
   const publicKey = readFileSync(join(home, ".ssh", "id_ed25519_deploy.pub"), "utf8");
   run("docker", ["exec", "-i", sshdContainer, "sh", "-c", "cat > /home/deploy/.ssh/authorized_keys && chown deploy:deploy /home/deploy/.ssh/authorized_keys && chmod 600 /home/deploy/.ssh/authorized_keys"], { input: publicKey });
+  if (dataSet === "rough") {
+    // 荒れた状態の SFTP: 1500 個のファイルのフォルダ、長い名前・日本語の名前、読めないフォルダ。
+    run("docker", ["exec", sshdContainer, "sh", "-c", [
+      "d=/home/deploy/many-files; mkdir -p $d",
+      "i=1; while [ $i -le 1500 ]; do printf 'line %d\\n' $i > $d/log-$(printf %05d $i).txt; i=$((i+1)); done",
+      "touch '/home/deploy/2026-10-29_本番環境_データベース移行_手順書_最終版_レビュー済み_修正版_v12_final_final.md'",
+      "touch /home/deploy/an-extremely-long-file-name-without-any-spaces-that-should-not-fit-in-a-narrow-column-at-all.tar.gz",
+      "mkdir -p /home/deploy/locked && chmod 000 /home/deploy/locked",
+      "chown -R deploy:deploy /home/deploy/many-files /home/deploy/*.md /home/deploy/*.tar.gz",
+    ].join(" && ")]);
+  }
   for (let attempt = 0; attempt < 50; attempt++) {
     try {
       const scanned = run("ssh-keyscan", ["-p", sshdPort, "-t", "ed25519", "127.0.0.1"], { stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -74,6 +89,12 @@ function hostBlock(alias, lines) {
 function buildHome() {
   const home = mkdtempSync(join(scratch, "ux-home-"));
   const ssh = join(home, ".ssh");
+  if (dataSet === "empty") {
+    mkdirSync(ssh, { recursive: true, mode: 0o700 });
+    writeFileSync(join(home, ".bashrc"), "export PS1='$ '\nexport LANG=C.UTF-8\n");
+    writeFileSync(join(home, ".bash_profile"), ". ~/.bashrc\n");
+    return home;
+  }
   for (const directory of ["connections/production/orchid", "connections/staging", "connections/home-lab", "conf.d"]) {
     mkdirSync(join(ssh, directory), { recursive: true, mode: 0o700 });
   }
@@ -126,7 +147,53 @@ function buildHome() {
   writeFileSync(join(home, "projects/api-server/docs/2026-10-29-障害報告-レスポンス遅延-詳細版-最終.md"), "# 障害報告\n");
   writeFileSync(join(home, ".bashrc"), "export PS1='$ '\nexport LANG=C.UTF-8\n");
   writeFileSync(join(home, ".bash_profile"), ". ~/.bashrc\n");
+  if (dataSet === "rough") addRoughConfiguration(home);
   return home;
+}
+
+// addRoughConfiguration は荒れた状態の設定を足す: 接続先を百件以上、長い名前、同じ接続名が2つのファイルに
+// ある、OpenSSH が読めない行、接続できない接続先（断られる・答えない・鍵が変わった）、鍵を十個以上。
+function addRoughConfiguration(home) {
+  const ssh = join(home, ".ssh");
+  const regions = ["tokyo", "orchid", "fukuoka", "sapporo", "singapore", "frankfurt", "virginia", "oregon", "sydney", "saopaulo"];
+  const roles = ["web", "api", "worker", "cache", "db", "search", "queue", "batch"];
+  const groups = [];
+  for (const [index, region] of regions.entries()) {
+    const group = `fleet-${region}`;
+    groups.push(group);
+    mkdirSync(join(ssh, "connections", group), { recursive: true, mode: 0o700 });
+    const blocks = [];
+    for (const role of roles) {
+      for (let n = 1; n <= 2; n++) {
+        blocks.push(hostBlock(`${region}-${role}-${String(n).padStart(2, "0")}`, [`HostName 10.${index}.${roles.indexOf(role)}.${n}`, "User deploy", "ProxyJump bastion"]));
+      }
+    }
+    writeFileSync(join(ssh, "connections", group, "hosts.conf"), blocks.join("\n"), { mode: 0o600 });
+  }
+  mkdirSync(join(ssh, "connections", "customer-acme-corporation-production-environment"), { recursive: true, mode: 0o700 });
+  writeFileSync(join(ssh, "connections", "customer-acme-corporation-production-environment", "hosts.conf"), [
+    hostBlock("customer-acme-corporation-production-kubernetes-node-pool-a-0001", ["HostName ip-10-200-31-187.ap-northeast-1.compute.internal", "User ec2-user", "ProxyJump bastion"]),
+    hostBlock("customer-acme-corporation-production-kubernetes-node-pool-a-0002", ["HostName ip-10-200-31-188.ap-northeast-1.compute.internal", "User ec2-user", "ProxyJump bastion"]),
+    // web-03 は connections/production/web.conf にもある（同じ接続名が2つ）。
+    hostBlock("web-03", ["HostName 198.51.100.99", "User admin"]),
+  ].join("\n"), { mode: 0o600 });
+  // 接続できない接続先: 断られる（ポート1）、答えない（TEST-NET）、鍵が変わった（known_hosts の鍵が違う）、ユーザーが違う。
+  mkdirSync(join(ssh, "connections", "broken"), { recursive: true, mode: 0o700 });
+  writeFileSync(join(ssh, "connections", "broken", "broken.conf"), [
+    hostBlock("refused-01", ["HostName 127.0.0.1", "Port 1", "User deploy"]),
+    hostBlock("timeout-01", ["HostName 192.0.2.1", "User deploy", "ConnectTimeout 5"]),
+    hostBlock("hostkey-changed", ["HostName 127.0.0.1", `Port ${sshdPort}`, "User deploy", "HostKeyAlias hostkey-changed.example", "IdentityFile ~/.ssh/id_ed25519_deploy"]),
+    hostBlock("wrong-user", ["HostName 127.0.0.1", `Port ${sshdPort}`, "User nobody-here", "IdentityFile ~/.ssh/id_ed25519_deploy"]),
+    // OpenSSH が読めない行（知らないキーワード）。
+    "Host typo-host\n\tHostNmae 192.0.2.77\n\tUser deploy\n",
+  ].join("\n"), { mode: 0o600 });
+  // 生成の印の中の Include に、足したグループを並べる（子のグループを先に）。
+  const config = readFileSync(join(ssh, "config"), "utf8");
+  const includes = [...groups, "customer-acme-corporation-production-environment", "broken"].map((group) => `Include connections/${group}/*.conf`).join("\n");
+  writeFileSync(join(ssh, "config"), config.replace("Include groups.sshc.conf", `${includes}\nInclude groups.sshc.conf\nInclude conf.d/*.conf`), { mode: 0o600 });
+  for (let n = 1; n <= 10; n++) {
+    run("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", `automation-${n}@ci-runner-with-a-very-long-hostname.example.internal`, "-f", join(ssh, `id_ed25519_automation_${String(n).padStart(2, "0")}`)]);
+  }
 }
 
 function copyPicturesFromServer(home) {
@@ -135,7 +202,14 @@ function copyPicturesFromServer(home) {
 }
 
 function writeKnownHosts(home, scanned) {
+  if (dataSet === "empty") return;
+  const rough = dataSet !== "rough" ? [] : [
+    // hostkey-changed は今の sshd と違う鍵を覚えている（鍵が変わった警告を出させる）。
+    "hostkey-changed.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGNoYW5nZWRrZXljaGFuZ2Vka2V5Y2hhbmdlZGtl",
+    ...Array.from({ length: 60 }, (_, index) => `10.${index % 10}.${Math.floor(index / 10)}.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG${String(index).padStart(2, "0")}aXh0dXJla2V5Zml4dHVyZWtleWZpeHR1cmVr`),
+  ];
   writeFileSync(join(home, ".ssh", "known_hosts"), [
+    ...rough,
     scanned,
     "203.0.113.10 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl",
     "198.51.100.20 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtm",
@@ -388,6 +462,16 @@ async function api(page, csrf, method, path, body) {
   }, { method, path, body, token: csrf.token });
 }
 
+// setTheme はこのマシンが使うプリセットのテーマを変える（設定の画面の［テーマ］と同じ保存）。
+async function setTheme(page, csrf, theme) {
+  const document = JSON.parse((await api(page, csrf, "GET", "/api/v1/settings")).text || "{}");
+  const base = (document.presets ?? []).find((preset) => preset.id === document.presetInUse);
+  if (base === undefined) throw new Error("no preset in use");
+  const preset = { ...base, appearance: { ...(base.appearance ?? {}), theme } };
+  const saved = await api(page, csrf, "PUT", `/api/v1/settings/presets/${base.id}`, { base, preset });
+  if (saved.status >= 300) throw new Error(`setting the theme failed: ${saved.status} ${saved.text.slice(0, 200)}`);
+}
+
 const updateStub = (route) => route.fulfill({ json: { current: "dev", available: false, canUpdate: false } });
 
 async function newPage(browsers, formFactor, colorScheme = "dark") {
@@ -417,14 +501,16 @@ const routes = [
   ["vault-passwords", "/vault/passwords"],
   ["vault-key-passphrases", "/vault/key-passphrases"],
   ["vault-otp", "/vault/otp"],
+  ["settings-general", "/settings/general"],
   ["settings-appearance", "/settings/appearance"],
-  ["settings-engine", "/settings/engine"],
   ["settings-terminal", "/settings/terminal"],
   ["settings-sftp", "/settings/sftp"],
   ["settings-shortcuts", "/settings/shortcuts"],
+  ["settings-keybar", "/settings/keybar"],
   ["settings-notifications", "/settings/notifications"],
+  ["settings-vault", "/settings/vault"],
+  ["settings-machines", "/settings/machines"],
   ["settings-connections", "/settings/connections"],
-  ["settings-password", "/settings/password"],
   ["sync", "/sync"],
   ["vpn", "/vpn"],
   ["history", "/history"],
@@ -438,6 +524,23 @@ const routes = [
 async function populate(page, csrf) {
   const results = [];
   const record = async (label, promise) => { const result = await promise; results.push([label, result.status]); return result; };
+  if (dataSet === "empty") return { results, monitoringId: undefined };
+  if (dataSet === "rough") {
+    for (let n = 1; n <= 24; n++) {
+      await record(`credential rough ${n}`, api(page, csrf, "PUT", `/api/v1/credentials/password/${encodeURIComponent(`customer-acme-corporation-production-database-administrator-${n}`)}`, { secret: `fixture-password-rough-${n}` }));
+    }
+    for (let n = 1; n <= 12; n++) {
+      await record(`snippet rough ${n}`, api(page, csrf, "POST", "/api/v1/snippets", {
+        name: `本番のデータベースのバックアップを取ってから古いログを消して容量を空ける手順 その${n}`,
+        description: "夜間のバッチが止まったときに使う。先に監視を止め、終わったら必ず戻すこと。手順書は Confluence の運用ページを参照。",
+        command: `pg_dump --format=custom --file=/var/backups/postgres/$(date +%Y%m%d-%H%M%S)-{{database}}.dump {{database}} && find /var/log/app -name '*.log' -mtime +{{days}} -delete && df -h /var`,
+        variables: [{ name: "database", type: "string", required: true, default: "production" }, { name: "days", type: "string", required: true, default: "14" }],
+      }));
+    }
+    for (const name of ["障害対応 2026-10-29 レスポンス遅延の調査", "定期メンテナンス", "Kubernetes のノード入れ替え", "顧客A", "顧客B"]) {
+      await record(`workspace ${name}`, api(page, csrf, "POST", "/api/v1/terminal/workspaces", { name }));
+    }
+  }
   for (const [kind, name, secret] of [
     ["password", "web-01 deploy", "fixture-password-1"],
     ["password", "nas admin", "fixture-password-2"],
@@ -474,6 +577,14 @@ async function openSessions(page, csrf, home, monitoringId) {
   await open({ kind: "shell", cwd: join(home, "projects/api-server") }, "api-server");
   await open({ kind: "ssh", alias: "web-01" }, undefined);
   await open({ kind: "shell", cwd: join(home, "Pictures") }, "画像の確認");
+  if (dataSet === "rough") {
+    await open({ kind: "ssh", alias: "refused-01" }, undefined);
+    await open({ kind: "ssh", alias: "timeout-01" }, undefined);
+    await open({ kind: "ssh", alias: "hostkey-changed" }, undefined);
+    await open({ kind: "ssh", alias: "wrong-user" }, undefined);
+    await open({ kind: "ssh", alias: "customer-acme-corporation-production-kubernetes-node-pool-a-0001" }, undefined);
+    for (let n = 1; n <= 6; n++) await open({ kind: "shell", cwd: home }, `夜間バッチの再実行とログの確認（${n}回目）— customer-acme-corporation`);
+  }
   if (monitoringId !== undefined) {
     await open({ kind: "ssh", alias: "web-02", workspaceId: monitoringId }, "web-02 のログ");
     await open({ kind: "ssh", alias: "db-primary", workspaceId: monitoringId }, undefined);
@@ -563,9 +674,11 @@ const browsers = {};
 const home = buildHome();
 let engine;
 try {
-  const scanned = startSSHServer(home);
-  writeKnownHosts(home, scanned.replace(/^\S+/, `[127.0.0.1]:${sshdPort}`));
-  copyPicturesFromServer(home);
+  if (dataSet !== "empty") {
+    const scanned = startSSHServer(home);
+    writeKnownHosts(home, scanned.replace(/^\S+/, `[127.0.0.1]:${sshdPort}`));
+    copyPicturesFromServer(home);
+  }
   engine = startEngine(home);
   engineEnvironment = engine.environment;
   for (const [key, args] of Object.entries(launchSettings)) browsers[key] = await chromium.launch({ args });
@@ -587,7 +700,7 @@ try {
   const csrf = watchCSRF(setup.page);
   await signIn(setup.page);
   const populated = await populate(setup.page, csrf);
-  const sessions = await openSessions(setup.page, csrf, home, populated.monitoringId);
+  const sessions = dataSet === "empty" ? [] : await openSessions(setup.page, csrf, home, populated.monitoringId);
   // Home の「確認が必要」の件数のもと（診断・お知らせ・復旧待ち）を残す。画面の文に中身が出ないため。
   const overview = await api(setup.page, csrf, "GET", "/api/v1/config/overview");
   const overviewBody = JSON.parse(overview.text || "{}");
@@ -595,7 +708,7 @@ try {
   writeFileSync(join(out, "setup.json"), JSON.stringify({ populated, sessions, attention }, null, 2));
   await setup.page.reload();
   await setup.page.waitForTimeout(2500);
-  try {
+  if (dataSet !== "empty") try {
     await selectSession(setup.page, "api-server");
     await typeInto(setup.page, ["clear", "ls -F", "git log --oneline -5 2>/dev/null || echo 'not a git repository'", `printf '%s\\n' ${join(home, "Pictures/IMG_2041.jpg")} ${join(home, "projects/api-server/docs/latency-chart.png")}`]);
     await selectSession(setup.page, "画像の確認");
@@ -651,14 +764,49 @@ try {
     }
   }
 
-  // 6. ライトの配色で入口以外の主な画面を撮る。
-  if (wants("light")) {
+  // 6. テーマ: テーマは設定のプリセットにある（ブラウザの配色では変わらない）。このマシンが使うプリセットの
+  // テーマを API で変えてから撮る。ライト（無彩色）は全画面、ほかのテーマは主な画面だけ。最後に dark へ戻す。
+  if (wants("themes")) {
+    const themeShots = { light: null, "white-blue": ["home", "connections", "files", "menu", "settings-appearance", "vault-otp"], "white-purple": ["home", "connections", "files", "menu", "settings-appearance", "vault-otp"], "dark-blue": ["home", "connections", "settings-appearance"], "dark-purple": ["home", "connections", "settings-appearance"] };
+    for (const [theme, names] of Object.entries(themeShots)) {
+      for (const formFactor of formFactors.filter((each) => ["phone", "desktop"].includes(each.id))) {
+        const { context, page } = await newPage(browsers, formFactor);
+        const csrf = watchCSRF(page);
+        await signIn(page);
+        await setTheme(page, csrf, theme);
+        await page.reload();
+        await page.waitForTimeout(2000);
+        for (const [name, path] of routes.filter(([name]) => names === null || names.includes(name))) {
+          await go(page, path);
+          await capture(page, formFactor, `theme-${theme}-${name}`);
+        }
+        if (dataSet !== "empty") {
+          try {
+            await selectSession(page, "api-server");
+            await capture(page, formFactor, `theme-${theme}-terminal-local-session`, { wait: 1500 });
+          } catch (error) { console.log("theme session failed", theme, formFactor.id, String(error).split("\n")[0]); }
+        }
+        await setTheme(page, csrf, "dark");
+        await context.close();
+      }
+    }
+  }
+
+  // 6b. 読み込み中: API の応答を遅らせ、開いた直後（読み込み中の表示）を撮る。
+  if (wants("loading")) {
     for (const formFactor of formFactors.filter((each) => ["phone", "desktop"].includes(each.id))) {
-      const { context, page } = await newPage(browsers, formFactor, "light");
+      const { context, page } = await newPage(browsers, formFactor);
       await signIn(page);
-      for (const [name, path] of routes.filter(([name]) => ["home", "connections", "files", "menu"].includes(name))) {
+      await context.route(/\/api\/v1\/(?!session|events|update)/, async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        await route.continue().catch(() => {});
+      });
+      for (const [name, path] of routes.filter(([name]) => ["home", "connections", "files", "snippets", "config", "keys", "known-hosts", "vault-passwords", "settings-general", "settings-terminal", "sync", "history"].includes(name))) {
         await go(page, path);
-        await capture(page, formFactor, `light-${name}`);
+        await page.waitForTimeout(700);
+        await page.screenshot({ path: join(out, `${formFactor.id}--loading-${name}.png`) }).catch(() => {});
+        console.log("shot", `${formFactor.id}--loading-${name}.png`);
+        await page.waitForTimeout(4500);
       }
       await context.close();
     }
