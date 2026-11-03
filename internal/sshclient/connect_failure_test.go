@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -18,6 +17,23 @@ import (
 	"sshc/internal/terminal"
 )
 
+// refusedDial は、閉じたポートへ実際に繋いだ失敗を返す。文でなく OS のエラー番号で見分けることを確かめる。
+func refusedDial(t *testing.T) error {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	_ = listener.Close()
+	conn, err := net.Dial("tcp", address)
+	if err == nil {
+		_ = conn.Close()
+		t.Fatal("the closed port took the connection")
+	}
+	return err
+}
+
 func TestConnectFailuresAreToldApartByWhatHappened(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -25,16 +41,16 @@ func TestConnectFailuresAreToldApartByWhatHappened(t *testing.T) {
 		err  error
 		want sshclient.ConnectFailure
 	}{
-		{"a closed port", fmt.Errorf("dial tcp: %w", syscall.ECONNREFUSED), sshclient.ConnectFailureRefused},
+		{"a closed port", refusedDial(t), sshclient.ConnectFailureRefused},
 		{"the connect timeout", context.DeadlineExceeded, sshclient.ConnectFailureTimedOut},
-		{"a TCP timeout", fmt.Errorf("dial tcp: %w", syscall.ETIMEDOUT), sshclient.ConnectFailureTimedOut},
+		{"a TCP timeout", fmt.Errorf("dial tcp: %w", errTimedOut), sshclient.ConnectFailureTimedOut},
 		{"a name that does not exist", &net.DNSError{Err: "no such host", IsNotFound: true}, sshclient.ConnectFailureHostNotFound},
 		{"a name server out of reach", &net.DNSError{Err: "server misbehaving", IsTemporary: true}, sshclient.ConnectFailureNoNetwork},
-		{"no route out of this machine", fmt.Errorf("dial tcp: %w", syscall.ENETUNREACH), sshclient.ConnectFailureNoNetwork},
-		{"a network that went down", fmt.Errorf("dial tcp: %w", syscall.ENETDOWN), sshclient.ConnectFailureNoNetwork},
-		{"a host that does not answer on its network", fmt.Errorf("dial tcp: %w", syscall.EHOSTUNREACH), sshclient.ConnectFailureHostUnreachable},
+		{"no route out of this machine", fmt.Errorf("dial tcp: %w", errNetworkUnreachable), sshclient.ConnectFailureNoNetwork},
+		{"a network that went down", fmt.Errorf("dial tcp: %w", errNetworkDown), sshclient.ConnectFailureNoNetwork},
+		{"a host that does not answer on its network", fmt.Errorf("dial tcp: %w", errHostUnreachable), sshclient.ConnectFailureHostUnreachable},
 		{"a server that went away", fmt.Errorf("ssh: handshake failed: %w", io.EOF), sshclient.ConnectFailureClosed},
-		{"a connection reset", fmt.Errorf("read tcp: %w", syscall.ECONNRESET), sshclient.ConnectFailureClosed},
+		{"a connection reset", fmt.Errorf("read tcp: %w", errConnectionReset), sshclient.ConnectFailureClosed},
 		{"a jump host refused", &ssh.OpenChannelError{Reason: ssh.ConnectionFailed, Message: "Connection refused"}, sshclient.ConnectFailureRefused},
 		{"cancelled by the person", context.Canceled, sshclient.ConnectFailureUnknown},
 		{"something else", errors.New("ssh: no common algorithm for key exchange"), sshclient.ConnectFailureUnknown},
