@@ -74,6 +74,42 @@ beforeEach(() => {
 });
 
 describe("CommandPalette", () => {
+  it("leads with the commands and connections until something is typed, and then finds the later commands among the commands", async () => {
+    const user = userEvent.setup();
+    renderPalette({
+      commands: [{ id: "lead", label: "Lead action", detail: "", search: "", run: vi.fn() }],
+      laterCommands: [{ id: "later", label: "Later nas action", detail: "", search: "", run: vi.fn() }],
+    });
+
+    const shown = () => screen.getAllByRole("option").map((option) => option.textContent ?? "");
+    expect(shown()[0]).toContain("Lead action");
+    expect(shown().at(-1)).toContain("Later nas action");
+    expect(shown().findIndex((text) => text.includes("Connect to nas"))).toBeLessThan(shown().length - 1);
+
+    await user.type(screen.getByRole("searchbox"), "nas");
+    // An action comes before a connection whose name holds the same word.
+    expect(shown()[0]).toContain("Later nas action");
+    expect(shown()[1]).toContain("Connect to nas");
+  });
+
+  it("shows the first key assigned to a command beside it, all of them in its title, and no second line without details", () => {
+    renderPalette({ laterCommands: [{ id: "paste", label: "Paste", detail: "", search: "", keys: ["Ctrl+Shift+ArrowUp", "Meta+ArrowUp"], run: vi.fn() }] });
+
+    const option = screen.getByRole("option", { name: /Paste/ });
+    const key = option.querySelector("kbd");
+    expect(key).toHaveTextContent("Ctrl+Shift+↑");
+    expect(key).toHaveAttribute("title", "Ctrl+Shift+↑ / Win+↑");
+    expect(option.querySelectorAll("span")).toHaveLength(2);
+  });
+
+  it("lists a command of the kind setting among the settings", async () => {
+    const user = userEvent.setup();
+    renderPalette({ laterCommands: [{ id: "theme", kind: "setting", label: "Theme: Dark", detail: "", search: "appearance", run: vi.fn() }] });
+
+    await user.type(screen.getByRole("searchbox"), "appearance");
+    expect(screen.getByRole("option", { name: /Theme: Dark/ })).toHaveTextContent("Setting");
+  });
+
   it("runs an action as well as navigating, and closes once it has", async () => {
     const user = userEvent.setup();
     const run = vi.fn();

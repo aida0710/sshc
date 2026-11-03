@@ -12,12 +12,53 @@ const workspaces = [{ id: "default", name: "", hidden: false, builtIn: true }];
 const shells = { shellProfiles: vi.fn().mockResolvedValue({ profiles: [] }) };
 const refresh = vi.fn().mockResolvedValue(undefined);
 
-function setup() {
+function setup(maxSessions = 0) {
   return renderHook(({ listed, runTarget }: { listed: TerminalSession[]; runTarget: string | null }) => useTerminalWorkspaceController({
-    shells, terminalSessions: { sessions: listed, refresh } as unknown as TerminalSessionsState, workspaces,
+    shells, terminalSessions: { sessions: listed, refresh, maxSessions } as unknown as TerminalSessionsState, workspaces,
     enabled: false, section: "Terminal", navigate: vi.fn(), closeNavigation: vi.fn(), runTarget,
   }), { initialProps: { listed: sessions, runTarget: null as string | null } });
 }
+
+describe("what can go beside a session", () => {
+  it("can open a new session beside the only session, which has no other to go beside it", () => {
+    const { result, rerender } = setup();
+    rerender({ listed: sessions.slice(0, 1), runTarget: null });
+    act(() => result.current.showSession("one"));
+    expect(result.current.splitView.canSplit("one", "one")).toBe(false);
+    expect(result.current.splitView.canOpenBeside("one")).toBe(true);
+    expect(result.current.splitView.splitRefusal("one")).toBeNull();
+  });
+
+  it("says when the only session cannot have a new one beside it: at the session limit, or once it has ended", () => {
+    const { result, rerender } = setup(1);
+    rerender({ listed: sessions.slice(0, 1), runTarget: null });
+    act(() => result.current.showSession("one"));
+    expect(result.current.splitView.canOpenBeside("one")).toBe(false);
+    expect(result.current.splitView.splitRefusal("one")).toBe("sessions");
+
+    rerender({ listed: [{ ...sessions[0]!, state: "exited" }], runTarget: null });
+    expect(result.current.splitView.splitRefusal("one")).toBe("ended");
+  });
+
+  it("does not offer a new pane in a split of four panes, and still lets the panes change places", () => {
+    const { result } = setup();
+    act(() => result.current.showSession("one"));
+    for (const [source, target] of [["two", "one"], ["three", "two"], ["four", "three"]] as const) {
+      act(() => result.current.splitView.split({ sourceSessionId: source, targetSessionId: target, edge: "right" }));
+    }
+    expect(result.current.splitView.canOpenBeside("one")).toBe(false);
+    expect(result.current.splitView.canSplit("two", "one")).toBe(true);
+    expect(result.current.splitView.splitRefusal("one")).toBeNull();
+  });
+
+  it("forgets a request for a split when the run target changes", () => {
+    const { result, rerender } = setup();
+    act(() => result.current.splitView.requestSplit({ targetSessionId: "one", edge: "right" }));
+    expect(result.current.splitView.splitRequest).toEqual({ targetSessionId: "one", edge: "right" });
+    rerender({ listed: sessions, runTarget: "bastion" });
+    expect(result.current.splitView.splitRequest).toBeNull();
+  });
+});
 
 describe("split view session lifecycle", () => {
   it("focuses sidebar selections inside the split and preserves it when selecting another session", () => {

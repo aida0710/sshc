@@ -9,11 +9,15 @@ Arrange SSH and local shell sessions in up to four panes. You can choose session
 
 ## Arrange sessions
 
-1. Open at least two sessions.
+1. Open sessions.
 2. Drag a session from the sidebar to the top, bottom, left, or right of a terminal.
 3. Drop it in the highlighted area to add a pane there.
 
-You can also choose **Show in split view on the right** or **Show in split view below** from the **…** menu in a terminal heading or sidebar session row. The heading menu then asks which session to add. These actions split the selected pane. Dropping a session onto a workspace in the sidebar still moves its workspace membership.
+You can also choose **Show in split view on the right** or **Show in split view below** from the **…** menu in a terminal heading or sidebar session row. The heading menu then asks which session to add. **New session** opens a new pane with a duplicate of the session, a local shell or another connection; with no other session to add, the menu goes straight to that choice. These actions split the selected pane.
+
+Assign keys to **Split right** and **Split below** under **Settings → Keyboard shortcuts** to open the same choice from the keyboard (they have no default keys).
+
+Dropping a session onto a workspace in the sidebar still moves its workspace membership.
 
 ## Switch between splits
 

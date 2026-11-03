@@ -33,7 +33,7 @@ describe("arranging the key bar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Later" }));
 
     await waitFor(() => expect(savedKeys()).toEqual(["DirectInput", "Escape", "Control", "Tab", "Ctrl+C", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"]));
-    expect(presets[0]?.name).toBe("My key bar");
+    expect(presets[0]?.name).toBe("My key order");
     expect(server.document().presets[0]?.interface?.keyBarPreset).toBe(presets[0]?.id);
     // The moved key stays selected, so it can be moved again.
     expect(shownRow().getByRole("button", { name: "Tab" })).toHaveAttribute("aria-pressed", "true");
@@ -41,7 +41,7 @@ describe("arranging the key bar", () => {
 
   it("offers the Claude Code key bar without saving it among the person's own", async () => {
     render(<KeyBarConfig />);
-    const preset = screen.getByRole("combobox", { name: "Key bar preset" });
+    const preset = screen.getByRole("combobox", { name: "Key order" });
     expect(within(preset).getByRole("option", { name: "Claude Code" })).toBeInTheDocument();
 
     fireEvent.change(preset, { target: { value: "claude-code" } });
@@ -54,7 +54,7 @@ describe("arranging the key bar", () => {
 
   it("keeps a change to the Claude Code key bar in a key bar of one's own, and leaves the built-in one as it was", async () => {
     render(<KeyBarConfig />);
-    fireEvent.change(screen.getByRole("combobox", { name: "Key bar preset" }), { target: { value: "claude-code" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Key order" }), { target: { value: "claude-code" } });
     await shownRow().findByRole("button", { name: "Shift+Tab" });
     fireEvent.click(shownRow().getByRole("button", { name: "Tab" }));
     fireEvent.click(screen.getByRole("button", { name: "Earlier" }));
@@ -64,7 +64,7 @@ describe("arranging the key bar", () => {
     expect(presets[0]?.id).not.toBe("claude-code");
     expect(server.document().presets[0]?.interface?.keyBarPreset).toBe(presets[0]?.id);
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Key bar preset" }), { target: { value: "claude-code" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Key order" }), { target: { value: "claude-code" } });
     await waitFor(() => expect(server.document().presets[0]?.interface?.keyBarPreset).toBe("claude-code"));
     const builtInRow = await shownRow().findAllByRole("button");
     expect(builtInRow.at(-1)).toHaveAccessibleName("Tab");

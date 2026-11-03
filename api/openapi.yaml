@@ -6915,7 +6915,7 @@ components:
         bindings:
           type: object
           additionalProperties: false
-          required: [palette, terminalSearch, copy, paste, previousPrompt, nextPrompt, increaseFontSize, decreaseFontSize, resetFontSize, quickCommands, newSession, closeSession, nextSession, previousSession, nextPane, previousPane, toggleNavigation, home, sftp]
+          required: [palette, terminalSearch, copy, paste, previousPrompt, nextPrompt, increaseFontSize, decreaseFontSize, resetFontSize, quickCommands, newSession, closeSession, nextSession, previousSession, nextPane, previousPane, splitRight, splitBelow, toggleNavigation, home, sftp]
           properties:
             palette: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             terminalSearch: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
@@ -6933,6 +6933,8 @@ components:
             previousSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             nextPane: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             previousPane: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            splitRight: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            splitBelow: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             toggleNavigation: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             home: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             sftp: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }

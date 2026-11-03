@@ -6,17 +6,20 @@ test("shares shortcut presets between settings presets, each choosing the one it
   await openApplication(page, installation);
   await openSection(page, "Menu");
   await page.getByRole("link", { name: "Open Keyboard shortcuts" }).click();
-  const selector = page.getByRole("combobox", { name: "Shortcut preset" });
+  const selector = page.getByRole("combobox", { name: "Key bindings" });
   const presetToEdit = page.getByRole("combobox", { name: "Preset to edit" });
   const commandSearch = page.getByRole("button", { name: "Assign shortcut: Command search", exact: true });
   await expect(selector).toHaveValue("default");
   // Editing the default shortcuts creates a shortcut preset of one's own, chosen by the preset being edited.
   await commandSearch.click();
   await page.keyboard.press("Alt+k");
-  await expect(selector.locator("option:checked")).toHaveText("My shortcuts");
+  await expect(selector.locator("option:checked")).toHaveText("My key bindings");
   await expect(commandSearch).toHaveText("Alt+K");
-  await page.getByRole("textbox", { name: "Preset name", exact: true }).fill("Work laptop");
-  await page.getByRole("button", { name: "Rename", exact: true }).click();
+  await page.getByRole("button", { name: "Actions for My key bindings" }).click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const renaming = page.getByRole("dialog", { name: "Rename the key bindings" });
+  await renaming.getByRole("textbox", { name: "Name", exact: true }).fill("Work laptop");
+  await renaming.getByRole("button", { name: "Rename", exact: true }).click();
   await expect(selector.locator("option:checked")).toHaveText("Work laptop");
   const id = await selector.inputValue();
 
@@ -48,7 +51,8 @@ test("shares shortcut presets between settings presets, each choosing the one it
   }
 
   // Deleting a shortcut preset leaves the default shortcuts in force wherever it was chosen.
-  await page.getByRole("button", { name: "Delete preset", exact: true }).click();
+  await page.getByRole("button", { name: "Actions for Work laptop" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
   await page.getByRole("button", { name: "Delete everywhere", exact: true }).click();
   await expect(selector).toHaveValue("default");
   await presetToEdit.selectOption({ label: "Standard" });

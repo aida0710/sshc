@@ -1,12 +1,23 @@
 import { vaultApi, type PasswordVaultStatus } from "../api/vault";
 import { useTranslate } from "../i18n/context";
+import type { Bindings } from "../keyconfig/bindings";
 import type { Section } from "../routing/sectionRoute";
+import { appActions, type AppActionContext } from "./appActions";
 import type { PaletteCommand } from "./CommandPalette";
+import { paletteActionCommands } from "./paletteActionCommands";
+import { usePaletteSettingCommands } from "./usePaletteSettingCommands";
+import { usePendingTerminalAction } from "./usePendingTerminalAction";
 
 type PaletteCommandsOptions = {
   // A Vault without a master password cannot be locked, so it has no lock command.
   passwordless: boolean;
-  navigate: (section: Section) => void;
+  bindings: Bindings;
+  actionContext: AppActionContext;
+  // removeActiveFromSplit takes the session shown out of its split, or is null outside one.
+  removeActiveFromSplit: (() => void) | null;
+  osc52Enabled: boolean;
+  onOSC52Change: (enabled: boolean) => Promise<void>;
+  navigate: (section: Section) => boolean;
   addConnection: () => void;
   openLocalShell: () => void;
   // The engine answers a lock with the Vault's state: still unlocked means
@@ -15,18 +26,27 @@ type PaletteCommandsOptions = {
   onStillUnlocked: (status: PasswordVaultStatus) => void;
 };
 
-// usePaletteCommands は、Ctrl/Cmd+K で移動だけでなく実行もできる操作を並べる。
-// どこからでも何度かクリックしないと届かない操作を選んでいる。
+// usePaletteCommands は、Ctrl/Cmd+K で移動だけでなく実行もできる操作を並べる。commands は何も打たなくても先頭に
+// 並べる操作で、どこからでも何度かクリックしないと届かないものを選んでいる。laterCommands は、ショートカットの操作と
+// 設定の切り替えで、接続先などのあとに続く。
 export function usePaletteCommands({
   passwordless,
+  bindings,
+  actionContext,
+  removeActiveFromSplit,
+  osc52Enabled,
+  onOSC52Change,
   navigate,
   addConnection,
   openLocalShell,
   onLocked,
   onStillUnlocked,
-}: PaletteCommandsOptions): PaletteCommand[] {
+}: PaletteCommandsOptions): { commands: PaletteCommand[]; laterCommands: PaletteCommand[] } {
   const t = useTranslate();
-  return [
+  const { terminalFace, activeSessionId } = actionContext;
+  const runOnTerminal = usePendingTerminalAction({ terminalFace, activeSessionId, navigate });
+  const settingCommands = usePaletteSettingCommands({ osc52Enabled, onOSC52Change });
+  const commands: PaletteCommand[] = [
     {
       id: "new-connection",
       label: t("palette.newConnection"),
@@ -39,7 +59,8 @@ export function usePaletteCommands({
       label: t("palette.openRemoteFiles"),
       detail: t("palette.openRemoteFilesDetail"),
       search: "sftp files remote browse ファイル リモート 転送",
-      run: () => navigate("Files"),
+      keys: bindings.sftp,
+      run: () => { navigate("Files"); },
     },
     {
       id: "open-shell",
@@ -61,4 +82,17 @@ export function usePaletteCommands({
       },
     }]),
   ];
+  const laterCommands: PaletteCommand[] = [
+    // From the palette an action of the terminal screen shows that screen first.
+    ...paletteActionCommands({ t, bindings, appActions: appActions({ ...actionContext, terminalFace: true }), hasSession: activeSessionId !== null, runOnTerminal }),
+    ...(removeActiveFromSplit === null ? [] : [{
+      id: "remove-from-split",
+      label: t("splitView.remove"),
+      detail: "",
+      search: "remove from split pane 分割 外す ペイン",
+      run: removeActiveFromSplit,
+    }]),
+    ...settingCommands,
+  ];
+  return { commands, laterCommands };
 }

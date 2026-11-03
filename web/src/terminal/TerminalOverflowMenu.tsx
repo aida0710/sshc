@@ -25,7 +25,7 @@ export function TerminalOverflowMenu({
   onSearch,
   onPreviousPrompt,
   onNextPrompt,
-  canSplit = false,
+  splitRefusal,
   triggerRef,
 }: {
   osc52Enabled: boolean;
@@ -45,7 +45,8 @@ export function TerminalOverflowMenu({
   // The previous and next prompt, offered on a phone, which has no keys for them.
   onPreviousPrompt?: (() => void) | undefined;
   onNextPrompt?: (() => void) | undefined;
-  canSplit?: boolean;
+  // splitRefusal says why nothing can go beside this terminal; undefined when something can.
+  splitRefusal?: string | undefined;
   triggerRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
@@ -90,7 +91,7 @@ export function TerminalOverflowMenu({
         </button>
       )}
       {onSplit === undefined ? null : (["right", "bottom"] as const).map((edge) => (
-        <button key={edge} type="button" role="menuitem" disabled={!canSplit} className={menuItemClass()}
+        <button key={edge} type="button" role="menuitem" disabled={splitRefusal !== undefined} title={splitRefusal} className={menuItemClass()}
           onClick={action(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</button>
       ))}
       {onRemoveFromSplit === undefined ? null : (

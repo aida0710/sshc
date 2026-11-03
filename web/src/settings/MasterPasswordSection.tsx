@@ -8,7 +8,7 @@ import { FieldRow } from "../ui/FieldRow";
 import { PasswordInput } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea } from "../ui/ActionArea";
-import { SettingsSection } from "./SettingsSection";
+import { PageSection } from "../ui/page";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useLoad } from "../ui/useLoad";
 import { isAcceptedButShort, meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
@@ -18,10 +18,10 @@ export type MasterPasswordApi = Pick<VaultApi, "passwordVault" | "changeMasterPa
 type MasterDraft = { current: string; next: string; confirm: string; withoutPassword: boolean };
 const emptyDraft: MasterDraft = { current: "", next: "", confirm: "", withoutPassword: false };
 
-// Changing (or removing) the master password that seals the vault.
-export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
+// Changing (or removing) the master password that seals the vault. It belongs to this machine's vault, not to the
+// preset being edited, so it says so beside its heading.
+export function MasterPasswordSection({ api, onVaultChanged }: {
   api: MasterPasswordApi;
-  showHeading: boolean;
   onVaultChanged?: ((status: PasswordVaultStatus) => void) | undefined;
 }) {
   const t = useTranslate();
@@ -73,9 +73,8 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
   const strong = meetsMasterPasswordMinimum(draft.next, minPassphraseLength) && draft.next === draft.confirm;
   const canChange = passwordless !== null && (draft.withoutPassword || strong);
   return (
-    <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets" showHeading={showHeading}>
+    <PageSection heading={t("secrets.changeHeading")} meta={t("secrets.changeScope")} hint={t("secrets.changeNote")}>
       <div>
-        <p className="text-xs leading-[18px] text-ink-faint">{t("secrets.changeNote")}</p>
         <MoreDetails className="mb-4 mt-1">{t("secrets.changeNoteMore")}</MoreDetails>
         <PasswordlessSwitch checked={draft.withoutPassword} onChange={(checked) => edit({ withoutPassword: checked })} />
         <div className="mt-3">
@@ -116,6 +115,6 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
           </Button>
         </ActionArea>
       </div>
-    </SettingsSection>
+    </PageSection>
   );
 }

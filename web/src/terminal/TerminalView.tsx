@@ -19,6 +19,7 @@ import { useTouchTerminal } from "./touchMode";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachFontZoom } from "./attachFontZoom";
 import { attachTerminalShortcuts } from "./attachTerminalShortcuts";
+import { registerTerminalActions } from "./terminalActions";
 import { steppedFontSize } from "./fontSize";
 import { attachTouchScroll } from "./touchScroll";
 import { terminalTouchScrollTarget } from "./touchScrollTarget";
@@ -108,7 +109,8 @@ type TerminalViewProps = {
   onSplit?: (edge: PaneEdge) => void;
   // onRemoveFromSplit takes this session out of the split it is shown in.
   onRemoveFromSplit?: () => void;
-  canSplit?: boolean;
+  // splitRefusal says why nothing can go beside this session; undefined when something can.
+  splitRefusal?: string | undefined;
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   // onExit hands over how the program ended, as the stream reported it.
   onExit?: (exit: ExitReport) => void;
@@ -186,7 +188,7 @@ export function TerminalView({
   headerActions,
   onSplit,
   onRemoveFromSplit,
-  canSplit = false,
+  splitRefusal,
   api = terminalSessionsApi,
   onExit,
   onReconnect,
@@ -602,12 +604,13 @@ export function TerminalView({
       setFontSize: zoomTo,
     });
     // Like a pinch, the text size keys change only this terminal, and are not saved.
-    const detachShortcuts = attachTerminalShortcuts(container, {
+    const shortcutHandlers = {
       increaseFontSize: () => zoomTo(steppedFontSize(shownFontSizeRef.current, 1)),
       decreaseFontSize: () => zoomTo(steppedFontSize(shownFontSizeRef.current, -1)),
       resetFontSize: () => setZoomedFontSize(null),
       quickCommands: () => openQuickCommands.current(),
-    });
+    };
+    const detachShortcuts = attachTerminalShortcuts(container, shortcutHandlers);
 
     const typed = (data: string) => {
       // xterm answers the queries in replayed history (DA1, cursor position,
@@ -635,7 +638,7 @@ export function TerminalView({
     linkController.connect();
 
     sendPaste.current = (text) => linkController.currentStream()?.send(prepareTerminalPaste(text, view.modes.bracketedPasteMode));
-    const detachClipboard = attachTerminalClipboard({
+    const terminalClipboard = attachTerminalClipboard({
       container,
       terminal: view,
       paste: (text) => {
@@ -657,6 +660,14 @@ export function TerminalView({
       sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),
       selectionIsSearchMatch: search.isSelectingMatch,
     });
+    const unregisterActions = registerTerminalActions(session.id, {
+      ...shortcutHandlers,
+      terminalSearch: search.show,
+      copy: terminalClipboard.copySelection,
+      paste: terminalClipboard.paste,
+      previousPrompt: () => promptJump.current?.jump(-1),
+      nextPrompt: () => promptJump.current?.jump(1),
+    });
 
     const stopObservingSize = observeTerminalSize(view, container, fitAndSync);
     const stopWatchingShown = watchTerminalShown(container, (shown) => linkController.currentStream()?.reportShown(shown));
@@ -670,7 +681,8 @@ export function TerminalView({
       scrollbackOffset.dispose();
       detachFontZoom();
       detachShortcuts();
-      detachClipboard();
+      unregisterActions();
+      terminalClipboard.detach();
       output.dispose();
       statusLineTerminal.dispose();
       statusLine.current = null;
@@ -949,7 +961,7 @@ export function TerminalView({
             } : {})}
             onSplit={onSplit}
             onRemoveFromSplit={onRemoveFromSplit}
-            canSplit={canSplit}
+            splitRefusal={splitRefusal}
             triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}
             onQuickCommands={() => openQuickCommands.current()}

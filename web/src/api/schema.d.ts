@@ -4519,6 +4519,8 @@ export interface components {
                 previousSession: string[];
                 nextPane: string[];
                 previousPane: string[];
+                splitRight: string[];
+                splitBelow: string[];
                 toggleNavigation: string[];
                 home: string[];
                 sftp: string[];
