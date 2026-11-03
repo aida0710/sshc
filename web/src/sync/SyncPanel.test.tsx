@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -477,6 +477,21 @@ describe("SyncPanel", () => {
       screen.getByRole("button", { name: "Edit bucket settings" }),
     ).toBeInTheDocument();
     expect(document.body.textContent ?? "").not.toContain("the-secret");
+  });
+
+  it("offers the first push as soon as setup finishes", async () => {
+    const api = buildApi(unconfigured, nothingToDo);
+    render(<SyncPanel api={api} />);
+
+    await userEvent.type(await screen.findByLabelText("Endpoint"), "https://acc.r2.cloudflarestorage.com");
+    await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
+    await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
+    await userEvent.type(screen.getByLabelText("Secret access key"), "the-secret");
+    await userEvent.click(await screen.findByRole("button", { name: "Check connection" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Verify and save" }));
+
+    expect(await screen.findByLabelText("Commit message")).toHaveValue("Update config");
+    expect(screen.getByRole("button", { name: "Push this machine's settings" })).toBeEnabled();
   });
 
   it("keeps configured credentials collapsed until they need editing", async () => {
@@ -1507,6 +1522,76 @@ describe("SyncPanel", () => {
     expect(button).toBeEnabled();
     await userEvent.click(button);
     await waitFor(() => expect(syncNow).toHaveBeenCalledOnce());
+  });
+
+  describe("the commit message after a cycle", () => {
+    const threeChanges = { message: "3 changes (+1 ~1 -1): config, known_hosts, and 1 more", added: 1, modified: 1, removed: 1 };
+    const noChanges = { message: "Record current workspace", added: 0, modified: 0, removed: 0 };
+
+    it("follows the new draft once Sync now has sent the changes", async () => {
+      const api = buildApi(configured, nothingToDo, {
+        syncNow: vi.fn().mockResolvedValue(configured),
+        syncPushDraft: vi.fn().mockResolvedValueOnce(threeChanges).mockResolvedValue(noChanges),
+      });
+      render(<SyncPanel api={api} />);
+      const message = await screen.findByLabelText("Commit message");
+      await waitFor(() => expect(message).toHaveValue(threeChanges.message));
+
+      await userEvent.click(screen.getByRole("button", { name: "Sync now" }));
+
+      await waitFor(() => expect(message).toHaveValue(noChanges.message));
+      expect(screen.getByText("There are no local changes to push.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Push this machine's settings" })).toBeDisabled();
+    });
+
+    it("keeps a message typed by hand, because Sync now did not send it", async () => {
+      const api = buildApi(configured, nothingToDo, {
+        syncNow: vi.fn().mockResolvedValue(configured),
+        syncPushDraft: vi.fn().mockResolvedValueOnce(threeChanges).mockResolvedValue(noChanges),
+      });
+      render(<SyncPanel api={api} />);
+      const message = await screen.findByLabelText("Commit message");
+      await waitFor(() => expect(message).toHaveValue(threeChanges.message));
+      await userEvent.clear(message);
+      await userEvent.type(message, "Rotate the deploy key");
+
+      await userEvent.click(screen.getByRole("button", { name: "Sync now" }));
+
+      expect(await screen.findByText("There are no local changes to push.")).toBeInTheDocument();
+      expect(message).toHaveValue("Rotate the deploy key");
+    });
+
+    it("does not read a draft after a cycle on a machine set to receive only", async () => {
+      const receiveOnly: SyncStatus = { ...configured, direction: "pull" };
+      const syncNow = vi.fn().mockResolvedValue(receiveOnly);
+      const api = buildApi(receiveOnly, nothingToDo, { syncNow });
+      render(<SyncPanel api={api} />);
+
+      await userEvent.click(await screen.findByRole("button", { name: "Receive now" }));
+
+      await waitFor(() => expect(syncNow).toHaveBeenCalledOnce());
+      expect(api.syncPushDraft).not.toHaveBeenCalled();
+    });
+
+    it("follows the new draft when the polling finds that automatic sync sent the changes", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        const api = buildApi(configured, nothingToDo, {
+          syncPushDraft: vi.fn().mockResolvedValueOnce(threeChanges).mockResolvedValue(noChanges),
+        });
+        render(<SyncPanel api={api} />);
+        const message = await screen.findByLabelText("Commit message");
+        await waitFor(() => expect(message).toHaveValue(threeChanges.message));
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+
+        await waitFor(() => expect(message).toHaveValue(noChanges.message));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it("shows only the pressed sync button as working while the cycle runs", async () => {

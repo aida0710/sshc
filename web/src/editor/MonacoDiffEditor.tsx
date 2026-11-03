@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as monaco from "monaco-editor/editor/editor.api.js";
+import { editorFontFamily } from "./editorFont";
 import { languageFor } from "./MonacoEditor";
 import { useTheme } from "../theme/context";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
@@ -17,7 +18,7 @@ export function MonacoDiffEditor({ path, original, modified }: { path: string; o
       // This comparison has no apply/revert actions or their gutter menu.
       renderGutterMenu: false,
       minimap: { enabled: false }, scrollBeyondLastLine: false,
-      fontFamily: "JetBrains Mono, ui-monospace, monospace", fontSize: 13,
+      fontFamily: editorFontFamily, fontSize: 13,
       theme: scheme === "dark" ? "vs-dark" : "vs", unusualLineTerminators: "off",
     });
     editor.setModel({ original: originalModel, modified: modifiedModel });

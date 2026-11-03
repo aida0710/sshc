@@ -177,6 +177,21 @@ describe("the language switch", () => {
     expect(window.localStorage.getItem(localStorageKeys.locale)).toBe("ja");
   });
 
+  it("tells the browser the language on screen from the first render on", async () => {
+    const user = userEvent.setup();
+    document.documentElement.lang = "fr";
+    render(
+      <LanguageProvider initial="en">
+        <Probe />
+      </LanguageProvider>,
+    );
+    expect(document.documentElement.lang).toBe("en");
+
+    await user.click(screen.getByRole("button", { name: "to japanese" }));
+
+    expect(document.documentElement.lang).toBe("ja");
+  });
+
   it("writes nothing but the language, and nothing at all until it is changed", async () => {
     const user = userEvent.setup();
     render(

@@ -23,9 +23,12 @@ type engineReadiness struct {
 	mainPID       func(context.Context) int
 	verifyProcess func(int) error
 	failureDetail func(context.Context) string
-	timeout       time.Duration
-	process       *detachedProcess
-	client        *http.Client
+	// exitedEarly returns an error once the service manager has seen the engine exit, so the
+	// wait ends at once instead of at the timeout. Nil means nothing reports an exit.
+	exitedEarly func(context.Context) error
+	timeout     time.Duration
+	process     *detachedProcess
+	client      *http.Client
 }
 
 func waitForEngineReady(ctx context.Context, home string, readiness engineReadiness) error {
@@ -62,6 +65,11 @@ func waitForReadyEngine(ctx context.Context, stateDir string, readiness engineRe
 		found, err := readiness.probe(readyCtx, stateDir, client)
 		if err == nil {
 			return found, nil
+		}
+		if readiness.exitedEarly != nil {
+			if exited := readiness.exitedEarly(readyCtx); exited != nil {
+				return handoff.Handoff{}, exited
+			}
 		}
 		select {
 		case <-ctx.Done():

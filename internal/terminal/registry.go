@@ -18,7 +18,7 @@ type Spec struct {
 	Alias string
 	// ShellProfile is the ID of the local shell profile a shell session runs.
 	ShellProfile string
-	// Title は一覧に出す名前である。ssh は alias、shell はシェルの basename。
+	// Title は一覧に出す名前である。ssh は alias、shell はシェルのプロファイルの名前。
 	Title string
 	// Workspace は、このセッションを入れるワークスペースの ID である。
 	Workspace string

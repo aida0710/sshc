@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -32,14 +33,17 @@ func newPlatformServiceManager(home string) (engineServiceManager, error) {
 		return nil, err
 	}
 	engine := taskEngine{stateDir: stateDir, client: &http.Client{Timeout: connectTimeout}}
-	return &taskServiceManager{
+	manager := &taskServiceManager{
 		sid:              user.String(),
 		runner:           osServiceCommandRunner{path: filepath.Join(systemDirectory, "schtasks.exe")},
 		readTask:         readWindowsServiceTask,
 		engineRunning:    func() (bool, error) { return isEngineRunning(stateDir) },
 		engineResponding: engine.probe,
 		stopEngine:       engine.stop,
-		waitReady:        engine.wait,
 		lock:             serviceOperationLock(home),
-	}, nil
+	}
+	manager.waitReady = func(ctx context.Context, executable string) error {
+		return engine.wait(ctx, executable, manager.engineExited)
+	}
+	return manager, nil
 }

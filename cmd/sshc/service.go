@@ -19,6 +19,8 @@ const outdatedServiceDefinitionAdvice = "the service definition is from an older
 // 今の版の定義と一致しないことを表す。
 var errOutdatedServiceDefinition = errors.New("the service definition is from an older sshc")
 
+// serviceReadyTimeout is how long a service manager gets to answer or to start an engine it
+// supervises. The logon task on Windows waits longer for its engine: see backgroundReadyTimeout.
 const serviceReadyTimeout = 5 * time.Second
 
 type serviceState uint8

@@ -4,6 +4,9 @@ import { expect, openApplication, openSection, test } from "./support/environmen
 import { openLocalSFTPDirectory, openSecondSFTPPane } from "./support/sftp";
 import { watchForPolicyViolations } from "./support/policyViolations";
 
+// While the bundled font loads, Windows has to reach these instead of the browser's generic monospace.
+const windowsMonospaceFallback = /^"JetBrains Mono",.*"Cascadia Mono", Consolas,/;
+
 test("edits an engine-local file with Ctrl+S and confirms an external overwrite", async ({ page, installation }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installation.write("editor-local/notes.txt", "first line\n");
@@ -16,6 +19,7 @@ test("edits an engine-local file with Ctrl+S and confirms an external overwrite"
   const details = page.getByRole("dialog", { name: "Details for notes.txt", exact: true });
   // The details preview shows text in the read-only editor beside the properties.
   await expect(details.locator(".monaco-editor .view-lines")).toContainText("first line");
+  await expect(details.locator(".monaco-editor .view-lines")).toHaveCSS("font-family", windowsMonospaceFallback);
   await details.getByRole("button", { name: "Edit file", exact: true }).click();
   const editor = page.getByRole("dialog", { name: /editor-local\/notes.txt$/ });
   // Native EditContext exposes a textbox div and a hidden readonly textarea.
@@ -118,6 +122,7 @@ for (const file of comparisonFiles) {
     await comparison.getByRole("button", { name: `View text differences for ${file.name}`, exact: true }).click();
     const text = page.getByRole("dialog", { name: `Text differences: ${file.name}`, exact: true });
     await expect(text.locator(".monaco-diff-editor")).toBeVisible();
+    await expect(text.locator(".view-lines").first()).toHaveCSS("font-family", windowsMonospaceFallback);
     await expect(text.locator(".line-insert").first()).toBeVisible();
     await expect(text.locator(".line-delete").first()).toBeVisible();
     await jsonWorker;

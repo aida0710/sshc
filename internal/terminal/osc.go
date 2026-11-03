@@ -210,7 +210,7 @@ func (o *oscObserver) complete() {
 	switch number {
 	case "0", "1", "2":
 		if o.reports.Title != nil {
-			o.reports.Title(cleanDisplayText(payload, MaxTitle))
+			o.reports.Title(cleanDisplayText(withoutExecutablePath(payload), MaxTitle))
 		}
 	case "7":
 		if directory, ok := parseOSC7Directory(payload); ok && o.reports.Directory != nil {

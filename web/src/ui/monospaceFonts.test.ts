@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { defaultStack, fontStack, fonts, knownFont, symbolFontFamily } from "./fonts";
+import { defaultStack, fontStack, fonts, knownFont, symbolFontFamily } from "./monospaceFonts";
 
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -30,7 +30,7 @@ function textFaces(): Face[] {
   return faces().filter((face) => face.family !== symbolFontFamily);
 }
 
-describe("端末の字体", () => {
+describe("等幅の字体", () => {
   it("ships every weight and slant the terminal actually draws", () => {
     const wanted = [
       ["400", "normal"],

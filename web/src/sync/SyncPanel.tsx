@@ -99,7 +99,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
     acceptedRemovals,
     resolve,
   } = pull;
-  const { statusState, reload, adopt: adoptStatus } = useSyncStatus({
+  const { statusState, reload, adopt: adoptStatus, adoptAndRefresh } = useSyncStatus({
     api,
     refreshBucket,
     resetBucket,
@@ -219,14 +219,12 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   // Pushed or force-pushed: the engine's status and result replace what
   // the screen was showing, and everything derived from the bucket reloads.
   function adoptPush(next: PushResponse, noticeKey: "sync.pushed" | "sync.forcePushed") {
-    adoptStatus(next.status);
     pull.close();
     setResultView({ kind: "push", result: next.result });
     setNotice(t(noticeKey));
+    // The message went out with this push, so the next draft may replace it.
     acceptPushMessage();
-    void refreshPushDraft();
-    void refreshBucket();
-    void refreshHistory();
+    adoptAndRefresh(next.status);
   }
 
   return (
@@ -262,8 +260,9 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
             })
           }
           onSyncNow={() =>
+            // The cycle sends its own message, so a message typed by hand stays for the next push.
             run(() => api.syncNow(), {
-              apply: adoptStatus,
+              apply: adoptAndRefresh,
               failure: t("sync.autoNowFailed"),
             })
           }
@@ -301,7 +300,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           if (request === null) return;
           void run(() => api.completeSyncSetup(request), {
             apply: (next) => {
-              adoptStatus(next.status);
+              adoptAndRefresh(next.status);
               setRevealed(next.generatedKey ?? "");
               form.finishSetup();
               setNotice(t("sync.setup.saved"));
