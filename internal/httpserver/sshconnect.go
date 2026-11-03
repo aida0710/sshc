@@ -6,6 +6,7 @@ import (
 	"sshc/internal/application"
 	"sshc/internal/keys"
 	"sshc/internal/sshclient"
+	"sshc/internal/terminal"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnrefusal"
 )
@@ -40,6 +41,37 @@ func hostKeyProblem(err error) (string, bool) {
 		return "host_key_revoked", true
 	}
 	return "", false
+}
+
+// 利用者が直さなくても通るかもしれない接続の失敗の語。画面（web/src/terminal/sessions.ts）が
+// 同じ語で文を選ぶ。
+const (
+	problemConnectRefused         = "connect_refused"
+	problemConnectTimedOut        = "connect_timed_out"
+	problemConnectHostNotFound    = "connect_host_not_found"
+	problemConnectNoNetwork       = "connect_no_network"
+	problemConnectHostUnreachable = "connect_host_unreachable"
+	problemConnectClosed          = "connect_closed"
+)
+
+// connectFailureProblem は、接続の失敗の理由を通信形式に変える。分からない失敗は
+// terminal.ProblemReconnectFailed にする。
+func connectFailureProblem(err error) string {
+	switch sshclient.ClassifyConnectFailure(err) {
+	case sshclient.ConnectFailureRefused:
+		return problemConnectRefused
+	case sshclient.ConnectFailureTimedOut:
+		return problemConnectTimedOut
+	case sshclient.ConnectFailureHostNotFound:
+		return problemConnectHostNotFound
+	case sshclient.ConnectFailureNoNetwork:
+		return problemConnectNoNetwork
+	case sshclient.ConnectFailureHostUnreachable:
+		return problemConnectHostUnreachable
+	case sshclient.ConnectFailureClosed:
+		return problemConnectClosed
+	}
+	return terminal.ProblemReconnectFailed
 }
 
 // connectProblem は、接続を組み立てられなかった理由を通信形式に変える。

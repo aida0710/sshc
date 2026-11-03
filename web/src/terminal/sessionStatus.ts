@@ -1,5 +1,6 @@
 import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { connectionProgressText } from "./progress";
 import { terminalProblemKey } from "./sessions";
 
@@ -34,6 +35,43 @@ export function sessionStateText(t: Translate, session: TerminalSession): string
     default:
       return t("terminal.connected");
   }
+}
+
+// rowProblemKeys は、失敗の理由を行の2行目に出す短い言い方である。全文はツールチップと、セッションを開いた
+// ときの枠に出す。一度つながってから切れたものと、開けなかったものを言い分ける。
+const rowProblemKeys: Readonly<Record<string, MessageKey>> = {
+  reconnect_failed: "terminal.rowProblem.reconnectGaveUp",
+  reconnect_exhausted: "terminal.rowProblem.reconnectGaveUp",
+  reconnect_stopped: "terminal.rowProblem.reconnectStopped",
+  connect_refused: "terminal.rowProblem.refused",
+  connect_timed_out: "terminal.rowProblem.timedOut",
+  connect_host_not_found: "terminal.rowProblem.hostNotFound",
+  connect_no_network: "terminal.rowProblem.noNetwork",
+  connect_host_unreachable: "terminal.rowProblem.hostUnreachable",
+  connect_closed: "terminal.rowProblem.closed",
+  host_key_changed: "terminal.rowProblem.hostKeyChanged",
+  host_key_unknown: "terminal.rowProblem.hostKey",
+  host_key_declined: "terminal.rowProblem.hostKey",
+  host_key_revoked: "terminal.rowProblem.hostKey",
+  known_hosts_symlink: "terminal.rowProblem.hostKey",
+  authentication_rejected: "terminal.rowProblem.authentication",
+  authentication_unavailable: "terminal.rowProblem.authentication",
+  authentication_cancelled: "terminal.rowProblem.authentication",
+  identity_unavailable: "terminal.rowProblem.authentication",
+  key_passphrase_required: "terminal.rowProblem.authentication",
+  proxy_authentication_required: "terminal.rowProblem.authentication",
+};
+
+// rowProblemText は、セッションの行の2行目に出す、失敗の理由の短い言い方である。
+export function rowProblemText(t: Translate, problem: string): string {
+  return t(rowProblemKeys[problem] ?? "terminal.rowProblem");
+}
+
+// reconnectsOnEnter は、接続の問題で終わったセッションかである。エンジンが「Enterで再接続します」と書いたので、
+// 次の Enter でつなぎ直し、ほかのキーは捨てる。シェルが自分で終わったセッションは含まない。
+export function reconnectsOnEnter(session: TerminalSession): boolean {
+  if (session.state !== "exited" || session.kind !== "ssh" || session.alias === undefined) return false;
+  return session.problem !== "" || session.exited?.connectionLost === true;
 }
 
 // endedRightAwayMs より早く終わったセッションは、終了コードが0でも、シェルやその

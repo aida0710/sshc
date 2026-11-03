@@ -27,6 +27,7 @@ export function TerminalComposer({
   value,
   sendable,
   enterSends,
+  placeholder,
   fieldRef,
   onChange,
   onSubmit,
@@ -35,6 +36,8 @@ export function TerminalComposer({
   // sendable is false while nothing can be sent. onSubmit still runs, to say why.
   sendable: boolean;
   enterSends: boolean;
+  // placeholder says what sending does when it is not sending text (connecting again). Undefined is the usual words.
+  placeholder?: string | undefined;
   // fieldRef is given the text box while it is shown, and null otherwise.
   fieldRef?: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
@@ -88,7 +91,7 @@ export function TerminalComposer({
         rows={1}
         value={value}
         aria-label={t("terminal.composerField")}
-        placeholder={t("terminal.composerPlaceholder")}
+        placeholder={placeholder ?? t("terminal.composerPlaceholder")}
         enterKeyHint={enterSends ? "send" : "enter"}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={keyDown}

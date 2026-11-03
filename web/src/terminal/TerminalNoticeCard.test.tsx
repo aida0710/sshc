@@ -113,6 +113,21 @@ describe("TerminalNoticeCard", () => {
     });
   });
 
+  it("reconnects on an Enter pressed on the card itself when the connection was lost", async () => {
+    const actions = recovery();
+    renderCard(lost, actions, { focus: { take: true, giveBack: vi.fn() } });
+    expect(screen.getByRole("region", { name: "The SSH connection was lost." })).toHaveFocus();
+    await userEvent.keyboard("x{Enter}");
+    expect(actions.reconnect).toHaveBeenCalledOnce();
+  });
+
+  it("leaves an Enter on a shell that exited by itself alone", async () => {
+    const actions = recovery();
+    renderCard({ ...session, state: "exited", exited: { code: 3, signal: "", at: "2026-11-02T09:30:00Z" } }, actions, { focus: { take: true, giveBack: vi.fn() } });
+    await userEvent.keyboard("{Enter}");
+    expect(actions.reconnect).not.toHaveBeenCalled();
+  });
+
   it("is not a live region, so the strip above is what a screen reader reads", () => {
     renderCard(lost, recovery());
     expect(screen.queryByRole("status")).toBeNull();
