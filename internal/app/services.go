@@ -347,6 +347,7 @@ func buildTerminals(configService *application.Service, dependencies Dependencie
 		Start:          starter,
 		Limits:         configService.TerminalLimits,
 		ReconnectLimit: configService.TerminalReconnects,
+		Network:        dependencies.Network,
 		Random:         dependencies.Random,
 		ProgramBlocked: dependencies.ProgramBlocked,
 	}

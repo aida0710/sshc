@@ -41,6 +41,12 @@ type Spec struct {
 	// 送るものを返す。nil なら何も送らない。
 	Startup func() Startup
 	Cleanup func()
+	// TmuxSession は、前のエンジンでこのセッションが使っていた tmux のセッションの名前である。
+	// 新しいセッションは空で、Registry が決める。
+	TmuxSession string
+	// ResumeProgram は、前のエンジンでこのセッションに動いていた、続きから始められるプログラムの
+	// OSC 7501 の名前である。無ければ空。
+	ResumeProgram string
 }
 
 // Startup は、使える状態になった Process へ、接続のたびに送るものである。
@@ -65,6 +71,10 @@ type Registry struct {
 	// the person (blocked_program.go); nil when nobody listens. It runs under the
 	// session's mutex, so it must return at once and not call the session.
 	ProgramBlocked func(BlockedProgramChange)
+	// Network は、このマシンの回線について OS が言うことである。nil なら OS は何も言わない。
+	Network *NetworkWatch
+	// NetworkRetryInterval は、回線が戻ったかを確かめる間隔である。0 なら既定。
+	NetworkRetryInterval time.Duration
 	// Now と Random は、テストが時計と ID を固定するためにここにある。
 	Now    func() time.Time
 	Random io.Reader
@@ -78,7 +88,9 @@ type Registry struct {
 
 	pending           map[uint64]context.CancelFunc
 	pendingReconnects int
-	nextTicket        uint64
+	// pendingTmuxSessions は、確保中のセッションが取った tmux のセッションの名前である。
+	pendingTmuxSessions map[uint64]string
+	nextTicket          uint64
 	// outstanding は、送り出したまま戻っていない graceful/force の呼び出し数。
 	outstanding int
 	joined      []error
@@ -180,8 +192,10 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		r.mutex.Unlock()
 		return nil, err
 	}
-	creation, cancel := context.WithCancel(ctx)
+	tmuxSession := r.claimTmuxSessionLocked(spec)
+	creation, cancel := context.WithCancel(WithTmuxSession(ctx, tmuxSession))
 	ticket := r.reserve(cancel)
+	r.holdTmuxSessionLocked(ticket, tmuxSession)
 	r.mutex.Unlock()
 
 	size := spec.Size
@@ -233,6 +247,15 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		reconnectLimit: r.reconnectLimit,
 		now:            r.now,
 		programBlocked: r.ProgramBlocked,
+		network:        r.Network,
+		networkRetry:   r.NetworkRetryInterval,
+		tmuxSession:    tmuxSession,
+	}
+	if session.networkRetry == 0 {
+		session.networkRetry = networkRetryInterval
+	}
+	if isResumableProgram(spec.ResumeProgram) {
+		session.resumeProgram = spec.ResumeProgram
 	}
 	if spec.Alias != "" {
 		session.titleSource = TitleConnection
@@ -278,7 +301,19 @@ func (r *Registry) reserve(cancel context.CancelFunc) uint64 {
 // 呼び出し側が mutex を保持する。
 func (r *Registry) unreserve(ticket uint64) {
 	delete(r.pending, ticket)
+	delete(r.pendingTmuxSessions, ticket)
 	r.condition().Broadcast()
+}
+
+// holdTmuxSessionLocked は、確保が終わるまで name を取っておく。呼び出し側が mutex を保持する。
+func (r *Registry) holdTmuxSessionLocked(ticket uint64, name string) {
+	if name == "" {
+		return
+	}
+	if r.pendingTmuxSessions == nil {
+		r.pendingTmuxSessions = map[uint64]string{}
+	}
+	r.pendingTmuxSessions[ticket] = name
 }
 
 // discard は、公開しないと決めた Process を強制停止して回収する。
@@ -464,7 +499,7 @@ func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {
 		r.mutex.Unlock()
 		return nil, err
 	}
-	creation, cancel := context.WithCancel(ctx)
+	creation, cancel := context.WithCancel(WithTmuxSession(ctx, session.tmuxSession))
 	ticket := r.reserve(cancel)
 	r.pendingReconnects++
 	r.mutex.Unlock()

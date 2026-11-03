@@ -11,6 +11,11 @@ type Reopening struct {
 	PinnedTitle string
 	// WorkingDirectory is "" when the session never reported one.
 	WorkingDirectory string
+	// TmuxSession is the name of the tmux session its connection opens, if it uses tmux.
+	TmuxSession string
+	// ResumeProgram is the OSC 7501 name of a program that can be started again
+	// in the new shell, or "".
+	ResumeProgram string
 }
 
 // Reopening describes this session for opening it again.
@@ -21,6 +26,7 @@ func (s *Session) Reopening() Reopening {
 	reopening := Reopening{
 		Kind: s.kind, Alias: s.alias, ShellProfile: s.shellProfile,
 		Workspace: s.workspace, WorkingDirectory: directory,
+		TmuxSession: s.tmuxSession, ResumeProgram: s.programToResumeLocked(),
 	}
 	if s.titlePinned {
 		reopening.PinnedTitle = s.title

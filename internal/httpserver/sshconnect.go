@@ -49,7 +49,6 @@ const (
 	problemConnectRefused         = "connect_refused"
 	problemConnectTimedOut        = "connect_timed_out"
 	problemConnectHostNotFound    = "connect_host_not_found"
-	problemConnectNoNetwork       = "connect_no_network"
 	problemConnectHostUnreachable = "connect_host_unreachable"
 	problemConnectClosed          = "connect_closed"
 )
@@ -65,7 +64,7 @@ func connectFailureProblem(err error) string {
 	case sshclient.ConnectFailureHostNotFound:
 		return problemConnectHostNotFound
 	case sshclient.ConnectFailureNoNetwork:
-		return problemConnectNoNetwork
+		return terminal.ProblemNoNetwork
 	case sshclient.ConnectFailureHostUnreachable:
 		return problemConnectHostUnreachable
 	case sshclient.ConnectFailureClosed:

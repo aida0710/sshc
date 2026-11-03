@@ -88,7 +88,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 
 	client, closers, err := d.chain(ctx, target, prompt, trace)
 	if err != nil {
-		d.failSession(session, err)
+		d.failSession(ctx, session, err)
 		return
 	}
 	closers = append(closers, client)
@@ -105,12 +105,15 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	trace.stage(terminal.ConnectionOpeningSession, target, hops, hops)
 	trace.say(connectionlog.Brief, "認証に成功しました。セッションを開始します。")
 
+	// シェルのチャンネルより先に確かめる。MaxSessions の小さいサーバーでも、確かめるチャンネルが
+	// シェルの枠を取らない。
+	target = session.openingInTmux(ctx, client, target)
 	channelStarted := trace.now()
 	trace.say(connectionlog.Full, "SSHセッションチャンネルを要求します。")
 	remote, err := client.NewSession()
 	if err != nil {
 		trace.say(connectionlog.Detailed, "SSHセッションチャンネルの要求が失敗しました（%s）：%v", connectionlog.Elapsed(trace.since(channelStarted)), err)
-		d.failSession(session, err)
+		d.failSession(ctx, session, err)
 		closeAll(closers)
 		return
 	}
@@ -128,7 +131,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	}
 
 	if err := d.start(remote, target, session); err != nil {
-		d.failSession(session, err)
+		d.failSession(ctx, session, err)
 		closeAll(closers)
 		return
 	}
@@ -574,11 +577,16 @@ func (d Dialer) openWithTimeout(
 // failSession は、接続できなかった理由をターミナルへ書いてセッションを終える。
 //
 // 画面のターミナルには日本語の [sshc] の行で書き、元の英語の文は接続ログの「詳しく」に残す。
-// `sshc ssh` は DescribeFailure の文を CLI の失敗の行（sshc: ）で書く。
-func (d Dialer) failSession(session *Session, err error) {
+// `sshc ssh` は DescribeFailure の文を CLI の失敗の行（sshc: ）で書く。回線が戻ったかを確かめる
+// 試み（terminal.WithWaitingForNetwork）は、回線が無いままなら何も書かない。
+func (d Dialer) failSession(ctx context.Context, session *Session, err error) {
 	var explained *ExplainedError
 	if !errors.As(err, &explained) {
 		session.trace.say(connectionlog.Detailed, "失敗の詳細：%v", err)
+	}
+	if terminal.IsWaitingForNetwork(ctx) && ClassifyConnectFailure(err) == ConnectFailureNoNetwork {
+		session.fail(err, "")
+		return
 	}
 	if d.DescribeFailure != nil {
 		reason := fmt.Errorf("sshc: %w", d.DescribeFailure(err))

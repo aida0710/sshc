@@ -49,6 +49,9 @@ const (
 	ProblemReconnectStopped = "reconnect_stopped"
 	// ProblemReconnectExhausted は、再接続の回数の上限に達したことを表す。
 	ProblemReconnectExhausted = "reconnect_exhausted"
+	// ProblemNoNetwork は、このマシンの回線が無くて接続できなかったことを表す。回線を待つ間は
+	// 再接続の回数に数えない。
+	ProblemNoNetwork = "connect_no_network"
 )
 
 // StopReconnecting abandons the automatic reconnect loop while it is waiting
@@ -117,6 +120,10 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 			s.publish([]byte("\r\n[sshc] " + s.reconnectStopNotice(problem) + "\r\n"))
 			return false
 		}
+	} else {
+		s.mutex.Lock()
+		s.noNetwork, s.networkWaitAnnounced = false, false
+		s.mutex.Unlock()
 	}
 	for {
 		attempt, limit, ok := s.nextReconnectAttempt()
@@ -182,6 +189,9 @@ func (s *Session) nextReconnectAttempt() (attempt, limit int, ok bool) {
 // waitToReconnect は、再接続までの待ちを一覧とターミナルに出してから待つ。
 // 待っているあいだに止められたら false を返す。
 func (s *Session) waitToReconnect(attempt, limit int, now func() time.Time) bool {
+	if available, _ := s.network.State(); !available || s.lastAttemptHadNoNetwork() {
+		return s.waitForNetwork(attempt, limit, now)
+	}
 	wait := ReconnectBase(attempt)
 	if s.delay != nil {
 		wait = s.delay(attempt)
@@ -193,36 +203,49 @@ func (s *Session) waitToReconnect(attempt, limit int, now func() time.Time) bool
 	s.reconnectView = &ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: retryAt}
 	s.mutex.Unlock()
 	seconds := int((wait + time.Second - 1) / time.Second)
-	// 切れたことを書くのは最初の待ちだけである。2回目からは前の試みが失敗しただけで、
-	// 新しく切れたわけではない。
-	lead := "SSH接続が切れました。"
-	if attempt > 0 {
-		lead = "再接続できませんでした。"
-	}
 	s.publish([]byte(fmt.Sprintf(
 		"\r\n[sshc] %s%d秒後に再接続します（%d/%d）。\r\n",
-		lead, seconds, attempt+1, limit)))
+		reconnectLead(attempt), seconds, attempt+1, limit)))
 
+	_, networkChanged := s.network.State()
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case <-timer.C:
 		return true
+	case <-networkChanged:
+		// 回線が新しくなったなら、待たずに試す。無くなったなら、回線を待つ。
+		if available, _ := s.network.State(); available {
+			return true
+		}
+		return s.waitForNetwork(attempt, limit, now)
 	case <-s.stopping:
 		return false
 	}
+}
+
+// reconnectLead は、再接続を待つ行の頭である。切れたことを書くのは最初の待ちだけである。
+// 2回目からは前の試みが失敗しただけで、新しく切れたわけではない。
+func reconnectLead(attempt int) string {
+	if attempt > 0 {
+		return "再接続できませんでした。"
+	}
+	return "SSH接続が切れました。"
 }
 
 // reopenForReconnect は reopen を1回呼ぶ。dial のあいだは StopReconnecting が
 // 取り消せるよう、取り消しを reconnectCancel に置く。停止が dial の前に決まって
 // いたら dial せず、dial のあいだに決まったら返った process を捨てて、stopped を返す。
 func (s *Session) reopenForReconnect() (process Process, stopped bool, err error) {
-	attemptCtx, cancel := context.WithCancel(WithAutomaticReconnect(context.Background()))
+	attemptCtx, cancel := context.WithCancel(WithTmuxSession(WithAutomaticReconnect(context.Background()), s.tmuxSession))
 	s.mutex.Lock()
 	if s.stoppedLocked() {
 		s.mutex.Unlock()
 		cancel()
 		return nil, true, nil
+	}
+	if s.noNetwork {
+		attemptCtx = WithWaitingForNetwork(attemptCtx)
 	}
 	s.reconnectCancel = cancel
 	reopen := s.reopen
@@ -295,6 +318,8 @@ func (s *Session) classifyReconnectFailure(err error) (retry bool, problem strin
 
 // recordReconnectFailure は、自動再接続の失敗を分類して、待機中の表示に残す。
 // 試し直さない失敗は problem にも残す。
+//
+// 回線が無くて失敗した試みは、回数に数えない。回線が戻るのを待つだけで、接続先の問題ではない。
 func (s *Session) recordReconnectFailure(err error) (retry bool, problem string) {
 	retry, problem = s.classifyReconnectFailure(err)
 	s.mutex.Lock()
@@ -304,6 +329,13 @@ func (s *Session) recordReconnectFailure(err error) (retry bool, problem string)
 	}
 	if !retry {
 		s.problem = problem
+	}
+	s.noNetwork = problem == ProblemNoNetwork
+	if s.noNetwork && s.reconnectAttempts > 0 {
+		s.reconnectAttempts--
+	}
+	if !s.noNetwork {
+		s.networkWaitAnnounced = false
 	}
 	return retry, problem
 }

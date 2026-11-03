@@ -51,6 +51,7 @@ public final class EngineService extends Service {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final EngineShutdown shutdown = new EngineShutdown(ENGINE, this::stopEngine);
     private final EngineLease lease = new EngineLease();
+    private NetworkWatcher networkWatcher;
 
     public final class LocalBinder extends Binder {
         EngineService service() {
@@ -108,11 +109,14 @@ public final class EngineService extends Service {
         startForeground(NOTIFICATION_ID, notification());
 
         BlockedProgramWatcher.ensureStarted(this);
+        networkWatcher = new NetworkWatcher(this);
+        networkWatcher.start();
         ENGINE.execute(this::startEngine);
     }
 
     @Override
     public void onDestroy() {
+        networkWatcher.stop();
         requestEngineShutdown();
         super.onDestroy();
     }

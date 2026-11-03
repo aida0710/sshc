@@ -51,6 +51,7 @@ type testServer struct {
 	ptyRequested bool
 	env          []string
 	command      string
+	commands     []string
 	shellRan     bool
 	usedKey      ssh.PublicKey
 	dialed       []string
@@ -107,6 +108,9 @@ type serverOptions struct {
 	OnShell func(channel ssh.Channel)
 	// OnExec handles exec requests separately when a test needs to distinguish shell traffic.
 	OnExec func(channel ssh.Channel)
+	// AnswerExec は、コマンドごとの標準出力と終了コードを返す。answered が false なら、
+	// ふつうの exec として扱う。
+	AnswerExec func(command string) (stdout string, status uint32, answered bool)
 	// OnAgentChannel は、借りた agent へリモート側から話しかける。
 	OnAgentChannel func(conn net.Conn)
 	// OnGlobalRequest may handle forwarding requests for an end-to-end fixture.
@@ -439,10 +443,18 @@ func (s *testServer) session(connection ssh.Conn, channel ssh.Channel, requests 
 			s.reply(request, true)
 			go s.run(channel, false)
 		case "exec":
+			command := string(request.Payload[4:])
 			s.mutex.Lock()
-			s.command = string(request.Payload[4:])
+			s.command = command
+			s.commands = append(s.commands, command)
 			s.mutex.Unlock()
 			s.reply(request, true)
+			if s.options.AnswerExec != nil {
+				if stdout, status, answered := s.options.AnswerExec(command); answered {
+					go answerExec(channel, stdout, status)
+					continue
+				}
+			}
 			go s.run(channel, true)
 		default:
 			s.reply(request, false)
@@ -471,6 +483,13 @@ func (s *testServer) run(channel ssh.Channel, command bool) {
 		status := struct{ Status uint32 }{Status: uint32(s.ExitCode)}
 		_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(&status))
 	}
+	_ = channel.Close()
+}
+
+func answerExec(channel ssh.Channel, stdout string, status uint32) {
+	_, _ = io.WriteString(channel, stdout)
+	exit := struct{ Status uint32 }{Status: status}
+	_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(&exit))
 	_ = channel.Close()
 }
 
@@ -521,6 +540,13 @@ func (s *testServer) Command() string {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.command
+}
+
+// Commands は、届いた exec のコマンドを届いた順に返す。
+func (s *testServer) Commands() []string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return append([]string(nil), s.commands...)
 }
 
 func (s *testServer) ShellRan() bool {

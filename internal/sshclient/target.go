@@ -165,9 +165,13 @@ type Target struct {
 	KeepAliveMax  int
 	RemoteCommand string
 	RequestTTY    string
-	Timeout       time.Duration
-	Strict        string
-	Methods       Methods
+	// TmuxSession は、シェルの代わりに開く tmux のセッションの名前である。空なら tmux を使わない。
+	// ssh_config の語ではなく、接続先ごとの sshc の設定（「tmuxで開く」）から来る。RemoteCommand が
+	// あれば、それに従って使わない。
+	TmuxSession string
+	Timeout     time.Duration
+	Strict      string
+	Methods     Methods
 }
 
 // Address は、dial する宛先である。

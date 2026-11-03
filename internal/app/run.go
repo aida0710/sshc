@@ -82,7 +82,9 @@ type Dependencies struct {
 	// ProgramBlocked は、セッションのプログラムが利用者を待ち始めた・待つのをやめたことを聞く。
 	// Android のアプリが通知にする。nil なら誰も聞かない。呼び方の決まりは terminal.Registry にある。
 	ProgramBlocked func(terminal.BlockedProgramChange)
-	Environ        func() []string
+	// Network は、このマシンの回線について OS が言うことである（Android）。nil なら OS は何も言わない。
+	Network *terminal.NetworkWatch
+	Environ func() []string
 	// DockerEnvironment は、VPN 経路の docker を探して起動する環境を返す。nil なら、
 	// Environ から求めたログインシェルの環境を使う。受け入れテストは docker の無い
 	// 環境を渡し、テストを動かすマシンの docker に触れない。
