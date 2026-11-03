@@ -17,6 +17,8 @@ The master password cannot be recovered. It is not the sync encryption key, and 
 
 Concrete `Host` aliases from an existing `~/.ssh/config` appear immediately. Quick Connect searches names, groups, tags, and `user@host:port`.
 
+While there is no connection, Home and Connections show the tiles **Add connection**, **Open SSH Config**, and **Receive by sync**. To begin without a connection, press **Open a local shell** below them.
+
 To add one, open **Connections → Add connection**, then enter an alias, host, user, and port. Add a key, password, or ProxyJump only when needed.
 
 ## 3. Check before connecting

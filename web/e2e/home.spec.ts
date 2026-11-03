@@ -1,5 +1,6 @@
 import { expect, openApplication, openSection, test } from "./support/environment";
 import { metadataSchemaVersion } from "./support/settings";
+import { terminalRoot } from "./support/terminal";
 
 test("starts with a searchable host launcher and contacts nothing unasked", async ({
   page,
@@ -53,6 +54,33 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
 
   await page.getByRole("button", { name: "Manage connections" }).click();
   await expect(page.getByRole("navigation", { name: "Connections" })).toBeVisible();
+});
+
+test("offers the ways to begin while there is no connection, and each tile goes there", async ({
+  page,
+  installation,
+}) => {
+  await installation.write("config", "");
+  await openApplication(page, installation);
+  await openSection(page, "Home");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "Get started" })).toBeVisible();
+
+  await main.getByRole("button", { name: /^Open SSH Config/ }).click();
+  await expect(page).toHaveURL(/\/config/);
+
+  await openSection(page, "Home");
+  await main.getByRole("button", { name: /^Receive by sync/ }).click();
+  await expect(page).toHaveURL(/\/sync/);
+
+  await openSection(page, "Home");
+  await main.getByRole("button", { name: /^Add connection/ }).click();
+  await expect(page.getByRole("form", { name: "New connection" })).toBeVisible();
+
+  await openSection(page, "Home");
+  await main.getByRole("button", { name: "Open a local shell", exact: true }).click();
+  await expect(page).toHaveURL(/\/terminal/);
+  await expect(terminalRoot(page)).toBeVisible();
 });
 
 test("asks for attention to a line OpenSSH cannot read and shows it in SSH Config", async ({

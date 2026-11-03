@@ -1,26 +1,13 @@
 import { vaultApi, type PasswordVaultStatus } from "../api/vault";
-import type { CreateConnectionDraft } from "../connections/createConnectionDraft";
 import { useTranslate } from "../i18n/context";
 import type { Section } from "../routing/sectionRoute";
 import type { PaletteCommand } from "./CommandPalette";
-
-const blankConnectionDraft: CreateConnectionDraft = {
-  alias: "",
-  group: "",
-  hostName: "",
-  user: "",
-  port: "",
-  authentication: "dedicated_password",
-  savedCredential: "",
-  newCredential: "",
-  keyId: "",
-};
 
 type PaletteCommandsOptions = {
   // A Vault without a master password cannot be locked, so it has no lock command.
   passwordless: boolean;
   navigate: (section: Section) => void;
-  startConnectionDraft: (draft: CreateConnectionDraft) => void;
+  addConnection: () => void;
   openLocalShell: () => void;
   // The engine answers a lock with the Vault's state: still unlocked means
   // it refused, and the screen keeps working with that state.
@@ -33,7 +20,7 @@ type PaletteCommandsOptions = {
 export function usePaletteCommands({
   passwordless,
   navigate,
-  startConnectionDraft,
+  addConnection,
   openLocalShell,
   onLocked,
   onStillUnlocked,
@@ -45,10 +32,7 @@ export function usePaletteCommands({
       label: t("palette.newConnection"),
       detail: t("palette.newConnectionDetail"),
       search: "new connection create host add 新規 接続 追加 作成",
-      run: () => {
-        startConnectionDraft(blankConnectionDraft);
-        navigate("Connections");
-      },
+      run: addConnection,
     },
     {
       id: "open-files",

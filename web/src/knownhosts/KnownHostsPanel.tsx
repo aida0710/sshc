@@ -12,7 +12,8 @@ import {
   tableHeadRow,
 } from "../ui/form";
 import { ActionMenu, revealOnHover } from "../ui/ActionMenu";
-import { belowSmallWidthQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { belowSmallWidthQuery, mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { EmptyState } from "../ui/EmptyState";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
@@ -65,6 +66,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   const trustedSort = useTableSort<TrustedSort>("host");
   // Below sm the three columns of trusted keys do not fit, so each key is a two-line row instead.
   const narrowList = useMediaQuery(belowSmallWidthQuery);
+  const compact = useMediaQuery(mobileViewportQuery);
   // The two-line row a narrow screen has opened to show the whole host and fingerprint.
   const [openedEntry, setOpenedEntry] = useState<string | null>(null);
 
@@ -214,6 +216,46 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
     );
   }
 
+  const scanHostField = (layout: string) => (
+    <input {...asciiTextEntry}
+      aria-label={t("kh.hostToScan")}
+      placeholder={t("kh.hostToScan")}
+      value={scanHost}
+      onChange={(event) => setScanHost(event.target.value)}
+      className={`${control} ${layout}`}
+    />
+  );
+  const scanButton = (layout: string) => (
+    <Button kind="primary" className={layout} busy={action.running === "scan"} disabled={action.running !== null} onClick={() => void scan()}>
+      {t("kh.scan")}
+    </Button>
+  );
+
+  // Nothing is trusted yet and no scan is under way: scanning is the one thing to do here. The moment a scan
+  // answers, the page takes its usual shape so that its results have a place.
+  const nothingTrusted = listing !== null && listing.entries.length === 0 && !scanned && candidates.length === 0;
+  if (nothingTrusted) {
+    return (
+      <section aria-label={t("kh.heading")} className="flex flex-1 flex-col gap-[22px]">
+        <PageHeader title={t("kh.heading")} />
+        {error ? <Notice tone="danger">{error}</Notice> : null}
+        <div className="flex flex-1">
+          <EmptyState
+            icon="knownHosts"
+            title={t("kh.emptyHeading")}
+            detail={t("kh.emptyDetail")}
+            action={(
+              <div className={`mt-1 flex w-full gap-2 ${compact ? "flex-col" : ""}`}>
+                {scanHostField("min-w-0 flex-1")}
+                {scanButton(compact ? "w-full" : "")}
+              </div>
+            )}
+          />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section aria-label={t("kh.heading")} className="flex flex-col gap-[22px]">
       <PageHeader title={t("kh.heading")} />
@@ -234,16 +276,8 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
 
       <PageSection heading={t("kh.scanHeading")} headingId="known-hosts-scan-heading" hint={t("kh.scanHint")}>
         <div className="flex flex-wrap items-center gap-2">
-          <input {...asciiTextEntry}
-            aria-label={t("kh.hostToScan")}
-            placeholder={t("kh.hostToScan")}
-            value={scanHost}
-            onChange={(event) => setScanHost(event.target.value)}
-            className={`${control} sm:max-w-[360px]`}
-          />
-          <Button kind="primary" busy={action.running === "scan"} disabled={action.running !== null} onClick={() => void scan()}>
-            {t("kh.scan")}
-          </Button>
+          {scanHostField("sm:max-w-[360px]")}
+          {scanButton("")}
         </div>
 
         {scanned ? <p className="mt-3 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}

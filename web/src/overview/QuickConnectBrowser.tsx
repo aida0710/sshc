@@ -299,7 +299,7 @@ export function QuickConnectBrowser({
 
       {servers.length === 0 ? (
         <p className="rounded-[10px] bg-well p-4 text-sm text-ink-muted">
-          {index.servers.length === 0 ? t("home.noConnections") : t("home.noMatches")}
+          {t("home.noMatches")}
         </p>
       ) : (
         <ul

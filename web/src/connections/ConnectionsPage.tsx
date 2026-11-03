@@ -10,6 +10,9 @@ import {
 } from "../api/config";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { ConnectionListPane } from "./ConnectionListPane";
+import { sectionPath } from "../routing/sectionRoute";
+import { ConnectionStartTiles } from "./ConnectionStartTiles";
+import { hasNothingToList } from "./connectionTreeIndex";
 import { useToast } from "../ui/useToast";
 import { usePendingResult } from "../ui/usePendingResult";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
@@ -79,6 +82,7 @@ type ConnectionsPageProps = {
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
   onOpenSSHSession: (alias: string) => Promise<void>;
+  onOpenLocalShell: () => void;
 };
 
 type DiscardIntent =
@@ -101,6 +105,7 @@ export function ConnectionsPage({
   preferredKey = null,
   onPreferredKeyApplied,
   onOpenSSHSession,
+  onOpenLocalShell,
 }: ConnectionsPageProps) {
   const t = useTranslate();
   const showToast = useToast();
@@ -452,12 +457,14 @@ export function ConnectionsPage({
     );
   }
 
+  const nothingToList = hasNothingToList(overview);
+
   return (
     <>
     <PageBoard
       fill
       labelledBy="connections-heading"
-      aside={(
+      aside={nothingToList ? null : (
         <ConnectionGroupFacets
           overview={overview}
           scope={listActions.scope}
@@ -476,7 +483,7 @@ export function ConnectionsPage({
         <PageHeader
           title={t("conn.heading")}
           headingId="connections-heading"
-          meta={t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
+          meta={nothingToList ? undefined : t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
           actions={newConnectionButton(true)}
           className={workspaceHeaderLayout}
         />
@@ -501,6 +508,14 @@ export function ConnectionsPage({
           onSelect={onSelect}
           drag={drag}
           detailOpen={detailOpen}
+          startTiles={!nothingToList || detailOpen || invalidLocation ? null : (
+            <ConnectionStartTiles
+              onAddConnection={beginCreation}
+              onOpenConfig={() => onNavigateLocation?.(sectionPath("Config"))}
+              onOpenSync={() => onNavigateLocation?.(sectionPath("Sync"))}
+              onOpenLocalShell={onOpenLocalShell}
+            />
+          )}
           treeOptions={{
             scope: listActions.scope,
             onScopeChange: listActions.changeScope,
