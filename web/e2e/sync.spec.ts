@@ -525,6 +525,60 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   ).toBeVisible();
 });
 
+test("replaces the drafted commit message after Sync now, but keeps one typed by hand", async ({
+  page,
+  installation,
+}) => {
+  const status = {
+    configured: true,
+    keyConfigured: true,
+    locked: false,
+    auto: { enabled: false, phase: "idle" },
+    endpoint: "https://s3.example.invalid",
+    bucket: "sshc",
+    path: "",
+    region: "auto",
+    synced: true,
+    direction: "both",
+  };
+  const threeChanges = { message: "3 changes (+1 ~1 -1): config, known_hosts, and 1 more", added: 1, modified: 1, removed: 1 };
+  const noChanges = { message: "Record current workspace", added: 0, modified: 0, removed: 0 };
+  let draft = threeChanges;
+  await page.route("**/api/v1/sync**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const answer = (body: unknown) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (path === "/api/v1/sync" && request.method() === "GET") return answer(status);
+    if (path === "/api/v1/sync/push" && request.method() === "GET") return answer(draft);
+    if (path === "/api/v1/sync/now" && request.method() === "POST") {
+      draft = noChanges;
+      return answer(status);
+    }
+    if (path === "/api/v1/sync/bucket") return answer({ checkedAt: "2026-08-25T02:10:00Z", localIsLive: true, historyTruncated: false, history: [] });
+    if (path === "/api/v1/sync/history") return answer({ revisions: [] });
+    return route.continue();
+  });
+
+  await openApplication(page, installation);
+  await openSection(page, "Sync");
+  const message = page.locator("#sync-commit-message");
+  await expect(message).toHaveValue(threeChanges.message);
+
+  await page.getByRole("button", { name: "Sync now" }).click();
+
+  await expect(message).toHaveValue(noChanges.message);
+  await expect(page.getByText("There are no local changes to push.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Push this machine's settings" })).toBeDisabled();
+
+  await message.fill("Rotate the deploy key");
+  const nextDraftRead = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/sync/push");
+  await page.getByRole("button", { name: "Sync now" }).click();
+  await nextDraftRead;
+
+  await expect(message).toHaveValue("Rotate the deploy key");
+});
+
 test("reviews and accepts a diverged remote head on a receive-only machine", async ({
   page,
   installation,

@@ -29,6 +29,9 @@ export function useSyncRemoteState(api: Pick<SyncApi, "syncPushDraft" | "syncBuc
   const [pushDraft, setPushDraft] = useState<SyncPushDraft | null>(null);
   const [pushMessage, setPushMessage] = useState("");
   const pushMessageDirty = useRef(false);
+  // The draft is read by the polling and again after a transfer. Only the latest read is shown, so a
+  // slow poll cannot put back the message from before the transfer.
+  const pushDraftGeneration = useRequestGeneration();
 
   // The bucket is read by the polling and again after a push. Only the latest
   // read is shown, so a slow poll cannot put back the state before the push.
@@ -61,14 +64,16 @@ export function useSyncRemoteState(api: Pick<SyncApi, "syncPushDraft" | "syncBuc
   }, [api, t]);
 
   const refreshPushDraft = useCallback(async () => {
+    const isCurrent = pushDraftGeneration.begin();
     try {
       const draft = await api.syncPushDraft();
+      if (!isCurrent()) return;
       setPushDraft(draft);
       if (!pushMessageDirty.current) setPushMessage(draft.message);
     } catch {
-      setPushDraft(null);
+      if (isCurrent()) setPushDraft(null);
     }
-  }, [api]);
+  }, [api, pushDraftGeneration]);
 
   const resetBucket = useCallback(() => {
     bucketGeneration.retire();
@@ -79,10 +84,11 @@ export function useSyncRemoteState(api: Pick<SyncApi, "syncPushDraft" | "syncBuc
     [],
   );
   const resetPush = useCallback(() => {
+    pushDraftGeneration.retire();
     setPushDraft(null);
     setPushMessage("");
     pushMessageDirty.current = false;
-  }, []);
+  }, [pushDraftGeneration]);
 
   return {
     bucketState,

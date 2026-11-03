@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { updateGlobalSettings, useSettings } from "../settings/settingsStore";
 import { messages, type MessageKey } from "./messages";
 import { browserLocale, copyLocale, defaultLocale, detectLocale, forgetLocale, isLocale, type Locale } from "./locale";
@@ -38,6 +38,12 @@ export function LanguageProvider({ children, initial }: { children: ReactNode; i
     setLocaleState(synced);
     copyLocale(synced);
   }, [initial, synced]);
+
+  // The browser chooses fallback fonts, line breaks and the screen reader's voice from this. A layout
+  // effect sets it before the first paint, so the first frame is not drawn with the fonts of another language.
+  useLayoutEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);

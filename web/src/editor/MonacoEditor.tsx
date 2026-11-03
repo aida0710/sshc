@@ -18,6 +18,7 @@ import "monaco-editor/languages/definitions/python/register.js";
 import "monaco-editor/languages/definitions/shell/register.js";
 import "monaco-editor/languages/definitions/typescript/register.js";
 import "monaco-editor/languages/definitions/yaml/register.js";
+import { editorFontFamily } from "./editorFont";
 import { useTheme } from "../theme/context";
 import { editorCursorBlinking, reducedMotionQuery } from "../ui/reducedMotion";
 import { useMediaQuery } from "../ui/useMediaQuery";
@@ -102,7 +103,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
       ...noUnrequestedEditOptions,
       automaticLayout: true,
       minimap: { enabled: false },
-      fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      fontFamily: editorFontFamily,
       fontSize: 13,
       lineNumbersMinChars: 3,
       padding: { top: 10, bottom: 10 },

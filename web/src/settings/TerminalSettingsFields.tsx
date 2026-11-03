@@ -9,7 +9,7 @@ import {
   minBrowserScrollbackLines,
 } from "../terminal/browserScrollback";
 import { defaultRetainedTerminals, maxRetainedTerminals, minRetainedTerminals } from "../terminal/splitView/retainedSessions";
-import { fonts } from "../terminal/fonts";
+import { fonts } from "../ui/monospaceFonts";
 import { palettes } from "../terminal/palettes";
 import type { DescribableControlProps } from "../ui/describeControl";
 import { FieldRow } from "../ui/FieldRow";

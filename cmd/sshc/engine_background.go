@@ -12,8 +12,10 @@ import (
 	"sshc/internal/handoff"
 )
 
-// Background startup includes first-use storage initialization and antivirus
-// scanning on Windows, so allow more time than a managed service restart.
+// backgroundReadyTimeout is how long to wait for an engine that starts on its own: in the
+// background, or by the logon task on Windows. Its start includes first-use storage
+// initialization and antivirus scanning on Windows, which took up to 17 s on a Windows 11 VM with
+// every core busy. Nothing bounds that work, so this only ends the wait for an engine stuck alive.
 const backgroundReadyTimeout = 20 * time.Second
 
 type backgroundEngineStarter func() (*detachedProcess, error)
@@ -60,13 +62,19 @@ func ensureBackgroundEngine(ctx context.Context, environment commandEnvironment,
 	found, err := waitForReadyEngine(ctx, environment.stateDir, readiness)
 	var exited *engineExitedError
 	if errors.As(err, &exited) {
-		tail, tailErr := enginelog.Tail(enginelog.Path(environment.stateDir))
-		if tailErr != nil {
-			return handoff.Handoff{}, fmt.Errorf("%w; cannot read engine log: %v", err, tailErr)
-		}
-		return handoff.Handoff{}, fmt.Errorf("%w\n%s", err, tail)
+		return handoff.Handoff{}, withEngineLogTail(err, environment.stateDir)
 	}
 	return found, err
+}
+
+// withEngineLogTail adds the end of the engine log to the failure of an engine that exited: the
+// log says why, and the process has nowhere else to say it.
+func withEngineLogTail(failure error, stateDir string) error {
+	tail, err := enginelog.Tail(enginelog.Path(stateDir))
+	if err != nil {
+		return fmt.Errorf("%w; cannot read engine log: %v", failure, err)
+	}
+	return fmt.Errorf("%w\n%s", failure, tail)
 }
 
 func startBackgroundEngine() (*detachedProcess, error) {
