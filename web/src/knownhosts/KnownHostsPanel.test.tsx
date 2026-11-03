@@ -82,6 +82,13 @@ describe("KnownHostsPanel", () => {
     expect(screen.queryByRole("heading", { name: "No trusted host keys yet" })).not.toBeInTheDocument();
   });
 
+  it("leaves out the count of scan candidates until a scan finds one", async () => {
+    render(<ToastProvider><KnownHostsPanel api={buildApi()} /></ToastProvider>);
+
+    expect(await screen.findByText("Trusted entries", { selector: "dt" })).toBeVisible();
+    expect(screen.queryByText("Scan candidates", { selector: "dt" })).toBeNull();
+  });
+
   it("lists entries with their fingerprints", async () => {
     render(<KnownHostsPanel api={buildApi()} />);
 

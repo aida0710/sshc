@@ -41,6 +41,11 @@ const homeView: StoredValue<QuickConnectView> = {
   parse: (stored) => stored === "list" ? "list" : "panel",
 };
 
+// On a phone the groups are one line that scrolls sideways, so many of them leave the connections on the first
+// screen. The negative margin lets the line run to the edges of the card.
+const phoneGroupRow = "-mx-3.5 flex gap-2 overflow-x-auto px-3.5 [scrollbar-width:none]";
+const phoneGroupChip = "max-w-[70%] shrink-0";
+
 function connectionDestination(server: BrowserServer): string {
   return connectionAddress({ hostName: server.host.hostName ?? server.identity.alias, user: server.host.user ?? "", port: server.host.port ?? "" });
 }
@@ -259,7 +264,7 @@ export function QuickConnectBrowser({
             </nav>
           )}
           {visibleGroups.length === 0 ? null : (
-            <div role="group" aria-label={t("home.groupFilter")} className="flex flex-wrap gap-2">
+            <div role="group" aria-label={t("home.groupFilter")} className={mobile ? phoneGroupRow : "flex flex-wrap gap-2"}>
               {visibleGroups.map((candidate) => {
                 const childCount = index.visibleChildrenByParent.get(candidate.name)?.length ?? 0;
                 return (
@@ -269,7 +274,7 @@ export function QuickConnectBrowser({
                     title={candidate.name}
                     aria-label={t("home.openGroup", { name: candidate.name, count: candidate.descendantCount })}
                     onClick={() => setGroupTrail([...groupTrail, candidate.name])}
-                    className="flex min-h-9 min-w-0 max-w-full items-center gap-2 rounded-md bg-well px-3 py-1.5 text-left transition-colors hover:bg-hover"
+                    className={`flex min-h-9 items-center gap-2 rounded-md bg-well px-3 py-1.5 text-left transition-colors hover:bg-hover ${mobile ? phoneGroupChip : "min-w-0 max-w-full"}`}
                   >
                     <span
                       aria-hidden="true"

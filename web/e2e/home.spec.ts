@@ -147,3 +147,32 @@ test("opens the action menu without connecting, then keeps settings and connect 
   await page.getByRole("menuitem", { name: "Connect", exact: true }).click();
   await expect.poll(() => opened).toEqual([{ kind: "ssh", alias: "bastion" }]);
 });
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 411, height: 914 }, hasTouch: true, isMobile: true });
+
+  test("keeps many groups on one line that scrolls, so the connections stay on the first screen", async ({ page, installation }) => {
+    const groups = Array.from({ length: 14 }, (_, index) => `group-${index + 1}`);
+    await installation.write("config", [
+      "# >>> sshc groups (generated). Child groups first: OpenSSH keeps the first value it reads.",
+      "# Edit through the UI; lines between these markers are replaced on the next save.",
+      ...groups.map((name) => `Include connections/${name}/*.conf`),
+      "Include groups.sshc.conf",
+      "# <<< sshc groups",
+      "",
+    ].join("\n"));
+    await installation.write("groups.sshc.conf", "");
+    for (const name of groups) {
+      await installation.write(`connections/${name}/hosts.conf`, `Host ${name}-web\n\tHostName 198.51.100.1\n`);
+    }
+    await openApplication(page, installation);
+
+    const row = page.getByRole("group", { name: "Filter connections by group" });
+    await expect(row.getByRole("button")).toHaveCount(groups.length);
+    const tops = await row.getByRole("button").evaluateAll((chips) => chips.map((chip) => chip.getBoundingClientRect().top));
+    expect(new Set(tops).size).toBe(1);
+    expect(await row.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem").first()).toBeInViewport();
+  });
+});

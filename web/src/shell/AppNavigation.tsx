@@ -2,6 +2,7 @@ import type { PaneEdge } from "../terminal/splitView/layout";
 import { SplitGroupList } from "../terminal/splitView/SplitGroupList";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
 import { useBindings } from "../keyconfig/presets";
+import { shortcutLabel } from "../keyconfig/shortcutLabel";
 import {
   useSyncExternalStore,
   type MouseEvent,
@@ -168,12 +169,12 @@ export function AppNavigation({
       <button
         type="button"
         onClick={onOpenCommandPalette}
-        title={`${t("palette.open")} (${shortcuts.palette.join(" / ")})`}
+        title={`${t("palette.open")} (${shortcuts.palette.map(shortcutLabel).join(" / ")})`}
         className="mb-2.5 flex h-10 shrink-0 items-center gap-2 rounded-lg bg-well px-2 text-[13px] text-ink-faint transition-colors hover:text-ink md:h-8"
       >
         <Icon name="search" className="size-[15px] shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">{t("palette.open")}</span>
-        <kbd aria-hidden="true" className="hidden shrink-0 font-mono text-[11px] text-ink-faint md:block">{shortcuts.palette[0]}</kbd>
+        <kbd aria-hidden="true" className="hidden shrink-0 font-mono text-[11px] text-ink-faint md:block">{shortcuts.palette.slice(0, 1).map(shortcutLabel)}</kbd>
       </button>
 
       <div className="shrink-0">
