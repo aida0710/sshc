@@ -10,6 +10,14 @@ export async function sftpHostPicker(page: Page, pane: Locator): Promise<Locator
   return page.locator("[data-sftp-pane-tabs] button[data-value]:visible");
 }
 
+// chooseEntryOnPhone chooses a row of the phone's list, which has no checkboxes until something is chosen: a long press
+// starts choosing (the page takes a right click for one, as it does Android's context menu), and after that a tap chooses.
+export async function chooseEntryOnPhone(pane: Locator, name: string): Promise<void> {
+  const choosing = await pane.getByRole("checkbox").count() > 0;
+  await pane.getByRole("button", { name, exact: true }).click(choosing ? {} : { button: "right" });
+  await expect(pane.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+}
+
 // Connects a pane to `alias` the way a user does: opens the host picker and
 // chooses the host, which connects. `pane` defaults to the only visible pane.
 export async function connectSFTPHost(page: Page, alias: string, pane: Locator = page.getByRole("tabpanel")): Promise<void> {

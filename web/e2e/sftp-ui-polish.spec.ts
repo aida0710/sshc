@@ -4,7 +4,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { TransferJob, TransferJobList } from "../src/sftp/api";
 import { expect, openApplication, openSection, test } from "./support/environment";
 import { keepMachineState, readMachineState } from "./support/settings";
-import { openLocalSFTPDirectory } from "./support/sftp";
+import { chooseEntryOnPhone, openLocalSFTPDirectory } from "./support/sftp";
 
 // Phones keep touch controls when rotated beyond the portrait breakpoint.
 test.use({ hasTouch: true });
@@ -176,7 +176,7 @@ test("adds a compact file tab and preserves both directories and selections with
   const secondTab = strip.getByRole("tab", { name: "Local:mobile-second", exact: true });
   await expect(secondTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "sshc://local");
-  await page.getByRole("checkbox", { name: "Select report.txt", exact: true }).check();
+  await chooseEntryOnPhone(page.getByRole("tabpanel"), "report.txt");
   await expectCompactControls(page);
   await firstTab.click();
   const pane = page.getByRole("tabpanel");
@@ -225,13 +225,13 @@ test("restores two compact sources in one tab strip and preserves the host, path
   const remoteTab = strip.getByRole("tab", { name: "bastion:srv", exact: true });
   const pane = page.getByRole("tabpanel");
   await expect(pane.getByRole("button", { name: "notes.txt", exact: true })).toBeVisible();
-  await pane.getByRole("checkbox", { name: "Select notes.txt", exact: true }).check();
+  await chooseEntryOnPhone(pane, "notes.txt");
   await expectCompactControls(page);
   await remoteTab.click();
   await expect(page.getByRole("button", { name: "Host", exact: true })).toHaveAttribute("data-value", "bastion");
   await pane.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(pane.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv");
-  await pane.getByRole("checkbox", { name: "Select report.txt", exact: true }).check();
+  await chooseEntryOnPhone(pane, "report.txt");
   await expectCompactControls(page);
   await localTab.click();
   await expectSelectedLocation(page, { alias: "sshc://local", path: "/home/engine" });
