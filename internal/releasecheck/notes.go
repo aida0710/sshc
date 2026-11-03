@@ -46,8 +46,13 @@ func (c Checker) Catalog(ctx context.Context, current string) (Catalog, error) {
 	if err != nil {
 		return Catalog{}, err
 	}
+	// 新しいリリースがあると分かれば、本文を読めなくても確認は成功である。一覧は大きく、API の回数も使うので、
+	// 読めないことがある。Releases が nil のときは読めなかったことを表す。
 	releases, err := c.notes(ctx, current, latest.Version)
-	return Catalog{Latest: latest, Releases: releases}, err
+	if err != nil {
+		return Catalog{Latest: latest}, nil
+	}
+	return Catalog{Latest: latest, Releases: releases}, nil
 }
 
 func (c Checker) notes(ctx context.Context, current, latest string) ([]Release, error) {

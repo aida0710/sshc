@@ -58,3 +58,17 @@ func TestCatalogFetchesBoundedNotesWithoutAuthentication(t *testing.T) {
 		t.Fatalf("catalog=%+v paths=%v err=%v", catalog, paths, err)
 	}
 }
+
+// 本文の一覧を読めなくても、新しいリリースがあることは伝えることを検証する。
+func TestCatalogReportsTheLatestReleaseWithoutItsNotes(t *testing.T) {
+	checker := Checker{API: "https://api.github.com/repos/aida0710/sshc/releases/latest", HTTP: &http.Client{Transport: releaseTransport(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == "/repos/aida0710/sshc/releases" {
+			return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"tag_name":"v1.2.0"}`)), Header: make(http.Header)}, nil
+	})}}
+	catalog, err := checker.Catalog(context.Background(), "v1.1.0")
+	if err != nil || catalog.Latest.Version != "v1.2.0" || catalog.Releases != nil {
+		t.Fatalf("catalog=%+v err=%v", catalog, err)
+	}
+}
