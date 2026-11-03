@@ -348,7 +348,7 @@ test("uses established product names in the Japanese navigation", async ({ page,
   await page.reload();
   await expect(sessionStatus(page)).toContainText("ローカルセッション稼働中");
 
-  const quickConnect = page.getByRole("region", { name: "Quick Connect", exact: true });
+  const quickConnect = page.getByRole("region", { name: "クイック接続", exact: true });
   await expect(quickConnect).toBeVisible();
   await expect(quickConnect).not.toContainText(">_");
 

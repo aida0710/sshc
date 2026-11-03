@@ -82,6 +82,16 @@ test("locking the vault returns the application to its front door", async ({ pag
 });
 
 
+test("stays on the screen that creates a vault when the language is changed there", async ({ page, installation }) => {
+  await page.goto(installation.url);
+  await expect(page.getByRole("button", { name: "Create the vault" })).toBeVisible();
+
+  await page.getByLabel("Lang menu").selectOption("ja");
+
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+  await expect(page.getByRole("button", { name: "Vaultを作成" })).toBeVisible();
+});
+
 test("passwordless vaults hide manual locks and current password while protected vaults retain them", async ({ page, installation }) => {
   await page.goto(installation.url);
   await page.getByLabel("Use without a password").check();
