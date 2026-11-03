@@ -1,4 +1,4 @@
-import { symbolFontFamily } from "./fonts";
+import { symbolFontFamily } from "../ui/monospaceFonts";
 
 // One of the symbols, for asking the browser to fetch the font that draws it.
 const sampleSymbol = "⏵";

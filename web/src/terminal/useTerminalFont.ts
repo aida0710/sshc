@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { defaultStack, knownFont } from "./fonts";
+import { defaultStack, knownFont } from "../ui/monospaceFonts";
 
 export function useTerminalFont(name: string, fontSize: number): string {
   const font = knownFont(name);

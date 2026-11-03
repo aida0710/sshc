@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { defaultTint } from "../terminal/appearance";
 import { useBackgroundImage } from "../terminal/backgroundImage";
-import { fontStack } from "../terminal/fonts";
+import { fontStack } from "../ui/monospaceFonts";
 import { fontSizeRange } from "../terminal/fontSize";
 
 // A still terminal that shows what the chosen palette, font, size and

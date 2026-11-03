@@ -21,7 +21,7 @@ import { useReportDirty } from "./useReportDirty";
 import { AppearancePicker } from "../terminal/AppearancePicker";
 import { BackgroundPicker } from "../terminal/BackgroundPicker";
 import { chooseAppearance } from "../terminal/appearance";
-import { fonts } from "../terminal/fonts";
+import { fonts } from "../ui/monospaceFonts";
 import { operatingSystems, OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { palettes } from "../terminal/palettes";
 
