@@ -2,8 +2,6 @@ import { useCallback, useId, type ReactNode, type RefObject } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { useLanguage } from "../i18n/context";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
-import { ActionMenu } from "../ui/ActionMenu";
-import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { localHostAlias } from "./localHost";
 import { sftpApi, type RemoteDirectoryStats, type RemoteEntry } from "./api";
@@ -12,8 +10,8 @@ import { entryKind } from "./entryKind";
 import { entryTypeLabelKeys } from "./sftpMessageKeys";
 import { symbolicModeToOctal } from "./transfers";
 import { FilePreviewBody } from "./FilePreviewBody";
-import { PreviewIconButton } from "./PreviewIconButton";
-import { PreviewStepper } from "./PreviewStepper";
+import { FilePreviewArea, FilePreviewFrame, useFilePreviewOverlay } from "./FilePreviewFrame";
+import { FilePreviewHeader } from "./FilePreviewHeader";
 import { useFilePreview } from "./useFilePreview";
 import { usePreviewStepping } from "./usePreviewStepping";
 import { useLoad } from "../ui/useLoad";
@@ -27,7 +25,8 @@ function Property({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-// SFTPDetailsDialog shows the properties of the inspected entries, and a preview of a single file. steps are
+// SFTPDetailsDialog shows the properties of the inspected entries, and a preview of a single file, in the same frame
+// and under the same header as any other file preview (FilePreviewFrame, FilePreviewHeader). steps are
 // the files of the pane in the order it shows them: the step buttons, the arrow keys and a finger's swipe
 // across the previewed picture go through them, asking the pane to inspect another (onStep).
 export function SFTPDetailsDialog({
@@ -78,7 +77,8 @@ export function SFTPDetailsDialog({
     if (next !== undefined) onStep?.(next);
   };
   const onSwipe = usePreviewStepping({ position: stepPosition, count: stepCount, onStep: stepTo, onClose });
-  const heading = entry === null ? t("sftp.detailsForCount", { count: entries.length }) : t("sftp.detailsFor", { name: entry.name });
+  const overlay = useFilePreviewOverlay(preview);
+  const windowName = entry === null ? t("sftp.detailsForCount", { count: entries.length }) : t("sftp.detailsFor", { name: entry.name });
 
   // Only a remote directory has its size counted; anything else reads nothing.
   const readDirectoryStats = useCallback(
@@ -134,7 +134,7 @@ export function SFTPDetailsDialog({
 
   // A picture or a recording is not edited as text, so only other files offer the editor.
   const pictured = preview.kind === "image" || preview.kind === "media";
-  const downloadable = entries.some(canDownload);
+  const download = entries.some(canDownload) ? () => onDownload(entries) : undefined;
   // What the entries offer besides the download. A PC lists them under the details, the editor first; a
   // phone keeps the screen for the preview and puts them in the header's "…", beside the download.
   const editAction = entry !== null && kind === "file" && !pictured ? [{ label: t("sftp.editFile"), disabled: busy, run: () => onEdit(entry) }] : [];
@@ -146,30 +146,30 @@ export function SFTPDetailsDialog({
   ];
   const otherActions = [...editAction, ...entryActions];
 
-  return (
-    <ModalShell
-      labelledBy={headingId}
-      onDismiss={onClose}
-      {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
-      placement={mobileViewport ? "fullscreen" : "center"}
-      panelClassName={mobileViewport
-        ? "flex h-dvh w-full flex-col overflow-hidden rounded-none border-0! shadow-none"
-        : "flex h-[min(46rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg"}
-    >
-      <div className="flex items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
-        <h2 id={headingId} className="min-w-0 grow truncate text-sm font-medium">{heading}</h2>
-        <PreviewStepper position={stepPosition} count={stepCount} onStep={stepTo} />
-        {mobileViewport && downloadable ? <PreviewIconButton icon="download" label={t("sftp.download")} disabled={busy} onClick={() => onDownload(entries)} /> : null}
-        {mobileViewport && otherActions.length > 0 ? (
-          <ActionMenu label={t("sftp.selectedActions", { name: entry?.name ?? heading })}
-            items={otherActions.map(({ label, disabled, run }) => ({ label, disabled, onSelect: run }))}
-            triggerClassName="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink" />
-        ) : null}
-        <button type="button" className="text-xs text-ink-muted hover:text-ink" onClick={onClose}>{t("sftp.close")}</button>
-      </div>
+  const header = (
+    <FilePreviewHeader
+      headingId={headingId}
+      heading={entry === null ? windowName : entry.name}
+      {...(entry === null ? {} : { path: entry.path })}
+      accessibleName={windowName}
+      position={stepPosition}
+      count={stepCount}
+      onStep={stepTo}
+      onDownload={download}
+      downloadDisabled={busy}
+      menu={mobileViewport && otherActions.length > 0 ? {
+        label: t("sftp.selectedActions", { name: entry?.name ?? windowName }),
+        items: otherActions.map(({ label, disabled, run }) => ({ label, disabled, onSelect: run })),
+      } : undefined}
+      overlay={overlay}
+      onClose={onClose}
+    />
+  );
 
+  return (
+    <FilePreviewFrame headingId={headingId} header={header} overlay={overlay} onDismiss={onClose} returnFocusRef={returnFocusRef}>
       <div className={mobileViewport ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_18rem] overflow-hidden"}>
-        <div role="group" className={`min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain ${mobileViewport && pictured ? "bg-black" : "bg-surface-subtle p-3"}`} aria-label={t("sftp.preview")}>
+        <FilePreviewArea overlay={overlay}>
           {entry === null ? (
             <ul className="space-y-1 text-xs" aria-label={t("sftp.selectedItems")}>
               {entries.map((item) => (
@@ -177,22 +177,21 @@ export function SFTPDetailsDialog({
               ))}
             </ul>
           ) : preview.kind !== "idle" ? (
-            <FilePreviewBody preview={preview} path={entry.path} name={entry.name} onSwipe={onSwipe} />
+            <FilePreviewBody preview={preview} path={entry.path} name={entry.name} onDownload={busy ? undefined : download} onSwipe={onSwipe} />
           ) : (
             <p className="text-sm text-ink-muted">{t(entryTypeLabelKeys[entry.type])}</p>
           )}
-        </div>
+        </FilePreviewArea>
 
         {mobileViewport ? <details className="min-h-0 shrink-0 overflow-auto border-t border-line"><DisclosureSummary className="px-3 py-3 text-sm text-ink-muted">{t("sftp.properties")}</DisclosureSummary><div className="max-h-40 overflow-auto">{properties}</div></details> : properties}
       </div>
 
-      {mobileViewport ? null : (
+      {mobileViewport || otherActions.length === 0 ? null : (
         <div className="flex flex-wrap justify-end gap-2 border-t border-line px-3 py-2">
           {editAction.map(({ label, disabled, run }) => <Button key={label} disabled={disabled} onClick={run}>{label}</Button>)}
-          {downloadable ? <Button disabled={busy} onClick={() => onDownload(entries)}>{t("sftp.download")}</Button> : null}
           {entryActions.map(({ label, disabled, run }) => <Button key={label} disabled={disabled} onClick={run}>{label}</Button>)}
         </div>
       )}
-    </ModalShell>
+    </FilePreviewFrame>
   );
 }

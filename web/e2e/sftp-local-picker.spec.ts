@@ -72,7 +72,7 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await expect(draftRow).not.toContainText("-rw-r--r--");
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-mobile-pane-ja.png`, fullPage: true });
   await first.getByRole("button", { name: "フォルダ操作" }).click();
-  await expect(page.getByRole("dialog", { name: "フォルダ操作" }).getByRole("menuitem", { name: "ホームディレクトリ" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "フォルダ操作" }).getByRole("menuitem", { name: "新規フォルダ" })).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-mobile-ja.png`, fullPage: true });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 });

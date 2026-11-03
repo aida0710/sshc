@@ -24,7 +24,7 @@ export function FilePreviewBody({ preview, path, name, onDownload, onSwipe }: {
   preview: FilePreviewState;
   path: string;
   name: string;
-  onDownload?: () => void;
+  onDownload?: (() => void) | undefined;
   onSwipe?: (swipe: PreviewSwipe) => void;
 }) {
   switch (preview.kind) {

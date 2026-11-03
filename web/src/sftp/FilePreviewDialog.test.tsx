@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -71,6 +71,15 @@ describe("FilePreviewDialog", () => {
     expect(editor.textContent).toBe(contents);
     expect(editor.dataset.path).toBe("/srv/plot.py");
     expect(editor.dataset.readOnly).toBe("true");
+  });
+
+  it("heads the window with the file's name and says which folder it is in", async () => {
+    vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
+    renderDialog("/srv/shots/IMG_20261103_120000_with_a_long_name.png");
+
+    const dialog = await screen.findByRole("dialog", { name: "/srv/shots/IMG_20261103_120000_with_a_long_name.png" });
+    expect(within(dialog).getByRole("heading", { level: 2 })).toHaveTextContent(/^IMG_20261103_120000_with_a_long_name\.png$/u);
+    expect(within(dialog).getByText("/srv/shots")).toBeVisible();
   });
 
   it("says a file of another type cannot be previewed and offers its download", async () => {

@@ -301,17 +301,34 @@ describe("SFTP tabs", () => {
     expect(add).toBeDisabled();
   });
 
-  it("compares two tabs of one pane from the section bar once both have a host", async () => {
+  it("offers no filter while a tab has nothing listed", async () => {
+    seedStoredPanes([{ tabs: [{ alias: "edge", path: "/var/log" }] }]);
+    render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
+    const tab = within(screen.getByRole("tabpanel"));
+    expect(tab.getByRole("button", { name: "Connect" })).toBeVisible();
+    expect(tab.queryByRole("searchbox", { name: "Filter entries" })).toBeNull();
+
+    await userEvent.click(tab.getByRole("button", { name: "Connect" }));
+    expect(await tab.findByRole("searchbox", { name: "Filter entries" })).toBeVisible();
+  });
+
+  it("offers to compare two tabs of one pane only once both hold a connection", async () => {
     seedStoredPanes([{ tabs: [{ alias: "edge", path: "/var/log" }, { alias: "", path: "" }] }]);
     render(<SFTPWorkspace title="SFTP" aliases={["edge", "mirage"]} />);
-    const compare = screen.getByRole("button", { name: "Compare directories" });
+    const compareButton = () => screen.queryByRole("button", { name: "Compare directories" });
     expect(screen.getByRole("heading", { name: "SFTP" })).toBeVisible();
-    expect(compare).toBeDisabled();
+    expect(compareButton()).toBeNull();
 
     await userEvent.click(screen.getByRole("tab", { name: "New tab" }));
     await chooseHost("mirage");
-    expect(compare).toBeEnabled();
-    await userEvent.click(compare);
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("mirage", "", connecting));
+    expect(compareButton()).toBeNull();
+
+    await userEvent.click(screen.getByRole("tab", { name: "edge:log" }));
+    expect(compareButton()).toBeNull();
+    await userEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Connect" }));
+    await waitFor(() => expect(compareButton()).toBeInTheDocument());
+    await userEvent.click(compareButton()!);
     expect(await screen.findByRole("dialog", { name: "Choose tabs to compare" })).toBeVisible();
   });
 
@@ -373,7 +390,7 @@ describe("SFTP tabs", () => {
       .toHaveAttribute("data-value", localHostAlias);
   });
 
-  it("enables directory comparison between a local tab and a remote tab", async () => {
+  it("offers to compare a local tab and a remote tab once the remote one is connected", async () => {
     seedStoredPanes([
       { tabs: [{ alias: localHostAlias, path: "/home/alice" }] },
       { tabs: [{ alias: "edge", path: "/srv" }] },
@@ -382,8 +399,11 @@ describe("SFTP tabs", () => {
     render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
 
     await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("/home/alice"));
-    expect(screen.getByRole("button", { name: "Compare directories" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Compare directories" })).toBeNull();
     expect(api.list).not.toHaveBeenCalled();
+
+    await userEvent.click(within(screen.getByLabelText("Second remote pane")).getByRole("button", { name: "Connect" }));
+    expect(await screen.findByRole("button", { name: "Compare directories" })).toBeEnabled();
   });
 
   it("uses the same back, forward, home, root and refresh controls for Local", async () => {
@@ -917,7 +937,7 @@ describe("SFTP tabs", () => {
       expect(screen.getByLabelText("First remote pane")).toBeVisible();
       expect(screen.getByLabelText("Second remote pane")).not.toBeVisible();
       expect(screen.queryByRole("separator", { name: "Resize the panes" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Compare directories" })).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Compare directories" })).toBeNull();
       expect(storedPanes()).toHaveLength(2);
       const tabs = screen.getByRole("tablist", { name: "File tabs" });
       await userEvent.click(within(tabs).getByRole("tab", { name: "mirage:srv" }));
