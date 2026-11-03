@@ -1,4 +1,5 @@
 import type { TerminalSession } from "../api/terminalSessions";
+import { isDirectDestination } from "../connections/directDestination";
 import type { Translate } from "../i18n/context";
 
 export function terminalDisplayTitle(session: TerminalSession): string {
@@ -11,4 +12,11 @@ export function terminalDisplayTitle(session: TerminalSession): string {
 export function terminalSubtitle(session: TerminalSession, translate?: Translate): string {
   if (session.kind === "ssh") return session.alias ?? session.title;
   return translate === undefined ? "localhost" : translate("terminal.localhost");
+}
+
+// savedConnectionOf is the connection name an SSH session was opened with. A session opened on a user@host[:port] has
+// none, so nothing can be read or saved through a connection for it (SFTP, a port forward kept in its Host block).
+export function savedConnectionOf(session: Pick<TerminalSession, "kind" | "alias">): string | undefined {
+  if (session.kind !== "ssh" || session.alias === undefined || isDirectDestination(session.alias)) return undefined;
+  return session.alias;
 }

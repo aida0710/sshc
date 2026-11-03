@@ -79,6 +79,14 @@ type TerminalHandlers struct {
 	// ResolveTarget は、alias をこのエンジンの SSH の設定で解決する。繋ぎには行かない。
 	// nil なら行き先の受け口は alias_unresolvable で断る。
 	ResolveTarget func(alias string) (sshclient.Target, error)
+	// TypedPasswords は、ターミナルで打ったパスワードを保存するかの答えを受け取る。
+	TypedPasswords TypedPasswordAnswers
+}
+
+// TypedPasswordAnswers は、ターミナルで打ったパスワードを保存するかの答えを受け取る先である。
+type TypedPasswordAnswers interface {
+	SaveTypedPassword(typed terminal.TypedPassword) error
+	DeclineTypedPassword(typed terminal.TypedPassword) error
 }
 
 func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
@@ -94,6 +102,7 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.POST("/api/v1/terminal/sessions/:id/reconnect", handlers.Reconnect)
 	engine.POST("/api/v1/terminal/sessions/:id/reconnect/stop", handlers.StopReconnecting)
 	engine.POST("/api/v1/terminal/sessions/:id/host-key", handlers.AnswerHostKey)
+	engine.POST("/api/v1/terminal/sessions/:id/password-save", handlers.AnswerPasswordSave)
 	engine.POST("/api/v1/terminal/sessions/:id/forwards", handlers.StartForward)
 	engine.DELETE("/api/v1/terminal/sessions/:id/forwards/:forwardId", handlers.StopForward)
 	engine.GET("/api/v1/terminal/sessions/:id/control", handlers.Control)
@@ -176,6 +185,9 @@ func describeSession(view terminal.View) api.TerminalSession {
 	}
 	if view.AwaitingPrompt {
 		described.AwaitingPrompt = &view.AwaitingPrompt
+	}
+	if view.PasswordSaveQuestion {
+		described.PasswordSaveQuestion = &view.PasswordSaveQuestion
 	}
 	if view.ProgramProgress != nil {
 		var progress any
@@ -342,8 +354,9 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 	opening := terminalopen.Request{
 		Kind: kind, ShellProfile: request.ProfileId, WorkingDirectory: request.Cwd, Workspace: workspace, Size: size,
 	}
-	if request.Alias != nil {
-		opening.Alias = *request.Alias
+	opening.Alias, err = openingTarget(request)
+	if err != nil {
+		return h.startProblem(c, err)
 	}
 	session, err := h.opener().Open(c.Request().Context(), opening)
 	if err != nil {
@@ -359,6 +372,23 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 	return c.JSON(http.StatusCreated, api.OpenTerminalSessionResponse{
 		Session: describeSession(session.View()), StreamTicket: ticket,
 	})
+}
+
+// openingTarget は、要求が開く先を返す。接続名は接続名の検証だけを、保存していない接続先はその形の
+// 検証だけを通す。どちらかひとつしか受け付けない。どちらも無ければ空を返し、開く側が要るかを決める。
+func openingTarget(request api.OpenTerminalSessionRequest) (string, error) {
+	switch {
+	case request.Alias != nil && request.Destination != nil:
+		return "", validate.ErrUnsafeAlias
+	case request.Destination != nil:
+		if _, direct := validate.ParseDirectDestination(*request.Destination); !direct {
+			return "", validate.ErrUnsafeAlias
+		}
+		return *request.Destination, nil
+	case request.Alias != nil:
+		return *request.Alias, validate.Alias(*request.Alias)
+	}
+	return "", nil
 }
 
 // SetTitle は、利用者が付けた名前で一覧とペインの表示名を固定する。title が null なら
@@ -567,6 +597,50 @@ func (h TerminalHandlers) AnswerHostKey(c *echo.Context) error {
 		return unexpectedProblem(c, "terminal_host_key_answer_failed", err)
 	}
 	return c.JSON(http.StatusOK, h.list())
+}
+
+// AnswerPasswordSave は、ターミナルで打ったパスワードを Vault に保存するかの問いに答える。
+// もう待っていなければ 409 を返す。保存できなかったときは問いを開いたままにする。
+func (h TerminalHandlers) AnswerPasswordSave(c *echo.Context) error {
+	id, ok := sessionIDParam(c)
+	if !ok {
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	}
+	answer, ok := decodePasswordSaveAnswer(c)
+	if !ok {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	err := h.Registry.AnswerPasswordSave(id, func(typed terminal.TypedPassword) error {
+		if answer.Save {
+			return h.TypedPasswords.SaveTypedPassword(typed)
+		}
+		return h.TypedPasswords.DeclineTypedPassword(typed)
+	})
+	switch {
+	case errors.Is(err, terminal.ErrNotFound):
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	case errors.Is(err, terminal.ErrNoPasswordSaveQuestion):
+		return problem(c, http.StatusConflict, "terminal_no_password_save_question")
+	case err != nil:
+		return connectionProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, h.list())
+}
+
+// decodePasswordSaveAnswer は、問いへの答えを読む。形が違えば false を返す。save を省いた答えを
+// 「保存しない」と読まない。
+func decodePasswordSaveAnswer(c *echo.Context) (api.TerminalPasswordSaveAnswer, bool) {
+	var request struct {
+		Save json.RawMessage `json:"save"`
+	}
+	if err := decodeJSON(c, &request); err != nil || len(request.Save) == 0 {
+		return api.TerminalPasswordSaveAnswer{}, false
+	}
+	var answer api.TerminalPasswordSaveAnswer
+	if json.Unmarshal(request.Save, &answer.Save) != nil {
+		return api.TerminalPasswordSaveAnswer{}, false
+	}
+	return answer, true
 }
 
 // Close は、利用者が閉じたセッションを一覧から消す。生きていれば、終わるのを

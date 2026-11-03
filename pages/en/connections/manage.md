@@ -11,7 +11,7 @@ Connections uses a group tree, a host list, and a detail pane. Drag the column d
 
 ## Find a connection
 
-The default order is by name. Search matches alias, address, user, and group. Command search (`Ctrl/Cmd+K`) searches hosts, remote files, Snippets, and settings across the app. A host result menu opens its details directly.
+The default order is by name. Search matches alias, address, user, and group. Command search (`Ctrl/Cmd+K`) searches hosts, remote files, Snippets, and settings across the app. A host result menu opens its details directly. Type `user@host[:port]` to connect without saving, or to save it as a connection and connect.
 
 Home Quick Connect prioritizes recently connected hosts, then sorts unused entries by name. Panel/list preference is saved in the browser.
 
@@ -38,6 +38,8 @@ On narrow screens, press Select above the list or long-press a connection, then 
 A move or delete of several connections is saved as one change. If any of the affected files changed elsewhere, nothing is written.
 
 ## Create, duplicate, and rename
+
+Leave **Connection name** empty on a new connection to take it from the host name (`10.0.0.5` becomes `10-0-0-5`, `web.example.com` becomes `web`), with a number added if that name is taken. **Connect through** chooses the jump host. A group whose defaults name one passes it on by default; **None (connect directly)** opts out.
 
 Aliases are unique. Create, duplicate, and rename operations are rejected before writing if the target alias already exists.
 

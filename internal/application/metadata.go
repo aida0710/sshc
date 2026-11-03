@@ -73,6 +73,9 @@ type HostMetadata struct {
 	// 空ならVPNを通らない。ssh_configには書かない。OpenSSHが解釈する語では
 	// なく、sshcだけが持つ紐付けだからである。
 	VPN string `json:"vpn,omitempty"`
+	// PasswordSaveDeclinedBinding は、ターミナルで打ったパスワードを Vault に保存しないと答えた
+	// ときの認証先の digest である（AuthenticationBinding）。同じ認証先には二度と尋ねない。engine が書く。
+	PasswordSaveDeclinedBinding string `json:"passwordSaveDeclinedBinding,omitempty"`
 }
 
 // TerminalAppearance は、端末の見た目の選択である。

@@ -3,13 +3,16 @@ import type { HostEntry } from "../api/config";
 import { recentConnectionsApi, type RecentConnection } from "../api/recentConnections";
 import { useLanguage } from "../i18n/context";
 import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
+import { parseDirectDestination } from "../connections/directDestination";
 import { Icon } from "../ui/icons";
 import { formatDateTime } from "../ui/format";
 import { ModalShell } from "../ui/ModalShell";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { iconAction } from "../ui/form";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { isImeComposing } from "../ui/imeComposition";
 import { literalTextEntry } from "../ui/softKeyboard";
+import type { DirectDestinationActions } from "./useDirectDestinationActions";
 
 type HostChoice = { alias: string; group: string; hostName: string; user: string };
 
@@ -22,7 +25,7 @@ type RowProps = {
   key: string;
   name: string;
   detail: string;
-  icon: "home" | "terminal";
+  icon: "home" | "terminal" | "plus";
   current: boolean;
   label?: string;
   choose: () => void;
@@ -53,6 +56,7 @@ export function HostPickerDialog({
   loadRecent = loadDefaultRecent,
   initialFocus,
   returnFocusRef,
+  direct,
   onChoose,
   onChooseLocal,
   onClose,
@@ -68,6 +72,8 @@ export function HostPickerDialog({
   // phone, where focusing the search would raise the keyboard over the list the person came to pick from.
   initialFocus?: "search" | "close";
   returnFocusRef?: RefObject<HTMLElement | null>;
+  // direct lets the search take user@host[:port] as well as find a connection. Left out, it only finds one.
+  direct?: DirectDestinationActions | undefined;
   onChoose: (alias: string) => void;
   onChooseLocal?: (id: string) => void;
   onClose: () => void;
@@ -83,6 +89,7 @@ export function HostPickerDialog({
   const available = useMemo(() => hostChoices(aliases, hosts), [aliases, hosts]);
   const byAlias = useMemo(() => new Map(available.map((host) => [host.alias, host])), [available]);
   const normalized = normalizeHostQuery(query);
+  const destination = direct === undefined ? null : parseDirectDestination(query);
   const localMatches = local.filter((choice) => normalized === "" ||
     [choice.label, choice.detail, "local"].some((field) => field.toLocaleLowerCase().includes(normalized)));
   const matches = available.filter((host) => hostMatchesQuery(host, normalized));
@@ -129,6 +136,11 @@ export function HostPickerDialog({
     key: host.alias, name: host.alias, detail: detail || host.hostName, icon: "terminal",
     current: host.alias === value, choose: () => onChoose(host.alias),
   });
+  const connectDirectly = () => {
+    if (direct === undefined || destination === null) return;
+    direct.connect(destination);
+    setQuery("");
+  };
   const localRow = (choice: LocalChoice) => row({
     key: `local:${choice.id}`, name: choice.label, detail: choice.detail, icon: "home",
     current: choice.current === true, label: `${choice.label}, ${choice.detail}`,
@@ -168,7 +180,11 @@ export function HostPickerDialog({
             aria-label={t("sftp.searchHosts")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={t("sftp.searchHostsPlaceholder")}
+            // Enter takes the first thing offered only for a destination: a search is still being narrowed.
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !isImeComposing(event)) connectDirectly();
+            }}
+            placeholder={t(direct === undefined ? "sftp.searchHostsPlaceholder" : "terminal.newSessionSearch")}
             className="w-full rounded-md border border-control-line bg-control py-2 pl-9 pr-3 text-sm"
           />
         </label>
@@ -201,10 +217,23 @@ export function HostPickerDialog({
         ) : null}
       </div>
       <div className="min-h-0 overflow-y-auto p-2">
+        {direct === undefined || destination === null ? null : (
+          <div className={localMatches.length + matches.length === 0 ? "" : "mb-2 border-b border-line pb-2"}>
+            {row({
+              key: "direct:connect", name: t("directDestination.connect"),
+              detail: t("directDestination.connectDetail"), icon: "terminal", current: false, choose: connectDirectly,
+            })}
+            {direct.saveAndConnect === undefined ? null : row({
+              key: "direct:save", name: t("directDestination.saveAndConnect"),
+              detail: t("directDestination.saveAndConnectDetail", { alias: direct.aliasFor(destination) }), icon: "plus", current: false,
+              choose: () => direct.saveAndConnect?.(destination),
+            })}
+          </div>
+        )}
         {localMatches.length > 0 ? <div className="mb-2 border-b border-line pb-2">{localMatches.map(localRow)}</div> : null}
         {normalized !== "" ? (
           matches.length === 0 && localMatches.length === 0 ? (
-            <p className="p-4 text-center text-sm text-ink-muted">{t("sftp.noHostMatches")}</p>
+            destination === null ? <p className="p-4 text-center text-sm text-ink-muted">{t("sftp.noHostMatches")}</p> : null
           ) : matches.map((host) => hostRow(host, host.group || host.hostName))
         ) : view === "recent" && recentChoices.length > 0 ? (
           <section aria-labelledby="host-picker-recent-heading">

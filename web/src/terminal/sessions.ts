@@ -16,7 +16,7 @@ export const sessionListPollIntervalMs = 2_000;
 export type TerminalSessionsApi = Pick<
   SessionsApi,
   "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "setTerminalSessionTitle"
-  | "stopTerminalReconnect" | "answerTerminalHostKey" | "moveTerminalSession"
+  | "stopTerminalReconnect" | "answerTerminalHostKey" | "answerTerminalPasswordSave" | "moveTerminalSession"
 >;
 
 export type TerminalSessionsState = {
@@ -45,6 +45,9 @@ export type TerminalSessionsState = {
   stopReconnect: (id: string) => Promise<boolean>;
   // answerHostKey answers whether to trust the key a connecting session asks about (its hostKeyQuestion).
   answerHostKey: (id: string, fingerprint: string, accept: boolean) => Promise<boolean>;
+  // answerPasswordSave answers whether to save the password typed for this session (its passwordSaveQuestion). It says
+  // false when the answer could not be stored, and the question stays open.
+  answerPasswordSave: (id: string, save: boolean) => Promise<boolean>;
   close: (id: string) => Promise<void>;
   closeAll: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -283,6 +286,19 @@ export function useTerminalSessions(
     [api, applyMutation, refresh, reportConnectionFailure],
   );
 
+  const answerPasswordSave = useCallback(
+    async (id: string, save: boolean): Promise<boolean> => {
+      let answered = true;
+      await applyMutation(() => api.answerTerminalPasswordSave(id, { save }), async (error) => {
+        // The question was over first (its time passed, or another screen answered it); the list says so.
+        answered = failureCode(error) === "terminal_no_password_save_question";
+        await refresh();
+      });
+      return answered;
+    },
+    [api, applyMutation, refresh],
+  );
+
   const closeAll = useCallback(async () => {
     beginOperation();
     try {
@@ -343,7 +359,7 @@ export function useTerminalSessions(
   return {
     sessions: loaded ? sessions : noSessions,
     maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
-    rename, unpinTitle, open, reconnect, stopReconnect, answerHostKey, close, closeAll, refresh, markExited, moveToWorkspace,
+    rename, unpinTitle, open, reconnect, stopReconnect, answerHostKey, answerPasswordSave, close, closeAll, refresh, markExited, moveToWorkspace,
   };
 }
 

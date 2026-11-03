@@ -42,6 +42,8 @@ type Session struct {
 	size     terminal.Size
 	closers  []io.Closer
 	progress terminal.ConnectionProgress
+	// passwordSave は、Vault に保存するかの答えを待っている、打ったパスワードである。無ければ nil。
+	passwordSave *passwordSaveOffer
 	// ptyReady は、リモートが pty-req を受け入れたかどうか。remote はチャンネルが
 	// 開いた時点で入るが、PTY が無い間の window-change を OpenSSH の sshd は
 	// 後から来る pty-req の寸法で上書きする。それまでは寸法を覚えるだけにする。
@@ -331,6 +333,7 @@ func (s *Session) finish(info terminal.ExitInfo) {
 		s.mutex.Lock()
 		s.exit = info
 		s.mutex.Unlock()
+		s.ForgetTypedPassword()
 		close(s.done)
 	})
 }

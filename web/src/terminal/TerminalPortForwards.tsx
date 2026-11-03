@@ -5,7 +5,7 @@ import { terminalSessionsApi, type TerminalForward, type TerminalSession, type T
 import { useTranslate } from "../i18n/context";
 import { forwardDirective, forwardHintKeys, validForwardDestination, validForwardPort, type PortForwardKind } from "../forwarding/portForwarding";
 import { describeForwardProblem, forwardProblemIsSpecific } from "./forwardProblem";
-import { terminalSubtitle } from "./terminalPresentation";
+import { savedConnectionOf, terminalSubtitle } from "./terminalPresentation";
 import { clipboard } from "../ui/clipboard";
 import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
@@ -45,7 +45,7 @@ export function TerminalPortForwards({
 
   useEffect(() => setForwards(session.forwards ?? []), [session.forwards]);
   const connected = session.state === "connected";
-  const canSave = session.alias !== undefined && session.alias !== "";
+  const canSave = savedConnectionOf(session) !== undefined;
   const listenError = listenPort === "" || validForwardPort(listenPort) ? "" : t("conn.forwardInvalidPort");
   const destinationError = kind === "dynamic" || destination === "" || validForwardDestination(destination)
     ? ""

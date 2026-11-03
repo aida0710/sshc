@@ -397,6 +397,9 @@ func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.Cre
 	if wire.User != nil {
 		request.User = *wire.User
 	}
+	if wire.ProxyJump != nil {
+		request.ProxyJump = *wire.ProxyJump
+	}
 
 	var tagged struct {
 		Kind string `json:"kind"`
@@ -443,6 +446,12 @@ func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.Cre
 		request.Authentication = application.CreateAuthentication{
 			Kind: application.CreateAuthenticationIdentityFile, KeyID: authentication.KeyId,
 		}
+	case string(application.CreateAuthenticationAskOnConnect):
+		var authentication api.CreateAskOnConnectAuthentication
+		if err := decodeConnectionAuthentication(wire.Authentication, &authentication); err != nil {
+			return application.CreateConnectionRequest{}, errInvalidEdit
+		}
+		request.Authentication = application.CreateAuthentication{Kind: application.CreateAuthenticationAskOnConnect}
 	default:
 		return application.CreateConnectionRequest{}, errInvalidEdit
 	}
@@ -482,6 +491,8 @@ func connectionProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusUnprocessableEntity, "password_ineligible")
 	case errors.Is(err, application.ErrInvalidIdentityFile):
 		return problem(c, http.StatusUnprocessableEntity, "identity_file_invalid")
+	case errors.Is(err, application.ErrInvalidProxyJump):
+		return problem(c, http.StatusUnprocessableEntity, "proxy_jump_invalid")
 	case errors.Is(err, keys.ErrWrongPassphrase):
 		return problem(c, http.StatusForbidden, "wrong_passphrase")
 	case errors.Is(err, keys.ErrKeyChanged):

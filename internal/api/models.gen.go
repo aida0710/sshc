@@ -883,6 +883,11 @@ type ConnectionStringSet struct {
 	Value  string `json:"value"`
 }
 
+// CreateAskOnConnectAuthentication defines model for CreateAskOnConnectAuthentication.
+type CreateAskOnConnectAuthentication struct {
+	Kind string `json:"kind"`
+}
+
 // CreateConnectionAuthentication defines model for CreateConnectionAuthentication.
 type CreateConnectionAuthentication = json.RawMessage
 
@@ -893,6 +898,7 @@ type CreateConnectionRequest struct {
 	Group          *string                        `json:"group,omitempty"`
 	HostName       string                         `json:"hostName"`
 	Port           *int                           `json:"port,omitempty"`
+	ProxyJump      *string                        `json:"proxyJump,omitempty"`
 	User           *string                        `json:"user,omitempty"`
 }
 
@@ -1253,6 +1259,7 @@ type OpenTerminalSessionRequest struct {
 	Alias       *string                        `json:"alias,omitempty"`
 	Cols        *int                           `json:"cols,omitempty"`
 	Cwd         *string                        `json:"cwd,omitempty"`
+	Destination *string                        `json:"destination,omitempty"`
 	Kind        OpenTerminalSessionRequestKind `json:"kind"`
 	ProfileId   *string                        `json:"profileId,omitempty"`
 	Rows        *int                           `json:"rows,omitempty"`
@@ -2255,6 +2262,11 @@ type TerminalNotification struct {
 	Title           string                   `json:"title"`
 }
 
+// TerminalPasswordSaveAnswer defines model for TerminalPasswordSaveAnswer.
+type TerminalPasswordSaveAnswer struct {
+	Save bool `json:"save"`
+}
+
 // TerminalPresentation defines model for TerminalPresentation.
 type TerminalPresentation struct {
 	DisplayTitle string                          `json:"displayTitle"`
@@ -2318,27 +2330,28 @@ type TerminalRestoreSessionKind string
 
 // TerminalSession defines model for TerminalSession.
 type TerminalSession struct {
-	Alias               *string                     `json:"alias,omitempty"`
-	AwaitingPrompt      *bool                       `json:"awaitingPrompt,omitempty"`
-	Exited              *TerminalExit               `json:"exited,omitempty"`
-	Forwards            *[]TerminalForward          `json:"forwards,omitempty"`
-	HostKeyQuestion     *TerminalHostKeyQuestion    `json:"hostKeyQuestion,omitempty"`
-	Id                  string                      `json:"id"`
-	Kind                TerminalSessionKind         `json:"kind"`
-	LastNotification    *TerminalNotification       `json:"lastNotification,omitempty"`
-	NotificationVersion *int                        `json:"notificationVersion,omitempty"`
-	Presentation        *TerminalPresentation       `json:"presentation,omitempty"`
-	Problem             string                      `json:"problem"`
-	ProgramProgress     *TerminalProgramProgress    `json:"programProgress,omitempty"`
-	ProgramStatus       *TerminalProgramStatus      `json:"programStatus,omitempty"`
-	Progress            *TerminalConnectionProgress `json:"progress,omitempty"`
-	Reconnect           *TerminalReconnect          `json:"reconnect,omitempty"`
-	ShellProfileId      *string                     `json:"shellProfileId,omitempty"`
-	StartedAt           string                      `json:"startedAt"`
-	State               TerminalSessionState        `json:"state"`
-	Title               string                      `json:"title"`
-	WorkingDirectory    *string                     `json:"workingDirectory,omitempty"`
-	WorkspaceId         string                      `json:"workspaceId"`
+	Alias                *string                     `json:"alias,omitempty"`
+	AwaitingPrompt       *bool                       `json:"awaitingPrompt,omitempty"`
+	Exited               *TerminalExit               `json:"exited,omitempty"`
+	Forwards             *[]TerminalForward          `json:"forwards,omitempty"`
+	HostKeyQuestion      *TerminalHostKeyQuestion    `json:"hostKeyQuestion,omitempty"`
+	Id                   string                      `json:"id"`
+	Kind                 TerminalSessionKind         `json:"kind"`
+	LastNotification     *TerminalNotification       `json:"lastNotification,omitempty"`
+	NotificationVersion  *int                        `json:"notificationVersion,omitempty"`
+	PasswordSaveQuestion *bool                       `json:"passwordSaveQuestion,omitempty"`
+	Presentation         *TerminalPresentation       `json:"presentation,omitempty"`
+	Problem              string                      `json:"problem"`
+	ProgramProgress      *TerminalProgramProgress    `json:"programProgress,omitempty"`
+	ProgramStatus        *TerminalProgramStatus      `json:"programStatus,omitempty"`
+	Progress             *TerminalConnectionProgress `json:"progress,omitempty"`
+	Reconnect            *TerminalReconnect          `json:"reconnect,omitempty"`
+	ShellProfileId       *string                     `json:"shellProfileId,omitempty"`
+	StartedAt            string                      `json:"startedAt"`
+	State                TerminalSessionState        `json:"state"`
+	Title                string                      `json:"title"`
+	WorkingDirectory     *string                     `json:"workingDirectory,omitempty"`
+	WorkspaceId          string                      `json:"workspaceId"`
 }
 
 // TerminalSessionKind defines model for TerminalSession.Kind.

@@ -12,6 +12,7 @@ import { WorkspaceTree } from "../terminal/WorkspaceTree";
 import type { TerminalWorkspacesState } from "../terminal/useTerminalWorkspaces";
 import { UpdateBadge } from "./UpdateBadge";
 import { RunTargetSwitcher } from "./RunTargetSwitcher";
+import type { DirectDestinationActions } from "./useDirectDestinationActions";
 import type { RunTargetsState } from "../terminal/useRunTargets";
 import { Icon, type IconName } from "../ui/icons";
 import { BrandMark } from "../ui/BrandMark";
@@ -67,6 +68,7 @@ export function AppNavigation({
   aliases = [],
   hosts = [],
   onConnect,
+  directDestination,
   onOpenCommandPalette,
   sessionShortcut = null,
 }: {
@@ -102,6 +104,7 @@ export function AppNavigation({
   aliases?: string[];
   hosts?: HostEntry[];
   onConnect?: (alias: string, workspaceId: string) => void;
+  directDestination?: DirectDestinationActions | undefined;
   onOpenCommandPalette: () => void;
   // sessionShortcut is the last new session or close session shortcut, for the session list to answer.
   sessionShortcut?: SessionShortcutRequest | null;
@@ -221,6 +224,7 @@ export function AppNavigation({
           aliases={aliases}
           hosts={hosts}
           {...(onConnect === undefined ? {} : { onConnect })}
+          directDestination={directDestination}
           runTarget={runTargets.selected}
           sessionShortcut={sessionShortcut}
         />

@@ -6,7 +6,7 @@ import type { Section } from "../routing/sectionRoute";
 import type { InspectorContent } from "../ui/Inspector";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type { PasswordVaultStatus } from "../api/vault";
-import type { HostEntry } from "../api/config";
+import type { HostEntry, Overview } from "../api/config";
 
 
 export type Navigation = {
@@ -45,6 +45,8 @@ export type Shell = {
   onShowSession: (id: string) => void;
   // onOpenSSHSession は、接続を開いてからそのターミナルを表示する。cwd は開始位置である。
   onOpenSSHSession: (alias: string, cwd?: string) => Promise<void>;
+  // onOverviewRead hands over what a section read after changing the connections, for the searches outside it.
+  onOverviewRead: (overview: Overview) => void;
   // onOpenLocalShell は、ローカルシェルを開いてそのターミナルを表示する。
   onOpenLocalShell: () => void;
   // onAddConnection は、新しい接続の入力を開いた Connections へ移る。

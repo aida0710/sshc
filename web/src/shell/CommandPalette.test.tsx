@@ -219,4 +219,36 @@ describe("CommandPalette", () => {
     expect(onOpenSession).toHaveBeenCalledWith("second");
   });
 
+
+  it("leads with connecting to a user@host typed into the search, and saving it first", async () => {
+    const direct = { connect: vi.fn(), saveAndConnect: vi.fn(), aliasFor: () => "web" };
+    const props = renderPalette({ direct });
+    const input = screen.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" });
+    await userEvent.type(input, "deploy@web.example.com");
+
+    const options = screen.getAllByRole("option");
+    expect(options[0]).toHaveTextContent(/^.*Connect.*Not saved to the config files$/);
+    expect(options[1]).toHaveTextContent("Save as a connection and connect");
+    expect(options[1]).toHaveTextContent("Connection name: web");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(direct.connect).toHaveBeenCalledOnce());
+    expect(direct.connect).toHaveBeenCalledWith(expect.objectContaining({ user: "deploy", host: "web.example.com" }));
+    expect(props.onClose).toHaveBeenCalled();
+  });
+
+  it("saves from the second row", async () => {
+    const direct = { connect: vi.fn(), saveAndConnect: vi.fn(), aliasFor: () => "web" };
+    renderPalette({ direct });
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" }), "deploy@web.example.com");
+    await userEvent.click(screen.getByRole("option", { name: /Save as a connection and connect/ }));
+    await waitFor(() => expect(direct.saveAndConnect).toHaveBeenCalledOnce());
+    expect(direct.connect).not.toHaveBeenCalled();
+  });
+
+  it("leaves a search that is no destination to the results", async () => {
+    renderPalette({ direct: { connect: vi.fn(), saveAndConnect: vi.fn(), aliasFor: () => "web" } });
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" }), "nas");
+    expect(screen.queryByRole("option", { name: /Not saved to the config files/ })).toBeNull();
+    expect(screen.getByRole("option", { name: /Connect to nas/ })).toBeVisible();
+  });
 });

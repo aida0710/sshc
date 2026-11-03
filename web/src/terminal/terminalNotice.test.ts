@@ -50,6 +50,14 @@ describe("terminalNoticeFor", () => {
     expect(terminalNoticeFor(lost, live, true)?.kind).toBe("ended");
   });
 
+  it("asks about a typed password in a session that works, after what stops it working", () => {
+    const asking: TerminalSession = { ...session, passwordSaveQuestion: true };
+    expect(terminalNoticeFor(asking, live)?.kind).toBe("password-save");
+    expect(terminalNoticeFor(asking, { phase: "stopped", gone: false })?.kind).toBe("link-stopped");
+    expect(terminalNoticeFor({ ...asking, state: "reconnecting" }, live)?.kind).toBe("reconnecting");
+    expect(terminalNoticeFor(asking, live, true)?.kind).toBe("password-save");
+  });
+
   it("shows a card for the link to the engine only once it stopped retrying, and not for a session that is gone", () => {
     expect(terminalNoticeFor(session, { phase: "waiting", attempt: 2, seconds: 3 })).toBeNull();
     expect(terminalNoticeFor(session, { phase: "stopped", gone: false })?.kind).toBe("link-stopped");

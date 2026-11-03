@@ -48,7 +48,8 @@ type Auth struct {
 	// Stored は、その鍵について保存されているパスフレーズを返す。
 	//
 	// vault を見るのはここである。尋ねた結果は保存しない。保存は
-	// Secrets 画面の仕事であり、接続の途中で暗黙に永続化しない。
+	// Secrets 画面の仕事であり、接続の途中で暗黙に永続化しない。打ったパスワードを保存するのも、
+	// 認証が通ったあとに利用者が答えたときだけである（Dialer.OfferPasswordSave）。
 	Stored func(path string) (string, bool)
 	// Password は、その alias について保存されているアカウントパスワードを返す。
 	//
@@ -72,6 +73,9 @@ type Auth struct {
 	// ObserveCredential は、保存済み資格情報を認証質問へ使えたかを、秘密値を
 	// 渡さずに報告する。接続ログ専用であり、コードや質問への回答は含めない。
 	ObserveCredential func(target Target, event CredentialEvent, echoed bool)
+	// typedPasswords は、この接続の行き先で打ったパスワードを覚える。Dialer.connect が接続ごとの
+	// 複製に置く。nil なら覚えない。
+	typedPasswords *typedPasswordRecorder
 	// registerAgent is set on a per-handshake copy by methodsWithCleanup.
 	// Agent signers keep their socket alive, so the dialer must close it once
 	// authentication has completed or failed.
@@ -174,6 +178,9 @@ func (a Auth) password(target Target, prompt Prompter, stored storedCredentials)
 			a.trace.say(connectionlog.Detailed, "パスワードの入力を求めます。")
 		}
 		answer, err := prompt.Secret(prefix + "Password for " + authenticationTarget(target) + ": ")
+		if err == nil {
+			a.typedPasswords.note(target, answer)
+		}
 		return answer, stored.explainUnanswered(err)
 	}
 }
@@ -228,6 +235,11 @@ func (a Auth) keyboard(target Target, prompt Prompter, stored storedCredentials)
 			context: context, name: name, instruction: instruction, questions: questions, echos: echos,
 		}
 		answers, err := answerKeyboardChallenge(prompt, challenge, challengeAnswers{values: round.answers, answered: round.answered})
+		if err == nil {
+			if password, typed := round.typedPassword(answers); typed {
+				a.typedPasswords.note(target, password)
+			}
+		}
 		return answers, stored.explainUnanswered(err)
 	}
 }
@@ -323,6 +335,25 @@ func (round keyboardRound) storedPasswordQuestion() int {
 	return -1
 }
 
+// typedPassword は、利用者が打った答えのうち、アカウントのパスワードと言える値を返す。
+//
+// 「パスワード」と名乗る、画面に出さない問いが、まだ答えていないものの中にひとつだけあるときに
+// 限る。保存済みのパスワードを出すときより狭いのは、名乗らない問い（「Enter PIN:」など）への
+// 答えは一度きりのコードかもしれず、保存すると次の接続で使えない値を送るからである。
+func (round keyboardRound) typedPassword(answers []string) (string, bool) {
+	password, found := "", false
+	for index, question := range round.questions {
+		if round.answered[index] || !round.hidden(index) || round.asksTOTP[index] || !isPasswordQuestion(question) {
+			continue
+		}
+		if found {
+			return "", false
+		}
+		password, found = answers[index], true
+	}
+	return password, found
+}
+
 // hasOneHiddenNonTOTPQuestion は、問いがひとつで、画面に出さず、TOTPでもないかを返す。
 // 普通の Linux が keyboard-interactive でパスワードを聞く形である。
 func (round keyboardRound) hasOneHiddenNonTOTPQuestion() bool {
@@ -396,6 +427,8 @@ func (a Auth) publicKey(target Target, prompt Prompter) (ssh.AuthMethod, bool) {
 	}
 	return ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
 		a.observe("publickey")
+		// PreferredAuthentications で鍵を後ろに置いた接続は、断られたパスワードのあとで鍵で通る。
+		a.typedPasswords.forget(target)
 		return a.Signers(target, prompt)
 	}), true
 }

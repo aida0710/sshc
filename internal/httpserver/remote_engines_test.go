@@ -132,6 +132,7 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodPut, "/api/v1/engines/r100/terminal/sessions/abc/workspace", "r100 /api/v1/terminal/sessions/abc/workspace"},
 		{http.MethodPost, "/api/v1/engines/r100/terminal/sessions/abc/reconnect/stop", "r100 /api/v1/terminal/sessions/abc/reconnect/stop"},
 		{http.MethodPost, "/api/v1/engines/r100/terminal/sessions/abc/host-key", "r100 /api/v1/terminal/sessions/abc/host-key"},
+		{http.MethodPost, "/api/v1/engines/r100/terminal/sessions/abc/password-save", "r100 /api/v1/terminal/sessions/abc/password-save"},
 		{http.MethodPatch, "/api/v1/engines/r100/terminal/workspaces/w1", "r100 /api/v1/terminal/workspaces/w1"},
 		{http.MethodPut, "/api/v1/engines/r100/terminal/workspaces/w1/position", "r100 /api/v1/terminal/workspaces/w1/position"},
 		{http.MethodGet, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},

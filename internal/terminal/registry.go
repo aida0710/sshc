@@ -412,6 +412,15 @@ func (r *Registry) StopReconnecting(ctx context.Context, id string) error {
 	}
 }
 
+// AnswerPasswordSave は、セッションが尋ねている、打ったパスワードを保存するかの問いに答える。
+func (r *Registry) AnswerPasswordSave(id string, answer func(TypedPassword) error) error {
+	session, ok := r.Lookup(id)
+	if !ok {
+		return ErrNotFound
+	}
+	return session.AnswerPasswordSave(answer)
+}
+
 // AnswerHostKey は、接続中のセッションが待っている、known_hosts に無いホスト鍵の問いに答える。
 // 問いがその鍵についてのものでなくなっていれば ErrNoHostKeyQuestion を返す。
 func (r *Registry) AnswerHostKey(id, fingerprint string, accept bool) error {

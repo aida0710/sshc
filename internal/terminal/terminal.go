@@ -146,6 +146,26 @@ type HostKeyQuestioning interface {
 	AnswerHostKey(fingerprint string, accept bool) bool
 }
 
+// TypedPassword は、利用者がこのセッションのターミナルで打ち、認証が通ったアカウントの
+// パスワードである。Vault に保存するかの答えが出るまでエンジンのメモリにだけある。画面へも
+// ログへも出さない。一覧（View）は、問いがあることだけを言う。
+type TypedPassword struct {
+	Alias string
+	// Binding は、打ったときの認証先の digest（sshclient.Target.AuthenticationBinding）である。
+	// 答えるまでに接続先の設定が変わっていたら、別の相手のパスワードとして保存しない。
+	Binding  string
+	Password string
+}
+
+// PasswordSaveAsking is implemented by SSH processes that keep a password the
+// person typed until they answer whether to save it.
+type PasswordSaveAsking interface {
+	// TypedPassword returns the password waiting on the answer, if any.
+	TypedPassword() (TypedPassword, bool)
+	// ForgetTypedPassword lets go of it.
+	ForgetTypedPassword()
+}
+
 const (
 	ConnectionDialing        = "dialing"
 	ConnectionHostKey        = "host_key"
@@ -299,6 +319,9 @@ var (
 	// ErrReconnectUnavailable は、実行中または開き方を保持しないセッションの
 	// 明示再接続を拒否したことを報告する。
 	ErrReconnectUnavailable = errors.New("the terminal session cannot be reconnected")
+	// ErrNoPasswordSaveQuestion は、打ったパスワードを保存するかを尋ねていないセッションに
+	// 答えようとしたことを表す。
+	ErrNoPasswordSaveQuestion = errors.New("the terminal session is not asking about saving a password")
 	// ErrNoHostKeyQuestion は、その鍵についての問いを待っていないセッションに答えようとした
 	// ことを表す。答える前に、利用者がターミナルで答えたか、接続が先へ進んだか、終わった。
 	ErrNoHostKeyQuestion = errors.New("the terminal session is not asking about this host key")

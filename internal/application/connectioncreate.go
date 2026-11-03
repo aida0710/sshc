@@ -23,11 +23,14 @@ var (
 	ErrConnectionDestinationExists = errors.New("the connection destination file already exists")
 	ErrUnknownCreateAuthentication = errors.New("unknown connection authentication kind")
 	ErrConnectionChanged           = errors.New("connection authentication destination changed while saving")
+	// ErrInvalidProxyJump は、新しい接続の踏み台に、接続名でも none でもない値を渡したことを表す。
+	ErrInvalidProxyJump = errors.New("the jump host of a new connection must be a declared connection or none")
 )
 
 // CreateAuthenticationKind identifies the one source of authentication a new
 // connection uses. Passwords are written only to the encrypted vault; private
-// keys are represented in ssh_config by an IdentityFile directive.
+// keys are represented in ssh_config by an IdentityFile directive. A connection
+// that asks on connecting has neither, so the terminal asks for the password.
 type CreateAuthenticationKind string
 
 const (
@@ -35,7 +38,12 @@ const (
 	CreateAuthenticationSavedPassword     CreateAuthenticationKind = "saved_password"
 	CreateAuthenticationNewSharedPassword CreateAuthenticationKind = "new_shared_password"
 	CreateAuthenticationIdentityFile      CreateAuthenticationKind = "identity_file"
+	CreateAuthenticationAskOnConnect      CreateAuthenticationKind = "ask_on_connect"
 )
+
+// proxyJumpNone は、グループの既定の踏み台を受け継がず、直接接続する値である（ssh_config の
+// ProxyJump none）。
+const proxyJumpNone = "none"
 
 type CreateAuthentication struct {
 	Kind       CreateAuthenticationKind `json:"kind"`
@@ -45,11 +53,13 @@ type CreateAuthentication struct {
 }
 
 type CreateConnectionRequest struct {
-	Alias          string               `json:"alias"`
-	Group          string               `json:"group,omitempty"`
-	HostName       string               `json:"hostName"`
-	User           string               `json:"user,omitempty"`
-	Port           *int                 `json:"port,omitempty"`
+	Alias    string `json:"alias"`
+	Group    string `json:"group,omitempty"`
+	HostName string `json:"hostName"`
+	User     string `json:"user,omitempty"`
+	Port     *int   `json:"port,omitempty"`
+	// ProxyJump は、経由する接続先の接続名か proxyJumpNone である。空なら行を書かない。
+	ProxyJump      string               `json:"proxyJump,omitempty"`
 	Authentication CreateAuthentication `json:"authentication"`
 }
 
@@ -70,7 +80,7 @@ func (s *Service) CreateConnection(
 	}
 
 	switch request.Authentication.Kind {
-	case CreateAuthenticationIdentityFile:
+	case CreateAuthenticationIdentityFile, CreateAuthenticationAskOnConnect:
 		s.saveMutex.Lock()
 		defer s.saveMutex.Unlock()
 		prepared, identity, err := s.planCreateConnection(inventory, request)
@@ -180,11 +190,16 @@ func validateCreateConnectionRequest(request CreateConnectionRequest) error {
 	if err := validate.Port(port); err != nil {
 		return err
 	}
+	if request.ProxyJump != "" && request.ProxyJump != proxyJumpNone &&
+		(ValidateAlias(request.ProxyJump) != nil || request.ProxyJump == request.Alias) {
+		return ErrInvalidProxyJump
+	}
 	switch request.Authentication.Kind {
 	case CreateAuthenticationDedicatedPassword,
 		CreateAuthenticationSavedPassword,
 		CreateAuthenticationNewSharedPassword,
-		CreateAuthenticationIdentityFile:
+		CreateAuthenticationIdentityFile,
+		CreateAuthenticationAskOnConnect:
 		return nil
 	default:
 		return ErrUnknownCreateAuthentication
@@ -231,6 +246,9 @@ func (s *Service) planCreateConnection(
 	if err := refuseTakenAlias(graph, "", request.Alias); err != nil {
 		return planned{}, HostIdentity{}, err
 	}
+	if request.ProxyJump != "" && request.ProxyJump != proxyJumpNone && s.connectionIdentity(graph, request.ProxyJump).IsZero() {
+		return planned{}, HostIdentity{}, ErrInvalidProxyJump
+	}
 
 	port := 22
 	if request.Port != nil {
@@ -244,7 +262,8 @@ func (s *Service) planCreateConnection(
 		}
 	}
 	values := hostBlockValues{
-		alias: request.Alias, hostName: request.HostName, user: request.User, port: port, identityFile: identityFile,
+		alias: request.Alias, hostName: request.HostName, user: request.User, port: port,
+		proxyJump: request.ProxyJump, identityFile: identityFile,
 	}
 	block, err := createHostBlock(values, "\n")
 	if err != nil {
@@ -325,13 +344,15 @@ type hostBlockValues struct {
 	// user が空なら、User の行を書かない。
 	user string
 	port int
+	// proxyJump が空なら、ProxyJump の行を書かない。
+	proxyJump string
 	// identityFile が空なら、IdentityFile の行を書かない。
 	identityFile string
 }
 
 // createHostBlock は、values から Host ブロックを作る。行の終わりは ending にそろえる。
 func createHostBlock(values hostBlockValues, ending string) (*config.File, error) {
-	lines := make([]config.Line, 0, 5)
+	lines := make([]config.Line, 0, 6)
 	appendLine := func(indent, keyword string, arguments ...string) error {
 		line, err := buildLine(indent, keyword, arguments, ending)
 		if err != nil {
@@ -353,6 +374,11 @@ func createHostBlock(values hostBlockValues, ending string) (*config.File, error
 	}
 	if err := appendLine("\t", "Port", strconv.Itoa(values.port)); err != nil {
 		return nil, err
+	}
+	if values.proxyJump != "" {
+		if err := appendLine("\t", "ProxyJump", values.proxyJump); err != nil {
+			return nil, err
+		}
 	}
 	if values.identityFile != "" {
 		if err := appendLine("\t", "IdentityFile", values.identityFile); err != nil {
