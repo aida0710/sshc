@@ -4,10 +4,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"golang.org/x/sys/windows"
+
+	"sshc/internal/enginelog"
 )
 
 type taskEngine struct {
@@ -22,8 +25,21 @@ func (engine taskEngine) probe(ctx context.Context, executable string) error {
 	_, err := engine.readiness(executable).probe(ctx, engine.stateDir, engine.client)
 	return err
 }
-func (engine taskEngine) wait(ctx context.Context, executable string) error {
-	_, err := waitForReadyEngine(ctx, engine.stateDir, engine.readiness(executable))
+
+// wait waits for the engine the logon task started until it is ready or exitedEarly reports its
+// end. Its start is the engine's own first start, with the same work as a background start.
+func (engine taskEngine) wait(ctx context.Context, executable string, exitedEarly func(context.Context) error) error {
+	readiness := engine.readiness(executable)
+	readiness.timeout = backgroundReadyTimeout
+	readiness.exitedEarly = exitedEarly
+	readiness.failureDetail = func(context.Context) string {
+		return fmt.Sprintf("Task Scheduler reports the engine running, but it did not answer within %s (log: %s)",
+			backgroundReadyTimeout, enginelog.Path(engine.stateDir))
+	}
+	_, err := waitForReadyEngine(ctx, engine.stateDir, readiness)
+	if errors.Is(err, errTaskEngineExited) {
+		return withEngineLogTail(err, engine.stateDir)
+	}
 	return err
 }
 func (engine taskEngine) stop(ctx context.Context, executable string) error {

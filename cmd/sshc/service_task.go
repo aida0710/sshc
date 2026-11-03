@@ -239,6 +239,24 @@ func (manager *taskServiceManager) waitUntilReady(ctx context.Context) error {
 	}
 	return manager.waitReady(ctx, snapshot.definition.executable())
 }
+
+// errTaskEngineExited reports that the logon task stopped before its engine was ready.
+var errTaskEngineExited = errors.New("the engine exited before it was ready")
+
+// engineExited reports the end of the engine that the logon task runs: the task runs the engine
+// process itself, so it stays Running exactly as long as the process lives. A failed read says
+// nothing about the engine, so the wait goes on.
+func (manager *taskServiceManager) engineExited(ctx context.Context) error {
+	snapshot, err := manager.currentTask(ctx)
+	if err != nil {
+		return nil
+	}
+	if !snapshot.exists || snapshot.state == taskReady || snapshot.state == taskDisabled {
+		return errTaskEngineExited
+	}
+	return nil
+}
+
 func (manager *taskServiceManager) Disable(ctx context.Context) (removed bool, result error) {
 	release, err := manager.acquireOperationLock()
 	if err != nil {

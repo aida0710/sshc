@@ -7,9 +7,14 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"sshc/internal/enginelog"
+	"sshc/internal/handoff"
 )
 
 func TestWindowsServiceRejectsUnmanagedExecutablesWithThePowerShellCommand(t *testing.T) {
@@ -41,5 +46,50 @@ func TestWindowsReadinessRequiresTheRegisteredProcessExecutable(t *testing.T) {
 	}
 	if err := verifyTaskEngineExecutable(0, executable); err == nil {
 		t.Fatal("accepted inaccessible PID")
+	}
+}
+
+func TestLogonTaskEngineMayTakeLongerToStartThanAServiceManagerGetsToAnswer(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateDir := t.TempDir()
+	published := time.AfterFunc(serviceReadyTimeout+time.Second, func() {
+		document := testHandoff(backgroundTestURL)
+		document.PID = os.Getpid()
+		if err := handoff.Write(stateDir, document); err != nil {
+			t.Error(err)
+		}
+	})
+	defer published.Stop()
+	engine := taskEngine{stateDir: stateDir, client: backgroundTestClient(func(response http.ResponseWriter, _ *http.Request) {
+		io.WriteString(response, validEngineStatus())
+	})}
+	if err := engine.wait(context.Background(), executable, func(context.Context) error { return nil }); err != nil {
+		t.Fatalf("wait = %v", err)
+	}
+}
+
+func TestLogonTaskEngineThatExitsIsReportedWithTheEndOfItsLog(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateDir := t.TempDir()
+	log, err := enginelog.Open(stateDir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := log.WriteString("prepare this machine: the password vault is locked\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := log.Close(); err != nil {
+		t.Fatal(err)
+	}
+	engine := taskEngine{stateDir: stateDir, client: backgroundTestClient(func(http.ResponseWriter, *http.Request) {})}
+	err = engine.wait(context.Background(), executable, func(context.Context) error { return errTaskEngineExited })
+	if !errors.Is(err, errTaskEngineExited) || !strings.Contains(err.Error(), "the password vault is locked") {
+		t.Fatalf("wait = %v", err)
 	}
 }
