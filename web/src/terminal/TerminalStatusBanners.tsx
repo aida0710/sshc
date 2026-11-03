@@ -38,6 +38,7 @@ function StreamLinkMessage({ link }: { link: Exclude<StreamLink, { phase: "live"
 function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect"] }) {
   const t = useTranslate();
   const { attempt, limit, seconds } = useReconnectCountdown(reconnect);
+  if (reconnect?.waitingForNetwork === true) return t("terminal.waitingForNetworkDetail");
   if (seconds === null) return t("terminal.reconnectingNow", { attempt, limit });
   // 秒読みは毎秒変わるので読み上げず、試行の回数が変わったときだけ読み上げる。
   return (
@@ -50,7 +51,7 @@ function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect
 
 // The strip of one-line notices between the terminal header and the screen: the engine's reconnect progress, the
 // browser's own stream link, and how the program ended. Which rows it shows is statusBannerRows.
-export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, recovery, hostKeyAnswer }: {
+export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, recovery, hostKeyAnswer, onResumeProgram }: {
   session: TerminalSession;
   // A message from the view itself, such as a refused clipboard write.
   problem: string;
@@ -61,6 +62,8 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
   recovery?: SessionRecovery;
   // hostKeyAnswer answers the question about an unknown host key; without it the terminal is the way to answer.
   hostKeyAnswer?: HostKeyAnswer;
+  // onResumeProgram types the command that starts the previous shell's program again.
+  onResumeProgram?: (command: string) => void;
 }) {
   const t = useTranslate();
   const question = hostKeyQuestionOf(session);
@@ -125,6 +128,16 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
           {link.phase === "stopped" ? null : (
             <Button small onClick={onLinkStop} className={bannerButton}>
               {t("terminal.linkStop")}
+            </Button>
+          )}
+        </div>
+      )}
+      {!rows.has("resume-program") || session.resume === undefined ? null : (
+        <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
+          <p className="min-w-0 grow">{t("terminal.resumeTitle", { program: session.resume.program })}</p>
+          {onResumeProgram === undefined ? null : (
+            <Button small onClick={() => onResumeProgram(session.resume?.command ?? "")} className={bannerButton}>
+              {t("terminal.resumeRun")}
             </Button>
           )}
         </div>

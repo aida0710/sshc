@@ -21,3 +21,5 @@ internal/application/alias_rename.go	NoStartupRenamer.WithStartupRename	起動�
 internal/remotesync/collect.go	NeverTravels	app のテストが、自分の持つパスがスナップショットから除外されていることを remotesync の規則で確かめる。別の package のテストが使うので export_test.go へは移せない。
 internal/vpn/backend.go	Backends	backends の表の外に方式の並びを持つ層（acceptance と httpserver の OpenAPI の enum の照合、cmd/sshc の VPN プロファイルの入力）のテストが、足し忘れを見つける。
 internal/vpn/failure.go	FailureReasons	理由の言い方を持つ internal/vpnrefusal のテストが、言い方の足し忘れを見つける。
+internal/terminal/network.go	NewNetworkWatch	Android の engine だけが作る（mobile/）。PC は回線の有無を OS から聞かないので nil のまま使う。
+internal/terminal/network.go	NetworkWatch.SetAvailable	Android の ConnectivityManager の知らせを mobile.SetNetworkAvailable が渡す。呼び手は JNI の向こうに居る。

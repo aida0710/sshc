@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -34,6 +35,9 @@ type Session struct {
 	// 閉じたセッションが繋ぎ続けてはならない。届かないアドレスへの接続は
 	// タイムアウトまで goroutine とソケットを保持する。
 	cancel context.CancelFunc
+
+	// resumedTmux は、動いていた tmux のセッションに戻ったことを表す。Ready の前に書く。
+	resumedTmux atomic.Bool
 
 	mutex    sync.Mutex
 	closed   bool
@@ -79,6 +83,9 @@ func newSession(size terminal.Size, cancel context.CancelFunc) *Session {
 		size: size, cancel: cancel, done: make(chan struct{}), ready: make(chan struct{}),
 	}
 }
+
+// ResumedTmuxSession は、動いていた tmux のセッションに戻ったかを報告する。
+func (s *Session) ResumedTmuxSession() bool { return s.resumedTmux.Load() }
 
 // Forwards は、このセッションが開いている転送を報告する。
 func (s *Session) Forwards() []terminal.Forward { return s.forwarded.list() }
@@ -266,6 +273,23 @@ func (s *Session) sendWindowChange() error {
 	return remote.WindowChange(int(size.Rows), int(size.Cols))
 }
 
+// CheckTransport は、輸送が limit までに keepalive へ応答しなければ閉じる。リモートのシェルの
+// 待ちが解けて、輸送が落ちたものとして終わる（再接続はそこから始まる）。
+func (s *Session) CheckTransport(limit time.Duration) {
+	s.mutex.Lock()
+	client := s.client
+	s.mutex.Unlock()
+	if client == nil {
+		return
+	}
+	err := keepAliveReply(client, limit, s.done)
+	if err == nil || errors.Is(err, context.Canceled) {
+		return
+	}
+	s.closingTrace.say(connectionlog.Detailed, "回線が変わったあと、SSH接続が応答しないので切断します：%v", err)
+	_ = client.Close()
+}
+
 // Hangup はリモートへ SIGHUP を送り、SSH チャンネルを閉じる。
 func (s *Session) Hangup() error {
 	s.mutex.Lock()
@@ -339,13 +363,16 @@ func (s *Session) finish(info terminal.ExitInfo) {
 }
 
 // fail は、接続できなかった理由（line）を端末へ書いて終わらせる。reason は ReadyErr が返す。
+// line が空なら何も書かない。
 //
 // セッションは残す。接続できなかった理由が読めるのはそこだけである。
 // シェルの終わり方と違い、ExitInfo.Notice ではなく出力へ書く。呼ばれるのは Ready の前だけで、
 // シェルが動いていないので代替画面は無く、出力へ書けば接続ログの行との順番も保てる。
 func (s *Session) fail(reason error, line string) {
 	s.markReady(reason)
-	_, _ = io.WriteString(s.writer, "\r\n"+terminalNewlines(line)+"\r\n")
+	if line != "" {
+		_, _ = io.WriteString(s.writer, "\r\n"+terminalNewlines(line)+"\r\n")
+	}
 	s.finish(terminal.ExitInfo{Code: RemoteFailureExit, At: time.Now()})
 	_ = s.writer.Close()
 	_ = s.input.Close()

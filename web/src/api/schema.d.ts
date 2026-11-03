@@ -3588,6 +3588,7 @@ export interface components {
             hostKeyQuestion?: components["schemas"]["TerminalHostKeyQuestion"];
             awaitingPrompt?: boolean;
             passwordSaveQuestion?: boolean;
+            resume?: components["schemas"]["TerminalResumeHint"];
             programProgress?: components["schemas"]["TerminalProgramProgress"];
             programStatus?: components["schemas"]["TerminalProgramStatus"];
             exited?: components["schemas"]["TerminalExit"];
@@ -3657,6 +3658,11 @@ export interface components {
             /** Format: date-time */
             retryAt: string;
             problem: string;
+            waitingForNetwork?: boolean;
+        };
+        TerminalResumeHint: {
+            program: string;
+            command: string;
         };
         TerminalExit: {
             code: number;
@@ -4474,6 +4480,7 @@ export interface components {
              */
             encoding?: "utf-8" | "shift_jis" | "euc-jp" | "iso-2022-jp";
             vpn?: string;
+            tmux?: boolean;
         };
         AppearanceSettings: {
             accent?: string;

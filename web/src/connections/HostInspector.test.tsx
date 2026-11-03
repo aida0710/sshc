@@ -284,6 +284,16 @@ describe("HostInspector", () => {
     expect(onSave).toHaveBeenLastCalledWith(expect.not.objectContaining({ encoding: expect.anything() }));
   });
 
+  it("saves whether this connection opens in tmux", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<HostInspector detail={build()} onSave={onSave} />);
+
+    await user.click(screen.getByRole("checkbox", { name: "Open in tmux" }));
+    await user.click(saveButton()!);
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ tmux: true }));
+  });
+
   it("leaves OSC 52 to the one setting for every terminal", () => {
     render(<HostInspector detail={build()} onSave={vi.fn()} />);
 

@@ -21,6 +21,7 @@ import (
 
 	"sshc/internal/app"
 	"sshc/internal/storage"
+	"sshc/internal/terminal"
 )
 
 // version は、この AAR のバージョンである。
@@ -58,6 +59,14 @@ var running struct {
 	lastKind   int
 	lastDetail string
 }
+
+// network は、Android が回線について言うことである。エンジンの起動より先に知らせが届くことがあり、
+// エンジンを起動し直しても同じ回線の話なので、プロセスにひとつ持つ。
+var network = terminal.NewNetworkWatch()
+
+// SetNetworkAvailable は、ConnectivityManager の知らせを受け取る。回線が無い間、切れたセッションは
+// 再接続の回数を使わずに待ち、回線があると言われたらすぐ試す。
+func SetNetworkAvailable(available bool) { network.SetAvailable(available) }
 
 // Start は engine を起動し、入口の URL を返す。
 //

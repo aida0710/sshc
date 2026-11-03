@@ -180,6 +180,13 @@ func describeSession(view terminal.View) api.TerminalSession {
 			RetryAt: view.Reconnect.RetryAt.UTC(),
 			Problem: view.Reconnect.Problem,
 		}
+		if view.Reconnect.WaitingForNetwork {
+			waiting := true
+			described.Reconnect.WaitingForNetwork = &waiting
+		}
+	}
+	if view.Resume != nil {
+		described.Resume = &api.TerminalResumeHint{Program: view.Resume.Program, Command: view.Resume.Command}
 	}
 	if view.Progress != nil {
 		described.Progress = describeConnectionProgress(*view.Progress)
