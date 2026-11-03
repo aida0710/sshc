@@ -33,7 +33,7 @@ describe("arranging the key bar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Later" }));
 
     await waitFor(() => expect(savedKeys()).toEqual(["DirectInput", "Escape", "Control", "Tab", "Ctrl+C", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"]));
-    expect(presets[0]?.name).toBe("My key bar");
+    expect(presets[0]?.name).toBe("My key order");
     expect(server.document().presets[0]?.interface?.keyBarPreset).toBe(presets[0]?.id);
     // The moved key stays selected, so it can be moved again.
     expect(shownRow().getByRole("button", { name: "Tab" })).toHaveAttribute("aria-pressed", "true");

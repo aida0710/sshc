@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslate } from "../i18n/context";
+import { maxKeyBarPresetNameLength, maxKeyBarPresets } from "../rules/keyBar.generated";
+import { LibraryPresetChooser } from "../settings/LibraryPresetChooser";
 import { refreshPresetLibraries } from "../settings/presetLibrary";
 import { Icon } from "../ui/icons";
 import { PageSection } from "../ui/page";
@@ -7,9 +9,8 @@ import { PanelState } from "../ui/PanelState";
 import { Button, Notice } from "../ui/surface";
 import { CustomKeyDialog, type CustomKey } from "./CustomKeyDialog";
 import { paletteGroups } from "./keyBarCatalog";
-import { insertKey, isPlaced, keyAt, moveKey, moveToOtherRow, removeKey, replaceKey, type KeyBarLayout, type KeySlot } from "./keyBarLayout";
-import { builtInKeyBarPresets, saveKeyBarLayout, useKeyBarLayout, useKeyBarPresets } from "./keyBarPresets";
-import { KeyBarPresetSection } from "./KeyBarPresetSection";
+import { defaultKeyBarLayout, insertKey, isPlaced, keyAt, moveKey, moveToOtherRow, removeKey, replaceKey, type KeyBarLayout, type KeySlot } from "./keyBarLayout";
+import { builtInKeyBarPresets, keyBarPresetLibrary, saveKeyBarLayout, useKeyBarLayout, useKeyBarPresets } from "./keyBarPresets";
 import { KeyBarPreview } from "./KeyBarPreview";
 import { KeyFace, spokenKeyName } from "./KeyFace";
 import type { KeyBarKey } from "./keySequences";
@@ -63,8 +64,26 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
     <div data-key-bar-editor className="flex flex-col gap-5">
       {library.error ? <Notice tone="danger" actions={<Button small onClick={() => { void refreshPresetLibraries(); }}>{t("keyBar.reload")}</Button>}>{t("keyBar.reloadRequired")}</Notice> : null}
       {library.loading ? <PanelState tone="loading" title={t("keyBar.loading")} /> : null}
-      <KeyBarPresetSection presetId={presetId} layout={layout} onError={setError} />
-      <PageSection heading={t("keyBar.orderHeading")} actions={<span className="text-xs text-ink-faint">{t("keyBar.orderHint")}</span>}>
+      <PageSection heading={t("keyBar.preset")}>
+        <LibraryPresetChooser
+          library={keyBarPresetLibrary}
+          builtIn={builtInKeyBarPresets}
+          settingsPresetId={presetId}
+          labels={{
+            name: t("keyBar.preset"),
+            defaultName: t("keyBar.defaultPreset"),
+            unsavedHint: (name) => t("keyBar.unsavedPresetHint", { name }),
+            reset: t("keyBar.reset"),
+            renameHeading: t("keyBar.renameHeading"),
+            deleteHeading: t("keyBar.confirmDelete"),
+            saveFailed: t("keyBar.saveFailed"),
+          }}
+          limits={{ presets: maxKeyBarPresets, nameLength: maxKeyBarPresetNameLength }}
+          copyNamed={(id, name) => ({ id, name, ...layout })}
+          onReset={() => save(defaultKeyBarLayout, null)}
+          onError={setError}
+        />
+        <p className="mb-1.5 mt-3 text-xs text-ink-faint">{t("keyBar.orderHint")}</p>
         <KeyBarPreview layout={layout} selected={slot} onSelect={setSelected} disabled={unavailable} />
         <div className="mt-3 flex flex-wrap gap-2">
           <Button small disabled={unavailable || slot === null || slot.index === 0} onClick={() => {

@@ -901,7 +901,7 @@ test("arranges the key bar in the settings, and the terminal's bar follows it", 
   await order.getByRole("button", { name: "Esc", exact: true }).click();
   await page.getByRole("group", { name: "Function keys" }).getByRole("button", { name: "F5", exact: true }).click();
   await expect(order.getByRole("button", { name: "F5", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("combobox", { name: "Key bar preset" }).locator("option:checked")).toHaveText("My key bar");
+  await expect(page.getByRole("combobox", { name: "Key order" }).locator("option:checked")).toHaveText("My key order");
 
   await page.getByRole("button", { name: "Make a key" }).click();
   const making = page.getByRole("dialog", { name: "Your own key" });
