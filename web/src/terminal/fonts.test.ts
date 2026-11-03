@@ -60,6 +60,15 @@ describe("端末の字体", () => {
     for (const font of fonts) expect(font.stack.endsWith("monospace")).toBe(true);
   });
 
+  it("falls back to the Windows monospace fonts before the browser's generic one, after the other systems' fonts", () => {
+    const families = defaultStack.split(",").map((family) => family.trim().replace(/^"|"$/g, ""));
+    const firstWindowsFont = families.indexOf("Cascadia Mono");
+    expect(families.slice(firstWindowsFont)).toEqual(["Cascadia Mono", "Consolas", "monospace"]);
+    expect(families.slice(0, firstWindowsFont)).toEqual(
+      expect.arrayContaining(["Menlo", "Roboto Mono", "Droid Sans Mono"]),
+    );
+  });
+
   it("treats a name it does not know as no choice at all", () => {
     expect(knownFont("jetbrains-mono")?.label).toBe("JetBrains Mono");
     expect(knownFont("nope")).toBeNull();
