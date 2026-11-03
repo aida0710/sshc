@@ -1,7 +1,10 @@
 
 export type Font = { readonly name: string; readonly label: string; readonly stack: string };
+// Chrome on Windows ignores ui-monospace, and a Japanese Windows resolves the generic monospace
+// to BIZ UDGothic or MS Gothic, which draw \ as ¥ and narrow the cells. Cascadia Mono ships with
+// Windows 11 and Consolas with every Windows; they come last so macOS, Android and Linux keep their font.
 export const defaultStack =
-  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", monospace';
+  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", "Cascadia Mono", Consolas, monospace';
 
 export const fonts: readonly Font[] = [
   {
