@@ -104,7 +104,13 @@ export function useAppSession({
     return () => { active = false; };
   }, [state, vaultExists, vault]);
 
+  const stateNow = useRef(state);
+  stateNow.current = state;
+
   const lock = useCallback(() => {
+    // The screen that creates a vault is locked too, and what it saves (the language) is refused: that says nothing
+    // about a vault existing, and the screen stays as it is.
+    if (stateNow.current === "locked") return;
     setVaultExists(true);
     setState("locked");
     announceVaultLocked();
