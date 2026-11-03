@@ -2420,6 +2420,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/local/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A small picture of an engine-local PNG, JPEG or GIF for its row in the list, kept in the engine's memory by the file's revision. Links, other types and files too large to decode are refused, and the list keeps the file's icon. */
+        get: operations["thumbnailLocalSFTPFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/local/download": {
         parameters: {
             query?: never;
@@ -2573,6 +2590,25 @@ export interface paths {
         };
         /** @description Image bytes for the details dialog. The media type is decided by the leading bytes, never by the name. */
         get: operations["previewSFTPFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        /** @description A small picture of a remote PNG, JPEG or GIF for its row in the list, kept in the engine's memory by the file's revision. Made on the connection the pane already uses, one file at a time for a host; a JPEG with a picture in its Exif header costs only the header. Symlinks, other types and files too large to read or decode are refused, and the list keeps the file's icon. */
+        get: operations["thumbnailSFTPFile"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4674,6 +4710,7 @@ export interface components {
             notificationSound?: components["schemas"]["NotificationSound"];
             keepScreenAwake?: boolean;
             hideTouchLinkUnderlines?: boolean;
+            hideSFTPThumbnails?: boolean;
             shortcutPreset?: string;
             keyBarPreset?: string;
         };
@@ -10460,6 +10497,39 @@ export interface operations {
             422: components["responses"]["Problem"];
         };
     };
+    thumbnailLocalSFTPFile: {
+        parameters: {
+            query: {
+                path: string;
+                /** @description The revision the listing showed */
+                revision: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture, no more than 256 pixels along its longest edge and upright */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            415: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
     downloadLocalSFTPFile: {
         parameters: {
             query: {
@@ -10789,6 +10859,42 @@ export interface operations {
             413: components["responses"]["Problem"];
             415: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+        };
+    };
+    thumbnailSFTPFile: {
+        parameters: {
+            query: {
+                path: string;
+                /** @description The revision the listing showed */
+                revision: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture, no more than 256 pixels along its longest edge and upright */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            415: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     searchSFTPEntries: {

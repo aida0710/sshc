@@ -69,6 +69,18 @@ const previewProblems = [
   "sftp_conflict",
 ];
 
+const thumbnailProblems = [
+  ...previewProblems,
+  "network_request_failed",
+  "request_failed",
+  "invalid_request",
+  "sftp_permission_denied",
+  "sftp_local_permission_denied",
+  "sftp_local_privacy_protection",
+  "sftp_unsupported_entry",
+  "server_stopping",
+];
+
 // Background transfer failures are rendered by TransferManagerList and its
 // completion notice. Reporting the same expected failure as an application-wide
 // diagnostic obscures the queue controls, especially on a narrow screen.
@@ -113,7 +125,7 @@ export type DownloadStream = DownloadTarget & { directory: boolean; offset: numb
 export type ModeChange = { alias: string; remotePath: string; mode: string; expectedRevision: string; recursive: boolean };
 
 function pathFor(alias: string, suffix: string, remotePath: string): string {
-  if (alias === localHostAlias && (suffix === "text" || suffix === "preview")) return `/api/v1/sftp/local/${suffix}?path=${encodeURIComponent(remotePath)}`;
+  if (alias === localHostAlias && (suffix === "text" || suffix === "preview" || suffix === "thumbnail")) return `/api/v1/sftp/local/${suffix}?path=${encodeURIComponent(remotePath)}`;
   return `/api/v1/sftp/${encodeURIComponent(alias)}/${suffix}?path=${encodeURIComponent(remotePath)}`;
 }
 
@@ -253,6 +265,12 @@ export const sftpApi = {
       revision: response.headers.get("ETag") ?? "",
       blob: await response.blob(),
     };
+  },
+  // A row shows its picture or keeps its icon, and never says why, so no failure of a thumbnail is worth a notice.
+  async thumbnail({ alias, path, revision }: { alias: string; path: string; revision: string }, signal: AbortSignal): Promise<Blob> {
+    const endpoint = `${pathFor(alias, "thumbnail", path)}&revision=${encodeURIComponent(revision)}`;
+    const response = await apiClient.readResponse(endpoint, { signal, locallyHandledCodes: thumbnailProblems });
+    return response.blob();
   },
   async readText(alias: string, remotePath: string, options?: { expectedRevision?: string; signal?: AbortSignal }): Promise<RemoteTextFile> {
     const endpoint = pathFor(alias, "text", remotePath) + (options?.expectedRevision === undefined ? "" : `&expectedRevision=${encodeURIComponent(options.expectedRevision)}`);

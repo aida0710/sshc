@@ -9,8 +9,8 @@ const pane: SFTPPane = {
   id: "files",
   activeId: "remote",
   tabs: [
-    { id: "remote", alias: "application-server", path: "/srv/project/config", sort: { key: "name", direction: "ascending" } },
-    { id: "local", alias: localHostAlias, path: "/home/demo/projects", sort: { key: "name", direction: "ascending" } },
+    { id: "remote", alias: "application-server", path: "/srv/project/config", sort: { key: "name", direction: "ascending" }, view: "list" },
+    { id: "local", alias: localHostAlias, path: "/home/demo/projects", sort: { key: "name", direction: "ascending" }, view: "list" },
   ],
 };
 

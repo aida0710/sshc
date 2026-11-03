@@ -1,13 +1,13 @@
 import { sftpSortColumns, type SFTPSort, type SFTPSortState } from "./sftpEntrySort";
 import { isLocalPath, localHostAlias } from "./localHost";
-import { blankPane, maxPanes, maxTabsPerPane, paneOf, type SFTPPane, type SFTPTab } from "./sftpPanes";
+import { blankPane, maxPanes, maxTabsPerPane, paneOf, type SFTPEntryView, type SFTPPane, type SFTPTab } from "./sftpPanes";
 import { clampSplitRatio, evenSplitRatio } from "../ui/SplitResizeHandle";
 import { keepMachineStateJSON, readMachineStateJSON } from "../settings/machineState";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import type { StoredValue } from "../ui/useStoredValue";
 import { newIdentifier } from "../ui/randomIdentifier";
 
-type StoredTab = { alias: string; path: string; sortKey: SFTPSort; sortDirection: SFTPSortState["direction"] };
+type StoredTab = { alias: string; path: string; sortKey: SFTPSort; sortDirection: SFTPSortState["direction"]; view: SFTPEntryView };
 type StoredPane = { tabs: StoredTab[]; activeIndex: number };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -27,7 +27,7 @@ function restoreTab(value: unknown): SFTPTab[] {
   const alias = typeof value.alias === "string" ? value.alias : "";
   const path = typeof value.path === "string" &&
     (alias === localHostAlias ? isLocalPath(value.path) : value.path.startsWith("/")) ? value.path : "";
-  return [{ id: newIdentifier(), alias, path, sort: restoredSort(value) }];
+  return [{ id: newIdentifier(), alias, path, sort: restoredSort(value), view: value.view === "grid" ? "grid" : "list" }];
 }
 
 function restoreActiveId(value: unknown, tabs: SFTPTab[]): string {
@@ -52,7 +52,7 @@ export function restorePanes(): SFTPPane[] {
 function storedPane(pane: SFTPPane): StoredPane {
   const activeIndex = pane.tabs.findIndex((tab) => tab.id === pane.activeId);
   return {
-    tabs: pane.tabs.map(({ alias, path, sort }) => ({ alias, path, sortKey: sort.key, sortDirection: sort.direction })),
+    tabs: pane.tabs.map(({ alias, path, sort, view }) => ({ alias, path, sortKey: sort.key, sortDirection: sort.direction, view })),
     activeIndex: Math.max(activeIndex, 0),
   };
 }

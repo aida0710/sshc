@@ -17,6 +17,23 @@ describe("sftpApi resumable download", () => {
     vi.restoreAllMocks();
   });
 
+  it("asks the engine for a thumbnail by the listed revision, and no failure of one is reported", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(
+      JSON.stringify({ code: "sftp_preview_too_large", message: "too large" }),
+      { status: 413, headers: { "Content-Type": "application/problem+json" } },
+    ));
+    const signal = new AbortController().signal;
+
+    await expect(sftpApi.thumbnail({ alias: "edge", path: "/a b.png", revision: "r/1" }, signal)).rejects.toMatchObject({ code: "sftp_preview_too_large" });
+    await expect(sftpApi.thumbnail({ alias: "local", path: "/a.png", revision: "r" }, signal)).rejects.toMatchObject({ code: "sftp_preview_too_large" });
+
+    expect(fetched.mock.calls[0]?.[0]).toBe("/api/v1/sftp/edge/thumbnail?path=%2Fa%20b.png&revision=r%2F1");
+    expect(fetched.mock.calls[1]?.[0]).toBe("/api/v1/sftp/local/thumbnail?path=%2Fa.png&revision=r");
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
   it("leaves directory-list connection failures to the SFTP panel", async () => {
     const diagnostic = vi.fn();
     whenRequestFailed(diagnostic);
