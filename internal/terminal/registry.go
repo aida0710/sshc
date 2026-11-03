@@ -58,6 +58,10 @@ type Registry struct {
 	ReconnectDelay func(attempt int) time.Duration
 	// ReconnectLimit は、自動再接続を何回まで試みてよいかを返す。nil なら既定。
 	ReconnectLimit func() int
+	// ProgramBlocked hears when a session's program starts or stops waiting for
+	// the person (blocked_program.go); nil when nobody listens. It runs under the
+	// session's mutex, so it must return at once and not call the session.
+	ProgramBlocked func(BlockedProgramChange)
 	// Now と Random は、テストが時計と ID を固定するためにここにある。
 	Now    func() time.Time
 	Random io.Reader
@@ -224,6 +228,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		},
 		reconnectLimit: r.reconnectLimit,
 		now:            r.now,
+		programBlocked: r.ProgramBlocked,
 	}
 	if spec.Alias != "" {
 		session.titleSource = TitleConnection

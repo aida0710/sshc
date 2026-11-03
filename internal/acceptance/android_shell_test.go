@@ -279,6 +279,30 @@ func TestTheAndroidShellBridgesDeviceSpecificWebFeatures(t *testing.T) {
 	}
 }
 
+// プログラムが利用者を待っているときの通知は、裏でも動くエンジンから直接出し、押すと
+// Web画面の通知と同じ経路でそのセッションを開く。tagの形がずれると押しても開かない。
+func TestABlockedProgramIsNotifiedFromTheEngineWithTheTagThePageOpens(t *testing.T) {
+	t.Parallel()
+	service := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "EngineService.java")
+	watcher := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "BlockedProgramWatcher.java")
+	notifications := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "TerminalNotifications.java")
+	web := readRepoFile(t, "web", "src", "terminal", "notificationTags.ts")
+
+	if !strings.Contains(service, "BlockedProgramWatcher.ensureStarted(") {
+		t.Error("EngineServiceが起動したエンジンの知らせを受け取っていない")
+	}
+	if !strings.Contains(watcher, "Mobile.nextBlockedProgramChange()") {
+		t.Error("BlockedProgramWatcherがエンジンの知らせを待っていない")
+	}
+	const tagPrefix = `"sshc-terminal-"`
+	if !strings.Contains(notifications, tagPrefix) || !strings.Contains(web, tagPrefix) {
+		t.Errorf("通知のtagの形 %s がAndroidとWeb画面で揃っていない", tagPrefix)
+	}
+}
+
 // ランチャーや通知から戻っただけでMainActivityを積み増したり、同じengineの
 // WebViewを読み直したりしない。入力途中のフォームを通常のアプリ切り替えで失わないための境界。
 func TestTheAndroidShellKeepsTheVisibleWebViewAcrossAppSwitches(t *testing.T) {

@@ -1,6 +1,7 @@
 import { act, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 import type { TerminalSession } from "../api/terminalSessions";
 import { forgetAllDismissedTerminalNotices, forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
 import type { NoticeFocus } from "../ui/NoticeFrame";
@@ -20,17 +21,18 @@ function recovery(overrides: Partial<SessionRecovery> = {}): SessionRecovery {
   return { reconnect: vi.fn(), reconnectBusy: false, reconnectFailed: false, stopReconnecting: vi.fn(), stopBusy: false, ...overrides };
 }
 
-type CardOptions = { onCloseSession?: () => void; onDismiss?: () => void; answers?: HostKeyAnswer; focus?: NoticeFocus };
+type CardOptions = { onCloseSession?: () => void; onDismiss?: () => void; answers?: HostKeyAnswer; focus?: NoticeFocus; asksNotificationPermission?: boolean };
 
 function renderCard(
   shown: TerminalSession,
   actions: SessionRecovery,
-  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: false, giveBack: vi.fn() } }: CardOptions = {},
+  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: false, giveBack: vi.fn() }, asksNotificationPermission = false }: CardOptions = {},
 ) {
-  const notice = terminalNoticeFor(shown, { phase: "live" });
+  const notice = terminalNoticeFor(shown, { phase: "live" }, asksNotificationPermission);
   if (notice === null) throw new Error("no card for this session");
-  const view = render(<TerminalNoticeCard notice={notice} session={shown} title="web-01" recovery={actions} hostKeyAnswer={answers} focus={focus} onLinkNow={vi.fn()} onCloseSession={onCloseSession} onDismiss={onDismiss} />);
-  return { onCloseSession, onDismiss, answers, focus, view };
+  const notificationPermission = { due: asksNotificationPermission, finish: vi.fn() };
+  const view = render(<TerminalNoticeCard notice={notice} session={shown} title="web-01" recovery={actions} hostKeyAnswer={answers} notificationPermission={notificationPermission} focus={focus} onLinkNow={vi.fn()} onCloseSession={onCloseSession} onDismiss={onDismiss} />);
+  return { onCloseSession, onDismiss, answers, focus, notificationPermission, view };
 }
 
 describe("TerminalNoticeCard", () => {
@@ -43,6 +45,36 @@ describe("TerminalNoticeCard", () => {
     expect(actions.reconnect).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onCloseSession).toHaveBeenCalledOnce();
+  });
+
+  describe("asking for the notification permission", () => {
+    afterEach(() => {
+      delete window.sshcAndroid;
+    });
+
+    it("asks Android for the permission from the button, and is finished with it", async () => {
+      const requestNotificationPermission = vi.fn();
+      window.sshcAndroid = fakeAndroidBridge({ notificationPermission: vi.fn(() => "default"), requestNotificationPermission });
+      const { notificationPermission } = renderCard(session, recovery(), { asksNotificationPermission: true });
+      expect(screen.getByRole("region", { name: "Get notified when a program is waiting?" })).toBeVisible();
+
+      await userEvent.click(screen.getByRole("button", { name: "Enable notifications" }));
+
+      expect(requestNotificationPermission).toHaveBeenCalledOnce();
+      expect(notificationPermission.finish).toHaveBeenCalledOnce();
+    });
+
+    it("is finished with it when the person hides the card, without asking Android", async () => {
+      const requestNotificationPermission = vi.fn();
+      window.sshcAndroid = fakeAndroidBridge({ notificationPermission: vi.fn(() => "default"), requestNotificationPermission });
+      const { notificationPermission, onDismiss } = renderCard(session, recovery(), { asksNotificationPermission: true });
+
+      await userEvent.click(screen.getByRole("button", { name: "Hide this notice" }));
+
+      expect(notificationPermission.finish).toHaveBeenCalledOnce();
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(requestNotificationPermission).not.toHaveBeenCalled();
+    });
   });
 
   it("is not a live region, so the strip above is what a screen reader reads", () => {

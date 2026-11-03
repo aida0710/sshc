@@ -44,6 +44,12 @@ describe("terminalNoticeFor", () => {
     expect(terminalNoticeFor(asking("SHA256:first"), live)?.key).not.toBe(terminalNoticeFor(asking("SHA256:second"), live)?.key);
   });
 
+  it("asks for the notification permission only when nothing about the session comes first", () => {
+    expect(terminalNoticeFor(session, live, true)?.kind).toBe("notification-permission");
+    const lost = ended({ code: -1, signal: "", at: "2026-11-02T09:30:00Z", connectionLost: true });
+    expect(terminalNoticeFor(lost, live, true)?.kind).toBe("ended");
+  });
+
   it("shows a card for the link to the engine only once it stopped retrying, and not for a session that is gone", () => {
     expect(terminalNoticeFor(session, { phase: "waiting", attempt: 2, seconds: 3 })).toBeNull();
     expect(terminalNoticeFor(session, { phase: "stopped", gone: false })?.kind).toBe("link-stopped");

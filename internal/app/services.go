@@ -348,6 +348,7 @@ func buildTerminals(configService *application.Service, dependencies Dependencie
 		Limits:         configService.TerminalLimits,
 		ReconnectLimit: configService.TerminalReconnects,
 		Random:         dependencies.Random,
+		ProgramBlocked: dependencies.ProgramBlocked,
 	}
 
 	return terminals

@@ -20,6 +20,11 @@
     <string name="terminal_channel">Terminal</string>
     <!-- ターミナルの通知のアプリ名の横に出す。見出しと本文は接続先のプログラムが決める。 -->
     <string name="terminal_notification_source">From a terminal program</string>
+    <string name="blocked_program_channel">Programs waiting for you</string>
+    <string name="blocked_program_waiting">Waiting for you</string>
+    <string name="blocked_program_permission">Needs permission</string>
+    <string name="blocked_program_question">Has a question</string>
+    <string name="blocked_program_auth">Needs sign-in</string>
     <string name="transfer_channel">SFTP transfers</string>
     <string name="transfer_completed">SFTP transfer completed.</string>
     <string name="transfer_failed">SFTP transfer failed. Open sshc for details.</string>
