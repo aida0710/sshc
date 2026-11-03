@@ -424,6 +424,53 @@ test("a phone keeps the notices behind a button, shows them over the terminal on
   await expect(page).toHaveURL(/\/terminal$/);
 });
 
+test("the Android app asks for the notification permission once, behind the notices button, when a program first reports", async ({ page, installation }) => {
+  const claude = {
+    id: "permission-fixture", kind: "ssh", workspaceId: "default", alias: "gateway", title: "Claude Code",
+    startedAt: "2026-11-04T00:00:00Z", state: "connected", problem: "", forwards: [],
+    programStatus: { state: "idle", app: "claude-code", version: 1 },
+  };
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/stream")) {
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: "permission" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sessions: [claude], maxSessions: 12 }) });
+  });
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => { socket.send(Buffer.from("$ claude\r\n")); });
+  await page.addInitScript(() => {
+    const android = window as unknown as { askedForPermission: number; sshcAndroid: Partial<NonNullable<Window["sshcAndroid"]>> };
+    android.askedForPermission = 0;
+    android.sshcAndroid = {
+      notificationPermission: () => "default",
+      requestNotificationPermission: () => { android.askedForPermission += 1; },
+      takeOpenedNotification: () => "",
+      setAppearance: () => undefined,
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).first().tap();
+  await page.getByRole("button", { name: /^(gateway|Claude Code)/ }).first().tap();
+
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  const notices = screen.getByRole("button", { name: "Notices", exact: true });
+  await expect(notices).toBeVisible();
+  const card = screen.getByRole("region", { name: "Get notified when a program is waiting?" });
+  await expect(card).toHaveCount(0);
+
+  await notices.tap();
+  await card.getByRole("button", { name: "Enable notifications", exact: true }).tap();
+  expect(await page.evaluate(() => (window as unknown as { askedForPermission: number }).askedForPermission)).toBe(1);
+  await expect(card).toHaveCount(0);
+  await expect(notices).toHaveCount(0);
+
+  // Answered once: Android still reports "default" after one refusal, and the app does not ask again.
+  await page.reload();
+  await expect(screen).toBeVisible();
+  await expect(notices).toHaveCount(0);
+});
+
 test("a finger moves the shell's scrollback by the pixel and settles it on a row", async ({ page, installation }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApplication(page, installation);

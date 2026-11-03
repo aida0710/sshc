@@ -14,6 +14,9 @@ final class TerminalNotifications {
     /** 通知を押して開いた MainActivity が、どの通知から来たかを Web 画面へ伝えるための extra。 */
     static final String EXTRA_TAG = "com.github.aida0710.sshc.NOTIFICATION_TAG";
     private static final String CHANNEL = "terminal";
+    private static final String BLOCKED_PROGRAM_CHANNEL = "blocked_program";
+    // web/src/terminal/notificationTags.ts と同じ形。Web 画面はこの tag からセッションを見つける。
+    private static final String SESSION_TAG_PREFIX = "sshc-terminal-";
     // 同じ tag の通知は置き換える。tag ごとに 1 件なので id は固定でよい。
     private static final int NOTIFICATION_ID = 1;
     // 通知はプロセスに属し、出した MainActivity が閉じたあとに押されることもある。Activity
@@ -31,13 +34,34 @@ final class TerminalNotifications {
         return issued.take(tag);
     }
 
+    static String sessionTag(String sessionId) {
+        return SESSION_TAG_PREFIX + sessionId;
+    }
+
     void show(String tag, String title, String body) {
         // 音は Web 画面が設定の「通知音」で鳴らす。
         NotificationManager manager = AppNotifications.silentChannel(
                 context, CHANNEL, context.getString(R.string.terminal_channel), NotificationManager.IMPORTANCE_DEFAULT);
+        post(manager, CHANNEL, tag, title, body);
+    }
+
+    /**
+     * プログラムが利用者を待っていることの通知。待たせている間は作業が進まないので、音を鳴らして
+     * 画面の上にも出す。エンジンが出すので Web 画面は音を鳴らさず、重要度はチャンネルで決まる
+     * （Android の設定から利用者が変えられる）。
+     */
+    void showBlockedProgram(String tag, String title, String body) {
+        NotificationManager manager = AppNotifications.channel(
+                context, BLOCKED_PROGRAM_CHANNEL, context.getString(R.string.blocked_program_channel), NotificationManager.IMPORTANCE_HIGH);
+        // 許可は Web 画面の知らせと Settings > Notifications で求める。裏のサービスからは聞けない。
+        if (!manager.areNotificationsEnabled()) return;
+        post(manager, BLOCKED_PROGRAM_CHANNEL, tag, title, body);
+    }
+
+    private void post(NotificationManager manager, String channel, String tag, String title, String body) {
         // request code を tag ごとに変え、別の通知の extra で上書きされないようにする。
         PendingIntent content = AppNotifications.openApp(context, tag.hashCode(), new Intent().putExtra(EXTRA_TAG, tag));
-        Notification notification = new Notification.Builder(context, CHANNEL)
+        Notification notification = new Notification.Builder(context, channel)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
                 // 見出しと本文は接続先のプログラムが決める。sshc 自身の通知と見分けられるよう、
                 // ターミナルのプログラムからの通知であることをアプリ名の横に出す。
