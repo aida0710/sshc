@@ -45,8 +45,8 @@ type Dialer struct {
 	// 一度だけ読まない。設定は走っているあいだに変えられる。捕まえて
 	// しまうと、変えたユーザーは engine を起動し直すまで何も変わらないと感じる。
 	Verbosity func() connectionlog.Level
-	// DescribeFailure は、接続できなかった理由を端末へ書く前に、利用者向けの文へ
-	// 置き換える。nil なら元の失敗の文をそのまま書く。
+	// DescribeFailure は、接続できなかった理由を端末へ書く前に、CLI の失敗の文へ置き換える。
+	// nil なら画面のターミナルの日本語の文（FailureSentence）を書く。
 	//
 	// `sshc ssh` は CLI の英語の案内を、端末に書くこの文で出す。Open は握手を待たずに
 	// 返るので、呼び出し側が Open の戻り値で失敗を受け取って書き換えることはできない。
@@ -88,7 +88,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 
 	client, closers, err := d.chain(ctx, target, prompt, trace)
 	if err != nil {
-		session.fail(fmt.Errorf("sshc: %w", d.describeFailure(err)))
+		d.failSession(session, err)
 		return
 	}
 	closers = append(closers, client)
@@ -110,7 +110,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	remote, err := client.NewSession()
 	if err != nil {
 		trace.say(connectionlog.Detailed, "SSHセッションチャンネルの要求が失敗しました（%s）：%v", connectionlog.Elapsed(trace.since(channelStarted)), err)
-		session.fail(fmt.Errorf("sshc: %w", d.describeFailure(err)))
+		d.failSession(session, err)
 		closeAll(closers)
 		return
 	}
@@ -128,7 +128,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	}
 
 	if err := d.start(remote, target, session); err != nil {
-		session.fail(fmt.Errorf("sshc: %w", d.describeFailure(err)))
+		d.failSession(session, err)
 		closeAll(closers)
 		return
 	}
@@ -308,7 +308,29 @@ type hopConnection struct {
 }
 
 // connectOne は、ホップひとつへ繋ぐ。through が非 nil なら、その接続の上を通る。
+//
+// ホスト鍵の問いに答えを待っている間に、サーバーが接続を切ることがある（sshd の LoginGraceTime、
+// 既定 120 秒）。受け入れた鍵は known_hosts へ書いてあるので、切られていたらつなぎ直す。同じ
+// lookup を渡すので、known_hosts に書けなかった接続でも同じ鍵をもう一度尋ねない。
 func (d Dialer) connectOne(ctx context.Context, request hopConnection) (*ssh.Client, error) {
+	hostKeys := d.HostKeys.lookup(request.target)
+	client, err := d.attemptHop(ctx, request, hostKeys)
+	if err == nil || ctx.Err() != nil || !hostKeys.tookConfirmation() || !lostWhileAnswering(err) {
+		return client, err
+	}
+	request.trace.announce("ホスト鍵の確認を待っている間に接続が切れたので、つなぎ直します。")
+	return d.attemptHop(ctx, request, hostKeys)
+}
+
+// lostWhileAnswering は、ハンドシェイクの失敗が、応答の無くなった接続によるものかを返す。切られた
+// 接続は EOF などになり、NAT に捨てられた接続は応答が無いままタイムアウトになる。
+func lostWhileAnswering(err error) bool {
+	failure := ClassifyConnectFailure(err)
+	return failure == ConnectFailureClosed || failure == ConnectFailureTimedOut
+}
+
+// attemptHop は、ホップひとつへ1回繋ぐ。
+func (d Dialer) attemptHop(ctx context.Context, request hopConnection, hostKeys *hostKeyLookup) (*ssh.Client, error) {
 	target, through, prompt, trace := request.target, request.through, request.prompt, request.trace
 	hop, hops := request.number, request.count
 	started := trace.now()
@@ -346,12 +368,12 @@ func (d Dialer) connectOne(ctx context.Context, request hopConnection) (*ssh.Cli
 	auth.Observe = deadline.stopAtAuthentication(auth.Observe)
 	authMethods, closeAuth := auth.methodsWithCleanup(target, prompt)
 	defer closeAuth()
-	hostKeys := d.HostKeys.lookup(target)
 	verifyHostKey := hostKeys.callback(prompt, trace)
+	var serverMethods []string
 	config := &ssh.ClientConfig{
 		User:         target.User,
 		Auth:         authMethods,
-		AuthCallback: traceAuthentication(trace),
+		AuthCallback: traceAuthentication(trace, &serverMethods),
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			trace.checkingHostKey(target, hop, hops, key)
 			trace.say(connectionlog.Full, "鍵交換が終わり、ホスト鍵を受け取りました（%s）。", connectionlog.Elapsed(trace.since(started)))
@@ -374,6 +396,7 @@ func (d Dialer) connectOne(ctx context.Context, request hopConnection) (*ssh.Cli
 	trace.say(connectionlog.Full, "SSHハンドシェイクを開始します。")
 	connection, channels, requests, err := newClientConn(deadline.ctx, conn, target.Address(), config)
 	if err != nil {
+		err = withServerMethods(err, serverMethods)
 		trace.say(connectionlog.Detailed, "SSHハンドシェイクが停止しました（%s）。", connectionlog.Elapsed(trace.since(handshakeStarted)))
 		describeProxyExit(trace, conn)
 		trace.say(connectionlog.Brief, "%s", connectionFailureMessage("SSHハンドシェイク", err))
@@ -548,12 +571,21 @@ func (d Dialer) openWithTimeout(
 	return conn, startConnectDeadline(ctx, timeout-time.Since(started), timeout), nil
 }
 
-// describeFailure は、DescribeFailure があれば、それで接続の失敗を利用者向けの文にする。
-func (d Dialer) describeFailure(err error) error {
-	if d.DescribeFailure == nil {
-		return err
+// failSession は、接続できなかった理由をターミナルへ書いてセッションを終える。
+//
+// 画面のターミナルには日本語の [sshc] の行で書き、元の英語の文は接続ログの「詳しく」に残す。
+// `sshc ssh` は DescribeFailure の文を CLI の失敗の行（sshc: ）で書く。
+func (d Dialer) failSession(session *Session, err error) {
+	var explained *ExplainedError
+	if !errors.As(err, &explained) {
+		session.trace.say(connectionlog.Detailed, "失敗の詳細：%v", err)
 	}
-	return d.DescribeFailure(err)
+	if d.DescribeFailure != nil {
+		reason := fmt.Errorf("sshc: %w", d.DescribeFailure(err))
+		session.fail(reason, reason.Error())
+		return
+	}
+	session.fail(err, connectionlog.Mark(connectionlog.Notice)+" "+FailureSentence(err))
 }
 
 // ExplainedError は、利用者向けの文を持つ失敗である。接続ログには、元の失敗の
@@ -611,7 +643,7 @@ func describeHop(trace *tracer, target Target) {
 }
 
 // connectionFailureMessage は、どの段階で失敗したかを言う。理由は言わない。
-// 理由は、接続の最後に `sshc:` の行（Session.fail）で必ず書くので、ここでも書くと
+// 理由は、接続の最後の行（Dialer.failSession）で必ず書くので、ここでも書くと
 // 同じ文が2回並ぶ。
 func connectionFailureMessage(action string, err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {

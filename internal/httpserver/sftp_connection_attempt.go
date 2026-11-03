@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
 	"sshc/internal/connectionattempt"
+	"sshc/internal/connectionlog"
 	"sshc/internal/sshclient"
 )
 
@@ -17,6 +19,24 @@ import (
 // ターミナルと同じく接続のあいだの経過を表示する。known_hosts に無いホスト鍵は、ターミナルと
 // 同じくタブの中で尋ね、別の要求で答えを受け取る。attempt を名乗らない要求（転送など）は、
 // 尋ねる相手がいないので未知の鍵を断る。
+
+// newConnectionAttempts は、接続の失敗をターミナルと同じ文で接続ログに残す Registry を返す。
+func newConnectionAttempts() *connectionattempt.Registry {
+	attempts := connectionattempt.NewRegistry()
+	attempts.FailureLines = connectionFailureLogLines
+	return attempts
+}
+
+// connectionFailureLogLines は、接続の失敗を、日本語の [sshc] の行と、元の英語の文の行にする。
+// 文に元の文が入っているときは、同じ文を2回並べない。
+func connectionFailureLogLines(err error) []string {
+	sentence := sshclient.FailureSentence(err)
+	lines := []string{connectionlog.Mark(connectionlog.Notice) + " " + sentence}
+	if !strings.Contains(sentence, err.Error()) {
+		lines = append(lines, connectionlog.Mark(connectionlog.Notice)+connectionlog.Mark(connectionlog.Detailed)+" 失敗の詳細："+err.Error())
+	}
+	return lines
+}
 
 // observeConnection は、要求が attempt を名乗っていれば、その接続の経過を預ける ctx と、
 // 要求の処理が終わったときに結果を渡す関数を返す。

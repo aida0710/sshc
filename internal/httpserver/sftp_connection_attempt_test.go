@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"sshc/internal/api"
-	"sshc/internal/connectionattempt"
 	sshcSFTP "sshc/internal/sftp"
 )
 
@@ -23,7 +25,7 @@ func sftpAttemptRequests(t *testing.T, failure error, opened *int) func(method, 
 			*opened++
 			return nil, failure
 		}},
-		Attempts: connectionattempt.NewRegistry(),
+		Attempts: newConnectionAttempts(),
 	}
 	engine, credentials := sftpHTTPEngine(t, handlers)
 	return func(method, target string) (int, []byte) {
@@ -34,7 +36,7 @@ func sftpAttemptRequests(t *testing.T, failure error, opened *int) func(method, 
 
 func TestAListingThatNamesAnAttemptLeavesTheReasonItFailedToBeRead(t *testing.T) {
 	opened := 0
-	send := sftpAttemptRequests(t, errors.New("dial tcp 192.0.2.10:22: connect: connection refused"), &opened)
+	send := sftpAttemptRequests(t, fmt.Errorf("ssh: handshake failed: %w", io.EOF), &opened)
 
 	if status, body := send(http.MethodGet, "/api/v1/sftp/edge/entries?path=/work&attempt="+attemptTestID); status == http.StatusOK {
 		t.Fatalf("listing = %d %s, want a failure", status, body)
@@ -47,7 +49,9 @@ func TestAListingThatNamesAnAttemptLeavesTheReasonItFailedToBeRead(t *testing.T)
 	if err := json.Unmarshal(body, &attempt); err != nil {
 		t.Fatal(err)
 	}
-	if !attempt.Finished || len(attempt.Log) != 1 || attempt.Log[0] != "sshc: dial tcp 192.0.2.10:22: connect: connection refused" {
+	if !attempt.Finished || len(attempt.Log) != 2 ||
+		!strings.HasPrefix(attempt.Log[0], "[sshc] 接続先が接続を切りました。") ||
+		!strings.HasSuffix(attempt.Log[1], "失敗の詳細：ssh: handshake failed: EOF") {
 		t.Errorf("attempt = %+v", attempt)
 	}
 	// Another host's tab cannot read it.

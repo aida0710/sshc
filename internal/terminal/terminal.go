@@ -244,8 +244,11 @@ type ExitInfo struct {
 	// 落ちたことを表す。自動再接続はこれを見て繋ぎ直す。終了コードの値には
 	// この意味を載せない。
 	TransportLost bool
-	// Notice は、終わり方について sshc がターミナルへ書く文である（輸送が落ちた理由、
-	// 接続ログの深さを上げたときの keepalive の上限や終了状態の行など）。
+	// TransportLossReason は、輸送が落ちた理由の元の文である。`sshc ssh` が出す。画面の
+	// ターミナルは再接続の行で切れたことを言うので、接続ログの「詳しく」にだけ残す。
+	TransportLossReason string
+	// Notice は、終わり方について sshc がターミナルへ書く文である（接続ログの深さを
+	// 上げたときの keepalive の上限や終了状態の行など）。
 	// Process はこれを出力へ書かずに返す。出力の終わりに書くと、終わったプログラムの
 	// 代替画面に書かれ、engine がモードを戻したときに見えなくなる。
 	Notice string

@@ -77,6 +77,9 @@ type serverOptions struct {
 	Password string
 	// Keyboard は keyboard-interactive の質問と正解。
 	Keyboard map[string]string
+	// KeyboardRefusesWithoutAsking は、keyboard-interactive を問いを出さずに断る。PAM の無い
+	// OpenSSH の形である。
+	KeyboardRefusesWithoutAsking bool
 	// KeyboardEcho はkeyboard-interactiveで入力を表示する指定を再現する。
 	// OTPを表示入力として返す実在サーバーがあるため、非表示だけでは不十分。
 	KeyboardEcho        bool
@@ -202,6 +205,12 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 				}
 			}
 			return &ssh.Permissions{}, nil
+		}
+	}
+	if options.KeyboardRefusesWithoutAsking {
+		config.KeyboardInteractiveCallback = func(ssh.ConnMetadata, ssh.KeyboardInteractiveChallenge) (*ssh.Permissions, error) {
+			server.noteAttempt()
+			return nil, errors.New("no such user")
 		}
 	}
 	if options.Banner != "" {
