@@ -1,4 +1,5 @@
 import { useId, type MouseEvent, type ReactNode } from "react";
+import { runsInAndroidApp } from "../android/native";
 import { updateApi as defaultUpdateApi, type UpdateApi } from "../api/update";
 import { useLanguage } from "../i18n/context";
 import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
@@ -50,7 +51,8 @@ export function MenuPanel({
       {index === columns.length - 1 ? (
         <MenuGroupSection label={t("menu.displaySettings")} compact={compact}>
           <LanguageRow compact={compact} />
-          <SignOutRow compact={compact} />
+          {/* Signing out sends a person back to the URL sshc open prints, which the Android app has no way to reach. */}
+          {runsInAndroidApp() ? null : <SignOutRow compact={compact} />}
         </MenuGroupSection>
       ) : null}
     </div>

@@ -1,4 +1,5 @@
 import { newIdentifier } from "../ui/randomIdentifier";
+import { runsInAndroidApp } from "./native";
 
 // The Android WebView's file input cannot pick a folder (webkitdirectory picks
 // nothing), so the Android app opens its own folder picker, lists the folder,
@@ -17,7 +18,7 @@ type FolderEvent = CustomEvent<{ requestId?: unknown; status?: unknown }>;
 type Listing = { directories: string[]; files: { path: string; url: string; size: number; lastModified: number }[] };
 
 export function canChooseAndroidFolder(target: Window = window): boolean {
-  return target.sshcAndroid !== undefined;
+  return runsInAndroidApp(target);
 }
 
 function isListing(value: unknown): value is Listing {

@@ -1,3 +1,4 @@
+import { runsInAndroidApp } from "../android/native";
 import { tagClass } from "../ui/Tag";
 import { Fragment, type DragEvent, type ReactNode } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -203,11 +204,14 @@ function rowActionItems({ item, related, inventory, actions, t }: {
     menu.push({ label: t("keys.showPrivateKey"), onSelect: () => actions.onReveal(item) });
     if (pairedPublic !== undefined) menu.push({ label: t("keys.showPublicKey"), onSelect: () => actions.onShowPublicKey(pairedPublic) });
     if (certificate !== undefined) menu.push({ label: t("keys.showCertificate"), onSelect: () => actions.onShowPublicKey(certificate) });
-    menu.push({
-      label: t(heldByAgent ? "keys.removeFromAgent" : "keys.addToAgent"),
-      disabled: !inventory.agentAvailable,
-      onSelect: () => heldByAgent ? actions.onRemoveFromAgent(item) : actions.onAddToAgent(item),
-    });
+    // Android has no ssh-agent, so the Android app does not offer one that can never be reached.
+    if (!runsInAndroidApp()) {
+      menu.push({
+        label: t(heldByAgent ? "keys.removeFromAgent" : "keys.addToAgent"),
+        disabled: !inventory.agentAvailable,
+        onSelect: () => heldByAgent ? actions.onRemoveFromAgent(item) : actions.onAddToAgent(item),
+      });
+    }
     if (item.encrypted) menu.push({ label: t("keys.manageStoredPassphrase"), onSelect: () => actions.onManageStoredPassphrase(item) });
     menu.push({ label: t("keys.changePassphrase"), onSelect: () => actions.onChangePassphrase(item) });
   }

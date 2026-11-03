@@ -33,6 +33,10 @@ type TrustedSort = Exclude<CandidateSort, "trust">;
 // 回転の印を出し、待つ間はもう一方も始めない。
 type KnownHostsAction = "scan" | "addToKnownHosts";
 
+// The engine answers with the file's absolute path, which a delete sends back to bind the action to the file. On
+// screen it is named as every page names a file under ~/.ssh: the app's private folder means nothing on a phone.
+const knownHostsShownPath = "~/.ssh/known_hosts";
+
 // sshc neither reads nor writes ~/.ssh/known_hosts through a symbolic link, so
 // every operation on the file fails the same way. That message says why and that
 // ssh, which follows the link, can still add a host's key. Any other failure keeps
@@ -348,7 +352,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
       <PageSection
         heading={t("kh.trustedHeading")}
         headingId="known-hosts-trusted-heading"
-        meta={listing?.path}
+        meta={knownHostsShownPath}
         actions={(
           <span className="relative block w-full sm:w-60">
             <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
@@ -366,7 +370,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
         )}
       >
         {listing === null ? null : narrowList ? (
-          <ul aria-label={listing.path} className="flex flex-col">
+          <ul aria-label={knownHostsShownPath} className="flex flex-col">
             {displayedEntries.map((item) => {
               const key = `${item.line}-${item.digest}`;
               const opened = openedEntry === key;
@@ -404,7 +408,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
           </ul>
         ) : (
           <table className="w-full text-[13px]">
-            <caption className="sr-only">{listing.path}</caption>
+            <caption className="sr-only">{knownHostsShownPath}</caption>
             <thead>
               <tr className={tableHeadRow}>
                 <SortableTableHeader column="host" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
