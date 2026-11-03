@@ -97,6 +97,7 @@ var androidFieldIntent = map[string]string{
 	"Listen":      "wired: net.Listen",
 	"DefaultPort": "wired: WebView の localStorage と OPFS を起動をまたいで保つため、origin を固定する。desktop の固定 origin とは共有しない",
 	"UI":          "wired: 埋め込んだ SPA",
+	"Network":     "wired: ConnectivityManager の知らせ（SetNetworkAvailable）",
 	"Logger":      "wired: 呼び出し元が渡す",
 	"Home":        "wired: アプリの filesDir",
 	"Owner":       "wired: handoff.OwnerEngine",

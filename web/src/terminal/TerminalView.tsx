@@ -851,6 +851,11 @@ export function TerminalView({
     setComposerText("");
   }
 
+  function resumeProgram(command: string) {
+    sendInput.current(`${command}\r`);
+    if (!touchTerminalRef.current) terminal.current?.focus();
+  }
+
   const statusBanners = (
     <TerminalStatusBanners
       session={session}
@@ -860,6 +865,7 @@ export function TerminalView({
       onLinkStop={() => streamLinkController.current?.stopRetrying()}
       recovery={recovery}
       hostKeyAnswer={hostKeyAnswer}
+      onResumeProgram={resumeProgram}
     />
   );
 
@@ -1023,8 +1029,9 @@ export function TerminalView({
               notificationPermission={notificationPermission}
               focus={{
                 // Only the terminal the person works in, and not from under a dialog or menu. A phone shows it when the
-                // person asks for the notices, so it always takes the focus there.
-                take: mobile || (active && !isDismissibleLayerOpen()),
+                // person asks for the notices, so it always takes the focus there. The hint about the previous shell's
+                // program leaves the focus alone: the new shell is there to type into.
+                take: mobile || (notice.kind !== "resume-program" && active && !isDismissibleLayerOpen()),
                 // A touch screen would raise its keyboard again for the terminal.
                 giveBack: () => {
                   if (!touchTerminalRef.current) terminal.current?.focus();
@@ -1034,6 +1041,7 @@ export function TerminalView({
               onCloseSession={onCloseSession}
               onAnswerPasswordSave={onAnswerPasswordSave}
               onDismiss={mobile ? mobileNotices.close : noticeDismissal.dismiss}
+              onResumeProgram={resumeProgram}
             />
           </div>
         )}

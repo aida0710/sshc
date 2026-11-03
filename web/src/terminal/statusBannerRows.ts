@@ -12,7 +12,9 @@ export type StatusBannerRow =
   // Why the connection is in trouble while the session still runs.
   | "connection-problem"
   | "link"
-  | "ended";
+  | "ended"
+  // A program that ran in the lost shell can be started again in the new one.
+  | "resume-program";
 
 // NoticeSeverity is how a phone's notices button is coloured: danger once something ended or failed, notice while the
 // engine is working on it or a question waits.
@@ -39,6 +41,7 @@ export function statusBannerRows({ session, problem, link, reconnectFailed, answ
   if (session.problem !== "" && session.exited === undefined) rows.push("connection-problem");
   if (link.phase !== "live") rows.push("link");
   if (session.exited !== undefined) rows.push("ended");
+  if (session.resume !== undefined) rows.push("resume-program");
   return rows;
 }
 

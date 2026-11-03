@@ -460,6 +460,7 @@ func TestALocalShellIsNeverDialledAgain(t *testing.T) {
 func newFastRegistry() (*terminal.Registry, *fakeStarter) {
 	registry, starter := newRegistry(terminal.DefaultLimits())
 	registry.ReconnectDelay = func(int) time.Duration { return 0 }
+	registry.NetworkRetryInterval = time.Millisecond
 	return registry, starter
 }
 

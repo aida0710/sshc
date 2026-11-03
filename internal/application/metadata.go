@@ -76,6 +76,10 @@ type HostMetadata struct {
 	// PasswordSaveDeclinedBinding は、ターミナルで打ったパスワードを Vault に保存しないと答えた
 	// ときの認証先の digest である（AuthenticationBinding）。同じ認証先には二度と尋ねない。engine が書く。
 	PasswordSaveDeclinedBinding string `json:"passwordSaveDeclinedBinding,omitempty"`
+	// Tmux は、この接続をシェルの代わりに tmux で開くかである（sshclient/tmux.go）。
+	//
+	// ssh_configのRemoteCommandには書かない。書くと`ssh host コマンド`やscpが断られる。
+	Tmux bool `json:"tmux,omitempty"`
 }
 
 // TerminalAppearance は、端末の見た目の選択である。

@@ -28,18 +28,19 @@ type CardOptions = {
   focus?: NoticeFocus;
   asksNotificationPermission?: boolean;
   onAnswerPasswordSave?: (save: boolean) => Promise<boolean>;
+  onResumeProgram?: (command: string) => void;
 };
 
 function renderCard(
   shown: TerminalSession,
   actions: SessionRecovery,
-  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: false, giveBack: vi.fn() }, asksNotificationPermission = false, onAnswerPasswordSave }: CardOptions = {},
+  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: false, giveBack: vi.fn() }, asksNotificationPermission = false, onAnswerPasswordSave, onResumeProgram = vi.fn() }: CardOptions = {},
 ) {
   const notice = terminalNoticeFor(shown, { phase: "live" }, asksNotificationPermission);
   if (notice === null) throw new Error("no card for this session");
   const notificationPermission = { due: asksNotificationPermission, finish: vi.fn() };
-  const view = render(<TerminalNoticeCard notice={notice} session={shown} title="web-01" recovery={actions} hostKeyAnswer={answers} notificationPermission={notificationPermission} focus={focus} onLinkNow={vi.fn()} onCloseSession={onCloseSession} onAnswerPasswordSave={onAnswerPasswordSave} onDismiss={onDismiss} />);
-  return { onCloseSession, onDismiss, answers, focus, notificationPermission, view };
+  const view = render(<TerminalNoticeCard notice={notice} session={shown} title="web-01" recovery={actions} hostKeyAnswer={answers} notificationPermission={notificationPermission} focus={focus} onLinkNow={vi.fn()} onCloseSession={onCloseSession} onAnswerPasswordSave={onAnswerPasswordSave} onDismiss={onDismiss} onResumeProgram={onResumeProgram} />);
+  return { onCloseSession, onDismiss, answers, focus, notificationPermission, view, onResumeProgram };
 }
 
 describe("the question about a typed password", () => {
@@ -111,6 +112,26 @@ describe("TerminalNoticeCard", () => {
       expect(onDismiss).not.toHaveBeenCalled();
       expect(requestNotificationPermission).not.toHaveBeenCalled();
     });
+  });
+
+  it("says it waits for the network without counting down an attempt", () => {
+    renderCard({
+      ...session, state: "reconnecting",
+      reconnect: { attempt: 1, limit: 5, retryAt: "2026-11-02T09:30:00Z", problem: "", waitingForNetwork: true },
+    }, recovery());
+    const card = screen.getByRole("region", { name: "The connection to web-01 was lost" });
+    expect(card).toHaveTextContent("Waiting for the network");
+    expect(card).toHaveTextContent("Reconnects as soon as the network is back.");
+    expect(card).not.toHaveTextContent("1/5");
+  });
+
+  it("offers to start the previous shell's program again with the command the engine gave", async () => {
+    const onResumeProgram = vi.fn();
+    renderCard({ ...session, resume: { program: "Claude Code", command: "claude --continue" } }, recovery(), { onResumeProgram });
+    const card = screen.getByRole("region", { name: "Claude Code was running in the previous shell" });
+    expect(card).toHaveTextContent("claude --continue");
+    await userEvent.click(screen.getByRole("button", { name: "Continue where it left off" }));
+    expect(onResumeProgram).toHaveBeenCalledWith("claude --continue");
   });
 
   it("reconnects on an Enter pressed on the card itself when the connection was lost", async () => {

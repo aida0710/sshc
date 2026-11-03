@@ -55,6 +55,7 @@ func newDependencies(options dependencyOptions) (app.Dependencies, error) {
 		Home:        options.home,
 		Owner:       handoff.OwnerEngine,
 		PID:         os.Getpid(),
+		Network:     network,
 		// モバイルには ssh-keygen と ssh-agent がない。
 		Toolchain: nil,
 		KeyAgent:  nil,

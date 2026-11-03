@@ -20,6 +20,13 @@ describe("statusBannerRows", () => {
     expect(statusBannerRows({ ...quiet, session: ended })).toEqual(["ended"]);
   });
 
+  it("offers to continue the previous shell's program as a notice, not a failure", () => {
+    const resuming: TerminalSession = { ...session, resume: { program: "Claude Code", command: "claude --continue" } };
+    const rows = statusBannerRows({ ...quiet, session: resuming });
+    expect(rows).toEqual(["resume-program"]);
+    expect(noticeSeverity(rows, { session: resuming, link: live })).toBe("notice");
+  });
+
   it("asks about a host key only where a button can answer it", () => {
     const asking: TerminalSession = {
       ...session, state: "connecting",

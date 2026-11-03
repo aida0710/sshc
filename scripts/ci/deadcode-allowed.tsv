@@ -7,3 +7,4 @@
 mobile/sshc.go	Version	gomobile が Java 側に生やす。呼び手は JNI の向こう (EngineService の通知) に居るので、Go からは到達不能に見える。
 third_party/go-serial/unixutils/select.go	FDResultSets.IsError	upstream（bugst/go-serial）の公開 API をフォークでもそのまま残す。差分を最小に保つため消さない。
 third_party/go-serial/unixutils/select.go	FDResultSets.IsWritable	同上。
+mobile/sshc.go	SetNetworkAvailable	gomobile が Java 側に生やす。呼び手は JNI の向こう (NetworkWatcher) に居るので、Go からは到達不能に見える。

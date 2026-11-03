@@ -272,6 +272,8 @@ type ReconnectView struct {
 	Limit   int
 	RetryAt time.Time
 	Problem string
+	// WaitingForNetwork は、回線が無いので待っていることを表す。待つ間は回数に数えない。
+	WaitingForNetwork bool
 }
 
 // ExitCodeUnknown は、終了コードを得られなかったときの Code である。輸送が

@@ -39,6 +39,8 @@ type sshParts struct {
 	dialer   sshclient.Dialer
 	resolve  sshclient.Resolver
 	encoding func(string) (textencoding.Name, error)
+	// opensInTmux は、対話セッションをシェルの代わりに tmux で開く接続かを返す。
+	opensInTmux func(string) (bool, error)
 	// vpnProfile は、この alias が通るVPNプロファイルの名前と識別子を返す。
 	vpnProfile func(string) (application.AttachedVPNProfile, error)
 	// facts は、IdentityFile の ~ とトークンを展開するこのマシンの事実である。
@@ -110,6 +112,12 @@ func newSSHParts(dependencies sshDependencies) sshParts {
 				return application.AttachedVPNProfile{}, errNoConfiguration
 			}
 			return config.ConnectionVPNProfile(alias)
+		},
+		opensInTmux: func(alias string) (bool, error) {
+			if config == nil {
+				return false, errNoConfiguration
+			}
+			return config.ConnectionTmux(alias)
 		},
 		facts: application.LocalFactsFor(home),
 	}
@@ -188,6 +196,13 @@ func (p sshParts) connector(offerPasswordSave func(sshclient.Target) bool) termi
 		target, err := p.sessionTarget(name)
 		if err != nil {
 			return nil, err
+		}
+		opensInTmux, err := p.opensInTmux(name)
+		if err != nil {
+			return nil, err
+		}
+		if opensInTmux {
+			target.TmuxSession = terminal.TmuxSessionIn(ctx)
 		}
 		return dialer.Open(ctx, target, size)
 	}
