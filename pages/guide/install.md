@@ -168,7 +168,7 @@ sshc service restart
 ## 更新
 
 - Homebrew／`install.sh`／Windowsの`install.ps1`: `sshc update`
-- Android: GitHub Releasesから新しいAPKをインストール
+- Android: 新しいバージョンが公開されると、バージョンの下と［About sshc］に［リリースページを開く］が出ます。開いたページから新しいAPKをインストールします
 
 ### Web画面から更新する
 

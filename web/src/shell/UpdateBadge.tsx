@@ -8,7 +8,7 @@ import { availableRelease, isUpdateActive, useUpdateStatus } from "./useUpdateSt
 import { UpdateResultDialog } from "./UpdateResultDialog";
 import { isSafeHttpURL } from "../terminal/links";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
-import { explainedUpdateReason, updateMessage } from "./updateMessage";
+import { explainedUpdateReason, installsFromReleasePage, updateMessage } from "./updateMessage";
 import { readShownUpdateResult, updateDialogKey, updateJobToShow } from "./updateResultShown";
 
 type UpdateBadgeProps = {
@@ -94,7 +94,7 @@ export function UpdateBadge({ api = updateApi, current = "", leading, indicator,
         {release === undefined || releasePage === undefined ? null : (
           <p className={detailIndent}>
             <a href={releasePage} target="_blank" rel="noreferrer noopener" className="text-ink underline underline-offset-2">
-              {t("update.available", { version: release })}
+              {t(status !== null && installsFromReleasePage(status) ? "update.availableOnReleasePage" : "update.available", { version: release })}
             </a>
           </p>
         )}

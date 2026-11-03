@@ -92,20 +92,24 @@ func startWith(home, cache string, run engineRunner, probe entranceProbe) (strin
 	// 流し込めば、cgo を 1 行も書かずに logcat へ出る。
 	logger := slog.New(slog.NewTextHandler(log.Writer(), &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	entrance := make(chan string, 1)
-	dependencies, err := newDependencies(runtime.GOOS, home, cache, logger, func(readiness app.Readiness) error {
-		entrance <- readiness.Entrance
-		return nil
-	})
-	if err != nil {
-		return "", fail(KindUnknown, err)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	// Ownership moves to running.cancel only on a successful start. Keeping one
 	// deferred release makes every earlier return cancel the engine context;
 	// success replaces this local value after saving the original callback.
 	defer func() { cancel() }()
+
+	entrance := make(chan string, 1)
+	dependencies, err := newDependencies(dependencyOptions{
+		ctx: ctx, goos: runtime.GOOS, home: home, cache: cache, logger: logger,
+		announce: func(readiness app.Readiness) error {
+			entrance <- readiness.Entrance
+			return nil
+		},
+	})
+	if err != nil {
+		return "", fail(KindUnknown, err)
+	}
+
 	done := make(chan struct{})
 	failed := make(chan error, 1)
 	go func() {

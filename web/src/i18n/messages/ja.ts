@@ -1660,6 +1660,8 @@ export const ja = {
   "update.unavailable": "この導入では自動更新を利用できません。",
   "update.version": "バージョン{version}",
   "update.available": "{version}が公開されています。変更点を見る",
+  "update.availableOnReleasePage": "{version}が公開されています。リリースページを開く",
+  "update.openReleasePage": "リリースページを開く",
   "desktop.closeAllHeading": "Open connections",
   "desktop.closeAllNote":
     "すべてのセッション、ポート転送、ssh-agent転送を終了します。sshcエンジンは動作を続けます。",

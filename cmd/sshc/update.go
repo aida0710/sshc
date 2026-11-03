@@ -15,12 +15,11 @@ import (
 )
 
 const (
-	latestReleaseAPI = "https://api.github.com/repos/aida0710/sshc/releases/latest"
 	maxInstallerSize = 1 << 20
 
 	// updateReleaseCheckTimeout は、sshc update が最新リリースを尋ねる上限である。
 	// 利用者は確認そのものを求めて待っているので、engine の起動時の確認
-	// （releaseCheckTimeout）より長く、遅い回線でも答えを待つ。
+	// （startupUpdateCheckTimeout）より長く、遅い回線でも答えを待つ。
 	updateReleaseCheckTimeout = 30 * time.Second
 	// installerDownloadTimeout は、installer（maxInstallerSize 以下のスクリプト）1 本を
 	// 取得する上限である。本体の取得は installer 自身が行うので、ここには含まれない。
@@ -52,7 +51,7 @@ type updateDependencies struct {
 
 func defaultUpdateDependencies() updateDependencies {
 	checker := &releasecheck.Checker{
-		API:  latestReleaseAPI,
+		API:  releasecheck.LatestAPI,
 		HTTP: &http.Client{Timeout: updateReleaseCheckTimeout},
 	}
 	installerClient := taggedInstallerHTTPClient()
