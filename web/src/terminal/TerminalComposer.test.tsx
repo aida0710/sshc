@@ -18,10 +18,10 @@ beforeEach(() => {
   }));
 });
 
-function renderComposer({ value = "", disabled = false, enterSends = false } = {}) {
+function renderComposer({ value = "", sendable = true, enterSends = false } = {}) {
   const onSubmit = vi.fn();
   const onChange = vi.fn();
-  render(<TerminalComposer value={value} disabled={disabled} enterSends={enterSends} onChange={onChange} onSubmit={onSubmit} />);
+  render(<TerminalComposer value={value} sendable={sendable} enterSends={enterSends} onChange={onChange} onSubmit={onSubmit} />);
   return { onSubmit, onChange, field: screen.queryByRole("textbox", { name: "Text to send to the terminal" }) };
 }
 
@@ -80,14 +80,33 @@ describe("TerminalComposer", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("cannot send while the terminal is not connected", async () => {
-    const { onSubmit, field } = renderComposer({ value: "続けて", disabled: true, enterSends: true });
+  it("says that the button presses Enter while nothing is typed", async () => {
+    const { onSubmit } = renderComposer();
 
-    expect(field).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    const button = screen.getByRole("button", { name: "Press Enter" });
+    expect(button.querySelector("[data-icon]")).toHaveAttribute("data-icon", "cornerDownLeft");
+    await userEvent.click(button);
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the send arrow once something is typed", () => {
+    renderComposer({ value: " " });
+
+    const button = screen.getByRole("button", { name: "Send" });
+    expect(button.querySelector("[data-icon]")).toHaveAttribute("data-icon", "arrowUp");
+    expect(screen.queryByRole("button", { name: "Press Enter" })).toBeNull();
+  });
+
+  it("stays editable while nothing can be sent, marks the button, and still lets a press through to say why", async () => {
+    const { onSubmit, field } = renderComposer({ value: "続けて", sendable: false, enterSends: true });
+
+    expect(field).toBeEnabled();
+    const button = screen.getByRole("button", { name: "Send" });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(button);
     fireEvent.keyDown(field!, { key: "Enter" });
-    await userEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onSubmit).toHaveBeenCalledTimes(2);
   });
 });

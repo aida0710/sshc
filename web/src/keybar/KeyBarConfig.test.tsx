@@ -39,6 +39,45 @@ describe("arranging the key bar", () => {
     expect(shownRow().getByRole("button", { name: "Tab" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("offers the Claude Code key bar without saving it among the person's own", async () => {
+    render(<KeyBarConfig />);
+    const preset = screen.getByRole("combobox", { name: "Key bar preset" });
+    expect(within(preset).getByRole("option", { name: "Claude Code" })).toBeInTheDocument();
+
+    fireEvent.change(preset, { target: { value: "claude-code" } });
+
+    await waitFor(() => expect(server.document().presets[0]?.interface?.keyBarPreset).toBe("claude-code"));
+    expect(presets).toEqual([]);
+    expect(await shownRow().findByRole("button", { name: "Shift+Tab" })).toBeInTheDocument();
+    expect(preset).toHaveValue("claude-code");
+  });
+
+  it("keeps a change to the Claude Code key bar in a key bar of one's own, and leaves the built-in one as it was", async () => {
+    render(<KeyBarConfig />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Key bar preset" }), { target: { value: "claude-code" } });
+    await shownRow().findByRole("button", { name: "Shift+Tab" });
+    fireEvent.click(shownRow().getByRole("button", { name: "Tab" }));
+    fireEvent.click(screen.getByRole("button", { name: "Earlier" }));
+
+    await waitFor(() => expect(savedKeys()?.slice(-2)).toEqual(["Tab", "@"]));
+    expect(presets[0]?.name).toBe("My Claude Code");
+    expect(presets[0]?.id).not.toBe("claude-code");
+    expect(server.document().presets[0]?.interface?.keyBarPreset).toBe(presets[0]?.id);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Key bar preset" }), { target: { value: "claude-code" } });
+    await waitFor(() => expect(server.document().presets[0]?.interface?.keyBarPreset).toBe("claude-code"));
+    const builtInRow = await shownRow().findAllByRole("button");
+    expect(builtInRow.at(-1)).toHaveAccessibleName("Tab");
+  });
+
+  it("offers Shift+Tab to place", async () => {
+    render(<KeyBarConfig />);
+    fireEvent.click(offered("Input and modifiers").getByRole("button", { name: "Shift+Tab" }));
+
+    await waitFor(() => expect(savedKeys()).toContain("Shift+Tab"));
+    expect(offered("Input and modifiers").getByRole("button", { name: "Shift+Tab" })).toBeDisabled();
+  });
+
   it("puts a key on offer after the selected key, and offers a named key only while it is not in the bar", async () => {
     render(<KeyBarConfig />);
     fireEvent.click(shownRow().getByRole("button", { name: "Esc" }));

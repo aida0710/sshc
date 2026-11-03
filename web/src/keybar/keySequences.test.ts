@@ -11,6 +11,7 @@ describe("keyBarInput for the named keys", () => {
   it("sends the sequences xterm sends for the same keys", () => {
     expect(keyBarInput({ key: "Escape" }, none, normalCursor)).toBe("\x1b");
     expect(keyBarInput({ key: "Tab" }, none, normalCursor)).toBe("\t");
+    expect(keyBarInput({ key: "Shift+Tab" }, none, normalCursor)).toBe("\x1b[Z");
     expect(keyBarInput({ key: "Enter" }, none, normalCursor)).toBe("\r");
     expect(keyBarInput({ key: "Backspace" }, none, normalCursor)).toBe("\x7f");
     expect(keyBarInput({ key: "ArrowUp" }, none, normalCursor)).toBe("\x1b[A");

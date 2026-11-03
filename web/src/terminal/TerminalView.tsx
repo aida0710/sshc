@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import type { Terminal } from "@xterm/xterm";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { exitedAbnormally, sessionStateText, sessionStatusTone } from "./sessionStatus";
@@ -78,7 +79,7 @@ import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { TerminalComposer } from "./TerminalComposer";
-import { planComposerSend } from "./composerSend";
+import { composerSendBlock, planComposerSend, type ComposerSendBlock } from "./composerSend";
 import { terminalCommandApiFor } from "./commands/commandApi";
 import { forwardApiFor } from "./forwardApi";
 import { useLocalWindowsPaths } from "./useLocalWindowsPaths";
@@ -165,6 +166,12 @@ const linkPopoverOffsetPx = 8;
 // stays legible on its small screen.
 const mobileTerminalFontSize = 15;
 const desktopTerminalFontSize = 13;
+
+const composerSendBlockMessages: Record<ComposerSendBlock, MessageKey> = {
+  "wait-for-connection": "terminal.composerWaitForConnection",
+  "reconnect-first": "terminal.composerReconnectFirst",
+  "session-ended": "terminal.composerSessionEnded",
+};
 
 export function TerminalView({
   session,
@@ -705,10 +712,7 @@ export function TerminalView({
       },
       // A phone types into its text box, where Japanese is composed before it is sent; the terminal
       // takes the keys typed with the key bar's Ctrl or Alt (holdModifier below).
-      typingTarget: () => {
-        const field = composerField.current;
-        return field === null || field.disabled ? view : field;
-      },
+      typingTarget: () => composerField.current ?? view,
     });
     refit.current?.();
     return () => {
@@ -807,7 +811,13 @@ export function TerminalView({
     if (typingInTerminal) composerField.current?.focus();
   }
 
+  const sendBlock = composerSendBlock(session, link);
+
   function submitComposer() {
+    if (sendBlock !== null) {
+      setTerminalNotice(t(composerSendBlockMessages[sendBlock]));
+      return;
+    }
     const plan = planComposerSend(composerText, { bracketedPaste: terminal.current?.modes.bracketedPasteMode ?? false });
     if (plan.kind === "confirm") {
       setPendingPaste({ sessionId: session.id, raw: plan.text, fromComposer: true });
@@ -1079,7 +1089,7 @@ export function TerminalView({
       />
       {directInput ? null : <TerminalComposer
         value={composerText}
-        disabled={link.phase !== "live"}
+        sendable={sendBlock === null}
         enterSends={composerEnterSends}
         fieldRef={composerField}
         onChange={setComposerText}

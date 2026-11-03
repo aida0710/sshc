@@ -633,7 +633,13 @@ func TestAuthenticationPromptStillAcceptsInputBeforeReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	process := spy.at(0)
+	if session.View().AwaitingPrompt {
+		t.Fatal("the view says a prompt waits before one was shown")
+	}
 	process.prompt.Store(true)
+	if !session.View().AwaitingPrompt {
+		t.Fatal("the view does not say that the prompt waits for an answer")
+	}
 	if _, err := session.Write([]byte("answer\r")); err != nil {
 		t.Fatalf("Write to prompt = %v", err)
 	}

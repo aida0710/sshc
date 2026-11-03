@@ -471,6 +471,50 @@ test("the Android app asks for the notification permission once, behind the noti
   await expect(notices).toHaveCount(0);
 });
 
+test("Android back lets go of text selected in the terminal before it leaves the terminal", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await openShellFromNavigation(page);
+  await expect(drawnRows(page).filter({ visible: true })).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/terminal/);
+  const terminal = page.url();
+
+  // A long press selects through Android's own handles, which a test cannot raise; the selection they make is this one.
+  await page.evaluate(() => { document.getSelection()!.selectAllChildren(document.querySelector(".sshc-select-overlay")!); });
+  const selected = () => page.evaluate(() => document.getSelection()?.isCollapsed === false);
+  expect(await selected()).toBe(true);
+
+  expect(await pressAndroidBack(page)).toBe("handled");
+  expect(await selected()).toBe(false);
+  expect(page.url()).toBe(terminal);
+
+  // Nothing is left to let go of: this one leaves.
+  await pressAndroidBack(page);
+  await expect(page).not.toHaveURL(terminal);
+});
+
+test("keeps what was written in the phone's text box once the session has ended, and says what to do", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await openShellFromNavigation(page);
+  await expect(drawnRows(page).filter({ visible: true })).toContainText(/[$#%>]/, { timeout: 20_000 });
+
+  const textBox = page.getByLabel("Text to send to the terminal", { exact: true });
+  await textBox.fill("exit");
+  await page.getByRole("button", { name: "Send", exact: true }).tap();
+  await expect(page.getByRole("button", { name: "Press Enter", exact: true })).toHaveAttribute("aria-disabled", "true");
+
+  await textBox.fill("a long request to Claude Code");
+  const send = page.getByRole("button", { name: "Send", exact: true });
+  await expect(send).toHaveAttribute("aria-disabled", "true");
+  // A person can still press it, to learn why it does not send; Playwright would wait for it to be enabled.
+  await send.tap({ force: true });
+
+  await expect(textBox).toHaveValue("a long request to Claude Code");
+  await expect(textBox).toBeEditable();
+  await expect(page.getByText("This session has ended.")).toBeVisible();
+});
+
 test("a finger moves the shell's scrollback by the pixel and settles it on a row", async ({ page, installation }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApplication(page, installation);

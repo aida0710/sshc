@@ -25,7 +25,8 @@ export type PresetLibraryState<Preset> = { presets: Preset[]; loading: boolean; 
 
 export type PresetLibrary<Preset extends LibraryPreset> = {
   // usePresets is the library and the preset a settings preset chose (the one this machine uses when
-  // settingsPresetId is left out). A choice of a deleted preset is shown as the defaults, which are in force.
+  // settingsPresetId is left out). presets holds the saved ones only. A choice of a deleted preset is shown as the
+  // defaults, which are in force.
   usePresets(settingsPresetId?: string): PresetLibraryState<Preset> & { selected: string };
   // useChosen is the preset in force for a settings preset, or undefined for the defaults.
   useChosen(settingsPresetId?: string): Preset | undefined;
@@ -36,7 +37,7 @@ export type PresetLibrary<Preset extends LibraryPreset> = {
   // update replaces the list and makes a settings preset take selected.
   update(next: Preset[], selected: string, settingsPresetId?: string): Promise<void>;
   // saveChosen keeps an edit in the preset a settings preset chose; build is given undefined when it chose
-  // the defaults, and returns a new preset to keep the edit in.
+  // the defaults or a built-in preset, neither of which can change, and returns a new preset to keep the edit in.
   saveChosen(build: (chosen: Preset | undefined) => Preset, settingsPresetId?: string): Promise<void>;
 };
 
@@ -53,10 +54,13 @@ const registrations = new Set<Registration>();
 let generation = 0;
 let refreshing = false;
 
-export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, read, choice }: {
+export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, read, choice, builtIn = [] }: {
   endpoint: string;
   read: (metadata: Metadata) => Preset[] | undefined;
   choice: ChoiceKey;
+  // builtIn are presets that ship with sshc: a settings preset chooses one by id like a saved one, but they are not
+  // in the list that is saved.
+  builtIn?: readonly Preset[];
 }): PresetLibrary<Preset> {
   let state: PresetLibraryState<Preset> = { presets: [], loading: true, busy: false, error: false };
   let revision = 0;
@@ -68,7 +72,8 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
   // chosenId is the choice as stored, which may name a preset deleted since.
   const chosenId = (document: SettingsDocument | null, settingsPresetId?: string) =>
     presetInterfaceOf(document, settingsPresetId)[choice] ?? defaultPresetId;
-  const chosenIn = (presets: Preset[], id: string) => presets.find((preset) => preset.id === id);
+  const savedIn = (presets: Preset[], id: string) => presets.find((preset) => preset.id === id);
+  const chosenIn = (presets: Preset[], id: string) => savedIn(presets, id) ?? builtIn.find((preset) => preset.id === id);
 
   registrations.add({
     begin(atGeneration) {
@@ -115,9 +120,9 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
     select,
     update,
     async saveChosen(build, settingsPresetId) {
-      const selected = chosenIn(state.presets, chosenId(currentSettings(), settingsPresetId));
-      const preset = build(selected);
-      const next = selected === undefined ? [...state.presets, preset] : state.presets.map((p) => p.id === preset.id ? preset : p);
+      const saved = savedIn(state.presets, chosenId(currentSettings(), settingsPresetId));
+      const preset = build(saved);
+      const next = saved === undefined ? [...state.presets, preset] : state.presets.map((p) => p.id === preset.id ? preset : p);
       await update(next, preset.id, settingsPresetId);
     },
   };

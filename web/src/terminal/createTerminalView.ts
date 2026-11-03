@@ -10,6 +10,7 @@ import { attachLigatures, type LigatureDrawing } from "./ligatures";
 import { linkTextNamesTarget, modifierOpensLink, osc8Link } from "./links";
 import type { ScreenPoint } from "./tappedLink";
 import { openTerminalURL, type TerminalLinkSelection } from "./TerminalLinkPopover";
+import { redrawOnceSymbolFontLoads } from "./terminalSymbolFont";
 import { applyCurrentUnicodeWidths } from "./unicodeWidths";
 import { attachWebglWhileShown } from "./webgl";
 
@@ -100,6 +101,7 @@ export function createTerminalView(container: HTMLElement, options: TerminalView
     backgroundImage: options.backgroundImage,
     webglSettled: options.webglSettled,
   });
+  const stopWaitingForSymbolFont = redrawOnceSymbolFontLoads(view);
   return {
     view,
     fit,
@@ -108,6 +110,7 @@ export function createTerminalView(container: HTMLElement, options: TerminalView
     ligatureDrawing,
     renderer,
     dispose: () => {
+      stopWaitingForSymbolFont();
       alternateScreen.dispose();
       inlineImages.dispose();
       ligatureDrawing.dispose();

@@ -900,6 +900,40 @@ test("arranges the key bar in the settings, and the terminal's bar follows it", 
   await keys.getByRole("button", { name: "Ctrl+C", exact: true }).click();
 });
 
+test("offers a key bar for Claude Code, whose keys reach the program as the keys themselves", async ({ page, installation }) => {
+  test.skip(
+    process.platform === "win32",
+    "on-screen keys are a touch affordance; make e2e on Linux or macOS covers this path",
+  );
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Menu", exact: true }).click();
+  await page.getByRole("link", { name: "Open Key bar" }).click();
+
+  const preset = page.getByRole("combobox", { name: "Key bar preset" });
+  await preset.selectOption({ label: "Claude Code" });
+  const order = page.getByRole("group", { name: "Keys always shown" });
+  await expect(order.getByRole("button", { name: "Shift+Tab", exact: true })).toBeVisible();
+
+  // The choice is kept in the settings: it is there after a reload.
+  await page.reload();
+  await expect(preset.locator("option:checked")).toHaveText("Claude Code");
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await openLocalShell(page);
+  const rows = drawnRows(page);
+  await expect(rows).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const keys = page.getByLabel("On-screen keys");
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("cat -v");
+  await page.keyboard.press("Enter");
+  await keys.getByRole("button", { name: "Shift+Tab", exact: true }).click();
+  await keys.getByRole("button", { name: "/", exact: true }).click();
+  await keys.getByRole("button", { name: "@", exact: true }).click();
+  await keys.getByRole("button", { name: "Enter", exact: true }).click();
+  await expect(rows).toContainText("^[[Z/@", { timeout: 20_000 });
+  await keys.getByRole("button", { name: "Ctrl+C", exact: true }).click();
+});
+
 test("types straight into the terminal after the direct input key, with the text box hidden, and back", async ({ page, installation }) => {
   test.skip(
     process.platform === "win32",
