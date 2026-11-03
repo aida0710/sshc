@@ -71,6 +71,15 @@ type Session struct {
 	connectedCallback func()
 	connectedOnce     sync.Once
 
+	// tmuxSession is the name of the tmux session this session's connection opens,
+	// if the connection uses tmux. It never changes. See tmux_session.go.
+	tmuxSession string
+	// resumeProgram is the program (its OSC 7501 name) that ran in a shell this
+	// session lost, until the person runs something in the new one. See
+	// resume_program.go.
+	resumeProgram   string
+	resumeDirectory string
+
 	reopen         func(ctx context.Context, size Size) (Process, error)
 	reconnectError func(error) (retry bool, problem string)
 	stopNotice     func(problem string) string
@@ -81,7 +90,14 @@ type Session struct {
 	// ReconnectSettled のあいだ安定して繋がったら 0 に戻す。
 	reconnectAttempts int
 	reconnectCancel   context.CancelFunc
-	now               func() time.Time
+	// network は、このマシンの回線について OS が言うことである。nil なら OS は何も言わない。
+	network      *NetworkWatch
+	networkRetry time.Duration
+	// noNetwork は、直前の接続の試みが回線の無さで失敗したことを表す。reconnect_network.go。
+	noNetwork bool
+	// networkWaitAnnounced は、回線を待っていることをターミナルに書いたことを表す。
+	networkWaitAnnounced bool
+	now                  func() time.Time
 	// stopping は、繋ぎ直しを待っている最中に閉じられたことを伝える。
 	stopping chan struct{}
 	// discarded は、ユーザーが自分でこのコンソールを閉じたことを表す。
@@ -127,6 +143,8 @@ type View struct {
 	// PasswordSaveQuestion is true while a password typed for this connection
 	// waits on whether to save it. The password itself is never in the view.
 	PasswordSaveQuestion bool
+	// Resume is present while a program that ran in a lost shell can be started again.
+	Resume *ResumeHint
 	// ProgramProgress is the current program's OSC 9;4 report, independent of SSH connection progress.
 	ProgramProgress *ProgramProgress
 	// ProgramStatus is the OSC 7501 record to show, or nil when there is none.
@@ -227,6 +245,7 @@ func (s *Session) View() View {
 		view.ProgramProgress = &progress
 	}
 	view.ProgramStatus = s.programStatus.summary()
+	view.Resume = s.resumeHintLocked()
 	if s.reconnectView != nil {
 		status := *s.reconnectView
 		view.Reconnect = &status
@@ -280,7 +299,9 @@ func (s *Session) Write(p []byte) (int, error) {
 			// Ready前の通常入力を溜めない。明示的な認証promptだけが例外である。
 			return len(p), nil
 		}
+		return process.Write(p)
 	}
+	s.forgetProgramToResumeOnEnter(p)
 	return process.Write(p)
 }
 
@@ -377,6 +398,7 @@ func (s *Session) WriteCommandInput(ctx context.Context, generation uint64, comm
 	if !ok {
 		return ErrExactInputUnavailable
 	}
+	s.forgetProgramToResumeOnEnter(payload)
 	return writer.WriteExact(ctx, payload)
 }
 
@@ -464,6 +486,7 @@ func (s *Session) forceClose() error {
 // capability retain the historical synchronous-Open contract.
 func (s *Session) observeProcess(pending State, successMessage string) {
 	s.mutex.Lock()
+	s.noteProgramToResumeLocked()
 	// A replacement shell announces its own title; the previous one must not
 	// linger on the pane while it starts.
 	s.resetTerminalTitleLocked()
@@ -487,11 +510,7 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 		s.problem = ""
 		s.reconnectView = nil
 		s.mutex.Unlock()
-		if successMessage != "" {
-			s.publish([]byte(successMessage))
-		}
-		s.signalConnected()
-		s.sendStartup(process)
+		s.announceConnected(process, successMessage)
 		return
 	}
 	observed := &processReadiness{done: make(chan struct{}), userInitiated: pending == StateConnecting}
@@ -517,14 +536,37 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 		s.mutex.Unlock()
 		close(observed.done)
 		if current && err == nil {
-			if successMessage != "" {
-				s.publish([]byte(successMessage))
-			}
-			s.signalConnected()
-			s.sendStartup(process)
+			s.announceConnected(process, successMessage)
 		}
 	}()
 }
+
+// announceConnected は、Process が使える状態になったことをターミナルへ書き、起動時のものを送る。
+//
+// 動いていた tmux のセッションに戻ったなら、前のプログラムはそこで動いている。新しいシェルとは
+// 言わず、続きからの案内も、打ち込む起動時のコマンドも要らない。
+func (s *Session) announceConnected(process Process, successMessage string) {
+	resumed := resumedTmuxSession(process)
+	if resumed {
+		s.mutex.Lock()
+		s.resumeProgram, s.resumeDirectory = "", ""
+		s.mutex.Unlock()
+	}
+	if successMessage != "" {
+		if resumed {
+			successMessage = reattachedTmuxMessage
+		}
+		s.publish([]byte(successMessage))
+	}
+	s.announceProgramToResume()
+	s.signalConnected()
+	if !resumed {
+		s.sendStartup(process)
+	}
+}
+
+// reattachedTmuxMessage は、再接続で動いていた tmux のセッションに戻ったときに書く行である。
+const reattachedTmuxMessage = "\r\n[sshc] 再接続しました。\r\n"
 
 // sendStartup は、Spec.Startup の知らせとコマンドを、使える状態になった Process へ送る。
 //
@@ -548,6 +590,7 @@ func (s *Session) sendStartup(process Process) {
 func (s *Session) pump(now func() time.Time) {
 	defer close(s.done)
 	go s.writeReplies(s.done)
+	go s.watchNetworkChanges(s.done)
 	connectedAt := s.started
 	for {
 		s.mutex.Lock()

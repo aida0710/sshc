@@ -111,3 +111,22 @@ it("says in red that a session ended as soon as it opened, even with status 0", 
 
   expect(screen.getByText(/exited with status 0 as soon as it started/)).toHaveClass("text-danger");
 });
+
+it("says a reconnect waits for the network instead of counting down", () => {
+  const waiting: TerminalSession = {
+    ...session, kind: "ssh", alias: "web-01", state: "reconnecting",
+    reconnect: { attempt: 1, limit: 5, retryAt: "2026-08-14T09:00:00Z", problem: "", waitingForNetwork: true },
+  };
+  render(<TerminalStatusBanners session={waiting} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} recovery={idleRecovery} />);
+  expect(screen.getByRole("status")).toHaveTextContent("Waiting for the network. Reconnects as soon as it is back.");
+  expect(screen.getByRole("button", { name: "Stop reconnecting" })).toBeVisible();
+});
+
+it("types the command that continues the previous shell's program", () => {
+  const onResumeProgram = vi.fn();
+  const resuming: TerminalSession = { ...session, kind: "ssh", alias: "web-01", resume: { program: "Claude Code", command: "claude --continue" } };
+  render(<TerminalStatusBanners session={resuming} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} onResumeProgram={onResumeProgram} />);
+  expect(screen.getByRole("status")).toHaveTextContent("Claude Code was running in the previous shell");
+  screen.getByRole("button", { name: "Continue where it left off" }).click();
+  expect(onResumeProgram).toHaveBeenCalledWith("claude --continue");
+});

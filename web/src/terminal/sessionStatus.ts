@@ -20,6 +20,7 @@ export function sessionStatusText(t: Translate, session: TerminalSession): strin
 export function sessionStateText(t: Translate, session: TerminalSession): string {
   switch (session.state) {
     case "reconnecting":
+      if (session.reconnect?.waitingForNetwork === true) return t("terminal.waitingForNetwork");
       return t("terminal.reconnectingAttempt", {
         attempt: String(session.reconnect?.attempt ?? 1),
         limit: String(session.reconnect?.limit ?? 1),

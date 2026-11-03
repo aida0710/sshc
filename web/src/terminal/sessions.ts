@@ -191,11 +191,12 @@ export function useTerminalSessions(
   }, [refresh, refreshGeneration]);
 
   const connectionInProgress = sessions.some(
-    (session) => session.state === "connecting" || session.state === "reconnecting",
+    (session) => session.state === "connecting" || (session.state === "reconnecting" && session.reconnect?.waitingForNetwork !== true),
   );
 
   // Only while a session is connecting or reconnecting does the list switch to
-  // the faster interval, for the reason given at connectingPollIntervalMs.
+  // the faster interval, for the reason given at connectingPollIntervalMs. A wait
+  // for the network has no steps to show and may last long, on a phone's battery.
   // Terminal notifications must still be observed while the app is in the
   // background; that is precisely when delivering them is useful. An empty or
   // refused list is read again too: another browser, a machine that uses this

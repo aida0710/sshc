@@ -5375,6 +5375,8 @@ components:
         # このセッションのターミナルで打ったパスワードで認証が通り、Vault に保存するかの答えを
         # 待っている。パスワードの値は API に出さない。答えは POST .../password-save。
         passwordSaveQuestion: { type: boolean }
+        # 新しいシェルで、前のシェルのプログラムを続きから始められるあいだだけある。
+        resume: { $ref: "#/components/schemas/TerminalResumeHint" }
         # プログラムの OSC 9;4。消去時は省略する。SSH 接続の段階とは独立。
         programProgress: { $ref: "#/components/schemas/TerminalProgramProgress" }
         # プログラムが OSC 7501 で知らせた状態のうち、いちばん利用者の手を要するもの。無ければ省略する。
@@ -5494,6 +5496,18 @@ components:
         limit: { type: integer, minimum: 1, maximum: 5 }
         retryAt: { type: string, format: date-time }
         problem: { type: string }
+        # このマシンの回線が無いので待っている。待つ間は回数に数えず、戻ったらすぐ試す。
+        waitingForNetwork: { type: boolean }
+    # 失った前のシェルで動いていたプログラムを、新しいシェルで続きから始める案内。
+    TerminalResumeHint:
+      type: object
+      additionalProperties: false
+      required: [program, command]
+      properties:
+        # 利用者が知っているプログラムの名前。
+        program: { type: string, maxLength: 64 }
+        # 新しいシェルで打つコマンド。Enter を付けて送る。
+        command: { type: string, maxLength: 8192 }
     TerminalExit:
       type: object
       additionalProperties: false
@@ -6848,6 +6862,8 @@ components:
         # 通る VPN プロファイルの名前。ssh_config には書かない。OpenSSH が解釈する
         # 語ではなく、sshc だけが持つ紐付けだからである。
         vpn: { type: string, maxLength: 48 }
+        # シェルの代わりに tmux で開く。ssh_config の RemoteCommand には書かない。
+        tmux: { type: boolean }
     # アプリの見た目のうち、metadata に置いて同期するもの。テーマ（ライト／ダーク）は
     # このブラウザだけの好みなので、ここには無い。
     AppearanceSettings:

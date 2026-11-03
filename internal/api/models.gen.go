@@ -2299,10 +2299,11 @@ type TerminalProgramStatusState string
 
 // TerminalReconnect defines model for TerminalReconnect.
 type TerminalReconnect struct {
-	Attempt int       `json:"attempt"`
-	Limit   int       `json:"limit"`
-	Problem string    `json:"problem"`
-	RetryAt time.Time `json:"retryAt"`
+	Attempt           int       `json:"attempt"`
+	Limit             int       `json:"limit"`
+	Problem           string    `json:"problem"`
+	RetryAt           time.Time `json:"retryAt"`
+	WaitingForNetwork *bool     `json:"waitingForNetwork,omitempty"`
 }
 
 // TerminalRestoreOffer defines model for TerminalRestoreOffer.
@@ -2328,6 +2329,12 @@ type TerminalRestoreSession struct {
 // TerminalRestoreSessionKind defines model for TerminalRestoreSession.Kind.
 type TerminalRestoreSessionKind string
 
+// TerminalResumeHint defines model for TerminalResumeHint.
+type TerminalResumeHint struct {
+	Command string `json:"command"`
+	Program string `json:"program"`
+}
+
 // TerminalSession defines model for TerminalSession.
 type TerminalSession struct {
 	Alias                *string                     `json:"alias,omitempty"`
@@ -2346,6 +2353,7 @@ type TerminalSession struct {
 	ProgramStatus        *TerminalProgramStatus      `json:"programStatus,omitempty"`
 	Progress             *TerminalConnectionProgress `json:"progress,omitempty"`
 	Reconnect            *TerminalReconnect          `json:"reconnect,omitempty"`
+	Resume               *TerminalResumeHint         `json:"resume,omitempty"`
 	ShellProfileId       *string                     `json:"shellProfileId,omitempty"`
 	StartedAt            string                      `json:"startedAt"`
 	State                TerminalSessionState        `json:"state"`

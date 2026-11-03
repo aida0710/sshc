@@ -180,6 +180,15 @@ export function HostInspector({
               <option value="iso-2022-jp">{t("connection.encodingISO2022JP")}</option>
             </select>
           </FieldRow>
+
+          <FieldRow density="editor" label={t("connection.tmuxLabel")} hint={t("connection.tmuxHint")}>
+            <input
+              type="checkbox"
+              checked={draft.tmux === true}
+              onChange={(event) => setDraft({ ...draft, tmux: event.target.checked })}
+              className="mt-1.5 h-4 w-4 accent-accent"
+            />
+          </FieldRow>
         </EditorSection>
 
         <EditorSection title={t("inspector.vpnHeading")}>

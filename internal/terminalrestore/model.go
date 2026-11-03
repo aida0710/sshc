@@ -38,6 +38,12 @@ type Session struct {
 	PinnedTitle  string        `json:"pinnedTitle,omitempty"`
 	// WorkingDirectory is absolute, or under the remote home (`~/src`) for SSH.
 	WorkingDirectory string `json:"workingDirectory,omitempty"`
+	// TmuxSession is the tmux session it opens, if its connection uses tmux, so
+	// the next engine returns to the same one.
+	TmuxSession string `json:"tmuxSession,omitempty"`
+	// ResumeProgram is the OSC 7501 name of a program that ran in it and can be
+	// started again in the new shell.
+	ResumeProgram string `json:"resumeProgram,omitempty"`
 }
 
 // FromReopenings chooses the sessions worth opening again. Sessions in the
@@ -53,13 +59,14 @@ func FromReopenings(reopenings []terminal.Reopening) []Session {
 			Kind: reopening.Kind, Alias: reopening.Alias, ShellProfile: reopening.ShellProfile,
 			Workspace: reopening.Workspace, PinnedTitle: reopening.PinnedTitle,
 			WorkingDirectory: reopening.WorkingDirectory,
+			TmuxSession:      reopening.TmuxSession, ResumeProgram: reopening.ResumeProgram,
 		})
 	}
 	return sessions
 }
 
 func (s Session) valid() bool {
-	for _, text := range []string{s.ShellProfile, s.Workspace, s.PinnedTitle, s.WorkingDirectory} {
+	for _, text := range []string{s.ShellProfile, s.Workspace, s.PinnedTitle, s.WorkingDirectory, s.TmuxSession, s.ResumeProgram} {
 		if len(text) > maxTextBytes {
 			return false
 		}
