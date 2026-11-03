@@ -52,6 +52,7 @@ type updateDependencies struct {
 func defaultUpdateDependencies() updateDependencies {
 	checker := &releasecheck.Checker{
 		API:  releasecheck.LatestAPI,
+		Page: releasecheck.LatestPage,
 		HTTP: &http.Client{Timeout: updateReleaseCheckTimeout},
 	}
 	installerClient := taggedInstallerHTTPClient()

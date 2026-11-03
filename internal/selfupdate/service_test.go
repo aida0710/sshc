@@ -214,6 +214,41 @@ func TestManualRestartConfirmsTheInstalledReleaseWithoutReinstalling(t *testing.
 	}
 }
 
+func TestAnEngineUpdatedAnotherWayEndsARestartThatFailedAndCanUpdateAgain(t *testing.T) {
+	dependencies := updateFixture(t)
+	dependencies.Restart = func(context.Context, Job) error { return errors.New("restart failed") }
+	service := New(dependencies)
+	plan, err := service.Prepare(t.Context(), "v1.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := service.Start(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.ResponseSent(job.ID, nil)
+	waitForUpdateState(t, service, "restart_required")
+	if err := service.Stop(); err != nil {
+		t.Fatal(err)
+	}
+
+	// sshc update went past the release whose restart failed, to v1.2.0, and v1.3.0 is out now.
+	later := dependencies
+	later.Current = "v1.2.0"
+	later.Latest = func(context.Context) (releasecheck.Release, error) {
+		return releasecheck.Release{Version: "v1.3.0"}, nil
+	}
+	engine := New(later)
+	defer func() { _ = engine.Stop() }()
+	ended, err := engine.Status()
+	if err != nil || ended.State != JobSucceeded || ended.Problem != "" {
+		t.Fatalf("status of the overtaken job = %+v, %v", ended, err)
+	}
+	if _, err := engine.Prepare(t.Context(), "v1.3.0"); err != nil {
+		t.Fatalf("Prepare after the overtaken job = %v", err)
+	}
+}
+
 func TestConcurrentStartsReserveExactlyOneDurableJob(t *testing.T) {
 	dependencies := updateFixture(t)
 	service := New(dependencies)

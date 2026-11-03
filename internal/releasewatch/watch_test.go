@@ -136,3 +136,51 @@ func TestInitialFailureIsNotRetriedByPageReads(t *testing.T) {
 		t.Fatalf("calls=%d", calls)
 	}
 }
+
+func TestACheckThatLearnedLessKeepsWhatAnEarlierCheckRead(t *testing.T) {
+	published := time.Date(2026, 11, 3, 3, 0, 0, 0, time.UTC)
+	read := releasecheck.Catalog{
+		Latest:   releasecheck.Release{Version: "v1.1.0", PublishedAt: published},
+		Releases: []releasecheck.Release{{Version: "v1.1.0", Body: "notes"}},
+	}
+	answers := []releasecheck.Catalog{read, {Latest: releasecheck.Release{Version: "v1.1.0", PageURL: "https://example.invalid/v1.1.0"}}}
+	watcher := New(t.Context(), func(context.Context) (releasecheck.Catalog, error) {
+		answer := answers[0]
+		answers = answers[1:]
+		return answer, nil
+	})
+	defer watcher.Stop()
+	if _, err := watcher.Check(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	second, err := watcher.Check(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Failure != "" || !second.Latest.PublishedAt.Equal(published) || len(second.Releases) != 1 {
+		t.Errorf("second check = %+v", second)
+	}
+}
+
+func TestANewerReleaseIsToldEvenWhenItsNotesCouldNotBeRead(t *testing.T) {
+	answers := []releasecheck.Catalog{
+		{Latest: releasecheck.Release{Version: "v1.1.0", PublishedAt: time.Date(2026, 11, 3, 3, 0, 0, 0, time.UTC)}, Releases: []releasecheck.Release{{Version: "v1.1.0"}}},
+		{Latest: releasecheck.Release{Version: "v1.2.0"}},
+	}
+	watcher := New(t.Context(), func(context.Context) (releasecheck.Catalog, error) {
+		answer := answers[0]
+		answers = answers[1:]
+		return answer, nil
+	})
+	defer watcher.Stop()
+	if _, err := watcher.Check(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	second, err := watcher.Check(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Latest.Version != "v1.2.0" || !second.Latest.PublishedAt.IsZero() {
+		t.Errorf("second check = %+v", second)
+	}
+}
