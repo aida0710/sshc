@@ -112,6 +112,7 @@ export function QuickConnectBrowser({
     const target = connectionDestination(server);
     // The last connection is a badge beside the name, so a card that has one is as tall as one that has not.
     const lastConnectedAt = recentConnection === undefined ? null : formatDateTime(recentConnection.lastConnectedAt, locale);
+    const lastConnectedLabel = lastConnectedAt === null ? undefined : t("connection.lastConnected", { at: lastConnectedAt });
     const selected = selectedAlias === alias;
     const opening = launching === alias;
     const connect = () => {
@@ -166,7 +167,7 @@ export function QuickConnectBrowser({
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-[13.5px] font-semibold text-ink" title={alias}>{alias}</span>
               {lastConnectedAt === null || opening ? null : (
-                <span title={t("connection.lastConnected", { at: lastConnectedAt })} aria-label={t("connection.lastConnected", { at: lastConnectedAt })}
+                <span title={lastConnectedLabel} aria-label={lastConnectedLabel}
                   className="shrink-0 whitespace-nowrap rounded-full bg-select-fill px-2 text-[11px] leading-[18px] text-accent">{lastConnectedAt}</span>
               )}
               {server.duplicateAlias ? <span role="img" aria-label={t("browser.duplicateAlias")} className="text-notice-ink"><Icon name="warning" className="size-3.5" /></span> : null}
