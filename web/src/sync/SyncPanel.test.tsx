@@ -212,7 +212,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={buildApi(unconfigured, nothingToDo)} />);
 
     expect(
-      await screen.findByText(/may include private keys/),
+      await screen.findByText(/Private keys may be included/),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(
@@ -244,7 +244,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     const lastSynced = `Last synced ${formatDateTime("2026-08-05T00:00:00Z", "en")}, 7 files.`;
-    expect(await screen.findAllByText(lastSynced)).toHaveLength(2);
+    expect(await screen.findAllByText(lastSynced)).toHaveLength(1);
     expect(await screen.findByText(`Bucket checked at ${formatDateTime("2026-08-25T01:55:00Z", "en")}.`)).toBeInTheDocument();
     expect(await screen.findByText(new RegExp(`^${formatDateTime("2026-08-25T01:54:00Z", "en")} · 7 files`))).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);

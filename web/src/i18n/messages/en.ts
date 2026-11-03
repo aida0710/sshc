@@ -2248,7 +2248,7 @@ export const en = {
   "sync.flowKey": "Set the shared encryption key",
   "sync.flowOperate": "Inspect, send, or receive",
   "sync.loading": "Reading the sync settings…",
-  "sync.warningSummary": "~/.ssh is encrypted before it is sent. It may include private keys.",
+  "sync.warningSummary": "Private keys may be included.",
   "sync.warningMore": "Details",
   "sync.warningLess": "Hide details",
   "sync.warning":
@@ -2257,8 +2257,7 @@ export const en = {
   "sync.bucketHeading": "Bucket",
   "sync.notConfigured": "No bucket is configured yet.",
   "sync.endpoint": "Endpoint",
-  "sync.endpointHint":
-    "Must be https. For R2 this is https://<account>.r2.cloudflarestorage.com.",
+  "sync.endpointHint": "Must be https.",
   "sync.bucket": "Bucket name",
   "sync.path": "Path in the bucket",
   "sync.pathHint":
@@ -2835,6 +2834,7 @@ export const en = {
   "tree.allConnections": "All",
   "tree.resultsLabel": "Connection results",
   "tree.resultCount": "{visible} of {total}",
+  "tree.totalCount": "{count} total",
   "tree.sortLabel": "Connection order",
   "tree.sortConfigured": "Configured order",
   "tree.sortName": "Name",
@@ -2930,7 +2930,6 @@ export const en = {
   "conn.duplicated": "Duplicated {alias} as {copy}.",
   "conn.draftSaved": "Saved your changes.",
   "conn.heading": "Connections",
-  "conn.count": "{count} available",
   "conn.new": "Add connection",
   "conn.resizeGroups": "Resize the groups column",
   "conn.resizeList": "Resize the connection list",

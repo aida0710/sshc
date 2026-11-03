@@ -304,11 +304,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
               adoptStatus(next.status);
               setRevealed(next.generatedKey ?? "");
               form.finishSetup();
-              setNotice(
-                next.generatedKey === undefined
-                  ? t("sync.setup.saved")
-                  : t("sync.keyShownOnce"),
-              );
+              setNotice(t("sync.setup.saved"));
             },
             failure: t("sync.configureFailed"),
           });

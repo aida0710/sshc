@@ -3,6 +3,7 @@ import { useLanguage } from "../i18n/context";
 import { ActionMenu } from "../ui/ActionMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { sizedControl } from "../ui/form";
+import { formatDateTime } from "../ui/format";
 import { InputDialog } from "../ui/InputDialog";
 import { isImeComposing } from "../ui/imeComposition";
 import { PanelState } from "../ui/PanelState";
@@ -130,7 +131,7 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
     .filter((fact) => fact !== "").join(" · ");
   const started = machine.facts.startedAt === undefined
     ? t("settings.machineNeverStarted")
-    : new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(new Date(machine.facts.startedAt));
+    : formatDateTime(machine.facts.startedAt, locale);
   // The Android app keeps its own port: the WebView keeps what a page stores per port, so another port would
   // lose the browser's registration.
   const portFixed = machine.facts.os === "android";

@@ -31,6 +31,7 @@ import { setDirectInput, useDirectInput } from "./useDirectInput";
 import { useModifierKeys } from "./useModifierKeys";
 import type { ModifierName } from "./modifierLatch";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
+import { useSessionDestination } from "./sessionDestination";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { createTerminalOutput } from "./output";
 import { createStatusLineRouter } from "./statusLine";
@@ -786,6 +787,7 @@ export function TerminalView({
   const headerSaysState = session.state === "connecting" && link.phase === "live";
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session, t);
+  const destination = useSessionDestination(session);
   // Ctrl and Alt apply to the next key typed into the terminal, so one held while typing in the text box
   // moves the typing there, keeping the keyboard up. A closed keyboard stays closed: the key bar has already
   // let go of the focus then (keepKeyboardAsIs).
@@ -860,7 +862,7 @@ export function TerminalView({
               }`}
             />
             <p className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-[15px]" : "max-w-48 shrink-0 text-[13px]"}`}>{displayTitle}</p>
-            {mobile ? null : <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{subtitle}</span>}
+            {mobile ? null : <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{destination}</span>}
             {/* While connected the dot says it; the words stay for screen readers. A phone has no room for them
                 either way, but they are still read out there. */}
             <span role="status" className={!headerSaysState || mobile ? "sr-only" : `shrink-0 text-[11.5px] ${sessionStatusTone(session)}`}>{connectionStatus}</span>
@@ -871,7 +873,7 @@ export function TerminalView({
           </div>
           {mobile ? (
             <p className="mt-px flex min-w-0 items-center gap-1 pl-[17px] text-xs text-ink-faint">
-              <span className="truncate">{subtitle}</span>
+              <span className="truncate">{destination}</span>
               {headerSaysState ? <span className={`shrink-0 ${sessionStatusTone(session)}`}>· {connectionStatus}</span> : null}
             </p>
           ) : null}

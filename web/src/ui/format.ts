@@ -36,12 +36,33 @@ export function formatBytes(bytes: number, units: ByteUnits = {}): string {
   return `${digits} ${names[unit]}`;
 }
 
-// A timestamp from the engine as a short local date and time. A value that
-// is not a date is shown as it came, so a bad record is visible, not hidden.
-export function formatDateTime(value: string, locale?: string): string {
+function startOfDay(moment: Date): number {
+  return new Date(moment.getFullYear(), moment.getMonth(), moment.getDate()).getTime();
+}
+
+const yesterdayOffset = -1;
+
+// dayName is the locale's own word for today or yesterday (今日, Today), or null for any other day. Days are
+// calendar days where the browser is, not 24-hour spans, so a connection at 23:00 is yesterday at 01:00.
+function dayName(moment: Date, now: Date, locale: string | undefined): string | null {
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + yesterdayOffset);
+  const offset = startOfDay(moment) === startOfDay(now) ? 0 : startOfDay(moment) === startOfDay(yesterday) ? yesterdayOffset : null;
+  if (offset === null) return null;
+  const word = new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(offset, "day");
+  return word.charAt(0).toLocaleUpperCase(locale) + word.slice(1);
+}
+
+// formatDateTime is how every screen writes a timestamp from the engine: 今日 17:49, 昨日 9:02, then 11/1 9:02,
+// with the year only when it is not this year. A value that is not a date is shown as it came, so a bad record
+// is visible, not hidden.
+export function formatDateTime(value: string, locale?: string, now: Date = new Date()): string {
   const moment = new Date(value);
   if (Number.isNaN(moment.getTime())) return value;
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(moment);
+  const time = { hour: "numeric", minute: "2-digit" } as const;
+  const day = dayName(moment, now, locale);
+  if (day !== null) return `${day} ${new Intl.DateTimeFormat(locale, time).format(moment)}`;
+  const year = moment.getFullYear() === now.getFullYear() ? {} : { year: "numeric" } as const;
+  return new Intl.DateTimeFormat(locale, { ...year, month: "numeric", day: "numeric", ...time }).format(moment);
 }
 
 // A moment seen while the page is open, to the second: steps of one operation

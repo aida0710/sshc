@@ -2250,7 +2250,7 @@ export const ja = {
   "sync.flowKey": "共通の暗号化キーを設定",
   "sync.flowOperate": "状態を確認して送受信",
   "sync.loading": "同期設定を読み込んでいます…",
-  "sync.warningSummary": "~/.sshを暗号化してから送ります。秘密鍵も含まれる場合があります。",
+  "sync.warningSummary": "秘密鍵も同期の対象に含まれる場合があります。",
   "sync.warningMore": "詳しく",
   "sync.warningLess": "閉じる",
   "sync.warning":
@@ -2259,8 +2259,7 @@ export const ja = {
   "sync.bucketHeading": "バケット",
   "sync.notConfigured": "まだバケットが設定されていません。",
   "sync.endpoint": "エンドポイント",
-  "sync.endpointHint":
-    "https://で始まるURLを指定してください。R2ではhttps://<account>.r2.cloudflarestorage.comです。",
+  "sync.endpointHint": "https://で始まるURLを指定してください。",
   "sync.bucket": "バケット名",
   "sync.path": "バケット内のパス",
   "sync.pathHint": "任意です。空ならバケットのルートに置きます。",
@@ -2379,7 +2378,7 @@ export const ja = {
     "Vaultのロックが解除されている間、リモートが更新されていないか確認します。このマシンの設定を変更した場合は、最後の変更から5秒後に一度だけ送信します。リモートの内容は受信しません。",
   "sync.autoEnable": "このマシンを自動で同期する",
   "sync.autoIdle": "停止中",
-  "sync.autoLastRan": "最後に確認したのは{at}です。",
+  "sync.autoLastRan": "最終確認：{at}",
   "sync.autoBlockedConflicts":
     "自動同期を停止しました。同じファイルがこのマシンと他のマシンの両方で変更されています。「変更を確認」で内容を比較してください。",
   "sync.autoBlockedRemovals":
@@ -2835,6 +2834,7 @@ export const ja = {
   "tree.allConnections": "すべて",
   "tree.resultsLabel": "接続先",
   "tree.resultCount": "{visible}件 / 全{total}件",
+  "tree.totalCount": "{count}件",
   "tree.sortLabel": "接続の並び順",
   "tree.sortConfigured": "設定順",
   "tree.sortName": "名前順",
@@ -2931,7 +2931,6 @@ export const ja = {
   "conn.duplicated": "{alias}を複製して{copy}を作りました。",
   "conn.draftSaved": "変更を保存しました。",
   "conn.heading": "Connections",
-  "conn.count": "接続先{count}件",
   "conn.new": "接続先を追加",
   "conn.resizeGroups": "グループ列の幅を変更",
   "conn.resizeList": "接続先の一覧の幅を変更",

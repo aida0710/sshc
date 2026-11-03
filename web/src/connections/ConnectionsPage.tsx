@@ -483,7 +483,6 @@ export function ConnectionsPage({
         <PageHeader
           title={t("conn.heading")}
           headingId="connections-heading"
-          meta={nothingToList ? undefined : t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
           actions={newConnectionButton(true)}
           className={workspaceHeaderLayout}
         />

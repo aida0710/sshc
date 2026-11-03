@@ -3,8 +3,7 @@ import type { Translate } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
 import { formatOptionalDateTime } from "../ui/format";
 
-// The overview card and the collapsed details both say when this machine last
-// synced; building the sentence in one place keeps the two lines identical.
+// The line under the overview card's heading: when this machine last synced.
 export function describeLastSync(
   t: Translate,
   status: Pick<SyncStatus, "synced" | "lastSyncedAt" | "fileCount">,
