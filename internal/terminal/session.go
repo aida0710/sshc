@@ -623,10 +623,12 @@ func (s *Session) pump(now func() time.Time) {
 			// 一度も繋がっていない接続を「切れました」として試し直さない。
 			// 失敗の理由は接続ログとしてターミナルに出ている。
 			s.recordConnectionFailure(connectionErr)
+			s.announceEnterToReconnect(info)
 			s.finish(info)
 			return
 		}
 		if !s.reconnect(info, connectionErr, now) {
+			s.announceEnterToReconnect(info)
 			s.finish(info)
 			return
 		}
@@ -648,11 +650,11 @@ func (s *Session) recordConnectionFailure(err error) {
 }
 
 // connectionFailureProblem は、利用者が始めた接続（最初の接続と手動の再接続）の
-// 失敗を problem code にする。自動で試し直さないので、試し直せる失敗も
+// 失敗を problem code にする。自動で試し直さないので、理由の分からない失敗は
 // reconnect_failed ではなく connect_failed で表す。Ready の前に開けなかったときも、
 // Ready で失敗したときも同じ code にする。
 func (s *Session) connectionFailureProblem(err error) string {
-	if retry, code := s.classifyReconnectFailure(err); !retry {
+	if _, code := s.classifyReconnectFailure(err); code != ProblemReconnectFailed {
 		return code
 	}
 	return problemConnectFailed

@@ -63,6 +63,8 @@ func (s *Session) StopReconnecting() error {
 	s.problem = ProblemReconnectStopped
 	handshaking := s.handshakingProcessLocked()
 	s.mutex.Unlock()
+	// 止めると pump が終わりの行を書いてセッションを閉じるので、その前に書く。
+	s.publish([]byte("\r\n[sshc] 再接続を停止しました。\r\n"))
 	s.stopReconnecting()
 	if handshaking != nil {
 		// reopen は握手前に Process を返す。Ready を待つ側は stopping を見て
@@ -70,7 +72,6 @@ func (s *Session) StopReconnecting() error {
 		// 閉じて pump に exited まで進ませ、手動の再接続を使える状態にする。
 		abandonProcess(handshaking)
 	}
-	s.publish([]byte("\r\n[sshc] 再接続を停止しました。\r\n"))
 	return nil
 }
 
@@ -133,6 +134,27 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 			continue
 		}
 		return s.installReconnectedProcess(process)
+	}
+}
+
+// enterToReconnectNotice は、接続の問題で終わったセッションの最後に書く行である。画面の
+// ターミナルは、次の Enter で再接続し、ほかのキーを捨てる（web の reconnectsOnEnter）。
+const enterToReconnectNotice = "[sshc] Enterで再接続します。\r\n"
+
+// announceEnterToReconnect は、接続の問題で終わるセッションに、つなぎ直し方を書く。problem が
+// あるときは直前の行が改行で終わっている。プログラムの途中で切れたときは行の途中かもしれない。
+func (s *Session) announceEnterToReconnect(info ExitInfo) {
+	s.mutex.Lock()
+	reopens, discarded, problem := s.reopen != nil, s.discarded, s.problem
+	s.mutex.Unlock()
+	if !reopens || discarded {
+		return
+	}
+	switch {
+	case problem != "":
+		s.publish([]byte(enterToReconnectNotice))
+	case info.TransportLost:
+		s.publish([]byte("\r\n" + enterToReconnectNotice))
 	}
 }
 

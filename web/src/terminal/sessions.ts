@@ -354,7 +354,9 @@ export function useTerminalSessions(
           : session,
       ),
     );
-  }, [beginMutation]);
+    // The stream says how the program ended; only the list says why the session stopped (session.problem).
+    void refresh();
+  }, [beginMutation, refresh]);
 
   return {
     sessions: loaded ? sessions : noSessions,
@@ -396,6 +398,18 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.vpnRouteDisconnected";
     case "connect_failed":
       return "terminal.connectFailed";
+    case "connect_refused":
+      return "terminal.connectRefused";
+    case "connect_timed_out":
+      return "terminal.connectTimedOut";
+    case "connect_host_not_found":
+      return "terminal.connectHostNotFound";
+    case "connect_no_network":
+      return "terminal.connectNoNetwork";
+    case "connect_host_unreachable":
+      return "terminal.connectHostUnreachable";
+    case "connect_closed":
+      return "terminal.connectClosed";
     case "remote_engine_vault_locked":
       return "terminal.remoteVaultLocked";
     case "remote_engine_refused":

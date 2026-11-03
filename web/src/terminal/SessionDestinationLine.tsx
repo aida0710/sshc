@@ -1,7 +1,7 @@
 import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { programStatusText, programStatusTone, type ShownProgramStatus } from "./programStatus";
-import { sessionShowsDestination, sessionStatusText, sessionStatusTone } from "./sessionStatus";
+import { rowProblemText, sessionShowsDestination, sessionStatusText, sessionStatusTone } from "./sessionStatus";
 import { useSessionDestination } from "./sessionDestination";
 
 // The second line of a session row, under its name: where the session connects while it is connected,
@@ -22,9 +22,9 @@ export function SessionDestinationLine({ session, programStatus = null, id }: {
     return <span id={id} data-session-destination className="block truncate font-mono text-[10.5px] leading-[14px] text-ink-faint">{destination}</span>;
   }
   // A problem is explained in sentences where the session is shown. The row has one short line under the name,
-  // so it says only that the session did not open, and keeps the sentences for the tooltip.
+  // so it says the reason in a few words, and keeps the sentences for the tooltip.
   const status = sessionStatusText(t, session);
-  const shown = session.problem === "" ? status : t("terminal.rowProblem");
+  const shown = session.problem === "" ? status : rowProblemText(t, session.problem);
   return (
     <span id={id} data-session-status-text title={shown === status ? undefined : status} className={`block truncate text-[10.5px] leading-[14px] ${sessionStatusTone(session)}`}>
       {shown}
