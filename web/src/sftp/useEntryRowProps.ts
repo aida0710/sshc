@@ -1,15 +1,15 @@
 import type { ComponentPropsWithoutRef, ComponentPropsWithRef } from "react";
 import { useTranslate } from "../i18n/context";
 import type { RemoteEntry } from "./api";
-import type { SFTPEntryListModel } from "./useSFTPEntryList";
+import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
 
-// Both lists wire their rows through these, so that focus, selection and the long press work the same whichever
-// list is on screen. Only the markup around them differs.
-export function useEntryRowProps({ model, busy }: { model: SFTPEntryListModel; busy: boolean }) {
+// Every list wires its rows through these, so that focus, selection and the long press work the same whichever list
+// is on screen. Only the markup around them differs.
+export function useEntryRowProps({ model, busy, locked = false }: { model: SFTPEntryListModel; busy: boolean; locked?: boolean }) {
   const t = useTranslate();
   const {
     selectedPaths, activeRowKey, registerRow, setFocusedKey, clickEntry, toggleSelection,
-    beginLongPress, trackLongPress, cancelLongPress,
+    beginLongPress, trackLongPress, cancelLongPress, openParent,
   } = model;
   const entryCheckboxProps = (entry: RemoteEntry): ComponentPropsWithoutRef<"input"> => ({
     "aria-label": t("sftp.selectEntry", { name: entry.name }),
@@ -33,5 +33,12 @@ export function useEntryRowProps({ model, busy }: { model: SFTPEntryListModel; b
     onPointerUp: cancelLongPress,
     onPointerCancel: cancelLongPress,
   });
-  return { entryCheckboxProps, entryButtonProps };
+  const parentButtonProps = (): ComponentPropsWithRef<"button"> => ({
+    ref: (node) => { registerRow(parentRowKey, node); },
+    tabIndex: activeRowKey === parentRowKey ? 0 : -1,
+    disabled: busy || locked,
+    onFocus: () => setFocusedKey(parentRowKey),
+    onClick: openParent,
+  });
+  return { entryCheckboxProps, entryButtonProps, parentButtonProps };
 }

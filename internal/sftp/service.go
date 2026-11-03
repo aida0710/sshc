@@ -18,6 +18,8 @@ type Service struct {
 	// Non-nil selects a job snapshot, including an explicitly empty one.
 	selectedExclusions []string
 	Open               OpenRemote
+	// Borrow lends a connection that is already open (RemotePool.Borrow). Only thumbnails use it.
+	Borrow OpenRemote
 	// TemporaryPath はテスト時に差し替える。本番では対象と同じディレクトリへ予測不能な名前を作る。
 	TemporaryPath func(target string) (string, error)
 	// ConnectionLimit says how many connections one transfer may open to a

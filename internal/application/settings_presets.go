@@ -36,6 +36,9 @@ type InterfaceSettings struct {
 	KeepScreenAwake bool `json:"keepScreenAwake,omitempty"`
 	// HideTouchLinkUnderlines は、タッチのターミナルでリンクにいつも引く下線を引かない。既定（false）は引く。
 	HideTouchLinkUnderlines bool `json:"hideTouchLinkUnderlines,omitempty"`
+	// HideSFTPThumbnails は、SFTP の一覧に画像のサムネイルを出さない。既定（false）は出す。作るときは画像を接続先から
+	// 読むので、モバイル回線で使うプリセットでは切れるようにしている。
+	HideSFTPThumbnails bool `json:"hideSFTPThumbnails,omitempty"`
 	// ShortcutPreset は、使うショートカットのプリセットの ID である。空は既定の割り当て。
 	ShortcutPreset string `json:"shortcutPreset,omitempty"`
 	// KeyBarPreset は、スマホで使うキーバーのプリセットの ID である。空は既定の並び。

@@ -49,6 +49,8 @@ var (
 	ErrSpoolFull        = errors.New("download spool does not have enough free space")
 	ErrPreviewTooLarge  = errors.New("remote file is too large to preview")
 	ErrPreviewType      = errors.New("remote file has no previewable type")
+	// ErrNoOpenConnection is a borrow from a host that has no connection open.
+	ErrNoOpenConnection = errors.New("no SFTP connection is open to this host")
 	ErrInvalidQuery     = errors.New("search needs something to look for")
 	ErrUnsupportedEntry = errors.New("remote entry type cannot be copied")
 	ErrCompareLimit     = errors.New("directory comparison exceeded its safety limit")

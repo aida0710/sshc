@@ -1,10 +1,11 @@
-import type { ComponentPropsWithRef, DragEvent as ReactDragEvent } from "react";
+import type { DragEvent as ReactDragEvent } from "react";
 import { useLanguage, useTranslate } from "../i18n/context";
 import { draggableCursor } from "../ui/dragAndDropLook";
 import { formatDateTime } from "../ui/format";
 import { Icon } from "../ui/icons";
 import { SortableTableHeader } from "../ui/tableSort";
 import type { RemoteEntry } from "./api";
+import { EntryThumbnail } from "./EntryThumbnail";
 import { EntryIcon, EntryName, entrySize, entryTypeLabelKey } from "./sftpEntryLook";
 import type { SFTPSort, SFTPSortState } from "./sftpEntrySort";
 import { useEntryRowProps } from "./useEntryRowProps";
@@ -13,14 +14,17 @@ import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
 // The cells of the wide table: 7px above and below each row, as in the design.
 const headerCell = "px-2 pb-2 pt-2.5 font-normal";
 const bodyCell = "px-2 py-[7px]";
+// With a thumbnail the name cell keeps the height of a line of text: the 24px box takes what the padding gives up, so
+// that a picture does not make the table taller.
+const thumbnailCell = "px-2 py-[5px]";
 // In the wide table only the name grows: every other column is as wide as what it holds, with room after it.
 const fittedColumn = "w-px whitespace-nowrap pr-7";
 
-function ParentRowLabel() {
+function ParentRowLabel({ iconBoxClassName }: { iconBoxClassName: string }) {
   const t = useTranslate();
   return (
     <>
-      <Icon name="folder" className="size-[15px] shrink-0 text-accent" />
+      <span className={`flex shrink-0 justify-center ${iconBoxClassName}`}><Icon name="folder" className="size-[15px] text-accent" /></span>
       <span aria-hidden="true" className="font-mono">..</span>
       <span className="sr-only">{t("sftp.parentDirectory")}</span>
     </>
@@ -42,6 +46,7 @@ export function SFTPEntryTable({
   draggable,
   onDragStart,
   entryContext,
+  thumbnailAlias,
 }: {
   model: SFTPEntryListModel;
   entries: RemoteEntry[];
@@ -55,6 +60,7 @@ export function SFTPEntryTable({
   draggable: (entry: RemoteEntry) => boolean;
   onDragStart: ((event: ReactDragEvent<HTMLElement>, entry: RemoteEntry) => void) | undefined;
   entryContext: ((entry: RemoteEntry) => string) | undefined;
+  thumbnailAlias: string | null;
 }) {
   const t = useTranslate();
   const { locale } = useLanguage();
@@ -62,18 +68,11 @@ export function SFTPEntryTable({
   // A narrow pane fixes its columns (colgroup); the wide table fits all but the name to what they hold.
   const fitted = compact ? "" : fittedColumn;
   const {
-    selectedPaths, activeRowKey, allDisplayedSelected, selectAll, registerRow, setFocusedKey,
-    activate, openParent, toggleAllDisplayed, rowContextMenu,
+    selectedPaths, allDisplayedSelected, selectAll, activate, toggleAllDisplayed, rowContextMenu,
   } = model;
-  const { entryCheckboxProps, entryButtonProps } = useEntryRowProps({ model, busy });
+  const { entryCheckboxProps, entryButtonProps, parentButtonProps } = useEntryRowProps({ model, busy, locked });
   const rowCursor = (entry: RemoteEntry) => (draggable(entry) ? draggableCursor : "cursor-default");
-  const parentButtonProps: ComponentPropsWithRef<"button"> = {
-    ref: (node) => { registerRow(parentRowKey, node); },
-    tabIndex: activeRowKey === parentRowKey ? 0 : -1,
-    disabled: busy || locked,
-    onFocus: () => setFocusedKey(parentRowKey),
-    onClick: openParent,
-  };
+  const showsThumbnails = thumbnailAlias !== null;
 
   return (
     <table className={`w-full text-left text-sm ${compact ? "table-fixed" : "min-w-[44rem]"}`}>
@@ -105,10 +104,10 @@ export function SFTPEntryTable({
             <td className={`${bodyCell} pl-3.5`} colSpan={compact ? 5 : tableOwnership ? 8 : 6}>
               <button
                 type="button"
-                {...parentButtonProps}
+                {...parentButtonProps()}
                 className="flex w-full items-center gap-2 rounded text-left text-[13px] leading-5 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
               >
-                <ParentRowLabel />
+                <ParentRowLabel iconBoxClassName={showsThumbnails ? "w-6" : ""} />
               </button>
             </td>
           </tr>
@@ -127,13 +126,15 @@ export function SFTPEntryTable({
             <td className={`${bodyCell} w-9 pl-3.5`}>
               <input type="checkbox" {...entryCheckboxProps(entry)} onDoubleClick={(event) => event.stopPropagation()} />
             </td>
-            <td className={`${bodyCell} max-w-64`}>
+            <td className={`${showsThumbnails ? thumbnailCell : bodyCell} max-w-64`}>
               <button
                 type="button"
                 {...entryButtonProps(entry)}
                 className={`flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${rowCursor(entry)}`}
               >
-                <EntryIcon entry={entry} className="size-[15px] shrink-0" />
+                {showsThumbnails
+                  ? <EntryThumbnail alias={thumbnailAlias} entry={entry} boxClassName="size-6 rounded-[3px]" iconClassName="size-[15px]" />
+                  : <EntryIcon entry={entry} className="size-[15px] shrink-0" />}
                 <span className="min-w-0 grow">
                   <span className="block truncate text-[13px] leading-5 text-ink"><EntryName entry={entry} /></span>
                   {entryContext === undefined ? null : <span className="block truncate font-mono text-[10px] leading-3 text-ink-muted">{entryContext(entry)}</span>}

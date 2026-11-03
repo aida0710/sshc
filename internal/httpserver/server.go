@@ -415,7 +415,7 @@ func New(options Options) (*Server, error) {
 			return nil, err
 		}
 		server.transfers = transfers
-		registerSFTPRoutes(e, SFTPHandlers{Service: options.SFTP, Transfers: transfers, Actions: actions, Attempts: newConnectionAttempts(), MediaTickets: &mediaTickets{}})
+		registerSFTPRoutes(e, SFTPHandlers{Service: options.SFTP, Transfers: transfers, Actions: actions, Attempts: newConnectionAttempts(), MediaTickets: &mediaTickets{}, Thumbnails: sshcSFTP.NewThumbnailer(*options.SFTP)})
 	}
 	if options.Snippets != nil {
 		registerSnippetRoutes(e, SnippetHandlers{Service: options.Snippets, Actions: actions, BaseContext: baseCtx})

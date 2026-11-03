@@ -19,6 +19,10 @@ import { entryKind, movable } from "./entryKind";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
 import { SFTPActionSheet } from "./SFTPActionSheet";
 import { SFTPEntryList } from "./SFTPEntryList";
+import { SFTPEntryViewSwitch } from "./SFTPEntryViewSwitch";
+import { entriesShowThumbnails } from "./entryThumbnails";
+import type { SFTPEntryView } from "./sftpPanes";
+import { usePresetInterface } from "../settings/presetInterface";
 import { SFTPMenuActionList, type SFTPMenuAction } from "./SFTPMenuActionList";
 import { SFTPPhoneListHeader } from "./SFTPPhoneListHeader";
 import { sftpSortColumns, sortEntries, type SFTPSort, type SFTPSortState } from "./sftpEntrySort";
@@ -89,6 +93,8 @@ export function SFTPPanel({
   target = null,
   initialLocation = null,
   initialSort = { key: "name", direction: "ascending" },
+  entryView = "list",
+  onEntryViewChange = () => undefined,
   showTransfers = true,
   counterpart = null,
   onTargetHandled = () => undefined,
@@ -112,6 +118,9 @@ export function SFTPPanel({
   // aliases have arrived and can vouch for the host.
   initialLocation?: RestoredSFTPLocation | null;
   initialSort?: SFTPSortState;
+  // How this tab draws its folder, which the workspace remembers with the tab.
+  entryView?: SFTPEntryView;
+  onEntryViewChange?: (view: SFTPEntryView) => void;
   showTransfers?: boolean;
   // The other visible pane, so that files can go straight between the two.
   counterpart?: SFTPCounterpart | null;
@@ -204,6 +213,9 @@ export function SFTPPanel({
     },
   });
   const displayedEntries = search.matches(sortEntries(search.listedEntries, sort));
+  const thumbnailsHidden = usePresetInterface().hideSFTPThumbnails === true;
+  // A pane reads thumbnails only once it shows a listing, so a pane that has not connected opens nothing for them.
+  const thumbnailAlias = connected && !thumbnailsHidden && entriesShowThumbnails(displayedEntries) ? alias : null;
   const canOpenParent = search.search === null && !browser.atRoot;
   // Phones navigate upward in the toolbar so the parent does not consume a file row.
   const parentRowVisible = canOpenParent && !mobileInteraction;
@@ -618,6 +630,7 @@ export function SFTPPanel({
             ) : null}
             </>
             )}
+            <div className="ml-auto shrink-0 pl-1"><SFTPEntryViewSwitch view={entryView} onChange={onEntryViewChange} touchCompact={false} /></div>
             {can?.browserUpload ? (
               <>
                 <input
@@ -670,7 +683,7 @@ export function SFTPPanel({
             ) : null}
           </div>
           {mobileInteraction && connected && search.search?.mode !== "content" ? (
-            <SFTPPhoneListHeader sort={sort} columns={sortColumns} onSort={changeSort} onRefresh={search.refreshCurrent} refreshDisabled={busy || dirty} />
+            <SFTPPhoneListHeader sort={sort} columns={sortColumns} onSort={changeSort} entryView={entryView} onEntryViewChange={onEntryViewChange} onRefresh={search.refreshCurrent} refreshDisabled={busy || dirty} />
           ) : null}
           {waitingFor === null ? null : <SFTPWaitingOverlay label={waitingFor.label} detail={waitingFor.detail} />}
           <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={list.handleListKeys}>
@@ -749,6 +762,9 @@ export function SFTPPanel({
                 draggable={(entry) => can.dragOut && movable(entry)}
                 onDragStart={(event, entry) => transfers.beginDrag(event, entry, selectedPaths)}
                 entryContext={search.search === null ? undefined : (entry) => remoteParentOf(entry.path)}
+                view={entryView}
+                sortColumns={sortColumns}
+                thumbnailAlias={thumbnailAlias}
               />
             )}
           </div>

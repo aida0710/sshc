@@ -22,7 +22,7 @@ import { rememberPanes, restorePanes, sftpSplitRatio } from "./sftpPaneStorage";
 import { rememberTabsConnectedOnLeaving, wasConnectedOnLeaving } from "./tabsConnectedOnLeaving";
 import { useStoredValue } from "../ui/useStoredValue";
 import {
-  activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab, swapPanes,
+  activeTab, addTab, allTabs, blankTab, canSplit, changeTabView, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab, swapPanes,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
 
@@ -441,6 +441,8 @@ export function SFTPWorkspace({
                     target={ownsTarget ? target : null}
                     initialLocation={restored === undefined || restored.alias === "" ? null : restored}
                     initialSort={tab.sort}
+                    entryView={tab.view}
+                    onEntryViewChange={(view) => setPanes((current) => changeTabView(current, tab.id, view))}
                     showTransfers={false}
                     counterpart={other?.alias && other.path ? { alias: other.alias, path: other.path } : null}
                     onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
