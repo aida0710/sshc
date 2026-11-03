@@ -171,11 +171,8 @@ func describeSession(view terminal.View) api.TerminalSession {
 	if view.Progress != nil {
 		described.Progress = describeConnectionProgress(*view.Progress)
 	}
-	if question := view.HostKeyQuestion; question != nil {
-		described.HostKeyQuestion = &api.TerminalHostKeyQuestion{
-			Alias: question.Alias, HostName: question.HostName,
-			KeyType: question.KeyType, Fingerprint: question.Fingerprint,
-		}
+	if view.HostKeyQuestion != nil {
+		described.HostKeyQuestion = describeHostKeyQuestion(*view.HostKeyQuestion)
 	}
 	if view.ProgramProgress != nil {
 		var progress any
@@ -546,10 +543,6 @@ func (h TerminalHandlers) StopReconnecting(c *echo.Context) error {
 	return c.JSON(http.StatusOK, h.list())
 }
 
-// maxFingerprint は、答えに添えるフィンガープリントの長さの上限である（API の TerminalHostKeyAnswer）。
-// SHA256 のフィンガープリントは 50 文字なので、十分に余る。
-const maxFingerprint = 128
-
 // AnswerHostKey は、接続中のセッションが待っている、known_hosts に無いホスト鍵の問いに、
 // 画面のボタンから答える。その鍵についての問いをもう待っていなければ 409 を返し、何も書かない。
 func (h TerminalHandlers) AnswerHostKey(c *echo.Context) error {
@@ -557,20 +550,11 @@ func (h TerminalHandlers) AnswerHostKey(c *echo.Context) error {
 	if !ok {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
-	// accept を省いた答えを「受け入れない」と読まない。
-	var rawRequest struct {
-		Fingerprint string          `json:"fingerprint"`
-		Accept      json.RawMessage `json:"accept"`
-	}
-	if err := decodeJSON(c, &rawRequest); err != nil || len(rawRequest.Accept) == 0 ||
-		rawRequest.Fingerprint == "" || len(rawRequest.Fingerprint) > maxFingerprint {
+	answer, ok := decodeHostKeyAnswer(c)
+	if !ok {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	request := api.TerminalHostKeyAnswer{Fingerprint: rawRequest.Fingerprint}
-	if json.Unmarshal(rawRequest.Accept, &request.Accept) != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	err := h.Registry.AnswerHostKey(id, request.Fingerprint, request.Accept)
+	err := h.Registry.AnswerHostKey(id, answer.Fingerprint, answer.Accept)
 	switch {
 	case errors.Is(err, terminal.ErrNotFound):
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")

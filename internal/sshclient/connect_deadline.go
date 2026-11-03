@@ -87,11 +87,18 @@ func (d *connectDeadline) authenticationStarted() {
 // pausing は、尋ねているあいだ時計を止める Prompter を返す。
 //
 // 尋ねない Prompter はそのまま返す。Auth.Methods は非対話であることを型で見分け、
-// nil を「対話の方式を組み立てない」の意味に使う。包むとその区別が消える。
+// nil を「対話の方式を組み立てない」の意味に使う。包むとその区別が消える。ホスト鍵だけを
+// 尋ねる Prompter は、同じ理由で型を保ったまま、尋ねる関数だけを包む。
 func (d *connectDeadline) pausing(prompt Prompter) Prompter {
-	switch prompt.(type) {
+	switch typed := prompt.(type) {
 	case nil, nonInteractivePrompter:
 		return prompt
+	case hostKeyQuestionPrompter:
+		return hostKeyQuestionPrompter{confirm: func(question string) (bool, error) {
+			d.pause()
+			defer d.resume()
+			return typed.confirm(question)
+		}}
 	}
 	return deadlinePausingPrompter{prompter: prompt, deadline: d}
 }

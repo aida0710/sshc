@@ -1,6 +1,8 @@
 // Package connectionattempt は、HTTP の要求の中で張る接続（SFTP のタブが最初の一覧を取る
 // 要求など）が接続するあいだに報告した段階と接続ログを預かる。要求は接続し終わるまで
 // 返らないので、Web UI はこれを別の要求で読み、待っているあいだの経過を表示する。
+// 接続が known_hosts に無いホスト鍵について尋ねているあいだは、その問いも預かり、Web UI の
+// 答えを接続へ渡す。
 package connectionattempt
 
 import (
@@ -38,6 +40,9 @@ type Snapshot struct {
 	// Log は接続ログの行で、行末の改行を含まない。
 	Log      []string
 	Finished bool
+	// HostKeyQuestion は、接続が答えを待っている、known_hosts に無いホスト鍵の問いである。
+	// 待っていなければ nil。
+	HostKeyQuestion *terminal.HostKeyQuestion
 }
 
 // Registry は、進行中と終わって間もない試行を alias と識別子で預かる。
@@ -88,6 +93,9 @@ func (r *Registry) Snapshot(alias, id string) (Snapshot, bool) {
 		progress := *attempt.progress
 		snapshot.Progress = &progress
 	}
+	if question, asking := attempt.hostKeyQuestionLocked(); asking {
+		snapshot.HostKeyQuestion = &question
+	}
 	return snapshot, true
 }
 
@@ -121,6 +129,8 @@ type Attempt struct {
 	lines      []string
 	// partial は、まだ改行が届いていない行の頭である。
 	partial string
+	// hostKeyQuestion は、答えを待っているホスト鍵の問いである。待っていなければ nil。
+	hostKeyQuestion *openHostKeyQuestion
 }
 
 // Progress は、接続の段階を記録する。

@@ -47,6 +47,40 @@ describe("sftpApi resumable download", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it("leaves a host key refusal to the screen that asked, which says it in the terminal's words", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    for (const code of ["host_key_declined", "host_key_unknown", "host_key_changed", "host_key_revoked", "known_hosts_symlink"]) {
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(
+        JSON.stringify({ code, message: "request rejected" }),
+        { status: 502, headers: { "Content-Type": "application/problem+json" } },
+      ));
+      await expect(sftpApi.list("edge", "/")).rejects.toMatchObject({ code });
+    }
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
+  it("answers a host key question and reads a closed question as nothing to answer", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    const attempt = { log: [], finished: false };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify(attempt), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({ code: "sftp_no_host_key_question", message: "request rejected" }),
+        { status: 409, headers: { "Content-Type": "application/problem+json" } },
+      ));
+    const answer = { fingerprint: "SHA256:key", accept: true };
+
+    await expect(sftpApi.answerHostKey("edge", "6f1c2b9e-0d4a-4c1e-9a77-3b2f5d8e1a40", answer)).resolves.toEqual(attempt);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toBe("/api/v1/sftp/edge/connection-attempts/6f1c2b9e-0d4a-4c1e-9a77-3b2f5d8e1a40/host-key");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual(answer);
+    await expect(sftpApi.answerHostKey("edge", "6f1c2b9e-0d4a-4c1e-9a77-3b2f5d8e1a40", answer)).resolves.toBeNull();
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
   it("keeps the Problem of a refused preview and hands a locked vault to the lock screen", async () => {
     const locked = vi.fn();
     whenLocked(locked);

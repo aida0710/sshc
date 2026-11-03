@@ -2509,6 +2509,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/{alias}/connection-attempts/{attempt}/host-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                attempt: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Answers the host key question of a listing's connection. 409 means the connection no longer waits on a question about this key. */
+        post: operations["answerSFTPHostKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/{alias}/preview": {
         parameters: {
             query?: never;
@@ -4889,6 +4909,7 @@ export interface components {
         };
         SFTPConnectionAttempt: {
             progress?: components["schemas"]["TerminalConnectionProgress"];
+            hostKeyQuestion?: components["schemas"]["TerminalHostKeyQuestion"];
             /** @description Connection log lines at the configured verbosity, oldest first, without line endings. A failed attempt ends with the reason. */
             log: string[];
             finished: boolean;
@@ -10589,6 +10610,39 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    answerSFTPHostKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                attempt: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalHostKeyAnswer"];
+            };
+        };
+        responses: {
+            /** @description The connection attempt after the answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPConnectionAttempt"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
         };
     };
     previewSFTPFile: {

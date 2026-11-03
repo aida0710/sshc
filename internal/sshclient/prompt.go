@@ -49,10 +49,33 @@ func (nonInteractivePrompter) Confirm(string) (bool, error) {
 
 var noPrompt Prompter = nonInteractivePrompter{}
 
+// hostKeyQuestionPrompter は、known_hosts に無いホスト鍵を受け入れるかだけを尋ね、認証の
+// 入力は尋ねない。端末の無い接続（SFTP のタブ）で、接続を見ている人が画面のボタンで鍵に
+// 答えられるときに使う。認証は nonInteractivePrompter と同じく保存済みの資格情報だけで行う。
+type hostKeyQuestionPrompter struct {
+	confirm func(question string) (bool, error)
+}
+
+func (hostKeyQuestionPrompter) Line(string) (string, error) {
+	return "", ErrPromptUnavailable
+}
+
+func (hostKeyQuestionPrompter) Secret(string) (string, error) {
+	return "", ErrPromptUnavailable
+}
+
+func (p hostKeyQuestionPrompter) Confirm(question string) (bool, error) {
+	return p.confirm(question)
+}
+
 // isNonInteractive は、保存済み資格情報だけを使い、利用者へは尋ねない接続かを返す。
+// ホスト鍵だけを尋ねる接続も、認証については尋ねない。
 func isNonInteractive(prompt Prompter) bool {
-	_, nonInteractive := prompt.(nonInteractivePrompter)
-	return nonInteractive
+	switch prompt.(type) {
+	case nonInteractivePrompter, hostKeyQuestionPrompter:
+		return true
+	}
+	return false
 }
 
 // StreamPrompter は、端末のストリームへ問いを出す。
