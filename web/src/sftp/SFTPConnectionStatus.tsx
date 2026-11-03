@@ -5,21 +5,24 @@ import { PanelState } from "../ui/PanelState";
 // SFTPConnectionStatus stands in for the file list while a tab waits for its
 // SSH connection, and after the connection failed. One line says the stage or
 // the reason; below it come the lines the connection log setting asks for, as
-// a terminal shows them while it connects.
+// a terminal shows them while it connects. While the connection waits on the
+// person (a host key question), the question takes the place of that line.
 export function SFTPConnectionStatus({
   tone,
   title,
   log,
   action,
+  question,
 }: {
   tone: "loading" | "failed";
   title: string;
   log: readonly string[];
   action?: ReactNode;
+  question?: ReactNode;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center gap-2 p-4">
-      <PanelState tone={tone} title={title} {...(action === undefined ? {} : { action })} className="min-h-0 py-2" />
+      {question ?? <PanelState tone={tone} title={title} {...(action === undefined ? {} : { action })} className="min-h-0 py-2" />}
       {log.length === 0 ? null : <ConnectionLog lines={log} />}
     </div>
   );

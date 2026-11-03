@@ -6,7 +6,7 @@ import { exitedAbnormally } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
 import { hostKeyQuestionOf, statusBannerRows } from "./statusBannerRows";
 import { useReconnectCountdown } from "./useReconnectCountdown";
-import type { HostKeyAnswer } from "./useHostKeyAnswer";
+import type { HostKeyAnswer } from "../shell/useHostKeyAnswer";
 import type { SessionRecovery } from "./useSessionRecovery";
 import { Button } from "../ui/surface";
 

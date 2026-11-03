@@ -5,6 +5,7 @@ import { ApiError, failureCode } from "../api/client";
 import type { OpenTerminalSessionRequest, TerminalSession, TerminalSessionList, TerminalSessionsApi as SessionsApi } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import { hostKeyProblemMessages } from "../shell/hostKeyProblems";
 import type { ExitReport } from "./stream";
 
 // A hop or an authentication prompt should appear as soon as a person can
@@ -347,6 +348,7 @@ export function useTerminalSessions(
 }
 
 export function terminalProblemKey(code: string): MessageKey {
+  if (Object.hasOwn(hostKeyProblemMessages, code)) return hostKeyProblemMessages[code]!;
   switch (code) {
     case "terminal_session_limit":
       return "terminal.limitRefused";
@@ -358,16 +360,6 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.localWorkingDirectoryUnavailable";
     case "jump_depth_exceeded":
       return "terminal.jumpDepthExceeded";
-    case "host_key_declined":
-      return "terminal.hostKeyDeclined";
-    case "host_key_unknown":
-      return "terminal.hostKeyUnknown";
-    case "host_key_changed":
-      return "terminal.hostKeyChanged";
-    case "host_key_revoked":
-      return "terminal.hostKeyRevoked";
-    case "known_hosts_symlink":
-      return "terminal.knownHostsSymlink";
     case "identity_unavailable":
       return "terminal.identityUnavailable";
     case "authentication_unavailable":

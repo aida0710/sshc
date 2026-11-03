@@ -1682,7 +1682,8 @@ type SFTPComparisonMode string
 
 // SFTPConnectionAttempt defines model for SFTPConnectionAttempt.
 type SFTPConnectionAttempt struct {
-	Finished bool `json:"finished"`
+	Finished        bool                     `json:"finished"`
+	HostKeyQuestion *TerminalHostKeyQuestion `json:"hostKeyQuestion,omitempty"`
 
 	// Log Connection log lines at the configured verbosity, oldest first, without line endings. A failed attempt ends with the reason.
 	Log      []string                    `json:"log"`

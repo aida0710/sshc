@@ -14,7 +14,9 @@ import (
 // Connection is an authenticated SSH transport without a terminal channel.
 // Subsystems such as SFTP can open their own SSH channels on it. It is
 // deliberately non-interactive: stored credentials and known hosts are used,
-// while a prompt that would need a terminal makes the connection fail.
+// while a prompt that would need a terminal makes the connection fail. The one
+// exception is a host key known_hosts does not have, which a person watching
+// the connection may be asked about (ConnectionObserver.ConfirmHostKey).
 type Connection struct {
 	client *ssh.Client
 	// encoding は、Run が運ぶコマンドの入出力の文字コードである。
@@ -28,23 +30,37 @@ type Connection struct {
 // Connect authenticates one target and returns a transport owned by the
 // caller. Close must be called when its subsystem operation is complete.
 func (d Dialer) Connect(ctx context.Context, target Target) (*Connection, error) {
-	// A subsystem has no terminal on which to ask whether an unknown host key
-	// should be trusted. Force every stage of the non-interactive path to fail
-	// closed even when the saved target would normally allow an interactive
-	// confirmation. Applying this only to the final host leaves ProxyJump hops
-	// able to auto-register an unknown key before the subsystem reaches it.
-	strict := requireKnownHosts(target)
-	client, closers, err := d.chain(ctx, strict, noPrompt, d.observingTracer(ctx))
+	route, prompt := subsystemRoute(ctx, target)
+	client, closers, err := d.chain(ctx, route, prompt, d.observingTracer(ctx))
 	if err != nil {
 		return nil, err
 	}
 	connection := &Connection{
-		client: client, encoding: strict.Encoding, closers: append(closers, client), done: make(chan struct{}),
+		client: client, encoding: route.Encoding, closers: append(closers, client), done: make(chan struct{}),
 	}
-	if keepAlive := keepAliveLoop(client, keepAliveSettings{interval: strict.KeepAlive, count: strict.KeepAliveMax, done: connection.done}); keepAlive != nil {
+	if keepAlive := keepAliveLoop(client, keepAliveSettings{interval: route.KeepAlive, count: route.KeepAliveMax, done: connection.done}); keepAlive != nil {
 		go keepAlive()
 	}
 	return connection, nil
+}
+
+// subsystemRoute は、端末の無い接続の経路と、その途中で尋ねる手段を決める。
+//
+// 接続を見ている人が未知のホスト鍵に答えられるとき（SFTP のタブが最初の一覧を取る接続）は、
+// ターミナルと同じく各段の StrictHostKeyChecking に従い、ask ではその人に尋ねる。認証の
+// 入力（パスフレーズ、パスワード、ワンタイムパスワード）は尋ねず、保存済みの資格情報だけを使う。
+//
+// 答えられる人がいなければ、ホスト鍵を尋ねる先が無い。保存した接続先が普段は対話の確認を
+// 許していても、どの段でも未知の鍵を断る。最後の接続先だけにすると、ProxyJump の段が
+// 未知の鍵を自動で登録してしまう。
+func subsystemRoute(ctx context.Context, target Target) (Target, Prompter) {
+	observer, _ := connectionObserverIn(ctx)
+	if observer.ConfirmHostKey == nil {
+		return requireKnownHosts(target), noPrompt
+	}
+	return target, hostKeyQuestionPrompter{confirm: func(question string) (bool, error) {
+		return observer.ConfirmHostKey(ctx, question)
+	}}
 }
 
 func requireKnownHosts(target Target) Target {

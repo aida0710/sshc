@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { isInTerminalNotice, isTypingElsewhere } from "./terminalFocus";
+import { isInNoticeCard, isTypingElsewhere } from "./terminalFocus";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -25,14 +25,14 @@ describe("isTypingElsewhere", () => {
   });
 });
 
-describe("isInTerminalNotice", () => {
+describe("isInNoticeCard", () => {
   it("is true while a card over the terminal or one of its buttons holds the focus", () => {
-    document.body.innerHTML = `<section id="terminal"><textarea></textarea><section data-terminal-notice="question" tabindex="-1"><button>Cancel</button></section></section>`;
-    document.querySelector<HTMLElement>("[data-terminal-notice]")!.focus();
-    expect(isInTerminalNotice()).toBe(true);
+    document.body.innerHTML = `<section id="terminal"><textarea></textarea><section data-notice-card="question" tabindex="-1"><button>Cancel</button></section></section>`;
+    document.querySelector<HTMLElement>("[data-notice-card]")!.focus();
+    expect(isInNoticeCard()).toBe(true);
     document.querySelector<HTMLButtonElement>("button")!.focus();
-    expect(isInTerminalNotice()).toBe(true);
+    expect(isInNoticeCard()).toBe(true);
     document.querySelector<HTMLTextAreaElement>("textarea")!.focus();
-    expect(isInTerminalNotice()).toBe(false);
+    expect(isInNoticeCard()).toBe(false);
   });
 });

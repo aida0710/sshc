@@ -23,19 +23,13 @@ func reconnectStopNotice(problem string) string {
 	return ""
 }
 
-// connectProblem は、接続を組み立てられなかった理由を通信形式に変える。
-func connectProblem(err error) (string, bool) {
-	var unresolvable *application.ErrUnresolvable
+// hostKeyProblem は、ホスト鍵を受け入れなかった理由と、受け入れた鍵を保存できなかった理由を
+// 通信形式に変える。ターミナルと SFTP が同じ語を返し、画面は同じ文で伝える。
+func hostKeyProblem(err error) (string, bool) {
 	var symlinkedKnownHosts *sshclient.KnownHostsSymlinkError
 	switch {
-	case errors.As(err, &unresolvable):
-		return "alias_unresolvable", true
 	case errors.As(err, &symlinkedKnownHosts):
 		return problemKnownHostsSymlink, true
-	case errors.Is(err, sshclient.ErrJumpDepth):
-		return "jump_depth_exceeded", true
-	case errors.Is(err, sshclient.ErrNoHostName):
-		return "alias_unresolvable", true
 	case errors.Is(err, sshclient.ErrHostKeyDeclined):
 		return "host_key_declined", true
 	case errors.Is(err, sshclient.ErrHostKeyUnknown):
@@ -44,6 +38,23 @@ func connectProblem(err error) (string, bool) {
 		return "host_key_changed", true
 	case errors.Is(err, sshclient.ErrHostKeyRevoked):
 		return "host_key_revoked", true
+	}
+	return "", false
+}
+
+// connectProblem は、接続を組み立てられなかった理由を通信形式に変える。
+func connectProblem(err error) (string, bool) {
+	if code, ok := hostKeyProblem(err); ok {
+		return code, true
+	}
+	var unresolvable *application.ErrUnresolvable
+	switch {
+	case errors.As(err, &unresolvable):
+		return "alias_unresolvable", true
+	case errors.Is(err, sshclient.ErrJumpDepth):
+		return "jump_depth_exceeded", true
+	case errors.Is(err, sshclient.ErrNoHostName):
+		return "alias_unresolvable", true
 	case errors.Is(err, sshclient.ErrNoIdentity):
 		return "identity_unavailable", true
 	case errors.Is(err, sshclient.ErrNoAuthMethod):

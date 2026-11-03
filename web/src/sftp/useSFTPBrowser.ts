@@ -3,7 +3,7 @@ import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { sftpProblemText } from "./sftpProblemText";
 import type { RemoteEntry, SFTPConnectionAttempt } from "./api";
-import { watchConnectionAttempt } from "./sftpConnectionAttempt";
+import { watchConnectionAttempt, type ConnectionAttemptWatch } from "./sftpConnectionAttempt";
 import { localHostAlias } from "./localHost";
 import { sourceFor, type SFTPListing } from "./sftpSource";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
@@ -64,6 +64,9 @@ export function useSFTPBrowser({
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [navigation, setNavigation] = useState<{ paths: string[]; index: number }>({ paths: [], index: -1 });
   const loadGeneration = useRequestGeneration();
+  // connecting is the listing that opens the SSH connection, while it waits. It may wait on a host key question,
+  // which only this pane can answer.
+  const connecting = useRef<{ watch: ConnectionAttemptWatch; abort: AbortController } | null>(null);
   const requestedPath = useRef("");
   const openedInitialLocation = useRef(false);
   const reportLocation = useRef(onLocationChange);
@@ -76,10 +79,36 @@ export function useSFTPBrowser({
     return candidate === localHostAlias || aliases.includes(candidate);
   }
 
+  // Once the pane moves on (another listing, another host, the pane is taken down), nobody answers the connecting
+  // listing's host key question. It is ended rather than left waiting in the engine, which would keep the request,
+  // the half-open SSH connection and the polling open for good.
+  function abandonConnecting() {
+    connecting.current?.abort.abort();
+    connecting.current = null;
+  }
+
+  function beginRequest() {
+    abandonConnecting();
+    return loadGeneration.begin();
+  }
+
+  function retireRequests() {
+    abandonConnecting();
+    loadGeneration.retire();
+  }
+
+  // Taking the pane down (closing its tab, opening another section) ends a listing still connecting. StrictMode in
+  // development takes the pane down and puts it back at once; the restored location then opens again, as it does for
+  // a pane put back.
+  useEffect(() => () => {
+    abandonConnecting();
+    openedInitialLocation.current = false;
+  }, []);
+
   async function load(nextPath: string = latest.current.path, options: LoadOptions = {}): Promise<RemoteEntry[] | null> {
     const targetAlias = options.alias ?? latest.current.alias;
     const target = sourceFor(targetAlias);
-    const isCurrent = loadGeneration.begin();
+    const isCurrent = beginRequest();
     if (target === null) {
       setBusy(false);
       return null;
@@ -92,13 +121,21 @@ export function useSFTPBrowser({
     setProblem("");
     // A listing for a host this pane is not connected to opens the SSH
     // connection, which the engine reports while it lasts.
-    const connecting = !target.local && (!latest.current.connected || targetAlias !== latest.current.alias);
-    const watch = connecting ? watchConnectionAttempt(targetAlias, (reading) => { if (isCurrent()) setConnection(reading); }) : null;
-    if (connecting) setConnection(null);
+    const opensConnection = !target.local && (!latest.current.connected || targetAlias !== latest.current.alias);
+    const connection = opensConnection ? {
+      watch: watchConnectionAttempt(targetAlias, (reading) => { if (isCurrent()) setConnection(reading); }),
+      abort: new AbortController(),
+    } : null;
+    if (connection !== null) {
+      connecting.current = connection;
+      setConnection(null);
+    }
     try {
-      const listing = await (watch === null ? target.list(nextPath) : target.list(nextPath, { attempt: watch.attempt }));
-      void watch?.stop({ readFinal: false });
+      const listing = await (connection === null ? target.list(nextPath)
+        : target.list(nextPath, { attempt: connection.watch.attempt, signal: connection.abort.signal }));
+      void connection?.watch.stop({ readFinal: false });
       if (!isCurrent()) return null;
+      connecting.current = null;
       setConnection(null);
       const changed = listing.path !== latest.current.path || targetAlias !== latest.current.alias;
       setPath(listing.path);
@@ -116,8 +153,10 @@ export function useSFTPBrowser({
       onLoaded?.(listing, { refresh, changed });
       return listing.entries;
     } catch (error) {
-      await watch?.stop({ readFinal: true });
+      // An ended listing belongs to a pane that moved on; there is nothing left to show of it.
+      await connection?.watch.stop({ readFinal: !connection.abort.signal.aborted });
       if (!isCurrent()) return null;
+      connecting.current = null;
       const code = failureCode(error);
       if (code === "invalid_request") {
         // A listing's only free input is the path typed into the pane, so the
@@ -141,7 +180,7 @@ export function useSFTPBrowser({
   // busy state, loading overlay and staleness rule as a listing. Resolves to
   // null when it failed or when the user moved on before it answered.
   async function track<T>(pending: string, work: () => Promise<T>): Promise<T | null> {
-    const isCurrent = loadGeneration.begin();
+    const isCurrent = beginRequest();
     setBusy(true);
     setPendingPath(pending);
     setProblem("");
@@ -167,7 +206,7 @@ export function useSFTPBrowser({
     // Invalidate every request started for the previous host before React runs
     // the alias effect. Keeping its rows visible would also let an action for
     // host A be submitted with host B's alias during the hand-off render.
-    loadGeneration.retire();
+    retireRequests();
     reportLocation.current(nextAlias, "");
     setAlias(nextAlias);
     setConnected(false);
@@ -197,7 +236,7 @@ export function useSFTPBrowser({
     if (restored === null || !knownHost(initialLocation.alias) ||
         (initialLocation.path !== "" && !restored.acceptsPath(initialLocation.path))) return;
     openedInitialLocation.current = true;
-    loadGeneration.retire();
+    retireRequests();
     setAlias(initialLocation.alias);
     setPath(initialLocation.path);
     setConnected(false);
@@ -209,6 +248,15 @@ export function useSFTPBrowser({
     if (!restored.can.connect || initialLocation.connect === true) void load(initialLocation.path, { alias: initialLocation.alias });
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [aliases, initialLocation?.alias, initialLocation?.path]);
+
+  // answerHostKey answers the question the connecting listing asks about an unknown host key (connection's
+  // hostKeyQuestion). False when no listing of this pane waits on one, or the answer did not arrive: the
+  // application-wide failure notice says why, and the question stays for another press.
+  async function answerHostKey(fingerprint: string, accept: boolean): Promise<boolean> {
+    const watch = connecting.current?.watch;
+    if (watch === undefined) return false;
+    return watch.answerHostKey(fingerprint, accept).catch(() => false);
+  }
 
   async function navigateHistory(offset: -1 | 1): Promise<void> {
     const nextIndex = navigation.index + offset;
@@ -251,6 +299,7 @@ export function useSFTPBrowser({
     generation: loadGeneration,
     selectHost,
     resetForHost,
+    answerHostKey,
     connect: () => load(latest.current.path),
     retry: () => load(requestedPath.current),
     refresh: () => load(latest.current.path, { refresh: true }),

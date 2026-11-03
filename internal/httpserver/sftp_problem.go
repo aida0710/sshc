@@ -16,6 +16,10 @@ func sftpProblem(c *echo.Context, err error) error {
 	if sshcSFTP.ConnectionLost(err) {
 		return problem(c, http.StatusBadGateway, "sftp_connection_lost")
 	}
+	// ホスト鍵で接続しなかったときは、ターミナルと同じ語で返す。画面は同じ文で理由と対処を言う。
+	if code, ok := hostKeyProblem(err); ok {
+		return problem(c, http.StatusBadGateway, code)
+	}
 	switch {
 	case errors.Is(err, sshcSFTP.ErrAmbiguousTransfer):
 		return problem(c, http.StatusConflict, sshcSFTP.RemoteReconciliationProblem)
