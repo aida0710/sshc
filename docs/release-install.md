@@ -27,8 +27,8 @@ URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`
 - ダウンロードしたファイルのSHA-256が`checksums.txt`と一致すること
 - 2.49.0以降のGitHub CLI（`gh`）がgithub.comにログインしている場合は、ダウンロードしたバイナリのattestationが、`aida0710/sshc`のReleaseワークフローの署名であること（下の`gh attestation verify`と同じ条件）
 - ダウンロードしたバイナリが`sshc version`で、選んだOS・CPUと`SSHC_VERSION`のバージョンを報告すること
-- インストール先のディレクトリへ書き込めること
-- 既存のインストール先がシンボリックリンクやディレクトリではないこと
+- インストール先のフォルダへ書き込めること
+- 既存のインストール先がシンボリックリンクやフォルダではないこと
 
 これらの確認に失敗した場合、既存の実行ファイルを変更せず終了します。attestationの検証は、署名が一致しない場合のほか、GitHubへの接続やAPIの呼び出しに失敗した場合も通らず、`gh`のエラーをそのまま表示して終了します。
 
@@ -60,7 +60,7 @@ gh api repos/aida0710/sshc/compare/<tag>...main --jq .status
 
 インストール先は`SSHC_INSTALL_DIR`、バージョンは`SSHC_VERSION`で変更できます。
 
-現在の`install.sh`は、配置先と同じディレクトリに、導入元、バージョン、配置したバイナリのSHA-256を記録したreceiptを保存します。前のreceiptを削除してからバイナリを置き、最後に新しいreceiptを置くため、途中で止まってもreceiptが別のバイナリを指すことはありません。途中で止まった場合はreceiptのない導入になるので、同じ手順を実行し直してください。
+現在の`install.sh`は、配置先と同じフォルダに、導入元、バージョン、配置したバイナリのSHA-256を記録したreceiptを保存します。前のreceiptを削除してからバイナリを置き、最後に新しいreceiptを置くため、途中で止まってもreceiptが別のバイナリを指すことはありません。途中で止まった場合はreceiptのない導入になるので、同じ手順を実行し直してください。
 
 `sshc update`は、receiptのSHA-256が現在の実行ファイルと一致するときだけ、公開済みのタグに固定した`install.sh`で更新します。receiptを書かない古いインストーラー、手動コピー、`make install`で入れたもの、変更したバイナリは、推測で置き換えません。SHA-256が一致しない場合、`sshc update`と`sshc service install`はエラーで終了します。`install.sh`で入れ直すか、実行ファイルを自分で置き換えた場合はreceiptを削除してください。古いインストーラーから移行する場合は、上のタグを固定した手順を一度手動で実行してください。
 
@@ -75,7 +75,7 @@ sshc update
 更新するバージョン、実行ファイル、管理元を表示した後に確認を求めます。CIなど対話型のターミナルのない環境で実行する場合は、内容を確認した上で`sshc update --yes`を使用してください。
 
 - Homebrew版は、`brew --prefix --installed aida0710/tap/sshc`の`bin/sshc`と実行中ファイルが同一であることを確認し、`brew upgrade --formula --no-ask aida0710/tap/sshc`を実行します。Homebrewがtapを更新しなかったために新しいバージョンが入らなかった場合（`HOMEBREW_NO_AUTO_UPDATE`を設定している場合など）は、`brew update`を実行してから`sshc update`を再実行するよう表示します。
-- `install.sh`版は、SHA-256を記録したreceiptを確認し、GitHubの最新の安定バージョンのタグに固定した`install.sh`を取得します。スクリプトが同じReleaseの`checksums.txt`と一致したときだけ実行します。`install.sh`は公開された`checksums.txt`でバイナリを検証し、同じディレクトリの中で名前を変更して置き換えます。Ctrl-Cなどで取り消すと、`install.sh`に一時ファイルを削除させてから停止します。
+- `install.sh`版は、SHA-256を記録したreceiptを確認し、GitHubの最新の安定バージョンのタグに固定した`install.sh`を取得します。スクリプトが同じReleaseの`checksums.txt`と一致したときだけ実行します。`install.sh`は公開された`checksums.txt`でバイナリを検証し、同じフォルダの中で名前を変更して置き換えます。Ctrl-Cなどで取り消すと、`install.sh`に一時ファイルを削除させてから停止します。
 - Windowsの`install.ps1`版は、receiptとSHA-256を確認し、公開済みのタグの`install.ps1`を取得します。スクリプトも同じReleaseの`checksums.txt`と照合し、対象タグを`SSHC_VERSION`へ設定してPowerShellで実行します。Web画面からも確認後に更新できます。
 - 手動配置、ソースビルド、判定不能な導入は変更しません。Windowsでは`install.ps1`での導入方法を、それ以外では元の導入方法での更新を案内します。
 
@@ -152,13 +152,13 @@ Windowsでは、下記の削除操作で停止とサービス登録の削除を�
 1. `sshc service install`で登録している場合は、`sshc service disable`を実行します。sshcが作成したサービス定義だけを停止、無効化、削除します。フォアグラウンドやtmuxで起動したエンジンは、そのプロセスを停止します。
 2. 導入方法に合わせて実行ファイルを削除します。
    - Homebrew: `brew uninstall aida0710/tap/sshc`
-   - `install.sh`: 配置先の`sshc`と、同じディレクトリにあるreceipt（`.sshc-install-receipt.json`）を削除します。配置先は通常`~/.local/bin`で、rootで実行した場合は`/usr/local/bin`、`SSHC_INSTALL_DIR`を指定した場合はそのディレクトリです。
+   - `install.sh`: 配置先の`sshc`と、同じフォルダにあるreceipt（`.sshc-install-receipt.json`）を削除します。配置先は通常`~/.local/bin`で、rootで実行した場合は`/usr/local/bin`、`SSHC_INSTALL_DIR`を指定した場合はそのフォルダです。
    - `make install`: `make uninstall`で`~/.local/bin/sshc`を削除します。
    - Windows: 下記の「インストール済みアプリ」または`uninstall.ps1`で削除します。停止とサービスの削除も自動で行います。
    - Android: ほかのアプリと同じ手順でアンインストールします。
 3. 接続ごとのVPNを使った場合は、sshcが作成したコンテナイメージ`sshc-vpn`が残ります。VPNのコンテナはエンジンの停止時に削除されます。イメージが不要なら、`docker image ls sshc-vpn`で確認してから`docker image rm`で削除してください。
 
-Windowsでは、設定の「アプリ」→「インストール済みアプリ」からsshcを選んでアンインストールできます。PowerShellから削除する場合は次を実行します。`SSHC_INSTALL_DIR`で配置先を変えた場合は、`$dir`にそのディレクトリを指定してください。
+Windowsでは、設定の「アプリ」→「インストール済みアプリ」からsshcを選んでアンインストールできます。PowerShellから削除する場合は次を実行します。`SSHC_INSTALL_DIR`で配置先を変えた場合は、`$dir`にそのフォルダを指定してください。
 
 ```powershell
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\sshc'
@@ -180,7 +180,7 @@ launchctl bootout gui/$(id -u)/io.github.aida0710.sshc
 rm ~/Library/LaunchAgents/io.github.aida0710.sshc.plist
 ```
 
-sshcのデータは、アンインストールしても`~/.ssh/sshc`（Windowsでは`%USERPROFILE%\.ssh\sshc`）に残ります。Vault、接続先ごとのsshcの設定、VPNプロファイルの設定、SSH設定を変更する前のバックアップ、削除した鍵を含みます。使い直す予定がなく、中身が不要なことを確認した場合だけ、このディレクトリを削除してください。削除したVaultとバックアップは復元できません。`~/.ssh/config`、`Include`先のファイル、鍵はOpenSSHと共有しているため、sshcをアンインストールしても変更しません。暗号化同期でS3互換ストレージへ保存したスナップショットも残るため、不要な場合はストレージ側で削除してください。
+sshcのデータは、アンインストールしても`~/.ssh/sshc`（Windowsでは`%USERPROFILE%\.ssh\sshc`）に残ります。Vault、接続先ごとのsshcの設定、VPNプロファイルの設定、SSH設定を変更する前のバックアップ、削除した鍵を含みます。使い直す予定がなく、中身が不要なことを確認した場合だけ、このフォルダを削除してください。削除したVaultとバックアップは復元できません。`~/.ssh/config`、`Include`先のファイル、鍵はOpenSSHと共有しているため、sshcをアンインストールしても変更しません。暗号化同期でS3互換ストレージへ保存したスナップショットも残るため、不要な場合はストレージ側で削除してください。
 
 ## リポジトリ管理者向けの公開保護
 

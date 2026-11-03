@@ -954,7 +954,7 @@ func TestTheReconnectStopNoticeFollowsTheReason(t *testing.T) {
 		problem string
 		want    string
 	}{
-		{"vpn_route_disconnected", "VPN経路が切断されたため"},
+		{"vpn_route_disconnected", "VPNルートが切断されたため"},
 		{"host_key_changed", "設定を直さない限り同じ理由で失敗するため"},
 	} {
 		t.Run(test.problem, func(t *testing.T) {
@@ -965,7 +965,7 @@ func TestTheReconnectStopNoticeFollowsTheReason(t *testing.T) {
 				ReconnectError: func(error) (bool, string) { return false, test.problem },
 				ReconnectStopNotice: func(problem string) string {
 					if problem == "vpn_route_disconnected" {
-						return "VPN経路が切断されたため、自動再接続を停止しました。"
+						return "VPNルートが切断されたため、自動再接続を停止しました。"
 					}
 					return ""
 				},

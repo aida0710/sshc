@@ -111,7 +111,7 @@ func refuseRestartAfterDisconnect(ctx context.Context, name string, disconnected
 // ［再接続］で接続し直せることと一緒に知らせる。
 func routeDisconnectedError(name string) error {
 	return &sshclient.ExplainedError{
-		Sentence: fmt.Sprintf("VPN経路「%s」は切断されています。［再接続］を押すと、VPN経路を起動して接続し直します。", name),
+		Sentence: fmt.Sprintf("VPNルート「%s」は切断されています。［再接続］を押すと、VPNルートを起動して接続し直します。", name),
 		Err:      vpn.ErrRouteDisconnected,
 	}
 }

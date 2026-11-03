@@ -226,15 +226,15 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/sftp-two-pane-desktop.png`, fullPage: true });
     const projectRow = page.getByLabel("1つ目のリモートペイン").getByRole("button", { name: "project", exact: true })
       .locator("xpath=ancestor::*[@draggable='true'][1]");
-    await projectRow.dragTo(secondPane.getByRole("tabpanel").getByLabel(/現在のリモートディレクトリへ/));
+    await projectRow.dragTo(secondPane.getByRole("tabpanel").getByLabel(/現在のリモートフォルダへ/));
     const remoteTransfer = page.getByRole("dialog", { name: "リモート項目を転送" });
     await expect(remoteTransfer).toBeVisible();
     await expect(remoteTransfer.getByRole("button", { name: "ここへコピー" })).toBeVisible();
     await expect(remoteTransfer.getByRole("button", { name: "ここへ移動" })).toBeVisible();
     await page.screenshot({ path: `${visualDirectory}/sftp-remote-drag-ja.png`, fullPage: true });
     await remoteTransfer.getByRole("button", { name: "キャンセル" }).click();
-    await page.getByRole("button", { name: "ディレクトリを比較", exact: true }).click();
-    const compareDialog = page.getByRole("dialog", { name: "ディレクトリを比較" });
+    await page.getByRole("button", { name: "フォルダを比較", exact: true }).click();
+    const compareDialog = page.getByRole("dialog", { name: "フォルダを比較" });
     await expect(compareDialog.getByText("左のみ", { exact: true })).toBeVisible();
     await expect(compareDialog.getByText("右のみ", { exact: true })).toBeVisible();
     await expect(compareDialog.getByText("変更あり", { exact: true })).toBeVisible();

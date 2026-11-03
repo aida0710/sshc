@@ -54,7 +54,7 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await expect(localRow).toHaveAttribute("draggable", "true");
   const putRequest = page.waitForRequest((request) =>
     request.method() === "POST" && request.url().includes("/api/v1/sftp/transfers") && (request.postData() ?? "").includes('"operation":"put"'));
-  await second.getByRole("button", { name: "draft.txt" }).dragTo(first.getByLabel(/現在のリモートディレクトリへ/));
+  await second.getByRole("button", { name: "draft.txt" }).dragTo(first.getByLabel(/現在のリモートフォルダへ/));
   const queued = JSON.parse((await putRequest).postData() ?? "{}") as { sourcePath?: string; remotePath?: string; direction?: string };
   expect(queued).toMatchObject({ direction: "remote", sourcePath: "/home/engine/projects/draft.txt", remotePath: "/srv/projects/draft.txt" });
   await second.getByRole("button", { name: "ローカルパスを編集" }).click();

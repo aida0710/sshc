@@ -26,7 +26,7 @@
 | --- | --- |
 | `sshc version` がタグのバージョンを名乗る | `-X` が外れてもビルドは通る。`dev` のまま配られる |
 | engine が動作していないときに起動方法を表示する | エラー文ではなく実際の利用手順を検査するため |
-| `sshc engine` が handoff を生成する | listener と状態ディレクトリを実際に使用するため |
+| `sshc engine` が handoff を生成する | listener と状態フォルダを実際に使用するため |
 | `sshc status` が実行中の engine を報告する | CLI と engine 間の通信が必要なため |
 | アクセス URL が UI を返す | `go:embed` の内容が空でもビルドは成功するため |
 
@@ -125,7 +125,7 @@ DESKTOP-VJBBNNS / Windows 11 / 2026-08-18。すべて `sshc run` 経由で実行
 | `scripts/windows/package-smoke.ps1 -Architecture x64` | passed |
 | パッケージ内 CLI のアーキテクチャ | x64 = `0x8664`、arm64 = `0xAA64` |
 
-ConPTY の一連の動作を確認しました。実際の PowerShell が指定した作業ディレクトリで
+ConPTY の一連の動作を確認しました。実際の PowerShell が指定した作業フォルダで
 起動し、コマンドを実行し、その出力が HTTP を通って xterm.js に届いた。
 `0x03` を ConPTY の入力へ書けば走っている子が止まることも、`cmd.exe` と
 PowerShell の両方に対して確認しました。

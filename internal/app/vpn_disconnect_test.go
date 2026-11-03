@@ -19,7 +19,7 @@ func TestAnAutomaticReconnectDoesNotRestartADisconnectedRoute(t *testing.T) {
 	if !errors.As(err, &explained) || !errors.Is(err, vpn.ErrRouteDisconnected) {
 		t.Fatalf("err = %v, want an explained ErrRouteDisconnected", err)
 	}
-	if !strings.Contains(explained.Sentence, "VPN経路「lab」は切断されています。") {
+	if !strings.Contains(explained.Sentence, "VPNルート「lab」は切断されています。") {
 		t.Fatalf("sentence = %q", explained.Sentence)
 	}
 }

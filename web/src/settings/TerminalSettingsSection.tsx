@@ -20,10 +20,11 @@ import { TerminalPreview } from "./TerminalPreview";
 import { TouchModeField } from "./TouchModeField";
 import {
   draftOf,
+  firstUnusableNumber,
   initialTerminalDraft,
-  isFontSizeUnusable,
   settingsOf,
   type TerminalDraft,
+  type TypedNumber,
 } from "./terminalSettingsDraft";
 import { updatePreset, useSettings } from "./settingsStore";
 import { useRestingSave } from "./useRestingSave";
@@ -52,10 +53,9 @@ const startDirectoryFailures: Partial<Record<string, MessageKey>> = {
   start_directory_unusable: "terminal.startUnusable",
 };
 
-// The engine refuses a number it does not accept with one code, whichever number it is; the font size is the
-// only one outside the connection tab.
-function tabOfRefusedNumber(draft: TerminalDraft): TerminalSettingsTab {
-  return isFontSizeUnusable(draft) ? "look" : "connection";
+// The font size is the only typed number outside the connection tab.
+function tabOfNumber(field: TypedNumber["field"] | undefined): TerminalSettingsTab {
+  return field === "fontSize" ? "look" : "connection";
 }
 
 // saveFailureOf says why a save was refused and which tab holds the field to fix, if any.
@@ -64,7 +64,7 @@ function saveFailureOf(error: unknown, draft: TerminalDraft): { message: Message
   const startDirectoryMessage = startDirectoryFailures[code];
   if (startDirectoryMessage !== undefined) return { message: startDirectoryMessage, tab: "operation" };
   if (code === "terminal_limits_out_of_range" || code === "invalid_request") {
-    return { message: "terminal.limitsOutOfRange", tab: tabOfRefusedNumber(draft) };
+    return { message: "terminal.limitsOutOfRange", tab: tabOfNumber(firstUnusableNumber(draft)?.field) };
   }
   return { message: "terminal.settingsSaveFailed", tab: null };
 }
@@ -139,12 +139,13 @@ export function TerminalSettingsSection({ api, presetId, showHeading }: {
   }
 
   async function submit(submitted: TerminalDraft) {
-    const next = settingsOf(submitted);
-    if (next === null) {
-      setTab(tabOfRefusedNumber(submitted));
-      save.fail(t("terminal.limitsOutOfRange"));
+    const unusable = firstUnusableNumber(submitted);
+    if (unusable !== null) {
+      setTab(tabOfNumber(unusable.field));
+      save.fail(t(unusable.outOfRange, unusable.range));
       return;
     }
+    const next = settingsOf(submitted);
     await save.run(async () => {
       await updatePreset(presetId, ({ terminal: _previous, ...preset }) =>
         Object.keys(next).length === 0 ? preset : { ...preset, terminal: next });

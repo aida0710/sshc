@@ -230,7 +230,7 @@ func completionConditions() []completionCondition {
 				{proofPlaywright, "shows the alias, effective user, fingerprint and the exact line before registering"},
 			},
 			Manual: []proof{
-				{proofManual, "M1. 実リモートホストへの接続テスト"},
+				{proofManual, "M1. 実際の接続先への接続テスト"},
 				{proofManual, "M2. 実 `authorized_keys` への公開鍵登録"},
 			},
 			Gap: "SSH はプロセス内で通信するので、internal/sshclient は 127.0.0.1 に立てたサーバーと" +
@@ -272,7 +272,7 @@ func completionConditions() []completionCondition {
 				{proofGoTest, "TestNoRouteEverLetsAHostileAliasReachAnExternalEffect"},
 				{proofGoTest, "TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard"},
 			},
-			Manual: []proof{{proofManual, "M1. 実リモートホストへの接続テスト"}},
+			Manual: []proof{{proofManual, "M1. 実際の接続先への接続テスト"}},
 			Gap: "アプリケーションの判断だけで外部プログラムを起動しない。" +
 				"Match exec は解決の時点で断り、LocalCommand も KnownHostsCommand も " +
 				"このクライアントに機能として無い。ProxyCommand は明示された設定に従って起動する。" +
