@@ -3,8 +3,11 @@ export type Font = { readonly name: string; readonly label: string; readonly sta
 // Chrome on Windows ignores ui-monospace, and a Japanese Windows resolves the generic monospace
 // to BIZ UDGothic or MS Gothic, which draw \ as ¥ and narrow the cells. Cascadia Mono ships with
 // Windows 11 and Consolas with every Windows; they come last so macOS, Android and Linux keep their font.
+// The bundled symbols come after every text font and cover only what Android's fonts lack or draw as colour emoji
+// (index.css).
+export const symbolFontFamily = "sshc Terminal Symbols";
 export const defaultStack =
-  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", "Cascadia Mono", Consolas, monospace';
+  `ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", "Cascadia Mono", Consolas, "${symbolFontFamily}", monospace`;
 
 export const fonts: readonly Font[] = [
   {

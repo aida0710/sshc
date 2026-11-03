@@ -6,7 +6,19 @@ import type { KeyBarKey } from "./keySequences";
 // KeyFace is what a key of the key bar shows, the same on the bar and on the settings page.
 export function KeyFace({ barKey, iconClassName }: { barKey: KeyBarKey; iconClassName: string }) {
   const { face } = keyLook(barKey);
-  return face.kind === "icon" ? <Icon name={face.icon} className={`mx-auto ${iconClassName}`} /> : <>{face.text}</>;
+  switch (face.kind) {
+    case "icon":
+      return <Icon name={face.icon} className={`mx-auto ${iconClassName}`} />;
+    case "iconOverText":
+      return (
+        <span className="flex flex-col items-center leading-none">
+          <Icon name={face.icon} className="size-3" />
+          <span className="text-[10.5px]">{face.text}</span>
+        </span>
+      );
+    default:
+      return <>{face.text}</>;
+  }
 }
 
 // spokenKeyName is the name a screen reader gives a key whose face does not say it well, or undefined to read

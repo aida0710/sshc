@@ -4,6 +4,7 @@ import { Icon } from "../ui/icons";
 import { isImeComposing } from "../ui/imeComposition";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { literalTextEntry } from "../ui/softKeyboard";
+import { pressesEnterOnly } from "./composerSend";
 
 // The field grows with its text up to this many lines and then scrolls, so the
 // terminal above keeps most of the screen.
@@ -18,17 +19,21 @@ function keepFocus(event: { preventDefault(): void }) {
 // A tap on the terminal types here (TerminalView); the key bar's Ctrl and Alt
 // hand the next key to the terminal itself.
 // Enter starts a new line and the button beside the box sends, unless the
-// settings choose enterSends.
+// settings choose enterSends. With nothing typed the button presses Enter, which
+// answers a program's menu, and says so with its icon and name.
+// The box stays editable while nothing can be sent: a person on a bad connection
+// can finish what they are writing, and a disabled box would close the keyboard.
 export function TerminalComposer({
   value,
-  disabled,
+  sendable,
   enterSends,
   fieldRef,
   onChange,
   onSubmit,
 }: {
   value: string;
-  disabled: boolean;
+  // sendable is false while nothing can be sent. onSubmit still runs, to say why.
+  sendable: boolean;
   enterSends: boolean;
   // fieldRef is given the text box while it is shown, and null otherwise.
   fieldRef?: RefObject<HTMLTextAreaElement | null>;
@@ -63,8 +68,11 @@ export function TerminalComposer({
     const sends = enterSends ? !event.shiftKey : event.ctrlKey || event.metaKey;
     if (!sends) return;
     event.preventDefault();
-    if (!disabled) onSubmit();
+    onSubmit();
   }
+
+  const pressesEnter = pressesEnterOnly(value);
+  const sendName = t(pressesEnter ? "terminal.composerPressEnter" : "terminal.composerSend");
 
   return (
     <form
@@ -79,25 +87,24 @@ export function TerminalComposer({
         ref={field}
         rows={1}
         value={value}
-        disabled={disabled}
         aria-label={t("terminal.composerField")}
         placeholder={t("terminal.composerPlaceholder")}
         enterKeyHint={enterSends ? "send" : "enter"}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={keyDown}
-        className="min-h-11 grow resize-none rounded-[22px] bg-card px-3.5 py-2.5 text-base leading-6 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
+        className="min-h-11 grow resize-none rounded-[22px] bg-card px-3.5 py-2.5 text-base leading-6 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-accent"
       />
       <button
         type="submit"
-        disabled={disabled}
-        aria-label={t("terminal.composerSend")}
-        title={t("terminal.composerSend")}
+        aria-disabled={!sendable}
+        aria-label={sendName}
+        title={sendName}
         // The keyboard stays open: the field keeps the focus while the button is pressed.
         onPointerDown={keepFocus}
         onMouseDown={keepFocus}
-        className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
+        className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-disabled:opacity-60"
       >
-        <Icon name="arrowUp" className="size-5" />
+        <Icon name={pressesEnter ? "cornerDownLeft" : "arrowUp"} className="size-5" />
       </button>
     </form>
   );

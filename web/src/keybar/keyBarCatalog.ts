@@ -1,12 +1,17 @@
 import type { MessageKey } from "../i18n/messages";
 import type { IconName } from "../ui/icons";
+import { symbolKey } from "./keyBarLayout";
 import type { KeyBarKey, KeyBarKeyName } from "./keySequences";
 
 // The keys the key bar can hold, as the bar and the settings page show them. The names come from the engine
 // (internal/validate/keybar.go); a name added there has to be given a face here and a group below.
 
-// KeyFace is what a key shows: a short text, or an icon where a text's shape changes with the font (arrows).
-export type KeyFace = { kind: "text"; text: string } | { kind: "icon"; icon: IconName };
+// KeyFace is what a key shows: a short text, an icon where a text's shape or width would not do (arrows, Enter), or
+// an icon over a text where the name is too wide for a key of a full row (Shift+Tab).
+export type KeyFace =
+  | { kind: "text"; text: string }
+  | { kind: "icon"; icon: IconName }
+  | { kind: "iconOverText"; icon: IconName; text: string };
 
 type KeyLook = {
   face: KeyFace;
@@ -23,7 +28,8 @@ const looks: Record<KeyBarKeyName, KeyLook> = {
   Alt: { face: text("Alt") },
   Escape: { face: text("Esc") },
   Tab: { face: text("Tab") },
-  Enter: { face: text("Enter") },
+  "Shift+Tab": { face: { kind: "iconOverText", icon: "arrowBigUp", text: "Tab" }, spoken: { text: "Shift+Tab" } },
+  Enter: { face: { kind: "icon", icon: "cornerDownLeft" }, spoken: { text: "Enter" } },
   Backspace: { face: { kind: "icon", icon: "backspace" }, spoken: { message: "keyBar.backspace" } },
   Delete: { face: text("Del") },
   Insert: { face: text("Ins") },
@@ -67,12 +73,12 @@ export type PaletteGroup = { heading: MessageKey; keys: KeyBarKey[] };
 const named = (...names: KeyBarKeyName[]): KeyBarKey[] => names.map((key) => ({ key }));
 
 // The symbols are offered as keys that type themselves; once placed they are keys like the ones a person makes.
-const symbols = ["|", "-", "~", "/", "\\", "_", ":", ";", "`", "*", "&", "$"];
+const symbols = ["|", "-", "~", "/", "\\", "_", ":", ";", "`", "*", "&", "$", "@"];
 
 export const paletteGroups: PaletteGroup[] = [
-  { heading: "keyBar.groupInput", keys: named("DirectInput", "Control", "Alt", "Escape", "Tab", "Enter") },
+  { heading: "keyBar.groupInput", keys: named("DirectInput", "Control", "Alt", "Escape", "Tab", "Shift+Tab", "Enter") },
   { heading: "keyBar.groupEditing", keys: named("Backspace", "Delete", "Insert", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight", "Home", "End", "PageUp", "PageDown") },
   { heading: "keyBar.groupControl", keys: named("Ctrl+C", "Ctrl+D", "Ctrl+Z", "Ctrl+L", "Ctrl+R", "Ctrl+A", "Ctrl+E") },
   { heading: "keyBar.groupFunction", keys: named("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12") },
-  { heading: "keyBar.groupSymbols", keys: symbols.map((symbol) => ({ label: symbol, text: symbol })) },
+  { heading: "keyBar.groupSymbols", keys: symbols.map(symbolKey) },
 ];

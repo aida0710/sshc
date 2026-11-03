@@ -156,6 +156,13 @@ func (p *askingReadinessPTY) HostKeyQuestion() (terminal.HostKeyQuestion, bool) 
 	return *p.question, true
 }
 
+// AwaitingPrompt is true as it is for a real connection, whose host key question is a prompt typing can answer.
+func (p *askingReadinessPTY) AwaitingPrompt() bool {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.question != nil
+}
+
 func (p *askingReadinessPTY) AnswerHostKey(fingerprint string, accept bool) bool {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -685,6 +692,9 @@ func TestAHostKeyQuestionIsListedAndAnsweredFromTheAPI(t *testing.T) {
 	if question := listed.Sessions[0].HostKeyQuestion; question == nil || question.Alias != "web-01" ||
 		question.KeyType != "ssh-ed25519" || question.Fingerprint != "SHA256:offered" {
 		t.Fatalf("question = %+v", question)
+	}
+	if awaiting := listed.Sessions[0].AwaitingPrompt; awaiting == nil || !*awaiting {
+		t.Fatalf("awaitingPrompt = %v", awaiting)
 	}
 
 	path := "/api/v1/terminal/sessions/" + opened.Session.Id + "/host-key"

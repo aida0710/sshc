@@ -9,13 +9,13 @@ import { InputDialog } from "../ui/InputDialog";
 import { PageSection } from "../ui/page";
 import { newIdentifier } from "../ui/randomIdentifier";
 import { defaultKeyBarLayout, type KeyBarLayout } from "./keyBarLayout";
-import { saveKeyBarLayout, selectKeyBarPreset, updateKeyBarPresets, useKeyBarPresets } from "./keyBarPresets";
+import { builtInKeyBarPresets, saveKeyBarLayout, selectKeyBarPreset, updateKeyBarPresets, useKeyBarPresets } from "./keyBarPresets";
 
 type Naming = "copy" | "rename";
 
 // KeyBarPresetSection chooses the key bar preset a settings preset uses, and holds the actions that copy,
-// rename, reset and delete key bar presets. The default layout is not a saved preset: it can be copied, not
-// renamed, reset or deleted.
+// rename, reset and delete key bar presets. The default layout and the built-in presets are not saved presets: they
+// can be copied, not renamed, reset or deleted.
 export function KeyBarPresetSection({ presetId, layout, onError }: {
   presetId?: string | undefined;
   layout: KeyBarLayout;
@@ -27,7 +27,7 @@ export function KeyBarPresetSection({ presetId, layout, onError }: {
   const [deleting, setDeleting] = useState(false);
   const unavailable = library.loading || library.busy || library.error;
   const chosen = library.presets.find((preset) => preset.id === library.selected);
-  const chosenName = chosen?.name ?? t("keyBar.defaultPreset");
+  const chosenName = chosen?.name ?? builtInKeyBarPresets.find((preset) => preset.id === library.selected)?.name ?? t("keyBar.defaultPreset");
 
   async function attempt(action: () => Promise<void>) {
     onError("");
@@ -54,11 +54,12 @@ export function KeyBarPresetSection({ presetId, layout, onError }: {
   ];
 
   return (
-    <PageSection heading={t("keyBar.presetsHeading")} {...(chosen === undefined ? { hint: t("keyBar.defaultPresetHint") } : {})}>
+    <PageSection heading={t("keyBar.presetsHeading")} {...(chosen === undefined ? { hint: t("keyBar.unsavedPresetHint", { name: chosenName }) } : {})}>
       <div className="flex min-w-0 items-center gap-2">
         <select aria-label={t("keyBar.preset")} className={sizedControl("w-full min-w-0 md:max-w-xs")} value={library.selected} disabled={unavailable}
           onChange={(event) => void attempt(() => selectKeyBarPreset(event.target.value, presetId))}>
           <option value={defaultPresetId}>{t("keyBar.defaultPreset")}</option>
+          {builtInKeyBarPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
           {library.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
         </select>
         <ActionMenu label={t("keyBar.presetActions", { name: chosenName })} items={actions}

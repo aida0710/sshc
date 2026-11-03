@@ -2319,6 +2319,7 @@ type TerminalRestoreSessionKind string
 // TerminalSession defines model for TerminalSession.
 type TerminalSession struct {
 	Alias               *string                     `json:"alias,omitempty"`
+	AwaitingPrompt      *bool                       `json:"awaitingPrompt,omitempty"`
 	Exited              *TerminalExit               `json:"exited,omitempty"`
 	Forwards            *[]TerminalForward          `json:"forwards,omitempty"`
 	HostKeyQuestion     *TerminalHostKeyQuestion    `json:"hostKeyQuestion,omitempty"`

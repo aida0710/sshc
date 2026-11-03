@@ -13,10 +13,10 @@ import (
 // ひとつ置き、cmd/rulegen が TypeScript へ配る。
 
 // KeyBarKeys は、キーバーに置ける用意したキーの名前である。名前は KeyboardEvent.key に合わせ、
-// Ctrl との組み合わせはショートカットの和音と同じ "Ctrl+C" の形にする。DirectInput はキーではなく、
+// Ctrl や Shift との組み合わせはショートカットの和音と同じ "Ctrl+C" の形にする。DirectInput はキーではなく、
 // 打った文字の行き先（下の入力欄か、ターミナルへそのまま）を切り替える。
 var KeyBarKeys = []string{
-	"DirectInput", "Control", "Alt", "Escape", "Tab", "Enter",
+	"DirectInput", "Control", "Alt", "Escape", "Tab", "Shift+Tab", "Enter",
 	"Backspace", "Delete", "Insert",
 	"ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight", "Home", "End", "PageUp", "PageDown",
 	"Ctrl+C", "Ctrl+D", "Ctrl+Z", "Ctrl+L", "Ctrl+R", "Ctrl+A", "Ctrl+E",

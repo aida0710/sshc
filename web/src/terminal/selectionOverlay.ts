@@ -43,6 +43,8 @@ export function attachSelectionOverlay(
   container.appendChild(overlay);
 
   let laidOut = "";
+  // heldAtPaint is whether the last paint left the text as it was because a selection held it.
+  let heldAtPaint = false;
 
   const paint = () => {
     if (view.rows <= 0 || view.cols <= 0) return;
@@ -60,6 +62,7 @@ export function attachSelectionOverlay(
     const relaidOut = shape !== laidOut;
 
     const held = selectionHeldIn(overlay);
+    heldAtPaint = held && !relaidOut;
     if (relaidOut && held) overlay.ownerDocument.getSelection()?.removeAllRanges();
 
     if (relaidOut || !held) {
@@ -120,12 +123,18 @@ export function attachSelectionOverlay(
     target.focus();
   };
   const cancelled = () => { touching = false; };
+  // A selection also ends without a tap here (Android's Back, the Copy of its bar): the next long press must not
+  // pick from the text kept while it was held, should the screen stay still until then.
+  const selectionChanged = () => {
+    if (heldAtPaint && !selectionHeldIn(overlay)) paint();
+  };
   const swallowCompatMouse = (event: MouseEvent) => event.preventDefault();
   container.addEventListener("touchstart", began, { passive: true });
   container.addEventListener("touchmove", moved, { passive: true });
   container.addEventListener("touchend", ended, { passive: true });
   container.addEventListener("touchcancel", cancelled, { passive: true });
   container.addEventListener("mousedown", swallowCompatMouse);
+  container.ownerDocument.addEventListener("selectionchange", selectionChanged);
 
   const render = view.onRender(paint);
   paint();
@@ -137,6 +146,7 @@ export function attachSelectionOverlay(
     container.removeEventListener("touchend", ended);
     container.removeEventListener("touchcancel", cancelled);
     container.removeEventListener("mousedown", swallowCompatMouse);
+    container.ownerDocument.removeEventListener("selectionchange", selectionChanged);
     overlay.remove();
   };
 }
