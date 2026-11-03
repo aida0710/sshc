@@ -174,6 +174,9 @@ func describeSession(view terminal.View) api.TerminalSession {
 	if view.HostKeyQuestion != nil {
 		described.HostKeyQuestion = describeHostKeyQuestion(*view.HostKeyQuestion)
 	}
+	if view.AwaitingPrompt {
+		described.AwaitingPrompt = &view.AwaitingPrompt
+	}
 	if view.ProgramProgress != nil {
 		var progress any
 		if view.ProgramProgress.State == terminal.ProgramProgressIndeterminate {

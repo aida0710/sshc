@@ -480,7 +480,7 @@ describe("TerminalView", () => {
       renderView();
       await waitFor(() => expect(streams).toHaveLength(1));
       const field = screen.getByRole("textbox", { name: "Text to send to the terminal" });
-      await waitFor(() => expect(field).toBeEnabled());
+      await waitFor(() => expect(screen.getByRole("button", { name: "Press Enter" })).toHaveAttribute("aria-disabled", "false"));
       return field;
     }
 
@@ -498,7 +498,7 @@ describe("TerminalView", () => {
     it("presses Enter when sent empty", async () => {
       await openComposer();
 
-      await userEvent.click(screen.getByRole("button", { name: "Send" }));
+      await userEvent.click(screen.getByRole("button", { name: "Press Enter" }));
 
       expect(streams[0]!.stream.send).toHaveBeenCalledOnce();
       expect(streams[0]!.stream.send).toHaveBeenCalledWith("\r");
@@ -515,6 +515,42 @@ describe("TerminalView", () => {
       await userEvent.click(screen.getByRole("button", { name: "Paste" }));
 
       expect(streams[0]!.stream.send).toHaveBeenNthCalledWith(1, "printf one\rprintf two");
+      expect(streams[0]!.stream.send).toHaveBeenNthCalledWith(2, "\r");
+      expect(field).toHaveValue("");
+    });
+
+    it.each([
+      ["a session that is still connecting", { state: "connecting" }, "Not connected yet."],
+      ["a session that is reconnecting", { state: "reconnecting" }, "Not connected yet."],
+      ["an SSH session that failed or was lost", { kind: "ssh", alias: "bastion", state: "exited", exited: { code: -1, signal: "", at: "2026-08-26T01:00:00Z", connectionLost: true } }, "Reconnect, then send it again"],
+      ["a local shell that ended", { state: "exited", exited: { code: 0, signal: "", at: "2026-08-26T01:00:00Z" } }, "Open a new session"],
+    ] as const)("keeps the text and says what to do for %s", async (_name, state, advice) => {
+      render(<TerminalView session={{ ...session, ...state }} api={{ streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+      await waitFor(() => expect(streams).toHaveLength(1));
+      const field = screen.getByRole("textbox", { name: "Text to send to the terminal" });
+      fireEvent.change(field, { target: { value: "長い依頼" } });
+
+      const send = screen.getByRole("button", { name: "Send" });
+      expect(send).toHaveAttribute("aria-disabled", "true");
+      await userEvent.click(send);
+
+      expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+      expect(field).toHaveValue("長い依頼");
+      expect(field).toBeEnabled();
+      expect(await screen.findByText(new RegExp(advice))).toBeVisible();
+    });
+
+    it("sends the answer to an authentication prompt while the session is connecting", async () => {
+      render(<TerminalView session={{ ...session, state: "connecting", awaitingPrompt: true }} api={{ streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+      await waitFor(() => expect(streams).toHaveLength(1));
+      act(() => streams[0]!.handlers.onReplay({ start: 0, next: 0, end: 0, truncated: false }));
+      const field = screen.getByRole("textbox", { name: "Text to send to the terminal" });
+      fireEvent.change(field, { target: { value: "secret" } });
+      await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toHaveAttribute("aria-disabled", "false"));
+
+      await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+      expect(streams[0]!.stream.send).toHaveBeenNthCalledWith(1, "secret");
       expect(streams[0]!.stream.send).toHaveBeenNthCalledWith(2, "\r");
       expect(field).toHaveValue("");
     });

@@ -12,6 +12,11 @@ export type KeySlot = { row: KeyBarRow; index: number };
 
 const rowLimits: Record<KeyBarRow, number> = { keys: maxKeyBarKeys, moreKeys: maxKeyBarMoreKeys };
 
+// symbolKey is a key that types one symbol: a key like the ones a person makes.
+export function symbolKey(symbol: string): KeyBarKey {
+  return { label: symbol, text: symbol };
+}
+
 // defaultKeyBarLayout is the key bar of a settings preset that chose no key bar preset (the user's choice,
 // 2026-11-02).
 export const defaultKeyBarLayout: KeyBarLayout = {
@@ -21,7 +26,21 @@ export const defaultKeyBarLayout: KeyBarLayout = {
   ],
   moreKeys: [
     { key: "Alt" }, { key: "Backspace" }, { key: "Home" }, { key: "End" }, { key: "PageUp" }, { key: "PageDown" },
-    { label: "|", text: "|" }, { label: "-", text: "-" }, { label: "~", text: "~" }, { label: "/", text: "/" },
+    symbolKey("|"), symbolKey("-"), symbolKey("~"), symbolKey("/"),
+  ],
+};
+
+// claudeCodeKeyBarLayout puts what Claude Code asks for one tap away: stopping it (Esc), its modes (Shift+Tab), its
+// menus (arrows and Enter) and its pickers (/ and @; a Japanese keyboard types them full width). The rest of the
+// default key bar stays behind 「…」, so the switch to direct input is still there.
+export const claudeCodeKeyBarLayout: KeyBarLayout = {
+  keys: [
+    { key: "Escape" }, { key: "Shift+Tab" }, { key: "Enter" }, { key: "ArrowUp" }, { key: "ArrowDown" }, { key: "Ctrl+C" },
+    symbolKey("/"), symbolKey("@"), { key: "Tab" },
+  ],
+  moreKeys: [
+    { key: "DirectInput" }, { key: "Control" }, { key: "Alt" }, { key: "ArrowLeft" }, { key: "ArrowRight" }, { key: "Backspace" },
+    { key: "Home" }, { key: "End" }, { key: "PageUp" }, { key: "PageDown" }, symbolKey("|"), symbolKey("-"), symbolKey("~"),
   ],
 };
 

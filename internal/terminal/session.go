@@ -120,6 +120,9 @@ type View struct {
 	// HostKeyQuestion is present while the connection waits on whether to
 	// trust a host key that known_hosts does not have.
 	HostKeyQuestion *HostKeyQuestion
+	// AwaitingPrompt is whether the connection waits on an answer to an
+	// authentication prompt, the only input Write keeps before it is connected.
+	AwaitingPrompt bool
 	// ProgramProgress is the current program's OSC 9;4 report, independent of SSH connection progress.
 	ProgramProgress *ProgramProgress
 	// ProgramStatus is the OSC 7501 record to show, or nil when there is none.
@@ -243,6 +246,10 @@ func (s *Session) View() View {
 		if question, asking := questioning.HostKeyQuestion(); asking {
 			view.HostKeyQuestion = &question
 		}
+	}
+	if prompting, ok := s.process.(Prompting); ok &&
+		(s.state == StateConnecting || s.state == StateReconnecting) {
+		view.AwaitingPrompt = prompting.AwaitingPrompt()
 	}
 	return view
 }

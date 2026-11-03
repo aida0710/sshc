@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { keyBarKeys, maxKeyBarKeys } from "../rules/keyBar.generated";
+import { keyBarKeys, maxKeyBarKeys, maxKeyBarMoreKeys } from "../rules/keyBar.generated";
 import { paletteGroups } from "./keyBarCatalog";
-import { defaultKeyBarLayout, insertKey, isPlaced, moveKey, moveToOtherRow, offersDirectInput, removeKey, replaceKey, type KeyBarLayout } from "./keyBarLayout";
+import { claudeCodeKeyBarLayout, defaultKeyBarLayout, insertKey, isPlaced, moveKey, moveToOtherRow, offersDirectInput, removeKey, replaceKey, type KeyBarLayout } from "./keyBarLayout";
 
 const layout: KeyBarLayout = {
   keys: [{ key: "Escape" }, { key: "Tab" }, { key: "Control" }],
@@ -63,5 +63,28 @@ describe("the keys on offer", () => {
   it("starts from the layout the user chose (2026-11-02)", () => {
     expect(defaultKeyBarLayout.keys.map((key) => key.key)).toEqual(["DirectInput", "Escape", "Tab", "Control", "Ctrl+C", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"]);
     expect(defaultKeyBarLayout.moreKeys.map((key) => key.key ?? key.text)).toEqual(["Alt", "Backspace", "Home", "End", "PageUp", "PageDown", "|", "-", "~", "/"]);
+  });
+
+  it("offers the @ that a Japanese keyboard types full width", () => {
+    const symbols = paletteGroups.flatMap((group) => group.keys.flatMap((key) => key.text === undefined ? [] : [key.text]));
+    expect(symbols).toContain("@");
+  });
+});
+
+describe("the Claude Code key bar", () => {
+  it("has the keys Claude Code asks for on the row always shown", () => {
+    expect(claudeCodeKeyBarLayout.keys.map((key) => key.key ?? key.text)).toEqual(["Escape", "Shift+Tab", "Enter", "ArrowUp", "ArrowDown", "Ctrl+C", "/", "@", "Tab"]);
+  });
+
+  it("keeps the switch to direct input, behind 「…」", () => {
+    expect(offersDirectInput(claudeCodeKeyBarLayout)).toBe(true);
+    expect(claudeCodeKeyBarLayout.moreKeys).toContainEqual({ key: "DirectInput" });
+  });
+
+  it("follows the rules the engine holds a saved copy of it to", () => {
+    const named = [...claudeCodeKeyBarLayout.keys, ...claudeCodeKeyBarLayout.moreKeys].flatMap((key) => key.key === undefined ? [] : [key.key]);
+    expect(new Set(named).size).toBe(named.length);
+    expect(claudeCodeKeyBarLayout.keys.length).toBeLessThanOrEqual(maxKeyBarKeys);
+    expect(claudeCodeKeyBarLayout.moreKeys.length).toBeLessThanOrEqual(maxKeyBarMoreKeys);
   });
 });

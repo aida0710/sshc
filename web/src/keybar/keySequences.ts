@@ -18,6 +18,7 @@ const escape = "\x1b";
 const plainKeys: Partial<Record<KeyBarKeyName, string>> = {
   Escape: escape,
   Tab: "\t",
+  "Shift+Tab": `${escape}[Z`,
   Enter: "\r",
   "Ctrl+C": "\x03",
   "Ctrl+D": "\x04",

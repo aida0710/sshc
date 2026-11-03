@@ -467,6 +467,17 @@
   font-display: block;
 }
 
+/* The symbols Android's fonts lack (scripts/fonts/generate-terminal-symbols.py). The range keeps the browser from
+   fetching the file for a terminal that never prints them, and leaves the cell's measure to the fonts before it. */
+@font-face {
+  font-family: "sshc Terminal Symbols";
+  src: url("/fonts/SshcTerminalSymbols.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+23F4-23FA;
+}
+
 /* The DOM renderer sets a run of cells in one element, where the font would draw -> as one
    shape. With ligatures on (terminal/ligatures.ts), the runs that hold one are set apart, and the
    features are named outright: xterm.js gives the rows a letter-spacing to fit the cells, which
