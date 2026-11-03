@@ -43,6 +43,13 @@ func New(parent context.Context, fetch Fetch) *Watcher {
 	return &Watcher{ctx: ctx, cancel: cancel, fetch: fetch}
 }
 
+// NewForVersion watches the project's GitHub releases for an engine of this version. The client has no timeout of
+// its own: checkTimeout bounds a whole check, and the list of releases is megabytes on a slow line.
+func NewForVersion(parent context.Context, version string) *Watcher {
+	checker := releasecheck.Checker{API: releasecheck.LatestAPI}
+	return New(parent, func(ctx context.Context) (releasecheck.Catalog, error) { return checker.Catalog(ctx, version) })
+}
+
 // Load checks only when no completed attempt has been retained, including failed attempts.
 func (w *Watcher) Load(ctx context.Context) (Snapshot, error) {
 	return w.load(ctx, false)

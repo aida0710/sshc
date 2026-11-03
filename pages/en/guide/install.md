@@ -166,7 +166,7 @@ A state or definition change while waiting for confirmation also prevents succes
 ## Update
 
 - Homebrew, `install.sh`, or Windows `install.ps1`: `sshc update`
-- Android: install the newer APK from GitHub Releases
+- Android: when a newer version is published, **Open the release page** appears under the version and in **About sshc**. Install the newer APK from that page
 
 ### Update from the web UI
 

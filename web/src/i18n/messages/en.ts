@@ -1661,6 +1661,8 @@ export const en = {
   "update.unavailable": "Automatic update is unavailable for this installation.",
   "update.version": "Version {version}",
   "update.available": "{version} is available — read what changed",
+  "update.availableOnReleasePage": "{version} is available. Open the release page",
+  "update.openReleasePage": "Open the release page",
   "desktop.closeAllHeading": "Open connections",
   "desktop.closeAllNote":
     "This closes every session, port forward, and SSH agent forwarding. The engine keeps running.",

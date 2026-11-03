@@ -14,8 +14,10 @@ import (
 
 func build(t *testing.T) app.Dependencies {
 	t.Helper()
-	dependencies, err := newDependencies("android", "/data/user/0/app/files", "/data/user/0/app/cache",
-		slog.Default(), func(app.Readiness) error { return nil })
+	dependencies, err := newDependencies(dependencyOptions{
+		ctx: t.Context(), goos: "android", home: "/data/user/0/app/files", cache: "/data/user/0/app/cache",
+		logger: slog.Default(), announce: func(app.Readiness) error { return nil },
+	})
 	if err != nil {
 		t.Fatalf("newDependencies = %v", err)
 	}
@@ -24,8 +26,15 @@ func build(t *testing.T) app.Dependencies {
 
 // Android では実行できない自己更新を提示しないことを検証する。
 func TestAndroidOffersNoSelfUpdate(t *testing.T) {
-	if build(t).Updates != nil {
+	if build(t).SelfUpdate != nil {
 		t.Error("the Android engine offers a self-update it cannot perform")
+	}
+}
+
+// 新しいリリースは Android でも調べ、画面がリリースページへ案内できることを検証する。
+func TestAndroidLooksForNewerReleases(t *testing.T) {
+	if build(t).Updates == nil {
+		t.Error("the Android engine cannot tell that a newer release exists")
 	}
 }
 
@@ -94,12 +103,12 @@ var androidFieldIntent = map[string]string{
 	"Environ":     "wired: 固定の環境。Android アプリの環境に有用な PATH が無い",
 
 	"SFTPDownloadSpoolRoot": "wired: アプリの cacheDir の下。アプリのプロセスには HOME が無い",
+	"Updates":               "wired: 新しいリリースを調べる。入れるのはリリースページの APK から",
 
 	// 意図して空にする。
 	"Toolchain":  "absent: ssh-keygen が Android に居ない",
 	"KeyAgent":   "absent: ssh-agent が Android に居ない",
 	"SelfUpdate": "absent: アプリの更新はOSで行う",
-	"Updates":    "absent: バイナリを置き換える経路が無い",
 
 	"StopEngine": "default: Run が自分で埋める。engine を止められるのは engine 自身だけである",
 	"Port":       "default: WebView は通知された URL を使うため、ポート番号を指定させない",
