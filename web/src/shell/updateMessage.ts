@@ -23,10 +23,19 @@ export function updateMessage(code: string): MessageKey {
   return updateMessages[code] ?? "update.unavailable";
 }
 
+// installsFromReleasePage tells that this installation cannot replace itself, as an Android app: a newer release is
+// installed from its release page.
+export function installsFromReleasePage(status: UpdateStatus): boolean {
+  return status.reason === "update_android_unsupported";
+}
+
 // The reason explains why this installation cannot update from the Web. A job that is
 // running or has failed reports its own outcome, so the reason would only repeat it.
-export function explainedUpdateReason({ reason, job }: UpdateStatus): string | undefined {
+// Installing from the release page needs no explanation until there is a release to install.
+export function explainedUpdateReason(status: UpdateStatus): string | undefined {
+  const { reason, job } = status;
   if (reason === undefined || reason === "" || reason === job?.problem || isUpdateActive(job)) return undefined;
+  if (installsFromReleasePage(status) && status.available !== true) return undefined;
   return reason;
 }
 

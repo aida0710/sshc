@@ -17,6 +17,9 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+// LatestAPI は、プロジェクトの最新リリースを返す GitHub のエンドポイントである。
+const LatestAPI = "https://api.github.com/repos/aida0710/sshc/releases/latest"
+
 // maxLatestResponseBytes bounds the single-release JSON response before decoding.
 const maxLatestResponseBytes = 1 << 20
 

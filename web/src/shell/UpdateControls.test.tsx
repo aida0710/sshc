@@ -186,7 +186,7 @@ describe("Web self update", () => {
     expect(api.startUpdate).not.toHaveBeenCalled();
   });
 
-  it.each(["update_unmanaged", "update_permission_denied", "update_development_build", "update_android_unsupported"])("explains %s under the version and offers no automatic update", async (reason) => {
+  it.each(["update_unmanaged", "update_permission_denied", "update_development_build"])("explains %s under the version and offers no automatic update", async (reason) => {
     const api = updater();
     vi.mocked(api.updateStatus).mockResolvedValue({ ...available, available: false, canUpdate: false, reason });
     render(<UpdateBadge api={api} />);

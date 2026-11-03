@@ -164,6 +164,55 @@ describe("AboutPage", () => {
     expect(screen.getByRole("button", { name: "Check for updates" })).toBeEnabled();
   });
 
+  it("does not show a failure left by an earlier check while the opening check runs", async () => {
+    const update = updates({ ...status, checkError: "failed hours ago" });
+    let finish: (status: UpdateStatus) => void = () => {};
+    vi.mocked(update.checkUpdate).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    render(<AboutPage api={api} updates={update} />);
+    await screen.findByRole("button", { name: "Checking…" });
+    expect(screen.queryByText("failed hours ago")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Could not check for the latest release/)).not.toBeInTheDocument();
+
+    await act(async () => { finish(status); });
+    expect(await screen.findByText("sshc v1.2.0 is available.")).toBeVisible();
+    expect(screen.queryByText("failed hours ago")).not.toBeInTheDocument();
+  });
+
+  it("clears a failed check from the page while another check runs", async () => {
+    const user = userEvent.setup();
+    const update = updates();
+    vi.mocked(update.checkUpdate).mockResolvedValueOnce({ ...status, checkError: "upstream unavailable" });
+    render(<AboutPage api={api} updates={update} />);
+    await screen.findByText("upstream unavailable");
+    vi.mocked(update.checkUpdate).mockImplementation(() => new Promise(() => {}));
+    await user.click(screen.getByRole("button", { name: "Check for updates" }));
+    expect(screen.queryByText("upstream unavailable")).not.toBeInTheDocument();
+  });
+
+  const androidApp: UpdateStatus = { ...status, canUpdate: false, reason: "update_android_unsupported", pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.2.0" };
+
+  it("sends an Android app to the page of a newer release instead of offering to install it", async () => {
+    render(<AboutPage api={api} updates={updates(androidApp)} />);
+    const link = await screen.findByRole("link", { name: "Open the release page" });
+    expect(link).toHaveAttribute("href", "https://github.com/aida0710/sshc/releases/tag/v1.2.0");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(screen.getByText("Update the Android app by installing the latest APK.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
+  });
+
+  it("has nothing to say about installing while an Android app is the latest", async () => {
+    render(<AboutPage api={api} updates={updates({ ...androidApp, latest: "v1.0.0", available: false })} />);
+    await screen.findByText("No newer version is available. The running v1.0.0 is the latest.");
+    expect(screen.queryByRole("link", { name: "Open the release page" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Update the Android app by installing the latest APK.")).not.toBeInTheDocument();
+  });
+
+  it("offers the release page only to an installation that cannot replace itself", async () => {
+    render(<AboutPage api={api} updates={updates({ ...status, pageUrl: "https://github.com/aida0710/sshc/releases/tag/v1.2.0" })} />);
+    await screen.findByRole("button", { name: "Update sshc" });
+    expect(screen.queryByRole("link", { name: "Open the release page" })).not.toBeInTheDocument();
+  });
+
   it("says when the sshc engine did not answer the check", async () => {
     const update = updates();
     vi.mocked(update.checkUpdate).mockRejectedValue(new Error("offline"));

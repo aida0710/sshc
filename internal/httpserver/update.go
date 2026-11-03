@@ -49,8 +49,8 @@ func (h *UpdateHandlers) status(c *echo.Context, refresh bool) error {
 	updating := false
 	status.CanUpdate = &canUpdate
 	reason := "update_unavailable"
-	if runtime.GOOS == "android" || runtime.GOOS == "windows" {
-		reason = "update_" + runtime.GOOS + "_unsupported"
+	if runtime.GOOS == "android" {
+		reason = "update_android_unsupported"
 	}
 	if h.Service != nil {
 		job, err := h.Service.Status()
