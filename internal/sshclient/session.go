@@ -154,16 +154,7 @@ func (s *Session) HostKeyQuestion() (terminal.HostKeyQuestion, bool) {
 	s.mutex.Lock()
 	progress := s.progress
 	s.mutex.Unlock()
-	if progress.Phase != terminal.ConnectionHostKey || progress.HostKey == nil {
-		return terminal.HostKeyQuestion{}, false
-	}
-	if !strings.Contains(s.input.openConfirmation(), progress.HostKey.Fingerprint) {
-		return terminal.HostKeyQuestion{}, false
-	}
-	return terminal.HostKeyQuestion{
-		Alias: progress.Alias, HostName: progress.HostName,
-		KeyType: progress.HostKey.Type, Fingerprint: progress.HostKey.Fingerprint,
-	}, true
+	return progress.HostKeyQuestionAbout(s.input.openConfirmation())
 }
 
 // AnswerHostKey answers the question about the key of this fingerprint, if it

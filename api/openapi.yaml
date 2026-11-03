@@ -3994,6 +3994,30 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/connection-attempts/{attempt}/host-key:
+    parameters:
+      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
+      - { name: attempt, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9-]{16,64}$" } }
+    post:
+      operationId: answerSFTPHostKey
+      # 一覧の要求の接続が待っている、known_hosts に無いホスト鍵の問い（hostKeyQuestion）に答える。
+      # ターミナルの POST /api/v1/terminal/sessions/{id}/host-key と同じ答え。その鍵についての問いを
+      # もう待っていなければ（ほかの答えが先に届いた、接続が先へ進んだ、終わった）、何もせずに
+      # 409 sftp_no_host_key_question を返す。
+      description: Answers the host key question of a listing's connection. 409 means the connection no longer waits on a question about this key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalHostKeyAnswer" }
+      responses:
+        "200": { description: The connection attempt after the answer, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPConnectionAttempt" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/preview:
     parameters: *sftpAlias
     get:
@@ -7575,6 +7599,9 @@ components:
       required: [log, finished]
       properties:
         progress: { $ref: "#/components/schemas/TerminalConnectionProgress" }
+        # 接続が known_hosts に無いホスト鍵を受け入れるかを尋ねているあいだだけある。ターミナルの
+        # セッションの hostKeyQuestion と同じ形。
+        hostKeyQuestion: { $ref: "#/components/schemas/TerminalHostKeyQuestion" }
         log:
           description: Connection log lines at the configured verbosity, oldest first, without line endings. A failed attempt ends with the reason.
           type: array

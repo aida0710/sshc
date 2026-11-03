@@ -2,12 +2,15 @@ import { failureCode } from "../api/client";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { codeText, type CodeMessages } from "../i18n/codeText";
+import { hostKeyProblemMessages } from "../shell/hostKeyProblems";
 import { describeVPNProblem } from "../vpn/vpnProblemMessage";
 import { vpnRefusalMessages } from "../vpn/vpnRefusals";
 
-// SFTP の失敗の code（engine の internal/httpserver/sftp.go の sftpProblem と転送の
-// problem、画面の転送が自分で投げる code）の言い方。
+// SFTP の失敗の code（engine の internal/httpserver/sftp_problem.go の sftpProblem と転送の
+// problem、画面の転送が自分で投げる code）の言い方。ホスト鍵で接続しなかったときは、
+// ターミナルと同じ文にする。
 const sftpProblemMessages: CodeMessages = {
+  ...hostKeyProblemMessages,
   sftp_unsupported_operation: "sftp.problem.unsupportedOperation",
   sftp_metadata_unavailable: "sftp.problem.metadataUnavailable",
   sftp_ownership_unavailable: "sftp.ownershipUnavailable",

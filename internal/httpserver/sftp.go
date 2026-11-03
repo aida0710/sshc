@@ -46,6 +46,7 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.POST("/api/v1/sftp/local/delete", handlers.DeleteLocal)
 	engine.GET("/api/v1/sftp/:alias/entries", handlers.List)
 	engine.GET("/api/v1/sftp/:alias/connection-attempts/:attempt", handlers.ConnectionAttempt)
+	engine.POST("/api/v1/sftp/:alias/connection-attempts/:attempt/host-key", handlers.AnswerHostKey)
 	engine.POST("/api/v1/sftp/:alias/entries", handlers.CreateEntry)
 	engine.GET("/api/v1/sftp/:alias/stats", handlers.DirectoryStats)
 	engine.GET("/api/v1/sftp/:alias/preview", handlers.Preview)

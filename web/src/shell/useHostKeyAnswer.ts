@@ -1,7 +1,8 @@
 import { useState } from "react";
 
-// HostKeyAnswer answers the question a connecting session asks about an unknown host key. The strip above the
-// terminal and the card over it both offer it, so they share one state (a press on either shows as busy on both).
+// HostKeyAnswer answers the question a connection asks about an unknown host key, in the terminal or an SFTP tab. In
+// the terminal the strip above and the card over it both offer it, so they share one state (a press on either shows as
+// busy on both).
 export type HostKeyAnswer = {
   // answer is undefined when this view cannot answer from a button.
   answer: ((fingerprint: string, accept: boolean) => void) | undefined;

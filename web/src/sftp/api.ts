@@ -4,6 +4,7 @@ import { issueAction, patchJSON, postJSON, putJSON, sendJSON } from "../api/guar
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
 import { saveFile, type BrowserSave } from "../ui/saveFile";
+import { hostKeyProblemCodes } from "../shell/hostKeyProblems";
 import { vpnProblemCodes } from "../vpn/vpnRefusals";
 import type { DirectoryCompareOptions, SearchOptions } from "./contentToolTypes";
 
@@ -26,11 +27,15 @@ export type RemoteSearchResult = components["schemas"]["SFTPSearchResult"];
 export type DirectoryComparison = components["schemas"]["SFTPDirectoryComparison"];
 export type RemoteDirectoryStats = components["schemas"]["SFTPDirectoryStats"];
 export type SFTPConnectionAttempt = components["schemas"]["SFTPConnectionAttempt"];
+type HostKeyAnswer = components["schemas"]["TerminalHostKeyAnswer"];
 
 export type SFTPListOptions = {
   // attempt names the SSH connection this listing may have to open, so that
   // connectionAttempt can report its stage and log before the listing returns.
   attempt?: string;
+  // signal ends the listing. A connection still waiting on its host key
+  // question stops waiting, and nothing is written to known_hosts.
+  signal?: AbortSignal;
 };
 
 export type RemotePreview = {
@@ -44,10 +49,13 @@ export type RemotePreview = {
 // that asked: the list, the search and the comparison say why
 // (sftpProblemText), and the details dialog marks the value unavailable. The
 // application-wide failure notice on top would repeat it.
-const connectionProblems = ["sftp_failed", "sftp_connection_lost", ...vpnProblemCodes];
+const connectionProblems = ["sftp_failed", "sftp_connection_lost", ...hostKeyProblemCodes, ...vpnProblemCodes];
 
 // A listing that has not begun connecting yet has left nothing to read.
 const connectionAttemptNotFound = "sftp_connection_attempt_not_found";
+// The connection no longer waits on a question about that key: another answer
+// came first, or the connection went on or ended. The attempt read next says where it is.
+const noHostKeyQuestion = "sftp_no_host_key_question";
 
 // preview が返しうる問題は、詳細モーダルがその場で言葉にする。共通の失敗
 // 通知まで重ねると、preview できない普通のファイルを開くたびに全画面の
@@ -168,7 +176,7 @@ export const sftpApi = {
     const response = await apiClient.send(endpoint, { method: "GET", headers: { "If-Range": revision } });
     if (response.status !== 204) throw new Error("download_changed");
   },
-  async list(alias: string, remotePath = "", { attempt }: SFTPListOptions = {}): Promise<{ path: string; entries: RemoteEntry[] }> {
+  async list(alias: string, remotePath = "", { attempt, signal }: SFTPListOptions = {}): Promise<{ path: string; entries: RemoteEntry[] }> {
     const listing = remotePath === ""
       ? `/api/v1/sftp/${encodeURIComponent(alias)}/entries`
       : pathFor(alias, "entries", remotePath);
@@ -176,6 +184,7 @@ export const sftpApi = {
       ? listing
       : `${listing}${listing.includes("?") ? "&" : "?"}attempt=${encodeURIComponent(attempt)}`;
     return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(endpoint, {
+      ...(signal === undefined ? {} : { signal }),
       locallyHandledCodes: connectionProblems,
     }));
   },
@@ -189,6 +198,20 @@ export const sftpApi = {
       }));
     } catch (error) {
       if (failureCode(error) === connectionAttemptNotFound) return null;
+      throw error;
+    }
+  },
+  // answerHostKey answers the host key question of the listing that named this
+  // attempt, as the terminal's buttons answer theirs, and returns the attempt
+  // as it is after the answer. Null when the question is no longer open.
+  async answerHostKey(alias: string, attempt: string, answer: HostKeyAnswer): Promise<SFTPConnectionAttempt | null> {
+    const endpoint = `/api/v1/sftp/${encodeURIComponent(alias)}/connection-attempts/${encodeURIComponent(attempt)}/host-key`;
+    try {
+      return validateOpenAPISchema<SFTPConnectionAttempt>("SFTPConnectionAttempt",
+        await postJSON<unknown>(endpoint, answer, undefined, [noHostKeyQuestion, connectionAttemptNotFound]));
+    } catch (error) {
+      const code = failureCode(error);
+      if (code === noHostKeyQuestion || code === connectionAttemptNotFound) return null;
       throw error;
     }
   },
