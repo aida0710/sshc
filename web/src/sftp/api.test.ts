@@ -74,9 +74,9 @@ describe("sftpApi resumable download", () => {
 
     await expect(sftpApi.answerHostKey("edge", "6f1c2b9e-0d4a-4c1e-9a77-3b2f5d8e1a40", answer)).resolves.toEqual(attempt);
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(String(url)).toBe("/api/v1/sftp/edge/connection-attempts/6f1c2b9e-0d4a-4c1e-9a77-3b2f5d8e1a40/host-key");
+    expect(url).toBe("/api/v1/sftp/edge/connection-attempts/6f1c2b9e-0d4a-4c1e-9a77-3b2f5d8e1a40/host-key");
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body))).toEqual(answer);
+    expect(JSON.parse(init?.body as string)).toEqual(answer);
     await expect(sftpApi.answerHostKey("edge", "6f1c2b9e-0d4a-4c1e-9a77-3b2f5d8e1a40", answer)).resolves.toBeNull();
     expect(diagnostic).not.toHaveBeenCalled();
   });
