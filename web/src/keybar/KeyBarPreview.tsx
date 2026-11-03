@@ -9,7 +9,8 @@ const keyShape = `h-11 min-w-0 truncate rounded-[9px] font-mono text-[11px] ${ke
 const keyGrid = "grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-y-1";
 
 // KeyBarPreview shows a layout in the key bar's order, with the keys behind 「…」 under it. A tap selects a key (a second
-// tap lets go of it) for the buttons beside it to move.
+// tap lets go of it) for the buttons beside it to move. The keys sit on the canvas, as the terminal's key bar does: a
+// light theme's card is as white as its sections and its terminal, which would leave only the keys' names.
 export function KeyBarPreview({ layout, selected, onSelect, disabled }: {
   layout: KeyBarLayout;
   selected: KeySlot | null;
@@ -29,7 +30,7 @@ export function KeyBarPreview({ layout, selected, onSelect, disabled }: {
     );
   });
   return (
-    <div data-key-bar-preview className="flex flex-col gap-2 rounded-[10px] bg-term-bg p-2">
+    <div data-key-bar-preview className="flex flex-col gap-2 rounded-[10px] bg-canvas p-2">
       <div role="group" aria-label={t("keyBar.keysRow")} className={keyGrid}>
         {row("keys")}
         {layout.moreKeys.length === 0 ? null : (

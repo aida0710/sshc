@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
 import type { TerminalSessionsState } from "./sessions";
+import { paneSessionIds } from "./splitView/layout";
 import { useTerminalWorkspaceController } from "./useTerminalWorkspaceController";
 import type { Section } from "../routing/sectionRoute";
 
@@ -45,6 +46,33 @@ function useController(list: TerminalSession[], refresh: () => Promise<void>, se
 }
 
 describe("useTerminalWorkspaceController", () => {
+  it("opens a session in a new pane beside the one shown, and keeps the one shown on the screen", async () => {
+    const { result, rerender } = renderHook(({ listed }: { listed: TerminalSession[] }) => useTerminalWorkspaceController({
+      shells,
+      terminalSessions: {
+        sessions: listed,
+        maxSessions: 50,
+        refresh: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn(async () => session("opened")),
+      } as unknown as TerminalSessionsState,
+      workspaces,
+      enabled: true,
+      section: "Terminal",
+      navigate: () => undefined,
+      closeNavigation: () => undefined,
+    }), { initialProps: { listed: [session("first")] } });
+    await waitFor(() => expect(result.current.activeSessionId).toBe("first"));
+
+    // The list holds the new session by the time the split lands, as terminalSessions.open sees to.
+    rerender({ listed: [session("first"), session("opened")] });
+    await act(async () => {
+      await result.current.openSessionInSplit({ kind: "shell" }, { targetSessionId: "first", edge: "right" });
+    });
+
+    expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["first", "opened"]);
+    expect(result.current.activeSessionId).toBe("opened");
+  });
+
   it("offers the shells of the engine in use and reads them again when the run target changes", async () => {
     const shell = (id: string) => ({ id, label: id, path: `/bin/${id}`, arguments: [], default: true });
     const here = { shellProfiles: vi.fn().mockResolvedValue({ profiles: [shell("zsh")] }) };

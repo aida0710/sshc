@@ -4,7 +4,8 @@ import type { OpenTerminalSessionRequest, TerminalSessionsApi } from "../api/ter
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
 import { sshSessionTarget } from "../connections/directDestination";
 import type { Section } from "../routing/sectionRoute";
-import { useSplitView } from "./splitView/useSplitView";
+import { duplicateSessionRequest } from "./duplicateSessionRequest";
+import { useSplitView, type SplitRequest } from "./splitView/useSplitView";
 import type { TerminalSessionsState } from "./sessions";
 import { topSessionId } from "./workspaceGrouping";
 
@@ -34,8 +35,8 @@ export function useTerminalWorkspaceController({
   closeNavigation,
 }: TerminalWorkspaceControllerOptions) {
   const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfileList["profiles"]>([]);
-  const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget });
-  const { selectSession: setActiveSessionId } = splitView;
+  const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget, maxSessions: terminalSessions.maxSessions });
+  const { selectSession: setActiveSessionId, dispatch: dispatchSplit } = splitView;
   const { activeSessionId } = splitView.state;
   const [sessionOrder, setSessionOrder] = useState<string[]>([]);
   const pendingSessionId = useRef<string | null>(null);
@@ -169,19 +170,24 @@ export function useTerminalWorkspaceController({
         (candidate) => candidate.id === id,
       );
       if (session === undefined) return null;
-      // A duplicate opens next to the original, in the same workspace and the
-      // directory the original works in, when the engine knows it.
-      const startIn = session.workingDirectory === undefined ? {} : { cwd: session.workingDirectory };
-      return openSession(
-        session.kind === "ssh" && session.alias !== undefined
-          ? { kind: "ssh", ...sshSessionTarget(session.alias), workspaceId: session.workspaceId, ...startIn }
-          : {
-              kind: "shell", workspaceId: session.workspaceId, ...startIn,
-              ...(session.shellProfileId === undefined ? {} : { profileId: session.shellProfileId }),
-            },
-      );
+      return openSession(duplicateSessionRequest(session));
     },
     [terminalSessions.sessions, openSession],
+  );
+
+  // openSessionInSplit opens a session in a new pane beside another. It does not show the session first: selecting
+  // one outside the split would put it in place of the panes, and the split would lose the session it goes beside.
+  // The list already holds the new session in the render this split lands in (terminalSessions.open), so the split
+  // does not take it for one that has ended.
+  const openSessionInSplit = useCallback(
+    async (request: OpenTerminalSessionRequest, place: SplitRequest) => {
+      const opened = await terminalSessions.open(request);
+      if (opened === null) return;
+      dispatchSplit({ type: "split", sourceSessionId: opened.id, ...place });
+      closeNavigation();
+      navigate("Terminal");
+    },
+    [closeNavigation, dispatchSplit, navigate, terminalSessions],
   );
 
   return {
@@ -194,6 +200,7 @@ export function useTerminalWorkspaceController({
     openLocalShell,
     openSSHSession,
     duplicateSession,
+    openSessionInSplit,
     reorderSessions: setSessionOrder,
   };
 }

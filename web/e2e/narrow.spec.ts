@@ -901,7 +901,7 @@ test("arranges the key bar in the settings, and the terminal's bar follows it", 
   await order.getByRole("button", { name: "Esc", exact: true }).click();
   await page.getByRole("group", { name: "Function keys" }).getByRole("button", { name: "F5", exact: true }).click();
   await expect(order.getByRole("button", { name: "F5", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("combobox", { name: "Key bar preset" }).locator("option:checked")).toHaveText("My key bar");
+  await expect(page.getByRole("combobox", { name: "Key order" }).locator("option:checked")).toHaveText("My key order");
 
   await page.getByRole("button", { name: "Make a key" }).click();
   const making = page.getByRole("dialog", { name: "Your own key" });
@@ -939,7 +939,7 @@ test("offers a key bar for Claude Code, whose keys reach the program as the keys
   await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Menu", exact: true }).click();
   await page.getByRole("link", { name: "Open Key bar" }).click();
 
-  const preset = page.getByRole("combobox", { name: "Key bar preset" });
+  const preset = page.getByRole("combobox", { name: "Key order" });
   await preset.selectOption({ label: "Claude Code" });
   const order = page.getByRole("group", { name: "Keys always shown" });
   await expect(order.getByRole("button", { name: "Shift+Tab", exact: true })).toBeVisible();

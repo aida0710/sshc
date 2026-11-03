@@ -11,7 +11,7 @@ export const builtInKeyBarPresets: readonly KeyBarPreset[] = [
   { id: "claude-code", name: "Claude Code", ...claudeCodeKeyBarLayout },
 ];
 
-const library = createPresetLibrary<KeyBarPreset>({
+export const keyBarPresetLibrary = createPresetLibrary<KeyBarPreset>({
   endpoint: "/api/v1/metadata/keybar",
   read: (metadata) => metadata.keyBarPresets,
   choice: "keyBarPreset",
@@ -20,22 +20,19 @@ const library = createPresetLibrary<KeyBarPreset>({
 
 // useKeyBarPresets is the key bar presets and the one a settings preset chose (the one this machine uses when
 // settingsPresetId is left out).
-export const useKeyBarPresets = library.usePresets;
+export const useKeyBarPresets = keyBarPresetLibrary.usePresets;
 
 // useKeyBarLayout is the key bar of a settings preset (the one in force when settingsPresetId is left out): its
 // chosen preset, or the default layout.
 export function useKeyBarLayout(settingsPresetId?: string): KeyBarLayout {
-  const chosen = library.useChosen(settingsPresetId);
+  const chosen = keyBarPresetLibrary.useChosen(settingsPresetId);
   return chosen === undefined ? defaultKeyBarLayout : { keys: chosen.keys, moreKeys: chosen.moreKeys };
 }
-
-export const selectKeyBarPreset = library.select;
-export const updateKeyBarPresets = library.update;
 
 // saveKeyBarLayout keeps an edited layout in the key bar preset a settings preset chose, or in a new preset
 // named newPresetName when it chose the default layout or a built-in one.
 export function saveKeyBarLayout(layout: KeyBarLayout, newPresetName: string, settingsPresetId?: string) {
-  return library.saveChosen((chosen) => chosen === undefined
+  return keyBarPresetLibrary.saveChosen((chosen) => chosen === undefined
     ? { id: newIdentifier(), name: newPresetName, ...layout }
     : { ...chosen, ...layout }, settingsPresetId);
 }

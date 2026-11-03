@@ -148,6 +148,17 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi()} page="SFTP" onNavigatePage={vi.fn()} />);
 
     expect(screen.getByRole("combobox", { name: "Preset to edit" })).toBeVisible();
+    // Above a page with a selector of its own, the two are told apart by their names.
+    expect(screen.getByText("Preset to edit")).toBeVisible();
+  });
+
+  it("keeps the master password in a section of its own, marked as this machine's, apart from the auto-lock of the preset", () => {
+    render(<SettingsPanel api={buildApi()} page="Vault" />);
+
+    const master = screen.getByRole("region", { name: "Master password" });
+    expect(within(master).getByRole("heading", { name: "Master password" })).toBeVisible();
+    expect(within(master).getByText("This machine only")).toBeVisible();
+    expect(within(screen.getByRole("region", { name: "Vault auto-lock" })).queryByLabelText("Current master password")).toBeNull();
   });
 
   it("loads the twelve-hour default and saves a timed Vault lock in the preset being edited", async () => {

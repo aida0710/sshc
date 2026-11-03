@@ -104,10 +104,12 @@ export function SettingsPanel({
       ) : null}
       {shows("Notifications") ? <NotificationSettingsSection presetId={editingPreset} showHeading={all} /> : null}
       {shows("Vault") ? (
-        <>
-          <VaultAutoLockSection presetId={editingPreset} showHeading={all} passwordless={passwordless} />
-          <MasterPasswordSection api={api} showHeading onVaultChanged={onVaultChanged} />
-        </>
+        <SettingsSection id="settings-vault" label={t("settings.vaultHeading")} icon="secrets" showHeading={all}>
+          <div className="flex flex-col gap-5">
+            <VaultAutoLockSection presetId={editingPreset} passwordless={passwordless} />
+            <MasterPasswordSection api={api} onVaultChanged={onVaultChanged} />
+          </div>
+        </SettingsSection>
       ) : null}
       {shows("Machines") ? <MachinesSettingsSection showHeading={all} /> : null}
       {terminalSessions !== undefined && shows("Connections") ? <SessionSettingsSection terminalSessions={terminalSessions} showHeading={all} /> : null}

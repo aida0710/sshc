@@ -1,6 +1,7 @@
-import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, type ReactNode } from "react";
 import type { TerminalAppearance, TerminalSettings } from "../api/settings";
 import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
+import { useTranslate } from "../i18n/context";
 import { resolveAppearance } from "../terminal/appearance";
 import { TerminalEmptyState } from "../terminal/TerminalEmptyState";
 import { TerminalSplitView } from "../terminal/splitView/TerminalSplitView";
@@ -10,7 +11,7 @@ import type { RemotePathAction } from "../sftp/SFTPPanel";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import type { PaneEdge } from "../terminal/splitView/layout";
-import { SplitSessionPicker } from "../terminal/splitView/SplitSessionPicker";
+import { maximumSplitGroups } from "../terminal/splitView/splitGroups";
 import { RunTargetConnectingPanel } from "../terminal/RunTargetConnectingPanel";
 import { RunTargetRefusalPanel } from "../terminal/RunTargetRefusalPanel";
 import type { RunTargetsState } from "../terminal/useRunTargets";
@@ -70,7 +71,7 @@ export function TerminalScreen({
   // Only an engine on an SSH host refuses a list; this machine's own list
   // keeps failing quietly.
   const refusal = runTarget === null ? null : terminalSessions.remoteRefusal;
-  const [splitRequest, setSplitRequest] = useState<{ targetSessionId: string; edge: PaneEdge } | null>(null);
+  const t = useTranslate();
   const session = terminalSessions.sessions.find((session) => session.id === activeSessionId) ?? null;
   const keepScreenAwake = useKeepScreenAwake();
   // Only while a terminal is on the screen: other sections let the screen turn off as usual.
@@ -79,6 +80,15 @@ export function TerminalScreen({
     document.title = session === null ? "sshc" : `${session.presentation?.displayTitle ?? session.title} · sshc`;
     return () => { document.title = "sshc"; };
   }, [session]);
+  // Why the terminal's 「…」 cannot split beside a session, for its disabled items; undefined when it can.
+  function splitRefusalText(sessionId: string): string | undefined {
+    switch (splitView.splitRefusal(sessionId)) {
+      case "ended": return t("splitView.refusedEnded");
+      case "groups": return t("splitView.maxGroups", { count: maximumSplitGroups });
+      case "sessions": return t("terminal.limitReached", { max: terminalSessions.maxSessions });
+      case null: return undefined;
+    }
+  }
   function renderTerminal(session: TerminalSession, headerActions: ReactNode, inPane: boolean) {
     const appearance = resolveAppearance(
       session.alias === undefined
@@ -97,8 +107,8 @@ export function TerminalScreen({
           inPane={inPane}
           focusRequest={splitView.state.focusRevision}
           headerActions={headerActions}
-          {...(splitView.compact ? {} : { onSplit: (edge: PaneEdge) => setSplitRequest({ targetSessionId: session.id, edge }) })}
-          canSplit={terminalSessions.sessions.some((candidate) => splitView.canSplit(candidate.id, session.id))}
+          {...(splitView.compact ? {} : { onSplit: (edge: PaneEdge) => splitView.requestSplit({ targetSessionId: session.id, edge }) })}
+          splitRefusal={splitRefusalText(session.id)}
           {...(splitView.groupBySession.has(session.id) ? { onRemoveFromSplit: () => splitView.removeFromSplit(session.id) } : {})}
           api={api}
           {...(runTarget === null ? {} : { runTarget })}
@@ -166,12 +176,5 @@ export function TerminalScreen({
       onUnlocked={runTargets.vaultUnlock.unlocked}
       onOpenInNewTab={() => void runTargets.openInNewTab(runTarget)}
       onOpenEngineInfo={() => runTargets.engineInfo.ask(runTarget)} />}
-    {splitRequest === null ? null : <SplitSessionPicker
-      sessions={terminalSessions.sessions.filter((candidate) => splitView.canSplit(candidate.id, splitRequest.targetSessionId))}
-      onClose={() => setSplitRequest(null)}
-      onSelect={(sourceSessionId) => {
-        splitView.split({ ...splitRequest, sourceSessionId });
-        setSplitRequest(null);
-      }} />}
   </div>;
 }

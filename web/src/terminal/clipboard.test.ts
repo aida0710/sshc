@@ -28,7 +28,7 @@ function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, righ
   const refuse = vi.fn();
   const copied = vi.fn();
   const nothingToPaste = vi.fn();
-  const detach = attachTerminalClipboard({
+  const { detach } = attachTerminalClipboard({
     container,
     terminal,
     clipboard,
@@ -72,7 +72,7 @@ describe("terminal clipboard interactions", () => {
     const container = document.createElement("div");
     const terminal = { attachCustomKeyEventHandler: vi.fn(), onSelectionChange: () => ({ dispose: () => {} }), hasSelection: () => false, getSelection: () => "", paste: vi.fn() };
     const taken: { mime: string; data: string | Blob }[][] = [];
-    const detach = attachTerminalClipboard({
+    const { detach } = attachTerminalClipboard({
       container, terminal, clipboard: { readText: vi.fn(), writeText: vi.fn() },
       settings: () => ({ copyOnSelect: false, rightClickPaste: false }), refuse: vi.fn(),
       takePaste: (items) => { taken.push(items()); return true; },
@@ -145,7 +145,7 @@ describe("terminal clipboard interactions", () => {
     let selectionChanged = () => {};
     let searching = false;
     const writeText = vi.fn(async () => undefined);
-    const detach = attachTerminalClipboard({
+    const { detach } = attachTerminalClipboard({
       container: document.createElement("div"),
       terminal: {
         attachCustomKeyEventHandler: vi.fn(),
@@ -173,7 +173,7 @@ describe("terminal clipboard interactions", () => {
   it("reviews a keyboard's multi-line suggestion and pasted input like a paste", () => {
     const paste = vi.fn();
     const container = document.createElement("div");
-    const detach = attachTerminalClipboard({
+    const { detach } = attachTerminalClipboard({
       container,
       terminal: { attachCustomKeyEventHandler: vi.fn(), onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })), hasSelection: () => false, getSelection: () => "", paste: vi.fn() },
       paste,
@@ -250,7 +250,7 @@ describe("terminal clipboard interactions", () => {
     let resolveRead: (text: string) => void = () => undefined;
     const read = new Promise<string>((resolve) => { resolveRead = resolve; });
     const paste = vi.fn();
-    const detach = attachTerminalClipboard({
+    const { detach } = attachTerminalClipboard({
       container,
       terminal: {
         attachCustomKeyEventHandler: vi.fn(),
@@ -428,7 +428,7 @@ describe("the long press is not a right click", () => {
   it("leaves the context menu alone where the pointer is coarse", () => {
     const container = document.createElement("div");
     const readText = vi.fn(async () => "pasted text");
-    const detach = attachTerminalClipboard({
+    const { detach } = attachTerminalClipboard({
       container,
       terminal: stub(),
       clipboard: { readText, writeText: vi.fn(async () => undefined) },
@@ -448,7 +448,7 @@ describe("the long press is not a right click", () => {
   it("still pastes on a right click where a mouse exists", () => {
     const container = document.createElement("div");
     const readText = vi.fn(async () => "pasted text");
-    const detach = attachTerminalClipboard({
+    const { detach } = attachTerminalClipboard({
       container,
       terminal: stub(),
       clipboard: { readText, writeText: vi.fn(async () => undefined) },
