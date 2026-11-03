@@ -15,7 +15,8 @@ FUZZ_TARGETS = \
 	internal/terminal:FuzzOSCObserverChunkingIsInvariant \
 	internal/knownhosts:FuzzParseKnownHostsRoundTrip \
 	internal/acceptance:FuzzAPIRequestBodies \
-	internal/remotesync:FuzzReadSnapshot
+	internal/remotesync:FuzzReadSnapshot \
+	internal/sftp:FuzzThumbnailOfAnyBytes
 
 
 generate:

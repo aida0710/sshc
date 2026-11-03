@@ -3951,6 +3951,25 @@ paths:
         "413": { $ref: "#/components/responses/Problem" }
         "415": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/thumbnail:
+    get:
+      operationId: thumbnailLocalSFTPFile
+      description: A small picture of an engine-local PNG, JPEG or GIF for its row in the list, kept in the engine's memory by the file's revision. Links, other types and files too large to decode are refused, and the list keeps the file's icon.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: revision, in: query, required: true, description: The revision the listing showed, schema: { type: string } }
+      responses:
+        "200":
+          description: The picture, no more than 256 pixels along its longest edge and upright
+          content: { image/jpeg: { schema: { type: string, format: binary } }, image/png: { schema: { type: string, format: binary } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "415": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/local/download:
     get:
       operationId: downloadLocalSFTPFile
@@ -4112,6 +4131,31 @@ paths:
         "413": { $ref: "#/components/responses/Problem" }
         "415": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/thumbnail:
+    parameters: *sftpAlias
+    get:
+      operationId: thumbnailSFTPFile
+      description: >-
+        A small picture of a remote PNG, JPEG or GIF for its row in the list, kept in the engine's memory by the file's
+        revision. Made on the connection the pane already uses, one file at a time for a host; a JPEG with a picture in
+        its Exif header costs only the header. Symlinks, other types and files too large to read or decode are refused,
+        and the list keeps the file's icon.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: revision, in: query, required: true, description: The revision the listing showed, schema: { type: string } }
+      responses:
+        "200":
+          description: The picture, no more than 256 pixels along its longest edge and upright
+          content: { image/jpeg: { schema: { type: string, format: binary } }, image/png: { schema: { type: string, format: binary } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "415": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/search:
     parameters: *sftpAlias
     get:
@@ -7253,6 +7297,8 @@ components:
         keepScreenAwake: { type: boolean }
         # タッチのターミナルで、リンクにいつも引く下線を引かない。省略は引く。
         hideTouchLinkUnderlines: { type: boolean }
+        # SFTP の一覧に画像のサムネイルを出さない。省略は出す。
+        hideSFTPThumbnails: { type: boolean }
         # 使うショートカットのプリセットの id。省略は既定の割り当て。
         shortcutPreset: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
         # スマホで使うキーバーのプリセットの id。省略は既定の並び。

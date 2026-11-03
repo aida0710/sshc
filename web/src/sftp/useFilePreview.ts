@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import type { MessageKey } from "../i18n/messages";
 import { sftpApi } from "./api";
+import { blobDataURL } from "./blobDataURL";
 import { playableMediaKind, type PlayableMediaKind } from "./playableMedia";
 
 export type FilePreviewState =
@@ -11,17 +12,6 @@ export type FilePreviewState =
   | { kind: "text"; contents: string }
   | { kind: "media"; element: PlayableMediaKind; url: string }
   | { kind: "unavailable"; reason: MessageKey };
-
-// A data: URL keeps the image inside the policy the app already ships;
-// img-src allows data: and nothing here needs a Blob URL.
-function dataURL(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error ?? new Error("preview_unreadable"));
-    reader.readAsDataURL(blob);
-  });
-}
 
 function unavailableReason(error: unknown): MessageKey {
   switch (failureCode(error)) {
@@ -68,7 +58,7 @@ function startFilePreview({ alias, path, show }: { alias: string; path: string; 
   void (async () => {
     try {
       const previewed = await sftpApi.previewFile(alias, path);
-      const url = await dataURL(previewed.blob);
+      const url = await blobDataURL(previewed.blob);
       if (active) show({ kind: "image", url });
       return;
     } catch (error) {

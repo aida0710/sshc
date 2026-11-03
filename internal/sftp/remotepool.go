@@ -52,13 +52,21 @@ type RemotePool struct {
 	now     func() time.Time
 	after   func(time.Duration, func()) *time.Timer
 
-	mutex  sync.Mutex
-	idle   map[string][]idleRemote
-	closed bool
+	mutex sync.Mutex
+	idle  map[string][]idleRemote
+	// inUse is the connections operations have taken, by key, which Borrow can lend as well.
+	inUse map[string][]Remote
+	// borrowers counts the reads a connection is lent to; none of them keeps it from an operation, but the idle timer
+	// waits for them.
+	borrowers map[Remote]int
+	closed    bool
 }
 
 func NewRemotePool(resolve ResolveRemote) *RemotePool {
-	return &RemotePool{resolve: resolve, now: time.Now, after: time.AfterFunc, idle: map[string][]idleRemote{}}
+	return &RemotePool{
+		resolve: resolve, now: time.Now, after: time.AfterFunc,
+		idle: map[string][]idleRemote{}, inUse: map[string][]Remote{}, borrowers: map[Remote]int{},
+	}
 }
 
 // Open resolves the current configuration before reusing a connection. The
@@ -77,6 +85,7 @@ func (p *RemotePool) Open(ctx context.Context, alias string) (Remote, error) {
 		if p.alive(ctx, remote) {
 			return p.wrap(key, remote), nil
 		}
+		p.markFinished(key, remote)
 		_ = remote.Close()
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -86,7 +95,91 @@ func (p *RemotePool) Open(ctx context.Context, alias string) (Remote, error) {
 	if err != nil {
 		return nil, err
 	}
+	p.mutex.Lock()
+	p.inUse[key] = append(p.inUse[key], remote)
+	p.mutex.Unlock()
 	return p.wrap(key, remote), nil
+}
+
+// Borrow lends a short read the connection a host has open, idle or in use, and never dials. Unlike Open it does not
+// take the connection away: the next operation finds it in the pool as usual and runs beside the read on the same SFTP
+// session, which serves requests side by side. Nothing the read does can close the connection for the others, except a
+// Discard after it has stopped responding, and if an operation closes it, the read simply fails.
+func (p *RemotePool) Borrow(ctx context.Context, alias string) (Remote, error) {
+	target, err := p.resolve(ctx, alias)
+	if err != nil {
+		return nil, err
+	}
+	key := alias + "\x00" + target.Identity
+	remote := p.lend(key)
+	if remote == nil {
+		return nil, ErrNoOpenConnection
+	}
+	if !p.alive(ctx, remote) {
+		p.giveBack(key, remote)
+		return nil, ErrNoOpenConnection
+	}
+	return &borrowedRemote{Remote: remote, pool: p, key: key}, nil
+}
+
+// lend prefers the connection released last, as takeIdle does, and otherwise one an operation is using.
+func (p *RemotePool) lend(key string) Remote {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	if p.closed {
+		return nil
+	}
+	var remote Remote
+	if entries := p.idle[key]; len(entries) > 0 {
+		remote = entries[len(entries)-1].remote
+	} else if used := p.inUse[key]; len(used) > 0 {
+		remote = used[len(used)-1]
+	}
+	if remote != nil {
+		p.borrowers[remote]++
+	}
+	return remote
+}
+
+// giveBack ends a loan. A connection still idle has been used just now, so its idle time starts over.
+func (p *RemotePool) giveBack(key string, remote Remote) {
+	p.mutex.Lock()
+	if p.borrowers[remote] > 1 {
+		p.borrowers[remote]--
+		p.mutex.Unlock()
+		return
+	}
+	delete(p.borrowers, remote)
+	restarted := false
+	for index := range p.idle[key] {
+		if p.idle[key][index].remote == remote {
+			p.idle[key][index].since = p.now()
+			restarted = true
+		}
+	}
+	p.mutex.Unlock()
+	if restarted {
+		p.after(RemoteIdleTimeout, func() { p.expire(key, remote) })
+	}
+}
+
+// borrowedRemote is what a borrower holds: Close ends the loan and leaves the connection open.
+type borrowedRemote struct {
+	Remote
+	pool *RemotePool
+	key  string
+	once sync.Once
+}
+
+func (r *borrowedRemote) Close() error {
+	r.once.Do(func() { r.pool.giveBack(r.key, r.Remote) })
+	return nil
+}
+
+// Discard closes the connection for everyone, for a borrower whose read has stopped responding. The pool drops it the
+// next time it looks, as it does a connection the host has closed.
+func (r *borrowedRemote) Discard() error {
+	return r.Remote.Close()
 }
 
 // Close shuts every idle connection and makes later releases close theirs.
@@ -121,6 +214,7 @@ func (p *RemotePool) takeIdle(key string) Remote {
 	// dropped by the host in the meantime.
 	last := entries[len(entries)-1]
 	p.idle[key] = entries[:len(entries)-1]
+	p.inUse[key] = append(p.inUse[key], last.remote)
 	return last.remote
 }
 
@@ -137,9 +231,11 @@ func (p *RemotePool) alive(ctx context.Context, remote Remote) bool {
 func (p *RemotePool) release(key string, remote Remote) error {
 	p.mutex.Lock()
 	if p.closed {
+		p.forgetInUse(key, remote)
 		p.mutex.Unlock()
 		return remote.Close()
 	}
+	p.forgetInUse(key, remote)
 	var evicted Remote
 	entries := p.idle[key]
 	if len(entries) >= maxIdleRemotesPerHost {
@@ -156,14 +252,30 @@ func (p *RemotePool) release(key string, remote Remote) error {
 	return nil
 }
 
-// expire closes a connection that has sat idle since it was released. One
-// that was taken and released again in the meantime has a newer timer.
+func (p *RemotePool) markFinished(key string, remote Remote) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.forgetInUse(key, remote)
+}
+
+func (p *RemotePool) forgetInUse(key string, remote Remote) {
+	used := p.inUse[key]
+	for index, candidate := range used {
+		if candidate == remote {
+			p.inUse[key] = append(used[:index:index], used[index+1:]...)
+			return
+		}
+	}
+}
+
+// expire closes a connection that has sat idle since it was released. One that was taken and released again in the
+// meantime has a newer timer, and so does one that is lent out, when it comes back.
 func (p *RemotePool) expire(key string, remote Remote) {
 	p.mutex.Lock()
 	entries := p.idle[key]
 	index := -1
 	for candidate, entry := range entries {
-		if entry.remote == remote && !p.now().Before(entry.since.Add(RemoteIdleTimeout)) {
+		if entry.remote == remote && p.borrowers[remote] == 0 && !p.now().Before(entry.since.Add(RemoteIdleTimeout)) {
 			index = candidate
 		}
 	}
@@ -200,7 +312,10 @@ func (r *pooledRemote) Close() error {
 }
 
 func (r *pooledRemote) Discard() error {
-	r.once.Do(func() { r.err = r.Remote.Close() })
+	r.once.Do(func() {
+		r.pool.markFinished(r.key, r.Remote)
+		r.err = r.Remote.Close()
+	})
 	return r.err
 }
 

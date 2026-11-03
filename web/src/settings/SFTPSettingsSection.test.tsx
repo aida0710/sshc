@@ -56,4 +56,19 @@ describe("Settings > SFTP", () => {
 
     expect(await screen.findByText("The SFTP settings could not be saved.")).toBeVisible();
   });
+
+  it("turns thumbnails off in the preset being edited, and on again by leaving nothing behind", async () => {
+    const server = fakeSettingsServer({ presets: [{ id: "default" }, { id: "phone", name: "Phone" }] });
+    render(<SFTPSettingsSection presetId="phone" showHeading={false} />);
+    const interfaceOf = (id: string) => server.document().presets.find((preset) => preset.id === id)?.interface;
+
+    const thumbnails = screen.getByRole("checkbox", { name: "Show thumbnails of images" });
+    expect(thumbnails).toBeChecked();
+    await userEvent.click(thumbnails);
+    await waitFor(() => expect(interfaceOf("phone")).toEqual({ hideSFTPThumbnails: true }));
+    expect(interfaceOf("default")).toBeUndefined();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Show thumbnails of images" }));
+    await waitFor(() => expect(interfaceOf("phone")).toBeUndefined());
+  });
 });

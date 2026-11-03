@@ -8,7 +8,9 @@ import { newIdentifier } from "../ui/randomIdentifier";
 export const maxTabsPerPane = 8;
 export const maxPanes = 2;
 
-export type SFTPTab = { id: string; alias: string; path: string; sort: SFTPSortState };
+// How a tab draws its folder: as rows, or as a grid of pictures.
+export type SFTPEntryView = "list" | "grid";
+export type SFTPTab = { id: string; alias: string; path: string; sort: SFTPSortState; view: SFTPEntryView };
 export type SFTPPane = { id: string; tabs: SFTPTab[]; activeId: string };
 export type PaneSide = "left" | "right";
 // Where a tab is dropped: into a pane (at index among its tabs, or at its end), or beside the only pane to
@@ -16,7 +18,7 @@ export type PaneSide = "left" | "right";
 export type TabDestination = { paneId: string; index?: number } | { side: PaneSide };
 
 export function blankTab(): SFTPTab {
-  return { id: newIdentifier(), alias: "", path: "", sort: { key: "name", direction: "ascending" } };
+  return { id: newIdentifier(), alias: "", path: "", sort: { key: "name", direction: "ascending" }, view: "list" };
 }
 
 export function paneOf(tabs: SFTPTab[], activeId = tabs[0]?.id ?? ""): SFTPPane {
@@ -100,6 +102,10 @@ export function relocateTab(panes: SFTPPane[], tabId: string, alias: string, pat
 
 export function resortTab(panes: SFTPPane[], tabId: string, sort: SFTPSortState): SFTPPane[] {
   return updateTab(panes, tabId, (tab) => ({ ...tab, sort }));
+}
+
+export function changeTabView(panes: SFTPPane[], tabId: string, view: SFTPEntryView): SFTPPane[] {
+  return updateTab(panes, tabId, (tab) => ({ ...tab, view }));
 }
 
 // reorderTab moves a tab within its own pane, to sit before the tab now at index. The index counts the

@@ -196,3 +196,100 @@ func TestPoolKeepsAFewIdleConnectionsPerHostAndClosesTheRest(t *testing.T) {
 		t.Fatal("a connection released after Close was pooled")
 	}
 }
+
+func TestBorrowLendsAnIdleConnectionAndLeavesItForTheNextOperation(t *testing.T) {
+	harness := newPoolHarness(t, plain)
+	connected, err := harness.pool.Open(context.Background(), "edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = connected.Close()
+
+	borrowed, err := harness.pool.Borrow(context.Background(), "edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := harness.pool.Open(context.Background(), "edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(harness.dialled) != 1 {
+		t.Fatalf("the operation dialled while the connection was lent: %d", len(harness.dialled))
+	}
+	_ = next.Close()
+	_ = borrowed.Close()
+	if harness.dialled[0].closed {
+		t.Fatal("ending a loan closed the connection")
+	}
+}
+
+func TestBorrowNeverDials(t *testing.T) {
+	harness := newPoolHarness(t, plain)
+	if _, err := harness.pool.Borrow(context.Background(), "edge"); !errors.Is(err, ErrNoOpenConnection) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(harness.dialled) != 0 {
+		t.Fatalf("dialled %d", len(harness.dialled))
+	}
+}
+
+func TestBorrowLendsAConnectionAnOperationHolds(t *testing.T) {
+	harness := newPoolHarness(t, plain)
+	held, err := harness.pool.Open(context.Background(), "edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := harness.pool.Borrow(context.Background(), "edge"); err != nil {
+		t.Fatal(err)
+	}
+	if err := held.(discardableRemote).Discard(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := harness.pool.Borrow(context.Background(), "edge"); !errors.Is(err, ErrNoOpenConnection) {
+		t.Fatalf("lent a discarded connection: %v", err)
+	}
+}
+
+func TestBorrowDoesNotLendADeadConnection(t *testing.T) {
+	harness := newPoolHarness(t, plain)
+	connected, err := harness.pool.Open(context.Background(), "edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = connected.Close()
+	harness.dialled[0].alive = false
+	if _, err := harness.pool.Borrow(context.Background(), "edge"); !errors.Is(err, ErrNoOpenConnection) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestAConnectionOnLoanOutlivesItsIdleTimerAndExpiresAfterTheLoan(t *testing.T) {
+	harness := newPoolHarness(t, plain)
+	connected, err := harness.pool.Open(context.Background(), "edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = connected.Close()
+	borrowed, err := harness.pool.Borrow(context.Background(), "edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	harness.clock = harness.clock.Add(RemoteIdleTimeout)
+	harness.timers[0]()
+	if harness.dialled[0].closed {
+		t.Fatal("the idle timer closed a connection on loan")
+	}
+	_ = borrowed.Close()
+	if len(harness.timers) != 2 {
+		t.Fatalf("ending the loan started %d timers in all", len(harness.timers))
+	}
+	harness.timers[1]()
+	if harness.dialled[0].closed {
+		t.Fatal("the connection closed the moment the loan ended")
+	}
+	harness.clock = harness.clock.Add(RemoteIdleTimeout)
+	harness.timers[1]()
+	if !harness.dialled[0].closed {
+		t.Fatal("a connection nobody uses stays open")
+	}
+}

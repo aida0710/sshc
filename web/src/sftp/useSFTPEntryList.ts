@@ -186,6 +186,16 @@ export function useSFTPEntryList({
     return element?.getAttribute("data-row-key") ?? activeRowKey;
   }
 
+  // moveFocusToRow takes the focus to a row, and the selection with it, as moving along the list does.
+  function moveFocusToRow(destination: string, event: Pick<ReactKeyboardEvent, "shiftKey" | "ctrlKey" | "metaKey">) {
+    focusRow(destination);
+    const entry = entries.find((candidate) => candidate.path === destination);
+    // Ctrl moves the cursor without disturbing a multi-row selection, and the
+    // parent row is a destination rather than something selectable.
+    if (entry === undefined || event.ctrlKey || event.metaKey) return;
+    selectEntry(entry, { shift: event.shiftKey, additive: false });
+  }
+
   function moveRowFocus(event: ReactKeyboardEvent<HTMLDivElement>, from: string | null) {
     if (rowKeys.length === 0) return;
     const current = from === null ? -1 : rowKeys.indexOf(from);
@@ -198,13 +208,7 @@ export function useSFTPEntryList({
           ? current < 0 ? 0 : Math.min(last, current + 1)
           : current < 0 ? last : Math.max(0, current - 1);
     const destination = rowKeys[next];
-    if (destination === undefined) return;
-    focusRow(destination);
-    const entry = entries.find((candidate) => candidate.path === destination);
-    // Ctrl moves the cursor without disturbing a multi-row selection, and the
-    // parent row is a destination rather than something selectable.
-    if (entry === undefined || event.ctrlKey || event.metaKey) return;
-    selectEntry(entry, { shift: event.shiftKey, additive: false });
+    if (destination !== undefined) moveFocusToRow(destination, event);
   }
 
   function entryForKey(key: string | null): RemoteEntry | null {
@@ -396,6 +400,7 @@ export function useSFTPEntryList({
     activeRowKey,
     setFocusedKey,
     focusRow,
+    moveFocusToRow,
     registerRow,
     focusAfterReload,
     cancelPendingFocus,
