@@ -412,7 +412,7 @@ func (s *Service) RenameBackground(current, suggested string) (Background, error
 		return Background{}, err
 	}
 	request := storage.Request{
-		Operation: "rename terminal background",
+		Operation: "terminal.background.rename",
 		Moves: []storage.Move{{
 			From: from,
 			To:   to,
@@ -469,7 +469,7 @@ func (s *Service) RemoveBackground(name string) error {
 		return err
 	}
 	request := storage.Request{
-		Operation: "remove terminal background",
+		Operation: "terminal.background.remove",
 		Removals: []storage.Removal{{
 			Path: target,
 			Precondition: storage.Precondition{

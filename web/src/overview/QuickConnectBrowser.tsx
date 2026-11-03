@@ -20,7 +20,7 @@ import { connectionAddress } from "../connections/connectionAddress";
 import { revealOnHover } from "../ui/ActionMenu";
 import { Spinner } from "../ui/Spinner";
 import { formatDateTime } from "../ui/format";
-import { relativeDay } from "../ui/relativeDay";
+import { resultCountText } from "../connections/resultCount";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { literalTextEntry } from "../ui/softKeyboard";
 
@@ -40,6 +40,11 @@ const homeView: StoredValue<QuickConnectView> = {
   fallback: "panel",
   parse: (stored) => stored === "list" ? "list" : "panel",
 };
+
+// On a phone the groups are one line that scrolls sideways, so many of them leave the connections on the first
+// screen. The negative margin lets the line run to the edges of the card.
+const phoneGroupRow = "-mx-3.5 flex gap-2 overflow-x-auto px-3.5 [scrollbar-width:none]";
+const phoneGroupChip = "max-w-[70%] shrink-0";
 
 function connectionDestination(server: BrowserServer): string {
   return connectionAddress({ hostName: server.host.hostName ?? server.identity.alias, user: server.host.user ?? "", port: server.host.port ?? "" });
@@ -106,12 +111,8 @@ export function QuickConnectBrowser({
     const recentConnection = recentByAlias.get(alias)?.connection;
     const target = connectionDestination(server);
     // The last connection is a badge beside the name, so a card that has one is as tall as one that has not.
-    const lastConnected = recentConnection === undefined
-      ? null
-      : {
-          day: relativeDay(recentConnection.lastConnectedAt, new Date(), locale),
-          full: t("connection.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt, locale) }),
-        };
+    const lastConnectedAt = recentConnection === undefined ? null : formatDateTime(recentConnection.lastConnectedAt, locale);
+    const lastConnectedLabel = lastConnectedAt === null ? undefined : t("connection.lastConnected", { at: lastConnectedAt });
     const selected = selectedAlias === alias;
     const opening = launching === alias;
     const connect = () => {
@@ -165,9 +166,9 @@ export function QuickConnectBrowser({
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-[13.5px] font-semibold text-ink" title={alias}>{alias}</span>
-              {lastConnected === null || opening ? null : (
-                <span title={lastConnected.full} aria-label={lastConnected.full}
-                  className="shrink-0 whitespace-nowrap rounded-full bg-select-fill px-2 text-[11px] leading-[18px] text-accent">{lastConnected.day}</span>
+              {lastConnectedAt === null || opening ? null : (
+                <span title={lastConnectedLabel} aria-label={lastConnectedLabel}
+                  className="shrink-0 whitespace-nowrap rounded-full bg-select-fill px-2 text-[11px] leading-[18px] text-accent">{lastConnectedAt}</span>
               )}
               {server.duplicateAlias ? <span role="img" aria-label={t("browser.duplicateAlias")} className="text-notice-ink"><Icon name="warning" className="size-3.5" /></span> : null}
             </span>
@@ -264,7 +265,7 @@ export function QuickConnectBrowser({
             </nav>
           )}
           {visibleGroups.length === 0 ? null : (
-            <div role="group" aria-label={t("home.groupFilter")} className="flex flex-wrap gap-2">
+            <div role="group" aria-label={t("home.groupFilter")} className={mobile ? phoneGroupRow : "flex flex-wrap gap-2"}>
               {visibleGroups.map((candidate) => {
                 const childCount = index.visibleChildrenByParent.get(candidate.name)?.length ?? 0;
                 return (
@@ -274,7 +275,7 @@ export function QuickConnectBrowser({
                     title={candidate.name}
                     aria-label={t("home.openGroup", { name: candidate.name, count: candidate.descendantCount })}
                     onClick={() => setGroupTrail([...groupTrail, candidate.name])}
-                    className="flex min-h-9 min-w-0 max-w-full items-center gap-2 rounded-md bg-well px-3 py-1.5 text-left transition-colors hover:bg-hover"
+                    className={`flex min-h-9 items-center gap-2 rounded-md bg-well px-3 py-1.5 text-left transition-colors hover:bg-hover ${mobile ? phoneGroupChip : "min-w-0 max-w-full"}`}
                   >
                     <span
                       aria-hidden="true"
@@ -293,7 +294,7 @@ export function QuickConnectBrowser({
       )}
 
       <div className="flex items-center gap-2">
-        <h3 className="min-w-0 flex-1 text-xs font-normal text-ink-faint">{t("tree.resultCount", { visible: servers.length, total: index.servers.length })}</h3>
+        <h3 className="min-w-0 flex-1 text-xs font-normal text-ink-faint">{resultCountText(t, servers.length, index.servers.length)}</h3>
         {mobile ? viewSwitch : null}
       </div>
 

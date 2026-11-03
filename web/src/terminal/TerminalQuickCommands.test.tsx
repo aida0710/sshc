@@ -96,6 +96,45 @@ describe("TerminalQuickCommands", () => {
     );
   });
 
+  it("inserts a snippet without variables at once, showing its text and sending it unsubmitted", async () => {
+    mocks.library.mockResolvedValue({
+      startup: [],
+      snippets: [{ id: "one", name: "Disk", description: "", command: "df -h", variables: [] }],
+    });
+    const onClose = vi.fn();
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={onClose} onCopied={() => undefined} /></LanguageProvider>);
+
+    expect(await screen.findByText("df -h")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Insert" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mocks.preview).toHaveBeenNthCalledWith(2, expect.objectContaining({ issueAction: true, submit: false, expectedReviewEvidence: "r" }));
+    expect(mocks.dispatch).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ snippetId: "one" }), false);
+  });
+
+  it("keeps the panel open and says why when the engine refuses to insert", async () => {
+    mocks.library.mockResolvedValue({
+      startup: [],
+      snippets: [{ id: "one", name: "Two lines", description: "", command: "a\nb", variables: [] }],
+    });
+    mocks.dispatch.mockRejectedValue(new ApiError("terminal_command_insert_unsafe", 422, null));
+    const onClose = vi.fn();
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={onClose} onCopied={() => undefined} /></LanguageProvider>);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Insert" }));
+
+    expect(await screen.findByText(/cannot be inserted without running them/u)).toBeVisible();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("asks for a review first when the snippet has variables", async () => {
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} onCopied={() => undefined} /></LanguageProvider>);
+    await screen.findByRole("option", { name: "Status" });
+
+    expect(screen.queryByRole("button", { name: "Insert" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Preview execution" })).toBeVisible();
+  });
+
   it("copies only the server-expanded command and says it was copied", async () => {
     const onCopied = vi.fn();
     render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} onCopied={onCopied} /></LanguageProvider>);

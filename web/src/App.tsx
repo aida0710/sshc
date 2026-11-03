@@ -11,6 +11,7 @@ import { createTerminalRestoreApi, terminalRestoreApi } from "./api/terminalRest
 import { engineTerminalBase } from "./api/remoteEngines";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
 import type { SessionState } from "./session/bootstrap";
+import { addressesByAlias } from "./connections/connectionAddress";
 import { blankConnectionDraft, type CreationPrerequisite } from "./connections/createConnectionDraft";
 import { LockScreen } from "./secrets/LockScreen";
 import { useLanguage } from "./i18n/context";
@@ -29,6 +30,7 @@ import { useStoredValue } from "./ui/useStoredValue";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
+import { SessionAddressesContext } from "./terminal/sessionDestination";
 import { useRunTargets } from "./terminal/useRunTargets";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
@@ -164,6 +166,10 @@ export function App({
       vaultRevision,
     };
   }, [runTargets.selected, vaultRevision]);
+  const sessionAddresses = useMemo(
+    () => runTargets.selected === null ? addressesByAlias(declared.hosts) : new Map<string, string>(),
+    [declared.hosts, runTargets.selected],
+  );
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,
@@ -384,7 +390,7 @@ export function App({
 
   if (state === "session-ended") return <SessionEndedScreen />;
 
-  return (
+  const app = (
     <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned} data-navigation-hidden={navigationHidden}>
       <div
         ref={rechecked}
@@ -634,4 +640,5 @@ export function App({
       {hiddenForRecheck ? <VaultRecheckOverlay phase={vaultRecheck} /> : null}
     </div>
   );
+  return <SessionAddressesContext.Provider value={sessionAddresses}>{app}</SessionAddressesContext.Provider>;
 }

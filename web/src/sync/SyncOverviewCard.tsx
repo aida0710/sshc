@@ -2,6 +2,7 @@ import { tagClass } from "../ui/Tag";
 import type { SyncStatus } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import { CheckboxField, hintText } from "../ui/form";
+import { formatDateTime } from "../ui/format";
 import { PageSection } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
 import { usePendingAction } from "../ui/usePendingAction";
@@ -95,7 +96,7 @@ export function SyncOverviewCard({
                 )
               : status.auto.at === undefined
                 ? t("sync.autoIdle")
-                : t("sync.autoLastRan", { at: status.auto.at })}
+                : t("sync.autoLastRan", { at: formatDateTime(status.auto.at, locale) })}
           </p>
         )}
         <div className="flex flex-wrap gap-2">

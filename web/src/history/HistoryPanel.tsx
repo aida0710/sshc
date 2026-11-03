@@ -86,13 +86,9 @@ export function HistoryPanel() {
     <div className={`flex flex-col gap-[22px] ${mobileTouchTargets}`}>
       <PageHeader title={t("history.pageTitle")} description={t("history.pageDescription")} />
       <SummaryStats>
-        {([
-          [t("history.metricChanges"), entries.length, false],
-          [t("history.metricInterrupted"), pending.length, pending.length > 0],
-          [t("history.metricRestorable"), restorableCount, false],
-        ] as const).map(([label, value, attention]) => (
-          <SummaryStat key={String(label)} label={String(label)} value={value} attention={Boolean(attention)} />
-        ))}
+        <SummaryStat label={t("history.metricChanges")} value={entries.length} />
+        {pending.length === 0 ? null : <SummaryStat label={t("history.metricInterrupted")} value={pending.length} attention />}
+        <SummaryStat label={t("history.metricRestorable")} value={restorableCount} />
       </SummaryStats>
       {problem === null ? null : (
         <Notice tone="danger">{t("history.requestRejected", { code: problem.code })}</Notice>
@@ -145,7 +141,7 @@ export function HistoryPanel() {
           <ol className="divide-y divide-line">
             {entries.map((entry) => (
               <li key={entry.id} className="grid gap-4 py-3.5 md:grid-cols-[10rem_minmax(0,1fr)_auto] md:items-center">
-                <time dateTime={entry.startedAt} title={entry.startedAt} className="text-xs text-ink-muted">{formatDateTime(entry.startedAt, locale)}</time>
+                <time dateTime={entry.startedAt} title={new Date(entry.startedAt).toLocaleString(locale)} className="text-xs text-ink-muted">{formatDateTime(entry.startedAt, locale)}</time>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium text-ink">{t(historyOperationLabelKey(entry.operation))}</p>

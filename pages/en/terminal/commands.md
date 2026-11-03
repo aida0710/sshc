@@ -5,7 +5,7 @@ description: Save, preview, and send commands to one session or a workspace.
 
 # Quick Commands and Snippets
 
-Open Quick Commands from the terminal overflow menu to insert, run, or copy a saved Snippet in the current pane.
+Open Quick Commands from the terminal overflow menu to insert, run, or copy a saved Snippet in the current pane. A Snippet without variables shows its text and can be inserted right away; running one always comes after a preview.
 
 ![Terminal Quick Commands menu](/images/terminal-actions.png)
 

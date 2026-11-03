@@ -117,26 +117,59 @@ export function TerminalQuickCommands({
     }
   }
 
+  function commandForSession(preview: TerminalCommandPreview): string {
+    const target =
+      preview.targets.find((item) => item.sessionId === session.id) ??
+      preview.targets[0];
+    if (target === undefined || target.command === "")
+      throw new Error("invalid_response");
+    return target.command;
+  }
+
+  function requestFor(snippet: Snippet): TerminalCommandRequest {
+    return {
+      snippetId: snippet.id,
+      inputs,
+      targets: [{ targetId: session.id, sessionId: session.id }],
+    };
+  }
+
+  // A snippet with no variables is the text on the panel, so inserting it asks nothing more. It only reaches the
+  // input line and runs nothing; running is still confirmed. The engine still reviews the command, so one with a
+  // line break is refused here as it is after a review.
+  async function insertSnippet() {
+    if (selected === null || busy) return;
+    setBusy(true);
+    setProblem("");
+    try {
+      const request = requestFor(selected);
+      const preview = await api.preview({ ...request, issueAction: false });
+      const confirmed = await api.preview({
+        ...request,
+        issueAction: true,
+        submit: false,
+        expectedReviewEvidence: preview.reviewEvidence,
+      });
+      await api.dispatch(confirmed, request, false);
+      onClose();
+    } catch (error) {
+      setProblem(describeTerminalCommandFailure(t, error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function prepare() {
     if (selected === null || busy) return;
     setBusy(true);
     setProblem("");
     try {
-      const request = {
-        snippetId: selected.id,
-        inputs,
-        targets: [{ targetId: session.id, sessionId: session.id }],
-      };
+      const request = requestFor(selected);
       const preview = await api.preview({
         ...request,
         issueAction: false,
       });
-      const target =
-        preview.targets.find((item) => item.sessionId === session.id) ??
-        preview.targets[0];
-      if (target === undefined || target.command === "")
-        throw new Error("invalid_response");
-      setPrepared({ command: target.command, preview, request });
+      setPrepared({ command: commandForSession(preview), preview, request });
     } catch (error) {
       setProblem(describeTerminalCommandFailure(t, error));
       setPrepared(null);
@@ -172,12 +205,7 @@ export function TerminalQuickCommands({
       issueAction: false,
       expectedReviewEvidence: prepared.preview.reviewEvidence,
     });
-    const target =
-      revealed.targets.find((item) => item.sessionId === session.id) ??
-      revealed.targets[0];
-    if (target === undefined || target.command === "")
-      throw new Error("invalid_response");
-    return target.command;
+    return commandForSession(revealed);
   }
 
   async function insertPrepared() {
@@ -233,13 +261,8 @@ export function TerminalQuickCommands({
         ...current.request,
         issueAction: false,
       });
-      const target =
-        preview.targets.find((item) => item.sessionId === session.id) ??
-        preview.targets[0];
-      if (target === undefined || target.command === "")
-        throw new Error("invalid_response");
       setPrepared({
-        command: target.command,
+        command: commandForSession(preview),
         preview,
         request: current.request,
       });
@@ -249,6 +272,8 @@ export function TerminalQuickCommands({
       setProblem(describeTerminalCommandFailure(t, refreshError));
     }
   }
+
+  const hasNoVariables = selected !== null && selected.variables.length === 0;
 
   return (
     <div
@@ -337,9 +362,19 @@ export function TerminalQuickCommands({
             />
           )}
           {prepared === null ? (
-            <Button className="self-start" disabled={busy || selected === null} onClick={() => void prepare()}>
-              {t("snippets.preview")}
-            </Button>
+            <>
+              {hasNoVariables ? <pre className={`max-h-32 whitespace-pre-wrap ${codeBlock}`}>{selected.command}</pre> : null}
+              <div className="flex flex-wrap gap-2">
+                {hasNoVariables ? (
+                  <Button kind="primary" disabled={busy} onClick={() => void insertSnippet()}>
+                    {t("terminal.quickCommandInsert")}
+                  </Button>
+                ) : null}
+                <Button disabled={busy || selected === null} onClick={() => void prepare()}>
+                  {t("snippets.preview")}
+                </Button>
+              </div>
+            </>
           ) : (
             <>
               <pre className={`max-h-32 whitespace-pre-wrap ${codeBlock}`}>

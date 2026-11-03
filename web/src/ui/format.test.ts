@@ -34,8 +34,30 @@ describe("formatDateTime", () => {
     expect(formatDateTime("never")).toBe("never");
   });
 
-  it("formats a timestamp in the requested locale", () => {
-    expect(formatDateTime("2026-09-18T04:05:00Z", "en-US")).toMatch(/Sep 18, 2026/);
+  // Built from local parts, so the expected day does not depend on the time zone the test runs in.
+  const now = new Date(2026, 10, 3, 18, 30);
+  const at = (...parts: [number, number, number, number, number]) => new Date(...parts).toISOString();
+
+  it("names today and yesterday by calendar day, with the time", () => {
+    expect(formatDateTime(at(2026, 10, 3, 17, 49), "ja-JP", now)).toBe("今日 17:49");
+    expect(formatDateTime(at(2026, 10, 3, 0, 1), "ja-JP", now)).toBe("今日 0:01");
+    expect(formatDateTime(at(2026, 10, 2, 23, 59), "ja-JP", now)).toBe("昨日 23:59");
+    expect(formatDateTime(at(2026, 10, 2, 9, 2), "en-US", now)).toBe("Yesterday 9:02 AM");
+    expect(formatDateTime(at(2026, 10, 3, 17, 49), "en-US", now)).toBe("Today 5:49 PM");
+  });
+
+  it("writes an older day as month and day, and adds the year only when it is not this year", () => {
+    expect(formatDateTime(at(2026, 10, 1, 9, 2), "ja-JP", now)).toBe("11/1 9:02");
+    expect(formatDateTime(at(2025, 10, 3, 17, 49), "ja-JP", now)).toBe("2025/11/3 17:49");
+    expect(formatDateTime(at(2026, 10, 1, 9, 2), "en-US", now)).toBe("11/1, 9:02 AM");
+  });
+
+  it("treats the turn of a month and a year as yesterday", () => {
+    expect(formatDateTime(at(2025, 11, 31, 23, 0), "ja-JP", new Date(2026, 0, 1, 1, 0))).toBe("昨日 23:00");
+  });
+
+  it("does not call a moment in the future today", () => {
+    expect(formatDateTime(at(2026, 10, 4, 9, 0), "ja-JP", now)).toBe("11/4 9:00");
   });
 });
 

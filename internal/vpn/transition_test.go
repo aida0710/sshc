@@ -167,7 +167,7 @@ func TestAStartCutShortWhileBuildingTheImageEndsWithTheDisconnect(t *testing.T) 
 		t.Fatalf("Start = %v, want only ErrRouteDisconnected", err)
 	}
 	record := manager.state(profile.Name).record.text()
-	if strings.Contains(record, "失敗") || !strings.Contains(record, "VPN経路の起動を中止しました") {
+	if strings.Contains(record, "失敗") || !strings.Contains(record, "VPNルートの起動を中止しました") {
 		t.Fatalf("経路の記録が打ち切りを失敗として書いた:\n%s", record)
 	}
 }
@@ -192,7 +192,7 @@ func TestClosingTheManagerWhileBuildingTheImageEndsTheStartAsStopped(t *testing.
 		t.Fatalf("Start = %v, want only ErrRouteStopped", err)
 	}
 	record := manager.state(profile.Name).record.text()
-	if strings.Contains(record, "失敗") || !strings.Contains(record, "VPN経路の起動を中止しました") {
+	if strings.Contains(record, "失敗") || !strings.Contains(record, "VPNルートの起動を中止しました") {
 		t.Fatalf("経路の記録が打ち切りを失敗として書いた:\n%s", record)
 	}
 }

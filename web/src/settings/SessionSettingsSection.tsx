@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { EndingSessionsList } from "../terminal/EndingSessionsList";
+import { SessionNamesList } from "../terminal/SessionNamesList";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Button } from "../ui/surface";
 import { usePendingResult } from "../ui/usePendingResult";
@@ -22,6 +23,7 @@ export function SessionSettingsSection({ terminalSessions, showHeading }: { term
   return (
     <SettingsSection id="settings-connections" label={t("desktop.closeAllHeading")} icon="connections" showHeading={showHeading}>
       <p className="max-w-2xl text-sm leading-6 text-ink-muted">{t("desktop.closeAllNote")}</p>
+      {terminalSessions.sessions.length === 0 ? null : <div className="mt-3"><SessionNamesList sessions={terminalSessions.sessions} label={t("desktop.openSessions")} /></div>}
       <ActionArea status={(
         <p role="status" className="text-sm text-ink-muted">
           <span className="mr-2 inline-block h-2 w-2 rounded-full bg-live" />

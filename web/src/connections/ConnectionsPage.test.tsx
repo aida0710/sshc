@@ -352,7 +352,7 @@ describe("ConnectionsPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("gives the list the whole width while nothing is open, with the group and the last connection in columns", async () => {
+  it("gives the list the whole width while nothing is open, with the last connection in a column and the group left to the heading", async () => {
     vi.mocked(recentConnectionsApi.recentConnections).mockResolvedValue({
       connections: [{ alias: "bastion", lastConnectedAt: new Date().toISOString() }],
     } as never);
@@ -360,7 +360,7 @@ describe("ConnectionsPage", () => {
 
     const row = await screen.findByRole("button", { name: "bastion" });
     await waitFor(() => expect(row).toHaveTextContent(/Last connected today/i));
-    expect(row).toHaveTextContent("Ungrouped");
+    expect(row).not.toHaveTextContent("Ungrouped");
     expect(screen.queryByRole("separator", { name: "Resize the connection list" })).not.toBeInTheDocument();
   });
 

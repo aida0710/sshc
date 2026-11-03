@@ -147,7 +147,7 @@ describe("VPNPanel", () => {
     expect(within(route).queryByRole("combobox")).toBeNull();
     expect(within(route).queryByRole("button", { name: /lab/ })).toBeNull();
     const profiles = screen.getByRole("region", { name: "VPN profiles" });
-    expect(within(profiles).getByText(/change "VPN profile" on its sshc tab/)).toBeVisible();
+    expect(within(profiles).getByText(/change "VPN profile" on its Display & terminal tab/)).toBeVisible();
   });
 
   it("says in its own words why this machine cannot open routes, and adds Docker's words as details", async () => {

@@ -262,13 +262,9 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
       {/* 読めなかった known_hosts の件数は分からないので、件数の欄ごと出さない。 */}
       {listing === null ? null : (
         <SummaryStats>
-          {([
-            [t("kh.metricEntries"), listing.entries.length],
-            [t("kh.metricHashed"), listing.entries.filter((entry) => entry.hashed).length],
-            [t("kh.metricCandidates"), candidates.length],
-          ] as const).map(([label, value], index) => (
-            <SummaryStat key={String(label)} label={String(label)} value={value} attention={index === 2 && candidates.length > 0} />
-          ))}
+          <SummaryStat label={t("kh.metricEntries")} value={listing.entries.length} />
+          <SummaryStat label={t("kh.metricHashed")} value={listing.entries.filter((entry) => entry.hashed).length} />
+          {candidates.length === 0 ? null : <SummaryStat label={t("kh.metricCandidates")} value={candidates.length} attention />}
         </SummaryStats>
       )}
 

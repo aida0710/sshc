@@ -104,7 +104,7 @@ describe("QuickConnectBrowser", () => {
     try {
       renderBrowser();
       const layout = screen.getByRole("group", { name: "Connection layout" });
-      expect(layout.parentElement).toContainElement(screen.getByRole("heading", { name: "3 of 3" }));
+      expect(layout.parentElement).toContainElement(screen.getByRole("heading", { name: "3 total" }));
       for (const button of within(layout).getAllByRole("button")) expect(button).toHaveAttribute("data-touch-compact");
     } finally {
       vi.unstubAllGlobals();
@@ -135,7 +135,7 @@ describe("QuickConnectBrowser", () => {
 
     const groupGrid = screen.getByRole("group", { name: "Filter connections by group" });
     expect(within(groupGrid).getAllByRole("button")).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "3 of 3" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "3 total" })).toBeInTheDocument();
 
     const list = screen.getByRole("list", { name: "Available connections" });
     const cards = within(list).getAllByRole("listitem");
@@ -167,7 +167,7 @@ describe("QuickConnectBrowser", () => {
     expect(screen.getByText("eu-api")).toBeInTheDocument();
 
     await userEvent.click(within(screen.getByRole("navigation", { name: "Selected group" })).getByRole("button", { name: "All" }));
-    expect(screen.getByRole("heading", { name: "3 of 3" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "3 total" })).toBeInTheDocument();
     expect(screen.getByText("bastion")).toBeInTheDocument();
   });
 

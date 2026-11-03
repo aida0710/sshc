@@ -309,8 +309,8 @@ describe("SettingsPanel", () => {
 
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Connection");
-    await waitFor(() => expect(within(region).getByLabelText("Engine replay buffer (bytes)")).toBeEnabled());
-    await user.type(within(region).getByLabelText("Engine replay buffer (bytes)"), "65536");
+    await waitFor(() => expect(within(region).getByLabelText("Engine replay buffer (KiB)")).toBeEnabled());
+    await user.type(within(region).getByLabelText("Engine replay buffer (KiB)"), "64");
     await user.type(within(region).getByLabelText("Browser scrollback (lines)"), "12000");
     await user.type(within(region).getByLabelText("Terminals kept hidden"), "20");
     await user.click(within(region).getByRole("tab", { name: "Behaviour" }));
@@ -335,7 +335,7 @@ describe("SettingsPanel", () => {
     expect(screen.getByText("Edits the chosen preset.")).toBeVisible();
     const terminal = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(terminal, "Connection");
-    expect(within(terminal).getByLabelText("Engine replay buffer (bytes)")).toHaveAttribute("max", "4194304");
+    expect(within(terminal).getByLabelText("Engine replay buffer (KiB)")).toHaveAttribute("max", "4096");
     expect(within(terminal).getByLabelText("Browser scrollback (lines)")).toHaveAttribute("max", "100000");
     expect(within(terminal).getByLabelText("Sessions open at once")).toHaveAttribute("max", "200");
     expect(within(terminal).getByLabelText("Terminals kept hidden")).toHaveAttribute("max", "99");
@@ -390,9 +390,41 @@ describe("SettingsPanel", () => {
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Connection");
     await waitFor(() => expect(within(region).getByLabelText("Sessions open at once")).toHaveValue(4));
-    expect(within(region).getByLabelText("Engine replay buffer (bytes)")).toHaveValue(null);
+    expect(within(region).getByLabelText("Engine replay buffer (KiB)")).toHaveValue(null);
     openTerminalTab(region, "Behaviour");
     expect(within(region).getByLabelText(/^Starting directory/)).toHaveValue("");
+  });
+
+  it("shows the stored replay buffer in KiB and keeps saving it in bytes", async () => {
+    const user = userEvent.setup();
+    withSettings({ presets: [{ id: "default", terminal: { scrollbackBytes: 65536 } }] });
+    render(<SettingsPanel api={buildApi()} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Connection");
+    const replayBuffer = within(region).getByLabelText("Engine replay buffer (KiB)");
+    await waitFor(() => expect(replayBuffer).toHaveValue(64));
+
+    await user.clear(replayBuffer);
+    await user.type(replayBuffer, "128");
+    await user.tab();
+
+    await waitFor(() => expect(presetSaved()?.terminal).toEqual({ scrollbackBytes: 131072 }));
+  });
+
+  it("says which number is out of range and what it accepts, without saving", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPanel api={buildApi()} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Connection");
+    const replayBuffer = within(region).getByLabelText("Engine replay buffer (KiB)");
+    await waitFor(() => expect(replayBuffer).toBeEnabled());
+    await user.type(replayBuffer, "8");
+    await user.tab();
+
+    expect(await within(region).findByText("Enter a replay buffer from 16 to 4096 KiB.")).toBeVisible();
+    expect(presetSaved()?.terminal).toBeUndefined();
   });
 
   it("says which way the directory was refused", async () => {

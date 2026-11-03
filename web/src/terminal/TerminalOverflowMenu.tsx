@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
+import { SwitchMark } from "../ui/SwitchMark";
 import { menuChoiceItemClass, menuGroupClass, menuGroupHeadingClass, menuItemClass, menuSurface } from "../ui/menuStyle";
 import { isScreenWakeLockSupported, saveKeepScreenAwake, useKeepScreenAwake } from "./keepScreenAwake";
 import { saveTouchMode, useDetectedTouchMode, useTouchMode, type FixedTouchMode } from "./touchMode";
@@ -165,7 +166,8 @@ function ChoiceMenuItem({ role, label, hint, checked, onSelect, indent = false }
       onClick={onSelect}
     >
       <span>{label}</span>
-      <Icon name={checked ? "check" : "minus"} className={`size-4 ${checked ? "text-live" : "text-ink-faint"}`} />
+      {role === "menuitemcheckbox" ? <SwitchMark on={checked} />
+        : checked ? <Icon name="check" className="size-4 text-live" /> : <span aria-hidden="true" className="size-4" />}
     </button>
   );
 }

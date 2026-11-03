@@ -19,7 +19,7 @@ export function SnippetVariableInputs({
       {variables.map((variable) => (
         <div key={variable.name} className="text-xs text-ink-muted">
           <span>
-            <code>{`{{${variable.name}}}`}</code>
+            <code>{variable.name}</code>
             {variable.description ? ` · ${variable.description}` : ""}
           </span>
           <SnippetVariableValue
