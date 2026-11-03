@@ -18,6 +18,8 @@ Create labelled account passwords under **Menu → Vault → Account passwords**
 
 The assigned password is reused when the same connection is opened from the terminal, SFTP, a ProxyJump route, or the CLI. It does not need to be configured separately for each feature.
 
+Choosing **Enter when connecting** as the authentication method of a new connection stores nothing in the Vault, and the terminal asks for the password when connecting. When a password typed in the terminal connects, sshc asks once whether to save it to the Vault for this connection. After **Don't save** it no longer asks for this connection; to save one later, set it under **Basic** in **Connections**.
+
 Key passphrases can be saved, edited, and removed per private key. A ProxyJump route resolves credentials independently for every hop and the final host.
 
 ## Choose vault protection

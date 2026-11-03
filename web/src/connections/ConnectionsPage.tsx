@@ -83,6 +83,8 @@ type ConnectionsPageProps = {
   onPreferredKeyApplied?: () => void;
   onOpenSSHSession: (alias: string) => Promise<void>;
   onOpenLocalShell: () => void;
+  // onOverviewRead hands over each overview read here, so the searches outside this page know the connections it changed.
+  onOverviewRead?: ((overview: Overview) => void) | undefined;
 };
 
 type DiscardIntent =
@@ -106,12 +108,16 @@ export function ConnectionsPage({
   onPreferredKeyApplied,
   onOpenSSHSession,
   onOpenLocalShell,
+  onOverviewRead,
 }: ConnectionsPageProps) {
   const t = useTranslate();
   const showToast = useToast();
   const retry = usePendingResult();
   const compact = useMediaQuery(mobileViewportQuery);
   const [overview, setOverview] = useState<Overview | null>(null);
+  useEffect(() => {
+    if (overview !== null) onOverviewRead?.(overview);
+  }, [overview, onOverviewRead]);
   const [listWidth, setListWidth] = useColumnWidth(connectionListWidth);
   const [discardIntent, setDiscardIntent] = useState<DiscardIntent | null>(null);
   // 見出しの「…」の［削除…］で、開いている接続先を消してよいかを確かめている間。
@@ -559,6 +565,7 @@ export function ConnectionsPage({
         {creating ? (
           <CreateConnectionPane
             groups={overview.groups}
+            aliases={overview.hosts.map((host) => host.identity.alias).filter((alias) => alias !== "")}
             initialDraft={creationDraft ?? undefined}
             onOpenPrerequisite={leaveForCreationPrerequisite}
             onCreateGroup={groups.createGroup}

@@ -11,6 +11,8 @@ import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
 import { isImeComposing } from "../ui/imeComposition";
+import { parseDirectDestination } from "../connections/directDestination";
+import type { DirectDestinationActions } from "./useDirectDestinationActions";
 import { searchPalette } from "./paletteSearch";
 
 // A command is something the palette performs, rather than somewhere it goes.
@@ -61,6 +63,7 @@ export function CommandPalette({
   onNavigate,
   onOpenSnippet,
   onOpenSession,
+  direct,
   returnFocusRef,
 }: {
   open: boolean;
@@ -77,6 +80,8 @@ export function CommandPalette({
   onNavigate: (section: Section) => void;
   onOpenSnippet: (id: string) => void;
   onOpenSession: (id: string) => void;
+  // direct lets the search take user@host[:port] as well as find something.
+  direct?: DirectDestinationActions | undefined;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
@@ -167,7 +172,29 @@ export function CommandPalette({
     })),
   ], [commands, files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessions, snippets, t, unreadBySession]);
 
-  const visible = useMemo(() => searchPalette(items.map((item) => ({ ...item, name: item.host?.alias ?? item.label })), query).slice(0, 40), [items, query]);
+  // A destination leads the results whatever else it finds: it is only offered when it was typed whole.
+  const directItems = useMemo<PaletteItem[]>(() => {
+    const destination = direct === undefined ? null : parseDirectDestination(query);
+    if (direct === undefined || destination === null) return [];
+    const { saveAndConnect } = direct;
+    const connect: PaletteItem = {
+      id: "direct:connect", kind: "host", search: "",
+      label: t("directDestination.connect"),
+      detail: t("directDestination.connectDetail"),
+      action: () => direct.connect(destination),
+    };
+    if (saveAndConnect === undefined) return [connect];
+    return [connect, {
+      id: "direct:save", kind: "host", search: "",
+      label: t("directDestination.saveAndConnect"),
+      detail: t("directDestination.saveAndConnectDetail", { alias: direct.aliasFor(destination) }),
+      action: () => saveAndConnect(destination),
+    }];
+  }, [direct, query, t]);
+  const visible = useMemo(() => [
+    ...directItems,
+    ...searchPalette(items.map((item) => ({ ...item, name: item.host?.alias ?? item.label })), query),
+  ].slice(0, 40), [directItems, items, query]);
 
   useEffect(() => {
     if (selected >= visible.length) setSelected(Math.max(0, visible.length - 1));

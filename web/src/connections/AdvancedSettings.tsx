@@ -226,7 +226,7 @@ export function AdvancedSettings({
           <table className="w-full table-fixed text-[12.5px]">
             <thead>
               <tr className="text-left text-[11.5px] text-ink-faint">
-                <th scope="col" className="w-[7.5rem] pb-1.5 pr-2 font-normal">{t("conn.forwardType")}</th>
+                <th scope="col" className="w-[10rem] pb-1.5 pr-2 font-normal">{t("conn.forwardType")}</th>
                 <th scope="col" className="w-[6.5rem] pb-1.5 pr-2 font-normal">{t("advanced.forwardListen")}</th>
                 <th scope="col" className="pb-1.5 pr-2 font-normal">{t("conn.forwardDestination")}</th>
                 <th scope="col" className="w-14 pb-1.5"><span className="sr-only">{t("advanced.rowActions")}</span></th>
@@ -259,7 +259,7 @@ export function AdvancedSettings({
             </tbody>
           </table>
         )}
-        <div className="mt-2 grid gap-2 @sm/editor:grid-cols-[7.5rem_6.5rem_minmax(0,1fr)_auto]">
+        <div className="mt-2 grid gap-2 @sm/editor:grid-cols-[10rem_6.5rem_minmax(0,1fr)_auto]">
           <select aria-label={t("conn.forwardType")} value={newForwardKind} disabled={fieldsDisabled} onChange={(event) => setNewForwardKind(event.currentTarget.value as PortForwardKind)} className={compactControl}>
             <option value="local">{t("conn.forwardLocal")}</option>
             <option value="remote">{t("conn.forwardRemote")}</option>

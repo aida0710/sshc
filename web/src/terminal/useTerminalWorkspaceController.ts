@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LocalShellProfileList } from "../api/settings";
 import type { OpenTerminalSessionRequest, TerminalSessionsApi } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
+import { sshSessionTarget } from "../connections/directDestination";
 import type { Section } from "../routing/sectionRoute";
 import { useSplitView } from "./splitView/useSplitView";
 import type { TerminalSessionsState } from "./sessions";
@@ -154,7 +155,7 @@ export function useTerminalWorkspaceController({
     async (alias: string, cwd?: string, workspaceId?: string) => {
       await openSession({
         kind: "ssh",
-        alias,
+        ...sshSessionTarget(alias),
         ...(cwd === undefined ? {} : { cwd }),
         ...(workspaceId === undefined ? {} : { workspaceId }),
       });
@@ -173,7 +174,7 @@ export function useTerminalWorkspaceController({
       const startIn = session.workingDirectory === undefined ? {} : { cwd: session.workingDirectory };
       return openSession(
         session.kind === "ssh" && session.alias !== undefined
-          ? { kind: "ssh", alias: session.alias, workspaceId: session.workspaceId, ...startIn }
+          ? { kind: "ssh", ...sshSessionTarget(session.alias), workspaceId: session.workspaceId, ...startIn }
           : {
               kind: "shell", workspaceId: session.workspaceId, ...startIn,
               ...(session.shellProfileId === undefined ? {} : { profileId: session.shellProfileId }),

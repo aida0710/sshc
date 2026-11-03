@@ -679,6 +679,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/engines/{alias}/terminal/sessions/{id}/password-save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. */
+        post: operations["remoteEngineAnswerTerminalPasswordSave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/engines/{alias}/terminal/sessions/{id}/title": {
         parameters: {
             query?: never;
@@ -1004,6 +1021,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["answerTerminalHostKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/sessions/{id}/password-save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["answerTerminalPasswordSave"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3518,6 +3551,7 @@ export interface components {
             progress?: components["schemas"]["TerminalConnectionProgress"];
             hostKeyQuestion?: components["schemas"]["TerminalHostKeyQuestion"];
             awaitingPrompt?: boolean;
+            passwordSaveQuestion?: boolean;
             programProgress?: components["schemas"]["TerminalProgramProgress"];
             programStatus?: components["schemas"]["TerminalProgramStatus"];
             exited?: components["schemas"]["TerminalExit"];
@@ -3645,6 +3679,7 @@ export interface components {
             /** @enum {string} */
             kind: "ssh" | "shell";
             alias?: string;
+            destination?: string;
             cwd?: string;
             cols?: number;
             rows?: number;
@@ -3730,6 +3765,9 @@ export interface components {
             hostName: string;
             keyType: string;
             fingerprint: string;
+        };
+        TerminalPasswordSaveAnswer: {
+            save: boolean;
         };
         TerminalHostKeyAnswer: {
             fingerprint: string;
@@ -4065,9 +4103,17 @@ export interface components {
             hostName: string;
             user?: string;
             port?: number;
+            proxyJump?: string;
             authentication: components["schemas"]["CreateConnectionAuthentication"];
         };
-        CreateConnectionAuthentication: components["schemas"]["CreateDedicatedPasswordAuthentication"] | components["schemas"]["CreateSavedPasswordAuthentication"] | components["schemas"]["CreateNewSharedPasswordAuthentication"] | components["schemas"]["CreateIdentityFileAuthentication"];
+        CreateConnectionAuthentication: components["schemas"]["CreateDedicatedPasswordAuthentication"] | components["schemas"]["CreateSavedPasswordAuthentication"] | components["schemas"]["CreateNewSharedPasswordAuthentication"] | components["schemas"]["CreateIdentityFileAuthentication"] | components["schemas"]["CreateAskOnConnectAuthentication"];
+        CreateAskOnConnectAuthentication: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ask_on_connect";
+        };
         CreateDedicatedPasswordAuthentication: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4381,6 +4427,7 @@ export interface components {
              */
             detectedOS?: "" | "server" | "linux" | "amazonlinux" | "ubuntu" | "debian" | "redhat" | "fedora" | "centos" | "rocky" | "almalinux" | "arch" | "alpine" | "opensuse" | "freebsd" | "macos" | "windows";
             detectedOSBinding?: string;
+            passwordSaveDeclinedBinding?: string;
             colour?: string;
             order?: number;
             orphan?: boolean;
@@ -6860,6 +6907,40 @@ export interface operations {
             502: components["responses"]["Problem"];
         };
     };
+    remoteEngineAnswerTerminalPasswordSave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalPasswordSaveAnswer"];
+            };
+        };
+        responses: {
+            /** @description The session list after answering */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
     remoteEngineSetTerminalSessionTitle: {
         parameters: {
             query?: never;
@@ -7503,6 +7584,38 @@ export interface operations {
         };
         responses: {
             /** @description The session list after answering the host key question */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    answerTerminalPasswordSave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalPasswordSaveAnswer"];
+            };
+        };
+        responses: {
+            /** @description The session list after answering */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -72,6 +72,7 @@ import { useMobileNotices } from "./useMobileNotices";
 import { useNotificationPermissionNotice } from "./useNotificationPermissionNotice";
 import { forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
 import { terminalNoticeFor } from "./terminalNotice";
+import { savedConnectionOf } from "./terminalPresentation";
 import { useSessionRecovery } from "./useSessionRecovery";
 import { useHostKeyAnswer } from "../shell/useHostKeyAnswer";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
@@ -117,6 +118,8 @@ type TerminalViewProps = {
   onCloseSession?: () => void;
   // onAnswerHostKey answers whether to trust the unknown host key the connection asks about (hostKeyQuestion).
   onAnswerHostKey?: (fingerprint: string, accept: boolean) => Promise<boolean>;
+  // onAnswerPasswordSave answers whether to save the password typed for this connection (passwordSaveQuestion).
+  onAnswerPasswordSave?: (save: boolean) => Promise<boolean>;
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
@@ -190,6 +193,7 @@ export function TerminalView({
   onStopReconnect,
   onCloseSession,
   onAnswerHostKey,
+  onAnswerPasswordSave,
   copyOnSelect = true,
   fontSize,
   rightClickPaste = true,
@@ -262,13 +266,14 @@ export function TerminalView({
   });
   const hostKeyAnswer = useHostKeyAnswer(onAnswerHostKey);
   const notificationPermission = useNotificationPermissionNotice(session);
+  const savedConnection = savedConnectionOf(session);
   const notice = terminalNoticeFor(session, link, notificationPermission.due);
   const noticeDismissal = useTerminalNoticeDismissal(notice?.key ?? null);
   const noticeRows = statusBannerRows({
     session, problem, link, reconnectFailed: recovery.reconnectFailed, answersHostKey: hostKeyAnswer.answer !== undefined,
   });
-  // The strip has nothing to say about the notification permission, which only has a card.
-  const noticesSeverity = noticeSeverity(noticeRows, { session, link }) ?? (notice?.kind === "notification-permission" ? "notice" : null);
+  // The strip has nothing to say about the questions that only have a card (the notification permission, a typed password).
+  const noticesSeverity = noticeSeverity(noticeRows, { session, link }) ?? (notice === null ? null : "notice");
   const noticesButton = useRef<HTMLButtonElement>(null);
   const noticesStrip = useRef<HTMLDivElement>(null);
   const noticeCardFrame = useRef<HTMLDivElement>(null);
@@ -927,8 +932,8 @@ export function TerminalView({
             osc52Enabled={osc52Enabled}
             onQuickCommands={() => openQuickCommands.current()}
             onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
-            onOpenRemoteDirectory={runTarget === undefined && session.kind === "ssh" && session.alias !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
-              ? () => onOpenRemotePath(session.alias!, currentDirectory, "browse")
+            onOpenRemoteDirectory={runTarget === undefined && savedConnection !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
+              ? () => onOpenRemotePath(savedConnection, currentDirectory, "browse")
               : undefined}
             onCopyContext={() => copyContext.current()}
             onCopyWithColors={() => copyWithColors.current()}
@@ -1011,6 +1016,7 @@ export function TerminalView({
               }}
               onLinkNow={() => streamLinkController.current?.connect()}
               onCloseSession={onCloseSession}
+              onAnswerPasswordSave={onAnswerPasswordSave}
               onDismiss={mobile ? mobileNotices.close : noticeDismissal.dismiss}
             />
           </div>

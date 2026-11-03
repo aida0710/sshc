@@ -284,7 +284,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		SFTPDownloadSpoolRoot: dependencies.SFTPDownloadSpoolRoot,
 		Snippets:              services.snippets,
 		Vault:                 services.vault,
-		Connect:               services.ssh.connector(),
+		Connect:               services.ssh.connector(services.config.OffersPasswordSave),
 		ResolveTarget:         services.ssh.target,
 		RemoteEngines:         remoteEngines,
 		ConnectionOpened: func(alias string) {

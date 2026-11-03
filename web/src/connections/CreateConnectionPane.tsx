@@ -1,4 +1,3 @@
-import type { Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { FieldRow, FieldRowNote, editorContainer } from "../ui/FieldRow";
@@ -6,7 +5,7 @@ import { control, Field, hintText } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { PasswordInput } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
-import type { CreateConnectionAuthenticationKind, CreateConnectionDraft, CreationPrerequisite } from "./createConnectionDraft";
+import { authenticationNeedsVault, noProxyJump, type CreateConnectionAuthenticationKind, type CreateConnectionDraft, type CreationPrerequisite } from "./createConnectionDraft";
 import { ConnectionVaultUnlock } from "./ConnectionVaultUnlock";
 import { EditorSection } from "./EditorSection";
 import { groupDefaultValue } from "./groupDefaults";
@@ -20,10 +19,10 @@ const authenticationChoices: readonly [CreateConnectionAuthenticationKind, Messa
   ["dedicated_password", "conn.createDedicatedPassword"],
   ["saved_password", "conn.createSavedPassword"],
   ["new_shared_password", "conn.createNewSharedPassword"],
+  ["ask_on_connect", "conn.createAskOnConnect"],
 ];
 
 type CreateConnectionPaneProps = CreateConnectionFormOptions & {
-  groups: Overview["groups"];
   onCancel: () => void;
   // onCreateGroup は、グループを作れたかを返す。無ければ［新しいグループ］を出さない。
   onCreateGroup?: ((name: string) => Promise<boolean>) | undefined;
@@ -40,7 +39,6 @@ function FieldProblem({ text }: { text: string }) {
 // CreateConnectionPane は、Connections の右の欄で開く新しい接続の欄である。入力のためにほかの操作を止める
 // モーダルにはせず、一覧やグループはそのまま触れる。作成するまで設定ファイルには何も書かない。
 export function CreateConnectionPane({
-  groups,
   onCancel,
   onCreateGroup,
   onOpenPrerequisite,
@@ -48,12 +46,14 @@ export function CreateConnectionPane({
   ...formOptions
 }: CreateConnectionPaneProps) {
   const t = useTranslate();
+  const { groups } = formOptions;
   const form = useCreateConnectionForm(formOptions);
   const { values, fieldErrors, touched } = form;
   useReportDirty(form.dirty, onDirtyChange);
 
   const defaultUser = values.group === "" ? "" : groupDefaultValue(groups, values.group, "User");
   const defaultPort = values.group === "" ? "" : groupDefaultValue(groups, values.group, "Port");
+  const { defaultJump } = form;
   // 欄の問題は、その欄から一度離れたあとで出す。打っている途中には出さない。
   const visibleProblem = (field: keyof typeof fieldErrors) => (touched.has(field) ? fieldErrors[field] : "");
 
@@ -70,7 +70,7 @@ export function CreateConnectionPane({
     onOpenPrerequisite?.(section, draft);
   }
 
-  const passwordNeedsVault = form.vault !== null && !form.vault.unlocked && values.authentication !== "identity_file";
+  const passwordNeedsVault = form.vault !== null && !form.vault.unlocked && authenticationNeedsVault(values.authentication);
 
   return (
     <form
@@ -97,9 +97,9 @@ export function CreateConnectionPane({
               <Field label={t("conn.createName")}>
                 <input {...asciiTextEntry}
                   id="create-connection-name"
-                  required
                   autoFocus
                   value={values.alias}
+                  placeholder={form.suggestedAlias}
                   onChange={(event) => form.setAlias(event.target.value)}
                   onBlur={() => form.touch("alias")}
                   aria-invalid={visibleProblem("alias") !== ""}
@@ -170,8 +170,17 @@ export function CreateConnectionPane({
               </Field>
               <FieldProblem text={visibleProblem("port")} />
             </div>
+            <div className="col-span-full">
+              <Field label={t("advanced.jumpVia")}>
+                <select id="create-connection-jump" value={values.proxyJump} onChange={(event) => form.setProxyJump(event.target.value)} className={control}>
+                  <option value="">{defaultJump === "" ? t("advanced.jumpNone") : t("conn.createJumpGroupDefault", { jump: defaultJump })}</option>
+                  {defaultJump === "" ? null : <option value={noProxyJump}>{t("advanced.jumpNone")}</option>}
+                  {form.jumpCandidates.map((alias) => <option key={alias} value={alias}>{alias}</option>)}
+                </select>
+              </Field>
+            </div>
           </div>
-          {defaultUser === "" && defaultPort === "" ? null : (
+          {defaultUser === "" && defaultPort === "" && defaultJump === "" ? null : (
             <p className={`mt-1.5 ${hintText}`}>{t("conn.createGroupDefaults", { group: values.group })}</p>
           )}
         </EditorSection>
@@ -221,7 +230,7 @@ export function CreateConnectionPane({
                   </FieldRowNote>
                 )}
               </>
-            ) : passwordNeedsVault || form.vault === null ? null : values.authentication === "dedicated_password" ? (
+            ) : values.authentication === "ask_on_connect" || passwordNeedsVault || form.vault === null ? null : values.authentication === "dedicated_password" ? (
               <FieldRow density="editor" label={t("conn.createConnectionPassword")} hint={t("conn.createDedicatedHint")} interactiveChildren>
                 <PasswordInput label={t("conn.createConnectionPassword")} value={values.dedicatedPassword} onChange={form.setDedicatedPassword} />
               </FieldRow>

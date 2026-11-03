@@ -195,6 +195,98 @@
       "why": "長さ超過"
     }
   ],
+  "directDestination": [
+    {
+      "input": "deploy@10.0.0.5",
+      "valid": true,
+      "why": "IPv4"
+    },
+    {
+      "input": "deploy@10.0.0.5:2222",
+      "valid": true,
+      "why": "ポートあり"
+    },
+    {
+      "input": "deploy@web.example.com",
+      "valid": true,
+      "why": "DNS 名"
+    },
+    {
+      "input": "deploy@2001:db8::1",
+      "valid": true,
+      "why": "角括弧の無い IPv6。ポートは書けない"
+    },
+    {
+      "input": "deploy@[2001:db8::1]:2222",
+      "valid": true,
+      "why": "角括弧の IPv6 とポート"
+    },
+    {
+      "input": "user@corp.example@web",
+      "valid": true,
+      "why": "ユーザー名の @。最後の @ で分ける"
+    },
+    {
+      "input": "web-01",
+      "valid": false,
+      "why": "@ が無い。接続名である"
+    },
+    {
+      "input": "@host",
+      "valid": false,
+      "why": "ユーザー名が空"
+    },
+    {
+      "input": "deploy@",
+      "valid": false,
+      "why": "ホスト名が空"
+    },
+    {
+      "input": "deploy@host:0",
+      "valid": false,
+      "why": "ポートが範囲外"
+    },
+    {
+      "input": "deploy@host:http",
+      "valid": false,
+      "why": "ポートが数でない"
+    },
+    {
+      "input": "deploy@[2001:db8::1",
+      "valid": false,
+      "why": "角括弧が閉じていない"
+    },
+    {
+      "input": "-oProxyCommand=x@host",
+      "valid": false,
+      "why": "ユーザー名の先頭の `-`"
+    },
+    {
+      "input": "de$(id)ploy@host",
+      "valid": false,
+      "why": "シェルが読む文字。%r に入る"
+    },
+    {
+      "input": "de{ploy@host",
+      "valid": false,
+      "why": "ブレース。valid_ruser が断る"
+    },
+    {
+      "input": "de}ploy@host",
+      "valid": false,
+      "why": "ブレース。valid_ruser が断る"
+    },
+    {
+      "input": "de ploy@host",
+      "valid": false,
+      "why": "ユーザー名の空白"
+    },
+    {
+      "input": "deploy@-host",
+      "valid": false,
+      "why": "ホスト名の先頭の `-`"
+    }
+  ],
   "port": [
     {
       "input": 22,

@@ -14,6 +14,7 @@ function api(overrides: Partial<TerminalSessionsApi> = {}): TerminalSessionsApi 
     reconnectTerminalSession: vi.fn().mockResolvedValue(list),
     stopTerminalReconnect: vi.fn().mockResolvedValue(list),
     answerTerminalHostKey: vi.fn().mockResolvedValue(list),
+    answerTerminalPasswordSave: vi.fn().mockResolvedValue(list),
     closeTerminalSession: vi.fn().mockResolvedValue(list),
     setTerminalSessionTitle: vi.fn().mockResolvedValue(list),
     moveTerminalSession: vi.fn().mockResolvedValue(list),
@@ -26,6 +27,41 @@ const translate = ((key: string) => key) as never;
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+describe("answerPasswordSave", () => {
+  it("sends the answer and takes the list it gets back", async () => {
+    const asked = { sessions: [{ id: "a", passwordSaveQuestion: true }], maxSessions: 50 } as never;
+    const answerTerminalPasswordSave = vi.fn().mockResolvedValue(list);
+    const client = api({ terminalSessions: vi.fn().mockResolvedValue(asked), answerTerminalPasswordSave });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(1));
+    await act(async () => {
+      expect(await result.current.answerPasswordSave("a", true)).toBe(true);
+    });
+    expect(answerTerminalPasswordSave).toHaveBeenCalledWith("a", { save: true });
+    expect(result.current.sessions).toHaveLength(0);
+  });
+
+  it("says false when the answer could not be stored", async () => {
+    const refusal = new ApiError("vault_locked", 409, { code: "vault_locked", message: "locked" });
+    const client = api({ answerTerminalPasswordSave: vi.fn().mockRejectedValue(refusal) });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    await act(async () => {
+      expect(await result.current.answerPasswordSave("a", true)).toBe(false);
+    });
+  });
+
+  it("treats a question that is already over as answered", async () => {
+    const code = "terminal_no_password_save_question";
+    const client = api({ answerTerminalPasswordSave: vi.fn().mockRejectedValue(new ApiError(code, 409, { code, message: "over" })) });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    await act(async () => {
+      expect(await result.current.answerPasswordSave("a", false)).toBe(true);
+    });
+  });
 });
 
 describe("useTerminalSessions", () => {

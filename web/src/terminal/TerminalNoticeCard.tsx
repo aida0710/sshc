@@ -8,6 +8,7 @@ import { requestBrowserNotificationPermission } from "../ui/browserNotifications
 import { Button } from "../ui/surface";
 import { exitText } from "./exitText";
 import type { NotificationPermissionNotice } from "./useNotificationPermissionNotice";
+import { PasswordSaveCard } from "./PasswordSaveCard";
 import { terminalProblemKey } from "./sessions";
 import type { TerminalNotice } from "./terminalNotice";
 import { useReconnectCountdown } from "./useReconnectCountdown";
@@ -16,7 +17,7 @@ import type { SessionRecovery } from "./useSessionRecovery";
 // TerminalNoticeCard shows a state of the session that waits on the person, larger than the strip above the
 // terminal and with the same actions. The strip still says it: the card is not a live region, so a screen reader
 // hears each change once, and the person can hide the card to read the log under it and act from the strip.
-export function TerminalNoticeCard({ notice, session, title, recovery, hostKeyAnswer, notificationPermission, focus, onLinkNow, onCloseSession, onDismiss }: {
+export function TerminalNoticeCard({ notice, session, title, recovery, hostKeyAnswer, notificationPermission, focus, onLinkNow, onCloseSession, onAnswerPasswordSave, onDismiss }: {
   notice: TerminalNotice;
   session: TerminalSession;
   // title is the session's name as the header shows it.
@@ -27,6 +28,7 @@ export function TerminalNoticeCard({ notice, session, title, recovery, hostKeyAn
   focus: NoticeFocus;
   onLinkNow: () => void;
   onCloseSession: (() => void) | undefined;
+  onAnswerPasswordSave: ((save: boolean) => Promise<boolean>) | undefined;
   onDismiss: () => void;
 }) {
   const frame = { focus, onDismiss };
@@ -41,6 +43,8 @@ export function TerminalNoticeCard({ notice, session, title, recovery, hostKeyAn
       return <EndedCard session={session} recovery={recovery} onCloseSession={onCloseSession} frame={frame} />;
     case "link-stopped":
       return <LinkStoppedCard onLinkNow={onLinkNow} frame={frame} />;
+    case "password-save":
+      return onAnswerPasswordSave === undefined ? null : <PasswordSaveCard focus={focus} onAnswer={onAnswerPasswordSave} />;
     case "notification-permission":
       return <NotificationPermissionCard notificationPermission={notificationPermission} focus={focus} />;
   }

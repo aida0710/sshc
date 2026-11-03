@@ -138,6 +138,7 @@ export function TerminalScreen({
           onStopReconnect={() => terminalSessions.stopReconnect(session.id)}
           onCloseSession={() => void terminalSessions.close(session.id)}
           onAnswerHostKey={(fingerprint, accept) => terminalSessions.answerHostKey(session.id, fingerprint, accept)}
+          onAnswerPasswordSave={(save) => terminalSessions.answerPasswordSave(session.id, save)}
           onOpenRemotePath={onOpenRemotePath}
           onOpenNavigation={onOpenNavigation}
         />

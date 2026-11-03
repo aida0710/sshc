@@ -21,19 +21,55 @@ function recovery(overrides: Partial<SessionRecovery> = {}): SessionRecovery {
   return { reconnect: vi.fn(), reconnectBusy: false, reconnectFailed: false, stopReconnecting: vi.fn(), stopBusy: false, ...overrides };
 }
 
-type CardOptions = { onCloseSession?: () => void; onDismiss?: () => void; answers?: HostKeyAnswer; focus?: NoticeFocus; asksNotificationPermission?: boolean };
+type CardOptions = {
+  onCloseSession?: () => void;
+  onDismiss?: () => void;
+  answers?: HostKeyAnswer;
+  focus?: NoticeFocus;
+  asksNotificationPermission?: boolean;
+  onAnswerPasswordSave?: (save: boolean) => Promise<boolean>;
+};
 
 function renderCard(
   shown: TerminalSession,
   actions: SessionRecovery,
-  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: false, giveBack: vi.fn() }, asksNotificationPermission = false }: CardOptions = {},
+  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: false, giveBack: vi.fn() }, asksNotificationPermission = false, onAnswerPasswordSave }: CardOptions = {},
 ) {
   const notice = terminalNoticeFor(shown, { phase: "live" }, asksNotificationPermission);
   if (notice === null) throw new Error("no card for this session");
   const notificationPermission = { due: asksNotificationPermission, finish: vi.fn() };
-  const view = render(<TerminalNoticeCard notice={notice} session={shown} title="web-01" recovery={actions} hostKeyAnswer={answers} notificationPermission={notificationPermission} focus={focus} onLinkNow={vi.fn()} onCloseSession={onCloseSession} onDismiss={onDismiss} />);
+  const view = render(<TerminalNoticeCard notice={notice} session={shown} title="web-01" recovery={actions} hostKeyAnswer={answers} notificationPermission={notificationPermission} focus={focus} onLinkNow={vi.fn()} onCloseSession={onCloseSession} onAnswerPasswordSave={onAnswerPasswordSave} onDismiss={onDismiss} />);
   return { onCloseSession, onDismiss, answers, focus, notificationPermission, view };
 }
+
+describe("the question about a typed password", () => {
+  const asking: TerminalSession = { ...session, passwordSaveQuestion: true };
+  const name = "Save this password to the Vault for this connection?";
+
+  it.each([
+    ["Save", true],
+    ["Don't save", false],
+  ])("answers with %s", async (button, save) => {
+    const onAnswerPasswordSave = vi.fn(async () => true);
+    renderCard(asking, recovery(), { onAnswerPasswordSave });
+    await userEvent.click(screen.getByRole("button", { name: button }));
+    expect(onAnswerPasswordSave).toHaveBeenCalledExactlyOnceWith(save);
+  });
+
+  it("takes closing it as the same no, since it is asked only once", async () => {
+    const onAnswerPasswordSave = vi.fn(async () => true);
+    const { onDismiss } = renderCard(asking, recovery(), { onAnswerPasswordSave });
+    await userEvent.click(screen.getByRole("button", { name: "Hide this notice" }));
+    expect(onAnswerPasswordSave).toHaveBeenCalledExactlyOnceWith(false);
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it("stays open and says so when the answer could not be stored", async () => {
+    renderCard(asking, recovery(), { onAnswerPasswordSave: vi.fn(async () => false) });
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByRole("region", { name })).toHaveTextContent("The password could not be saved.");
+  });
+});
 
 describe("TerminalNoticeCard", () => {
   it("offers Reconnect and Close for a lost SSH connection, under the reason", async () => {

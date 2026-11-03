@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { failureCode } from "../api/client";
 import {
   configApi,
+  type Overview,
   type CreateConnectionAuthentication,
   type CreateConnectionRequest,
   type CreateConnectionResponse,
@@ -11,7 +12,10 @@ import type { PasswordVaultStatus } from "../api/vault";
 import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
-import type { CreateConnectionAuthenticationKind, CreateConnectionDraft } from "./createConnectionDraft";
+import { isValidHostName } from "../rules/rules";
+import { connectionAliasFromHostName, uniqueConnectionAlias } from "./connectionAliasFromHost";
+import { authenticationNeedsVault, noProxyJump, type CreateConnectionAuthenticationKind, type CreateConnectionDraft } from "./createConnectionDraft";
+import { groupDefaultValue } from "./groupDefaults";
 import { createConnectionFieldErrors } from "./createConnectionValidation";
 import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
 import { openVaultCredentials, readVaultCredentials } from "./vaultCredentials";
@@ -21,10 +25,15 @@ export type CreateConnectionFormOptions = {
   keys?: Pick<KeysApi, "inventory">;
   secrets?: Pick<ConnectionSecretsApi, "passwordVault" | "credentials" | "initialiseVault" | "unlockVault">;
   initialDraft?: CreateConnectionDraft | undefined;
+  groups: Overview["groups"];
+  // aliases are the connections that exist: the names already taken, and the ones to go through.
+  aliases?: readonly string[] | undefined;
   onCreated: (result: CreateConnectionResponse) => void;
 };
 
 type TouchedField = "alias" | "hostName" | "user" | "port";
+
+const noAliases: readonly string[] = [];
 
 function optional(value: string): string | undefined {
   return value === "" ? undefined : value;
@@ -37,6 +46,8 @@ export function useCreateConnectionForm({
   keys = keysApi,
   secrets = connectionSecretsApi,
   initialDraft,
+  groups,
+  aliases = noAliases,
   onCreated,
 }: CreateConnectionFormOptions) {
   const t = useTranslate();
@@ -45,6 +56,7 @@ export function useCreateConnectionForm({
   const [hostName, setHostName] = useState(initialDraft?.hostName ?? "");
   const [user, setUser] = useState(initialDraft?.user ?? "");
   const [port, setPort] = useState(initialDraft?.port ?? "");
+  const [chosenJump, setProxyJump] = useState(initialDraft?.proxyJump ?? "");
   const [authentication, setAuthentication] = useState<CreateConnectionAuthenticationKind>(
     initialDraft?.authentication ?? "dedicated_password",
   );
@@ -103,22 +115,35 @@ export function useCreateConnectionForm({
     };
   }, [initialDraft, keys, secrets, t]);
 
-  const fieldErrors = createConnectionFieldErrors(t, { alias, hostName, user, port });
+  // suggestedAlias is the name the connection gets when the field stays empty.
+  const suggestedAlias = alias === "" && isValidHostName(hostName)
+    ? uniqueConnectionAlias(connectionAliasFromHostName(hostName), aliases)
+    : "";
+  const fieldErrors = createConnectionFieldErrors(t, { alias, hostName, user, port }, suggestedAlias);
+  const newAlias = alias === "" ? suggestedAlias : alias;
+  const defaultJump = group === "" ? "" : groupDefaultValue(groups, group, "ProxyJump");
+  const jumpCandidates = [...new Set(aliases)].filter((candidate) => candidate !== newAlias).sort((left, right) => left.localeCompare(right));
+  // A choice the selection no longer offers (the connection took that name, the group has no jump to opt out of) is no
+  // choice: what is sent is what the selection shows.
+  const proxyJump = chosenJump === noProxyJump
+    ? (defaultJump === "" ? "" : noProxyJump)
+    : (jumpCandidates.includes(chosenJump) ? chosenJump : "");
   const authenticationReady = (() => {
     switch (authentication) {
       case "dedicated_password": return dedicatedPassword !== "";
       case "saved_password": return savedCredential !== "";
       case "new_shared_password": return newCredential !== "" && newSharedPassword !== "";
       case "identity_file": return keyId !== "";
+      case "ask_on_connect": return true;
     }
   })();
-  const vaultReady = authentication === "identity_file" || vault?.unlocked === true;
+  const vaultReady = !authenticationNeedsVault(authentication) || vault?.unlocked === true;
   const fieldsValid = Object.values(fieldErrors).every((message) => message === "");
   const canSubmit = !loading && !busy && vaultReady && fieldsValid && authenticationReady;
   const canOpenVault = vault !== null && meetsMasterPasswordMinimum(masterPassword, vault.minPassphraseLength) &&
     (vault.exists || masterConfirmation === masterPassword);
   // 何かを入れたら下書きとみなし、ほかの接続を開くときや画面を離れるときに捨ててよいかを確かめる。
-  const dirty = [alias, group, hostName, user, port, dedicatedPassword, newCredential, newSharedPassword].some((value) => value !== "");
+  const dirty = [alias, group, hostName, user, port, chosenJump, dedicatedPassword, newCredential, newSharedPassword].some((value) => value !== "");
 
   // まだ作成できない理由。欄の下の帯に出す。離れた欄の問題は、その欄の下に出すのでここでは出さない。
   const disabledReason = (() => {
@@ -134,6 +159,7 @@ export function useCreateConnectionForm({
       case "new_shared_password":
         return newCredential === "" ? t("conn.createNeedSavedPasswordName") : t("conn.createNeedNewPassword");
       case "identity_file": return t("conn.createNeedPrivateKey");
+      case "ask_on_connect": return "";
     }
   })();
 
@@ -148,7 +174,7 @@ export function useCreateConnectionForm({
   }
 
   function safeDraft(): CreateConnectionDraft {
-    return { alias, group, hostName, user, port, authentication, savedCredential, newCredential, keyId };
+    return { alias, group, hostName, user, port, proxyJump: chosenJump, authentication, savedCredential, newCredential, keyId };
   }
 
   async function openVault() {
@@ -180,6 +206,8 @@ export function useCreateConnectionForm({
         return { kind: authentication, credential: newCredential, password: newSharedPassword };
       case "identity_file":
         return { kind: authentication, keyId };
+      case "ask_on_connect":
+        return { kind: authentication };
     }
   }
 
@@ -189,10 +217,12 @@ export function useCreateConnectionForm({
     if (!canSubmit) return;
     setBusy(true);
     setError("");
-    const request: CreateConnectionRequest = { alias, group, hostName, authentication: requestAuthentication() };
+    const request: CreateConnectionRequest = { alias: newAlias, group, hostName, authentication: requestAuthentication() };
     const selectedUser = optional(user);
     if (selectedUser !== undefined) request.user = selectedUser;
     if (port !== "") request.port = Number(port);
+    const selectedJump = optional(proxyJump);
+    if (selectedJump !== undefined) request.proxyJump = selectedJump;
 
     try {
       const result = await config.createConnection(request);
@@ -205,6 +235,7 @@ export function useCreateConnectionForm({
         case "identity_file_invalid": setError(t("conn.createKeyInvalid")); break;
         case "unknown_credential": setError(t("conn.createCredentialMissing")); break;
         case "connection_destination_exists": setError(t("conn.createDestinationExists")); break;
+        case "proxy_jump_invalid": setError(t("conn.createJumpInvalid")); break;
         default: setError(t("conn.createFailed"));
       }
     } finally {
@@ -213,13 +244,13 @@ export function useCreateConnectionForm({
   }
 
   return {
-    values: { alias, group, hostName, user, port, authentication, dedicatedPassword, savedCredential, newCredential, newSharedPassword, keyId, masterPassword, masterConfirmation },
-    setAlias, setGroup, setHostName, setUser, setPort,
+    values: { alias, group, hostName, user, port, proxyJump, authentication, dedicatedPassword, savedCredential, newCredential, newSharedPassword, keyId, masterPassword, masterConfirmation },
+    setAlias, setGroup, setHostName, setUser, setPort, setProxyJump,
     setDedicatedPassword, setSavedCredential, setNewCredential, setNewSharedPassword, setKeyId,
     setMasterPassword, setMasterConfirmation,
     privateKeys, credentials, vault,
     loading, busy, vaultBusy, error,
-    fieldErrors, touched, touch,
+    suggestedAlias, defaultJump, jumpCandidates, fieldErrors, touched, touch,
     canSubmit, canOpenVault, dirty, disabledReason,
     chooseAuthentication, clearSecrets, safeDraft, openVault, submit,
     clearError: () => setError(""),

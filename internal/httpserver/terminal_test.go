@@ -250,6 +250,10 @@ type terminalFixture struct {
 	forwardBindFailure error
 	forwarders         []*forwardingReadinessPTY
 	recorded           []string
+	// typedPassword は、次に作るセッションで打ったことにするパスワードである。
+	typedPassword  string
+	passwordSavers []*passwordSavingReadinessPTY
+	typedAnswers   recordedTypedPasswordAnswers
 }
 
 func (f *terminalFixture) connect(alias string) terminal.Process {
@@ -264,6 +268,15 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 		f.forwarders = append(f.forwarders, forwarder)
 		ready.finishOpen(nil)
 		return forwarder
+	}
+	if f.typedPassword != "" {
+		ready := newReadinessPTY(process)
+		saver := &passwordSavingReadinessPTY{readinessPTY: ready, typed: &terminal.TypedPassword{
+			Alias: alias, Binding: "binding-of-" + alias, Password: f.typedPassword,
+		}}
+		f.passwordSavers = append(f.passwordSavers, saver)
+		ready.finishOpen(nil)
+		return saver
 	}
 	if f.askingHostKey {
 		asking := &askingReadinessPTY{readinessPTY: newReadinessPTY(process), question: &terminal.HostKeyQuestion{
@@ -436,6 +449,7 @@ func newTerminalFixture(t *testing.T, limits terminal.Limits, offered ...termina
 			return fixture.connect(alias), nil
 		},
 		Connected:      fixture.record,
+		TypedPasswords: &fixture.typedAnswers,
 		ExpectedOrigin: fixture.origin,
 	})
 	server.Config.Handler = engine

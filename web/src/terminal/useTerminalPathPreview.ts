@@ -7,6 +7,7 @@ import type { ActionMenuItem } from "../ui/ActionMenu";
 import { clipboard } from "../ui/clipboard";
 import { useToast } from "../ui/useToast";
 import { pathPreviewAlias } from "./pathPreviewAlias";
+import { savedConnectionOf } from "./terminalPresentation";
 import { pathPreviewHome } from "./pathPreviewHome";
 import { previewPathsInBuffer, previewPathTargetsInBuffer } from "./previewPaths";
 import { isHomePath, resolveTerminalPath } from "./relativePaths";
@@ -42,7 +43,7 @@ export function useTerminalPathPreview({ session, runTarget, api, terminal, curr
   const showToast = useToast();
   const [shown, setShown] = useState<{ path: string; paths: string[] } | null>(null);
   const previewLinkedPath = useRef<((path: string) => void) | null>(null);
-  const remoteAlias = session.kind === "ssh" ? session.alias : undefined;
+  const remoteAlias = savedConnectionOf(session);
   const sameDestination = useSameDestination(remoteAlias, runTarget);
   const previewAlias = pathPreviewAlias(session, runTarget, sameDestination);
 
