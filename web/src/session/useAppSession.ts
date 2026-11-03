@@ -130,7 +130,8 @@ export function useAppSession({
     const checkVaultState = async (failClosed = false) => {
       if (failClosed) {
         holdUntilChecked = true;
-        setVaultRecheck("checking");
+        // Coming back again before a retry has succeeded confirms nothing, so what a failed check hid stays hidden.
+        setVaultRecheck((phase) => (phase === "retrying" ? phase : "checking"));
       }
       if (checking) return;
       checking = true;

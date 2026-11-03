@@ -114,7 +114,8 @@ export const ja = {
   "shell.title": "sshc",
   "shell.starting": "ローカルセッションを開始しています…",
   "shell.vaultChecking": "Vaultのロック状態を確認しています…",
-  "shell.vaultCheckRetrying": "Vaultの状態を確認できません。もう一度確認しています…",
+  "shell.vaultCheckRetrying":
+    "Vaultの状態を確認できませんでした。保護された内容を隠したまま再試行します。",
   "shell.active": "ローカルセッション稼働中 · {version}",
   "shell.bootstrapFailed":
     "ローカルセッションを開始できませんでした。ターミナルでsshcを一度実行し、このブラウザを登録し直してください。",

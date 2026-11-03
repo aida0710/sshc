@@ -3,8 +3,9 @@ import { androidCatalogue } from "./androidCatalogue";
 import { locales } from "./locale";
 import { messages } from "./messages";
 
-// Shown only where the Android app does not go: it asks for its own keys (terminal.androidNotifications*).
-const browserOnlyKeys = new Set(["terminal.browserNotificationsDefault", "terminal.browserNotificationsGranted"]);
+// Shown only where the Android app does not go: it asks for its own keys (terminal.androidNotifications*,
+// terminal.androidNotificationSoundHint).
+const browserOnlyKeys = new Set(["terminal.browserNotificationsDefault", "terminal.browserNotificationsGranted", "terminal.notificationSoundHint"]);
 
 describe("the Android app's wording", () => {
   it("has a word for every key of the catalogue, in both languages", () => {
@@ -20,6 +21,13 @@ describe("the Android app's wording", () => {
     const strayEnglish = Object.entries(androidCatalogue("en"))
       .filter(([key, text]) => !browserOnlyKeys.has(key) && /\b[Tt]his (?:machine|browser)\b|this tab is in the background/u.test(text));
     expect(strayEnglish).toEqual([]);
+  });
+
+  it("rewords what the catalogue says of this machine", () => {
+    expect(androidCatalogue("ja")["settings.thisMachine"]).toBe("このデバイス");
+    expect(androidCatalogue("ja")["start.openLocalShellNote"]).toBe("このデバイスのシェルをすぐ開きます");
+    expect(androidCatalogue("en")["settings.thisMachine"]).toBe("This device");
+    expect(androidCatalogue("en")["start.openLocalShellNote"]).toBe("Open a shell on this device right away");
   });
 
   it("does not send a person to a command line they do not have", () => {

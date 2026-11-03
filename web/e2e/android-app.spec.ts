@@ -65,11 +65,12 @@ test("the Android app's settings speak of the device and offer no port", async (
   await expect(machines.getByText("Android", { exact: true })).toBeVisible();
   await expect(machines.getByRole("spinbutton", { name: "Port" })).toHaveCount(0);
   await expect(machines).not.toContainText("54447");
+  await expect(machines).not.toContainText("Port");
 
   await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Menu", exact: true }).click();
   await page.getByRole("link", { name: "Open Notifications", exact: true }).click();
   const notifications = page.getByRole("region", { name: "Notifications" });
-  await expect(notifications).toContainText("while the app is in the background");
+  await expect(notifications).toContainText("while sshc is closed");
   await expect(notifications).not.toContainText("this tab");
 });
 

@@ -564,6 +564,7 @@ describe("SettingsPanel", () => {
     expect(within(region).getByText("sshc 0.59.0")).toBeVisible();
     expect(within(region).queryByText(/Android · /u)).toBeNull();
     expect(within(region).queryByRole("spinbutton", { name: "Port" })).toBeNull();
+    expect(within(region).queryByText("Port")).toBeNull();
     expect(within(region).queryByText(/54447/u)).toBeNull();
   });
 

@@ -112,7 +112,8 @@ export const en = {
   "shell.title": "sshc",
   "shell.starting": "Starting secure local session…",
   "shell.vaultChecking": "Checking that the vault is still unlocked…",
-  "shell.vaultCheckRetrying": "Could not confirm the vault state. Checking again…",
+  "shell.vaultCheckRetrying":
+    "The vault state could not be confirmed. Protected content remains hidden while sshc retries.",
   "shell.active": "Local session active · {version}",
   "shell.bootstrapFailed":
     "Secure local session could not be started. Run sshc in a terminal to enrol this browser again.",

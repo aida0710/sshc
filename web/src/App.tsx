@@ -53,7 +53,7 @@ import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
 import { mobileViewportQuery, navigationRailQuery, pinnedNavigationQuery, useMediaQuery } from "./ui/useMediaQuery";
 import { useAppViewport } from "./ui/useAppViewport";
-import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckMark } from "./shell/AppFallbackScreens";
+import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckMark, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
 import { SectionView, navigationId, startSections } from "./shell/sections";
 import { sectionIcons, sectionLabels } from "./shell/sectionPresentation";
 import { TerminalScreen } from "./shell/TerminalScreen";
@@ -637,7 +637,8 @@ export function App({
           />
         ) : null}
       </div>
-      {heldForRecheck ? <VaultRecheckMark phase={vaultRecheck} /> : null}
+      {heldForRecheck && vaultRecheck === "checking" ? <VaultRecheckMark /> : null}
+      {heldForRecheck && vaultRecheck === "retrying" ? <VaultRecheckOverlay /> : null}
     </div>
   );
   return <SessionAddressesContext.Provider value={sessionAddresses}>{app}</SessionAddressesContext.Provider>;

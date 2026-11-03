@@ -396,7 +396,7 @@ describe("App", () => {
     expect(await screen.findByLabelText("settings draft")).toHaveValue("keep this input");
   });
 
-  it("takes no input after a failed resume check until a retry succeeds", async () => {
+  it("keeps protected UI hidden after a failed resume check until a retry succeeds", async () => {
     let poll: (() => void) | null = null;
     const originalSetInterval = window.setInterval.bind(window);
     vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
@@ -424,8 +424,8 @@ describe("App", () => {
     });
     await act(async () => resumed.reject(new Error("offline")));
 
-    expect(screen.getByRole("navigation", { name: "Primary", hidden: true }).closest("[inert]")).not.toBeNull();
-    expect(screen.getByRole("status")).toHaveTextContent("Could not confirm the vault state. Checking again…");
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    expect(screen.getByText(/Protected content remains hidden while sshc retries/)).toBeVisible();
 
     await act(async () => {
       poll?.();
@@ -433,6 +433,47 @@ describe("App", () => {
       await Promise.resolve();
     });
     expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+  });
+
+  it("stays hidden when the page comes back again before a retry has succeeded", async () => {
+    let poll: (() => void) | null = null;
+    const originalSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler;
+      return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
+    });
+    const failed = deferred<PasswordVaultStatus>();
+    const again = deferred<PasswordVaultStatus>();
+    const vault = vi.fn()
+      .mockImplementationOnce(() => Promise.resolve(vaultStatus()))
+      .mockReturnValueOnce(failed.promise)
+      .mockReturnValueOnce(again.promise);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vault}
+      />,
+    );
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    await waitFor(() => expect(poll).not.toBeNull());
+
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => failed.reject(new Error("offline")));
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(vault).toHaveBeenCalledTimes(3);
+    expect(screen.getByText(/Protected content remains hidden while sshc retries/)).toBeVisible();
+    expect(screen.queryByText("Checking that the vault is still unlocked…")).toBeNull();
+
+    await act(async () => again.resolve(vaultStatus()));
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    expect(screen.queryByText(/Protected content remains hidden while sshc retries/)).toBeNull();
   });
 
   it("does not wait on resume when the vault has no password, which the engine never locks by itself", async () => {

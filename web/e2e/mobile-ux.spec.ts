@@ -628,6 +628,12 @@ test("coming back to the app after typing leaves the keyboard down", async ({ pa
   expect(await terminalInputFocused(page)).toBe(false);
 });
 
+// coveredAtScreenCentre says whether something is laid over the page in the middle of the screen. An inert page takes
+// no hits, so without a cover the point lands on the app's own frame.
+function coveredAtScreenCentre(page: Page): Promise<boolean> {
+  return page.evaluate(() => (document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)?.closest(".fixed") ?? null) !== null);
+}
+
 test("coming back to the app keeps the screen readable while the vault is checked, with a small mark", async ({ page, installation }) => {
   await page.setViewportSize({ width: 390, height: 640 });
   await openApplication(page, installation);
@@ -648,13 +654,30 @@ test("coming back to the app keeps the screen readable while the vault is checke
   await expect(mark).toBeVisible();
   // The page is still what is on screen: nothing is laid over it but the mark at the top.
   expect((await mark.boundingBox())!.height).toBeLessThan(48);
-  const covered = await page.evaluate(() => (document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)?.closest(".fixed") ?? null) !== null);
-  expect(covered).toBe(false);
+  expect(await coveredAtScreenCentre(page)).toBe(false);
   await capture(page, "vault-recheck");
 
   answer();
   await expect(app).not.toHaveAttribute("inert");
   await expect(mark).toHaveCount(0);
+});
+
+test("a vault check that fails on coming back hides the app until a retry succeeds", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  await page.route("**/api/v1/passwords", (route) => route.abort());
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+
+  const notice = page.getByText("Protected content remains hidden while sshc retries.");
+  await expect(notice).toBeVisible();
+  expect(await coveredAtScreenCentre(page)).toBe(true);
+  await capture(page, "vault-recheck-failed");
+
+  await page.unroute("**/api/v1/passwords");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(notice).toHaveCount(0);
+  await expect(page.locator(".sshc-app > .contents")).not.toHaveAttribute("inert");
+  expect(await coveredAtScreenCentre(page)).toBe(false);
 });
 
 test("a five-digit port on a phone is not hidden under the button that resets it", async ({ page, installation }) => {
