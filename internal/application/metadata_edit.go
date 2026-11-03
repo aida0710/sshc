@@ -39,12 +39,14 @@ func applyHostMetadataEdit(stored Metadata, request EditRequest) (Metadata, erro
 		if next.Identity != identity && hostMetadataIndex(hosts, next.Identity) >= 0 {
 			return Metadata{}, ErrMetadataChanged
 		}
-		// orphan の印は保存のたびに付け直し、判定した OS は engine が書く。どちらも
-		// 画面が決める値ではないので、いまの entry の値を引き継ぐ。
+		// orphan の印は保存のたびに付け直し、判定した OS とパスワードの保存を断ったことは engine が
+		// 書く。どれも画面が決める値ではないので、いまの entry の値を引き継ぐ。
 		next.Orphan = false
 		next.DetectedOS, next.DetectedOSBinding = "", ""
+		next.PasswordSaveDeclinedBinding = ""
 		if current != nil {
 			next.DetectedOS, next.DetectedOSBinding = current.DetectedOS, current.DetectedOSBinding
+			next.PasswordSaveDeclinedBinding = current.PasswordSaveDeclinedBinding
 		}
 		if !saysNothing(next) {
 			hosts = append(hosts, next)
@@ -74,6 +76,7 @@ func screenOwnedHostMetadata(entry *HostMetadata, identity HostIdentity) HostMet
 	owned := *entry
 	owned.Orphan = false
 	owned.DetectedOS, owned.DetectedOSBinding = "", ""
+	owned.PasswordSaveDeclinedBinding = ""
 	return owned
 }
 

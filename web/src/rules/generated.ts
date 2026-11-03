@@ -9,11 +9,14 @@
 export const groupSegmentPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export const aliasPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const hostnamePattern = /^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+export const directUserPattern = /^[^\x00-\x20\x7f'"`$\\;&<>|(){}-][^\x00-\x20\x7f'"`$\\;&<>|(){}]*$/;
 
 export const maxGroupSegments = 6;
 export const maxGroupSegmentBytes = 64;
 export const maxAliasLength = 64;
 export const maxHostnameLength = 255;
+export const maxUserLength = 255;
+export const maxDirectDestinationLength = 519;
 
 // ~/.ssh の中で既に意味を持つ名前。グループ名にも鍵のファイル名にも効く。
 // どちらも ~/.ssh の直下にその綴りを作る操作だからである。

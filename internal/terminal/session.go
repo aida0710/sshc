@@ -123,6 +123,9 @@ type View struct {
 	// AwaitingPrompt is whether the connection waits on an answer to an
 	// authentication prompt, the only input Write keeps before it is connected.
 	AwaitingPrompt bool
+	// PasswordSaveQuestion is true while a password typed for this connection
+	// waits on whether to save it. The password itself is never in the view.
+	PasswordSaveQuestion bool
 	// ProgramProgress is the current program's OSC 9;4 report, independent of SSH connection progress.
 	ProgramProgress *ProgramProgress
 	// ProgramStatus is the OSC 7501 record to show, or nil when there is none.
@@ -251,6 +254,9 @@ func (s *Session) View() View {
 		(s.state == StateConnecting || s.state == StateReconnecting) {
 		view.AwaitingPrompt = prompting.AwaitingPrompt()
 	}
+	if asking, ok := s.process.(PasswordSaveAsking); ok && s.state == StateConnected {
+		_, view.PasswordSaveQuestion = asking.TypedPassword()
+	}
 	return view
 }
 
@@ -295,6 +301,27 @@ func (s *Session) AnswerHostKey(fingerprint string, accept bool) error {
 	if !questioning.AnswerHostKey(fingerprint, accept) {
 		return ErrNoHostKeyQuestion
 	}
+	return nil
+}
+
+// AnswerPasswordSave answers whether to save the password typed for this
+// connection: answer stores or declines it. A refused answer (the Vault is
+// locked) keeps the question open, so the person can answer again.
+func (s *Session) AnswerPasswordSave(answer func(TypedPassword) error) error {
+	s.mutex.Lock()
+	asking, ok := s.process.(PasswordSaveAsking)
+	s.mutex.Unlock()
+	if !ok {
+		return ErrNoPasswordSaveQuestion
+	}
+	typed, waiting := asking.TypedPassword()
+	if !waiting {
+		return ErrNoPasswordSaveQuestion
+	}
+	if err := answer(typed); err != nil {
+		return err
+	}
+	asking.ForgetTypedPassword()
 	return nil
 }
 

@@ -169,6 +169,39 @@ func TestAnSSHSessionNeedsAValidAlias(t *testing.T) {
 	}
 }
 
+func TestADirectDestinationOpensWithoutASnippetOrAnEntryInTheRecents(t *testing.T) {
+	var connected []string
+	opener := Opener{
+		Connect: func(_ context.Context, name string, _ terminal.Size) (terminal.Process, error) {
+			connected = append(connected, name)
+			return connectedProcess{}, nil
+		},
+		Startup: func(string) StartupSnippet {
+			t.Fatal("asked for the startup snippet of a destination that has no connection name")
+			return StartupSnippet{}
+		},
+	}
+	spec, err := opener.spec(sshRequest("deploy@10.0.0.5:2222"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Alias != "deploy@10.0.0.5:2222" || spec.Title != "deploy@10.0.0.5:2222" {
+		t.Fatalf("spec = %+v", spec)
+	}
+	if got := spec.Startup(); got.Notice != "" || len(got.Commands) != 0 {
+		t.Fatalf("startup = %#v", got)
+	}
+	if _, err := spec.Open(context.Background(), terminal.Size{}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(connected, []string{"deploy@10.0.0.5:2222"}) {
+		t.Fatalf("connected to %v", connected)
+	}
+	if _, err := opener.spec(sshRequest("-oProxyCommand=id@host")); err == nil {
+		t.Fatal("a destination whose user reads as an option was accepted")
+	}
+}
+
 func TestReopeningLetsGoOfAWorkspaceADirectoryAndAShellProfileThatAreGone(t *testing.T) {
 	start := t.TempDir()
 	opener := Opener{

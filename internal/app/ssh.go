@@ -28,6 +28,7 @@ import (
 	"sshc/internal/terminalopen"
 	"sshc/internal/textencoding"
 	"sshc/internal/totp"
+	"sshc/internal/validate"
 )
 
 // errNoConfiguration は、設定を読む手段が配線されていないことを報告する。
@@ -120,12 +121,18 @@ func (p sshParts) target(alias string) (sshclient.Target, error) {
 	if err != nil {
 		return sshclient.Target{}, err
 	}
-	encoding, err := p.encoding(alias)
+	return p.withConnectionMetadata(target)
+}
+
+// withConnectionMetadata は、ssh_config に書かない接続の設定（文字コードと VPN プロファイル）を
+// target に足す。
+func (p sshParts) withConnectionMetadata(target sshclient.Target) (sshclient.Target, error) {
+	encoding, err := p.encoding(target.Alias)
 	if err != nil {
 		return sshclient.Target{}, err
 	}
 	target.Encoding = encoding
-	profile, err := p.vpnProfile(alias)
+	profile, err := p.vpnProfile(target.Alias)
 	if err != nil {
 		return sshclient.Target{}, err
 	}
@@ -171,15 +178,32 @@ func appendAliases(listed []string, target sshclient.Target) []string {
 	return append(listed, target.Alias)
 }
 
-// connector は、埋め込みターミナルが開く対話セッションである。
-func (p sshParts) connector() terminalopen.Connector {
-	return func(ctx context.Context, alias string, size terminal.Size) (terminal.Process, error) {
-		target, err := p.target(alias)
+// connector は、埋め込みターミナルが開く対話セッションである。接続名か、保存していない
+// 接続先（user@host[:port]）へ開く。打ったパスワードを保存するかを尋ねるのは、問いに答える画面の
+// あるここだけである（`sshc ssh` は尋ねない）。
+func (p sshParts) connector(offerPasswordSave func(sshclient.Target) bool) terminalopen.Connector {
+	dialer := p.dialer
+	dialer.OfferPasswordSave = offerPasswordSave
+	return func(ctx context.Context, name string, size terminal.Size) (terminal.Process, error) {
+		target, err := p.sessionTarget(name)
 		if err != nil {
 			return nil, err
 		}
-		return p.dialer.Open(ctx, target, size)
+		return dialer.Open(ctx, target, size)
 	}
+}
+
+// sessionTarget は、ターミナルのセッションひとつ分の接続を組み立てる。
+func (p sshParts) sessionTarget(name string) (sshclient.Target, error) {
+	destination, direct := validate.ParseDirectDestination(name)
+	if !direct {
+		return p.target(name)
+	}
+	target, err := sshclient.NewDirectTarget(destination, p.resolve, p.facts)
+	if err != nil {
+		return sshclient.Target{}, err
+	}
+	return p.withConnectionMetadata(target)
 }
 
 // probe は、認証テストである。何も尋ねない。

@@ -7,6 +7,7 @@ import type { TerminalSession } from "../api/terminalSessions";
 import { defaultWorkspaceId, type TerminalWorkspace } from "../api/terminalWorkspaces";
 import { useTranslate } from "../i18n/context";
 import { HostPickerDialog, type LocalChoice } from "../shell/HostPickerDialog";
+import type { DirectDestinationActions } from "../shell/useDirectDestinationActions";
 import type { SessionShortcutRequest } from "../shell/useAppShortcuts";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { keepMachineState, keepMachineStateJSON, parseMachineStateJSON } from "../settings/machineState";
@@ -56,6 +57,8 @@ type WorkspaceTreeProps = {
   hosts?: HostEntry[];
   onOpenShell: (profileId: string | undefined, workspaceId: string) => void;
   onConnect?: (alias: string, workspaceId: string) => void;
+  // directDestination is what the new session's search does with a user@host[:port] typed into it.
+  directDestination?: DirectDestinationActions | undefined;
   // runTarget is the SSH alias of the engine the shells open on, or null for
   // this machine.
   runTarget?: string | null;
@@ -94,6 +97,7 @@ export function WorkspaceTree({
   hosts = [],
   onOpenShell,
   onConnect,
+  directDestination,
   sessionShortcut = null,
 }: WorkspaceTreeProps) {
   const t = useTranslate();
@@ -103,6 +107,24 @@ export function WorkspaceTree({
   const collapsedState = interfaceState(settings.document, "collapsedTerminalWorkspaces");
   const collapsed = useMemo(() => collapsedOf(parseMachineStateJSON(collapsedState, [])), [collapsedState]);
   const [pickerWorkspace, setPickerWorkspace] = useState<string | null>(null);
+
+  // directInPicker closes the picker and opens the session in the workspace the picker was opened for.
+  function directInPicker(): DirectDestinationActions | undefined {
+    if (directDestination === undefined) return undefined;
+    const { connect, saveAndConnect, aliasFor } = directDestination;
+    const workspaceId = pickerWorkspace ?? defaultWorkspaceId;
+    return {
+      aliasFor,
+      connect: (destination) => {
+        setPickerWorkspace(null);
+        connect(destination, workspaceId);
+      },
+      saveAndConnect: saveAndConnect === undefined ? undefined : (destination) => {
+        setPickerWorkspace(null);
+        saveAndConnect(destination, workspaceId);
+      },
+    };
+  }
   const [nameRequest, setNameRequest] = useState<NameRequest | null>(null);
   const [deleting, setDeleting] = useState<{ workspace: TerminalWorkspace; sessionCount: number } | null>(null);
   const [broadcasting, setBroadcasting] = useState<TerminalSession[] | null>(null);
@@ -359,6 +381,7 @@ export function WorkspaceTree({
         hosts={hosts}
         local={localChoices}
         returnFocusRef={newSessionTrigger}
+        direct={directInPicker()}
         onChoose={(alias) => {
           setPickerWorkspace(null);
           onConnect?.(alias, pickerWorkspace ?? defaultWorkspaceId);

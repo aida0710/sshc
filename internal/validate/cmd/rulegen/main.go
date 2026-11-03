@@ -29,12 +29,14 @@ import (
 // 並びは決めてある。生成物が呼び出しごとに変われば、verify-generated が意味の
 // 無い差分を出す。
 type corpus struct {
-	GroupName []verdict     `json:"groupName"`
-	HostName  []verdict     `json:"hostName"`
-	Alias     []verdict     `json:"alias"`
-	Port      []portVerdict `json:"port"`
-	Render    []renderCase  `json:"render"`
-	Parse     []parseCase   `json:"parse"`
+	GroupName []verdict `json:"groupName"`
+	HostName  []verdict `json:"hostName"`
+	Alias     []verdict `json:"alias"`
+	// DirectDestination は、保存していない接続先 user@host[:port] である。
+	DirectDestination []verdict     `json:"directDestination"`
+	Port              []portVerdict `json:"port"`
+	Render            []renderCase  `json:"render"`
+	Parse             []parseCase   `json:"parse"`
 }
 
 type verdict struct {
@@ -111,11 +113,14 @@ func constants() string {
 `)
 	fmt.Fprintf(&out, "export const groupSegmentPattern = /%s/;\n", validate.GroupSegmentPattern)
 	fmt.Fprintf(&out, "export const aliasPattern = /%s/;\n", validate.AliasPattern)
-	fmt.Fprintf(&out, "export const hostnamePattern = /%s/;\n\n", validate.HostnamePattern)
+	fmt.Fprintf(&out, "export const hostnamePattern = /%s/;\n", validate.HostnamePattern)
+	fmt.Fprintf(&out, "export const directUserPattern = /%s/;\n\n", validate.DirectUserPattern)
 	fmt.Fprintf(&out, "export const maxGroupSegments = %d;\n", validate.MaxGroupSegments)
 	fmt.Fprintf(&out, "export const maxGroupSegmentBytes = %d;\n", validate.MaxGroupSegmentBytes)
 	fmt.Fprintf(&out, "export const maxAliasLength = %d;\n", validate.MaxAliasLength)
-	fmt.Fprintf(&out, "export const maxHostnameLength = %d;\n\n", validate.MaxHostnameLength)
+	fmt.Fprintf(&out, "export const maxHostnameLength = %d;\n", validate.MaxHostnameLength)
+	fmt.Fprintf(&out, "export const maxUserLength = %d;\n", validate.MaxUserLength)
+	fmt.Fprintf(&out, "export const maxDirectDestinationLength = %d;\n\n", validate.MaxDirectDestinationLength)
 	out.WriteString("// ~/.ssh の中で既に意味を持つ名前。グループ名にも鍵のファイル名にも効く。\n")
 	out.WriteString("// どちらも ~/.ssh の直下にその綴りを作る操作だからである。\n")
 	out.WriteString("//\n")
@@ -187,6 +192,27 @@ var aliases = []struct{ input, why string }{
 	{strings.Repeat("a", 65), "長さ超過"},
 }
 
+var directDestinations = []struct{ input, why string }{
+	{"deploy@10.0.0.5", "IPv4"},
+	{"deploy@10.0.0.5:2222", "ポートあり"},
+	{"deploy@web.example.com", "DNS 名"},
+	{"deploy@2001:db8::1", "角括弧の無い IPv6。ポートは書けない"},
+	{"deploy@[2001:db8::1]:2222", "角括弧の IPv6 とポート"},
+	{"user@corp.example@web", "ユーザー名の @。最後の @ で分ける"},
+	{"web-01", "@ が無い。接続名である"},
+	{"@host", "ユーザー名が空"},
+	{"deploy@", "ホスト名が空"},
+	{"deploy@host:0", "ポートが範囲外"},
+	{"deploy@host:http", "ポートが数でない"},
+	{"deploy@[2001:db8::1", "角括弧が閉じていない"},
+	{"-oProxyCommand=x@host", "ユーザー名の先頭の `-`"},
+	{"de$(id)ploy@host", "シェルが読む文字。%r に入る"},
+	{"de{ploy@host", "ブレース。valid_ruser が断る"},
+	{"de}ploy@host", "ブレース。valid_ruser が断る"},
+	{"de ploy@host", "ユーザー名の空白"},
+	{"deploy@-host", "ホスト名の先頭の `-`"},
+}
+
 var ports = []struct {
 	input int
 	why   string
@@ -246,6 +272,12 @@ func build() corpus {
 	for _, item := range aliases {
 		built.Alias = append(built.Alias, verdict{
 			Input: item.input, Valid: validate.Alias(item.input) == nil, Why: item.why,
+		})
+	}
+	for _, item := range directDestinations {
+		_, accepted := validate.ParseDirectDestination(item.input)
+		built.DirectDestination = append(built.DirectDestination, verdict{
+			Input: item.input, Valid: accepted, Why: item.why,
 		})
 	}
 	for _, item := range ports {

@@ -18,6 +18,7 @@ import (
 	"sshc/internal/sshmatch"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
+	"sshc/internal/validate"
 )
 
 // 接続を組み立てられない理由。
@@ -101,6 +102,8 @@ type Target struct {
 	HostName string
 	Port     string
 	User     string
+	// Direct は、設定ファイルに保存していない接続先（NewDirectTarget）であることを表す。
+	Direct bool
 	// authenticationBindingOverride は、非対話処理がhost key方針だけを安全側へ
 	// 強制した場合に、利用者が確認した元の接続経路を保持する。接続先や経路を
 	// 変えたときに設定してはならない。
@@ -281,6 +284,24 @@ type Resolver func(alias string) (effective.Values, error)
 func NewTarget(alias string, resolve Resolver, facts effective.LocalFacts) (Target, error) {
 	builder := targetBuilder{resolve: resolve, facts: facts}
 	return builder.build(alias, effective.MaxJumpDepth, nil)
+}
+
+// NewDirectTarget は、設定ファイルに保存していない接続先から接続ひとつ分を組み立てる。
+//
+// `ssh -p <port> <user>@<host>` と同じである。host に当たる設定（Host * など）を読み、
+// 書かれたユーザー名とポートはコマンドラインと同じく設定に勝つ。Alias は host になる。
+func NewDirectTarget(destination validate.DirectDestination, resolve Resolver, facts effective.LocalFacts) (Target, error) {
+	builder := targetBuilder{resolve: resolve, facts: facts}
+	written := effective.Hop{Host: destination.Host, User: destination.User, UserExplicit: true}
+	if destination.Port != 0 {
+		written.Port, written.PortExplicit = strconv.Itoa(destination.Port), true
+	}
+	target, err := builder.build(destination.Host, effective.MaxJumpDepth, &written)
+	if err != nil {
+		return Target{}, err
+	}
+	target.Direct = true
+	return target, nil
 }
 
 // targetBuilder は、ProxyJump のホップをたどりながら Target を組み立てる。

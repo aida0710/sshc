@@ -58,6 +58,7 @@ import { SectionView, navigationId, startSections } from "./shell/sections";
 import { sectionIcons, sectionLabels } from "./shell/sectionPresentation";
 import { TerminalScreen } from "./shell/TerminalScreen";
 import { useDeclaredConfig } from "./shell/useDeclaredConfig";
+import { useDirectDestinationActions } from "./shell/useDirectDestinationActions";
 import { useOSC52Setting } from "./shell/useOSC52Setting";
 import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
@@ -201,6 +202,12 @@ export function App({
     duplicateSession,
     reorderSessions: setSessionOrder,
   } = terminalWorkspace;
+  const directDestination = useDirectDestinationActions({
+    aliases: declared.knownAliases,
+    canSave: runTargets.selected === null,
+    open: openSSHSession,
+    onSaved: declared.readAgain,
+  });
   // The terminals draw with the preset this machine uses and the global settings.
   const terminalSettings = useTerminalSettings();
   // A phone shows the terminal's own top bar instead of the app header and the bottom tabs only
@@ -497,6 +504,7 @@ export function App({
             aliases={declared.knownAliases}
             hosts={declared.hosts}
             onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
+            directDestination={directDestination}
             onOpenCommandPalette={openPaletteFromNavigation}
             sessionShortcut={sessionShortcut}
           />
@@ -569,6 +577,7 @@ export function App({
                           terminalSessions,
                           onShowSession: showLocalSession,
                           onOpenSSHSession: openSSHSession,
+                          onOverviewRead: declared.adoptOverview,
                           onOpenLocalShell: () => void openLocalShell(),
                           onAddConnection: addConnection,
                           onOpenTerminal: openSFTPTerminal,
@@ -616,6 +625,7 @@ export function App({
             sectionLabels={sectionLabels}
             onClose={closePalette}
             onConnect={openSSHSession}
+            direct={directDestination}
             onOpenHostSettings={(identity) =>
               navigateLocation(
                 connectionLocation({
