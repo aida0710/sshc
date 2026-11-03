@@ -4,6 +4,7 @@ import { useSettingsSync } from "./settings/settingsStore";
 import { useTerminalSettings } from "./settings/terminalSettings";
 import { opensInThisPage } from "./ui/linkClick";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { runsInAndroidApp } from "./android/native";
 import { type HealthResponse } from "./api/client";
 import { runTargetTerminalSessionsApi, terminalSessionsApi } from "./api/terminalSessions";
 import { createTerminalWorkspacesApi, terminalWorkspacesApi } from "./api/terminalWorkspaces";
@@ -52,7 +53,7 @@ import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
 import { mobileViewportQuery, navigationRailQuery, pinnedNavigationQuery, useMediaQuery } from "./ui/useMediaQuery";
 import { useAppViewport } from "./ui/useAppViewport";
-import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
+import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckMark, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
 import { SectionView, navigationId, startSections } from "./shell/sections";
 import { sectionIcons, sectionLabels } from "./shell/sectionPresentation";
 import { TerminalScreen } from "./shell/TerminalScreen";
@@ -356,12 +357,11 @@ export function App({
 
   const changeOSC52 = useOSC52Setting();
 
-  // While the vault is rechecked on coming back to the page, the app is hidden and inert; the focus goes back
-  // to the terminal (or whatever had it) afterwards, but not to a text field on a phone, where it would raise the
-  // keyboard.
-  const hiddenForRecheck = state === "ready" && vaultRecheck !== "idle";
+  // While the vault is rechecked on coming back to the page, the app is inert; the focus goes back to the terminal
+  // (or whatever had it) afterwards, but not to a text field on a phone, where it would raise the keyboard.
+  const heldForRecheck = state === "ready" && vaultRecheck !== "idle";
   const rechecked = useRef<HTMLDivElement>(null);
-  useFocusBackAfterInert(rechecked, hiddenForRecheck, { keyboardOnScreen: mobileLayout });
+  useFocusBackAfterInert(rechecked, heldForRecheck, { keyboardOnScreen: mobileLayout });
 
   if (state === "locked") {
     return (
@@ -370,7 +370,7 @@ export function App({
         passwordless={session.passwordless}
         minPassphraseLength={session.minPassphraseLength}
         version={version}
-        offerSignOut
+        offerSignOut={!runsInAndroidApp()}
         onExists={session.markVaultExists}
         onOpen={session.openVault}
       />
@@ -395,8 +395,8 @@ export function App({
       <div
         ref={rechecked}
         className="contents"
-        inert={hiddenForRecheck}
-        aria-hidden={hiddenForRecheck ? true : undefined}
+        inert={heldForRecheck}
+        aria-hidden={heldForRecheck ? true : undefined}
       >
         {/* On a phone the terminal draws its own top bar (its menu button opens this navigation), as in the design. */}
         {terminalTopBar ? null : <AppHeader
@@ -637,7 +637,8 @@ export function App({
           />
         ) : null}
       </div>
-      {hiddenForRecheck ? <VaultRecheckOverlay phase={vaultRecheck} /> : null}
+      {heldForRecheck && vaultRecheck === "checking" ? <VaultRecheckMark /> : null}
+      {heldForRecheck && vaultRecheck === "retrying" ? <VaultRecheckOverlay /> : null}
     </div>
   );
   return <SessionAddressesContext.Provider value={sessionAddresses}>{app}</SessionAddressesContext.Provider>;

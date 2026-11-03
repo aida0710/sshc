@@ -172,12 +172,12 @@ test("keeps the chosen language across a reload, and translates the panels", asy
   await expect(page.getByRole("link", { name: "SSH Keysを開く", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "SSH Keysを開く", exact: true }).click();
   await expect(page.getByRole("heading", { name: "SSH Keys", level: 2 })).toBeVisible();
-  await expect(page.getByRole("button", { name: "鍵を作成" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "鍵を作成", exact: true })).toBeVisible();
 
   await page.reload();
   await expect(page).toHaveURL(/\/keys$/);
   await expect(page.getByRole("heading", { name: "SSH Keys", level: 2 })).toBeVisible();
-  await expect(page.getByRole("button", { name: "鍵を作成" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "鍵を作成", exact: true })).toBeVisible();
   expect(await page.evaluate(() => Object.keys(window.localStorage).sort())).toEqual([
     "sshc.browser.registration.v1",
     "sshc.language",

@@ -64,6 +64,20 @@ const fingerprintField = /Fingerprint verified through another channel/;
 const acknowledgement = /accept the risk/;
 
 describe("KnownHostsPanel", () => {
+  it("names the file under ~/.ssh on screen and sends the engine's absolute path back with a delete", async () => {
+    const absolute = "/data/data/com.github.aida0710.sshc/files/.ssh/known_hosts";
+    const api = buildApi({ knownHosts: vi.fn().mockResolvedValue({ path: absolute, entries: [entry] }) });
+    render(<ToastProvider><KnownHostsPanel api={api} /></ToastProvider>);
+
+    const row = await screen.findByRole("row", { name: /bastion\.example\.com/ });
+    expect(screen.getByText("~/.ssh/known_hosts", { selector: ":not(caption)" })).toBeVisible();
+    expect(document.body).not.toHaveTextContent(absolute);
+
+    await userEvent.click(within(row).getByRole("button", { name: "Delete" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Confirm delete" }));
+    await waitFor(() => expect(api.deleteKnownHosts).toHaveBeenCalledWith([{ line: 2, digest: entry.digest }], absolute));
+  });
+
   it("offers only the scan while nothing is trusted, and shows the page's usual shape once a scan answers", async () => {
     const api = buildApi({
       knownHosts: vi.fn().mockResolvedValue({ path: "~/.ssh/known_hosts", entries: [] }),

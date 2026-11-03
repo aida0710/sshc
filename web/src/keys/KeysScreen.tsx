@@ -19,6 +19,7 @@ import {
 } from "./KeyForms";
 import { AgentSection } from "./AgentSection";
 import { useEngineOS } from "../about/useEngineOS";
+import { runsInAndroidApp } from "../android/native";
 import { aboutApi, type AboutApi } from "../api/about";
 import { KeyTrashConfirmation } from "./KeyTrashConfirmation";
 import { KeyTrashTable } from "./KeyTrashTable";
@@ -477,7 +478,7 @@ export function KeysScreen({
 
       <KeyInventoryProblems inventory={inventory} />
 
-      <AgentSection inventory={inventory} engineOS={engineOS} />
+      {runsInAndroidApp() ? null : <AgentSection inventory={inventory} engineOS={engineOS} />}
     </section>
   );
 }

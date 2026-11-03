@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   apiClient,
   failureCode,
@@ -38,6 +38,9 @@ export function useAppSession({
   const [failure, setFailure] = useState("");
   const [vaultExists, setVaultExists] = useState(false);
   const [passwordless, setPasswordless] = useState(false);
+  // The check below reads this when the page comes back; its effect lives as long as the app is ready.
+  const passwordlessNow = useRef(passwordless);
+  passwordlessNow.current = passwordless;
   // The lock screen needs the engine's minimum to create a vault. It is an
   // engine constant, so the status read at start is enough.
   const [minPassphraseLength, setMinPassphraseLength] = useState<number | undefined>(undefined);
@@ -123,11 +126,12 @@ export function useAppSession({
     if (state !== "ready") return;
     let active = true;
     let checking = false;
-    let concealUntilChecked = false;
+    let holdUntilChecked = false;
     const checkVaultState = async (failClosed = false) => {
       if (failClosed) {
-        concealUntilChecked = true;
-        setVaultRecheck("checking");
+        holdUntilChecked = true;
+        // Coming back again before a retry has succeeded confirms nothing, so what a failed check hid stays hidden.
+        setVaultRecheck((phase) => (phase === "retrying" ? phase : "checking"));
       }
       if (checking) return;
       checking = true;
@@ -141,12 +145,12 @@ export function useAppSession({
           announceVaultLocked();
           return;
         }
-        if (concealUntilChecked) {
-          concealUntilChecked = false;
+        if (holdUntilChecked) {
+          holdUntilChecked = false;
           setVaultRecheck("idle");
         }
       } catch {
-        if (active && concealUntilChecked) setVaultRecheck("retrying");
+        if (active && holdUntilChecked) setVaultRecheck("retrying");
       } finally {
         checking = false;
       }
@@ -156,7 +160,8 @@ export function useAppSession({
       vaultStatePollIntervalMs,
     );
     const checkWhenVisible = () => {
-      if (document.visibilityState === "visible") void checkVaultState(true);
+      // The engine never locks a passwordless vault by itself, so coming back has nothing to wait for.
+      if (document.visibilityState === "visible") void checkVaultState(!passwordlessNow.current);
     };
     const checkWhenFocused = () => {
       if (document.visibilityState === "visible") void checkVaultState();

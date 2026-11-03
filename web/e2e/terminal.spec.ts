@@ -649,7 +649,7 @@ test("keeps the keyboard on the terminal after the page is hidden and shown agai
       document.dispatchEvent(new Event("visibilitychange"));
     }, state);
   }
-  await expect(page.getByText("Checking that the vault is still unlocked before restoring protected content…")).toHaveCount(0);
+  await expect(page.getByText("Checking that the vault is still unlocked…")).toHaveCount(0);
   await expect(terminalKeyboard(page)).toBeFocused();
   await page.keyboard.type("echo after-coming-back");
   await page.keyboard.press("Enter");

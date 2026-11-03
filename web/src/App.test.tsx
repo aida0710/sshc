@@ -11,6 +11,7 @@ import { ja } from "./i18n/messages";
 import { ApiError, apiClient } from "./api/client";
 import { announceVaultLocked } from "./secrets/vaultLockSignal";
 import type { PasswordVaultStatus } from "./api/vault";
+import { fakeAndroidBridge } from "./android/fakeAndroidBridge";
 import { vaultStatus } from "./testing/vaultStatus";
 import { terminalSessionsApi, type TerminalSession } from "./api/terminalSessions";
 import { localHostAlias } from "./sftp/localHost";
@@ -291,7 +292,7 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: "sshc" })).toBeNull();
   });
 
-  it("conceals the ready subtree on resume and coalesces overlapping focus checks", async () => {
+  it("keeps the app on screen but takes no input on resume, and coalesces overlapping focus checks", async () => {
     let poll: (() => void) | null = null;
     const originalSetInterval = window.setInterval.bind(window);
     vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
@@ -322,8 +323,10 @@ describe("App", () => {
     });
 
     expect(vault).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
-    expect(screen.getByText(/Checking that the vault is still unlocked/)).toBeVisible();
+    const held = screen.getByRole("navigation", { name: "Primary", hidden: true });
+    expect(held.closest("[inert]")).not.toBeNull();
+    expect(held).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("Checking that the vault is still unlocked…");
 
     await act(async () => resumed.resolve(vaultStatus()));
     expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
@@ -363,7 +366,7 @@ describe("App", () => {
     await act(async () => focused.resolve(vaultStatus()));
   });
 
-  it("keeps an in-progress form mounted while the resumed vault check conceals it", async () => {
+  it("keeps an in-progress form mounted while the resumed vault check holds it", async () => {
     window.history.replaceState(null, "", "/settings/machines");
     const resumed = deferred<PasswordVaultStatus>();
     const vault = vi
@@ -430,6 +433,79 @@ describe("App", () => {
       await Promise.resolve();
     });
     expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+  });
+
+  it("stays hidden when the page comes back again before a retry has succeeded", async () => {
+    let poll: (() => void) | null = null;
+    const originalSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler;
+      return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
+    });
+    const failed = deferred<PasswordVaultStatus>();
+    const again = deferred<PasswordVaultStatus>();
+    const vault = vi.fn()
+      .mockImplementationOnce(() => Promise.resolve(vaultStatus()))
+      .mockReturnValueOnce(failed.promise)
+      .mockReturnValueOnce(again.promise);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vault}
+      />,
+    );
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    await waitFor(() => expect(poll).not.toBeNull());
+
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => failed.reject(new Error("offline")));
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(vault).toHaveBeenCalledTimes(3);
+    expect(screen.getByText(/Protected content remains hidden while sshc retries/)).toBeVisible();
+    expect(screen.queryByText("Checking that the vault is still unlocked…")).toBeNull();
+
+    await act(async () => again.resolve(vaultStatus()));
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    expect(screen.queryByText(/Protected content remains hidden while sshc retries/)).toBeNull();
+  });
+
+  it("does not wait on resume when the vault has no password, which the engine never locks by itself", async () => {
+    let poll: (() => void) | null = null;
+    const originalSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler;
+      return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
+    });
+    const resumed = deferred<PasswordVaultStatus>();
+    const vault = vi.fn()
+      .mockImplementationOnce(() => Promise.resolve(vaultStatus({ passwordless: true })))
+      .mockReturnValueOnce(resumed.promise);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vault}
+      />,
+    );
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    await waitFor(() => expect(poll).not.toBeNull());
+
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(vault).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("navigation", { name: "Primary" }).closest("[inert]")).toBeNull();
+    expect(screen.queryByText("Checking that the vault is still unlocked…")).toBeNull();
+    await act(async () => resumed.resolve(vaultStatus({ passwordless: true })));
   });
 
   it("applies a broadcast lock, cleans up its observer, and ignores a late resume response", async () => {
@@ -1231,6 +1307,20 @@ describe("App", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Reload to recover the local session automatically");
     expect(screen.queryByText("Secure local session could not be started")).toBeNull();
+  });
+
+  it("sends nobody in the Android app to a command line when the session has ended", async () => {
+    vi.stubGlobal("sshcAndroid", fakeAndroidBridge());
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vi.fn().mockRejectedValue(new ApiError("invalid_session", 401, null))}
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reload to recover the local session automatically");
+    expect(screen.queryByText("$ sshc")).toBeNull();
   });
 
   it("replaces the ready shell with the session-ended screen after an API reports invalid_session", async () => {

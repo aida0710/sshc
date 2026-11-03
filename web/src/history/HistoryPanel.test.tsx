@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryPanel } from "./HistoryPanel";
 import { configApi } from "../api/config";
 import { ApiError } from "../api/client";
+import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
+import { LanguageProvider } from "../i18n/context";
 
 vi.mock("../api/config", async () => {
   const actual = await vi.importActual<typeof import("../api/config")>("../api/config");
@@ -68,6 +70,28 @@ describe("HistoryPanel", () => {
 
     expect(await screen.findByText("Completed changes", { selector: "dt" })).toBeVisible();
     expect(screen.queryByText("Interrupted", { selector: "dt" })).toBeNull();
+  });
+
+  it("names sshc's own files only where a person can open them", async () => {
+    vi.mocked(configApi.history).mockResolvedValue([{
+      id: "20260805T120000.000-abcd",
+      operation: "machine.settings.create",
+      status: "completed",
+      startedAt: "2026-08-05T12:00:00Z",
+      finishedAt: "2026-08-05T12:00:01Z",
+      paths: ["sshc/machines/14c85e4005beb423.json"],
+      restorable: [],
+    }] as never);
+    vi.stubGlobal("sshcAndroid", fakeAndroidBridge());
+    const { unmount } = render(<LanguageProvider initial="ja"><HistoryPanel /></LanguageProvider>);
+    expect(await screen.findByText("マシンの設定の変更")).toBeVisible();
+    expect(screen.queryByText(/sshc\/machines/u)).toBeNull();
+    expect(screen.getByText("変更前のファイルはアプリの中に残します。")).toBeVisible();
+    unmount();
+    vi.unstubAllGlobals();
+
+    render(<HistoryPanel />);
+    expect(await screen.findByText("sshc/machines/14c85e4005beb423.json")).toBeVisible();
   });
 
   it("shows an interrupted transaction as unfinished and offers both recoveries", async () => {
