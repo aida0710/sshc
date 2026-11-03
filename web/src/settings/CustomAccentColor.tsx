@@ -4,6 +4,7 @@ import { contrastRatio, minimumAccentContrast, parseAccentColor } from "../theme
 import { useTheme } from "../theme/context";
 import { themeAttributes } from "../theme/theme";
 import { narrowControl } from "../ui/form";
+import { asciiTextEntry } from "../ui/softKeyboard";
 import { Notice } from "../ui/surface";
 
 // CustomAccentColor is the row under the accent swatches while the custom accent is chosen: the system's
@@ -70,14 +71,12 @@ export function CustomAccentColor({ color, disabled, onPreview, onChoose }: {
           onChange={(event) => onPreview(event.target.value)}
           className="h-8 w-11 shrink-0 cursor-pointer rounded-md border border-control-line bg-control p-1 disabled:cursor-default"
         />
-        <input
+        <input {...asciiTextEntry}
           type="text"
           aria-label={t("appearance.customColorCode")}
           aria-invalid={typedInvalid}
           value={typed}
           disabled={disabled}
-          spellCheck={false}
-          autoCapitalize="none"
           onChange={(event) => setTyped(event.target.value)}
           onBlur={commitTyped}
           onKeyDown={(event) => {

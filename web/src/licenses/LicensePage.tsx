@@ -2,7 +2,7 @@ import { useState } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import catalogue from "./catalogue.generated.json";
 import { useTranslate } from "../i18n/context";
-import { control } from "../ui/form";
+import { control, touchLinkTarget } from "../ui/form";
 import { PageHeader } from "../ui/page";
 
 export function LicensePage() {
@@ -29,7 +29,7 @@ export function LicensePage() {
                 <span className="ml-1.5 text-xs text-ink-muted">{entry.license}</span>
               </DisclosureSummary>
               <div className="flex flex-col gap-3 pb-4 pl-6">
-                <a href={entry.url} target="_blank" rel="noopener noreferrer" className="self-start break-all text-sm text-accent underline">{entry.url}</a>
+                <a href={entry.url} target="_blank" rel="noopener noreferrer" className={`${touchLinkTarget} self-start break-all text-sm text-accent underline`}>{entry.url}</a>
                 {entry.notices.map((notice) => (
                   <section key={notice.name}>
                     <h3 className="mb-2 text-xs font-medium text-ink-muted">{notice.name}</h3>

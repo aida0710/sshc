@@ -4,6 +4,7 @@ import type { CredentialKind, CredentialList, CredentialsApi } from "../api/cred
 import { useTranslate } from "../i18n/context";
 import { Field, control, hintText } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
+import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { Button, Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useLoad } from "../ui/useLoad";
@@ -77,7 +78,7 @@ function CredentialEditForm({ kind, name, initialName, initialSecret, revealFail
 
   // The name field appears once the saved value is read; the panel's first field then takes the focus.
   useEffect(() => {
-    nameInput.current?.focus();
+    if (!hasOnScreenKeyboard()) nameInput.current?.focus();
   }, []);
 
   const close = useCallback(() => {

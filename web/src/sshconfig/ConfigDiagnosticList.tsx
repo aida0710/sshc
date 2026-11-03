@@ -1,3 +1,4 @@
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { useTranslate } from "../i18n/context";
 import {
   configDiagnosticDetail,
@@ -27,7 +28,7 @@ export function ConfigDiagnosticList({ diagnostics, className = "" }: { diagnost
         ) : (
           <li key={group.code} className={severityTone(group.severity)}>
             <details>
-              <summary className="cursor-pointer">{describeConfigDiagnosticGroup(t, group.code, group.diagnostics.length)}</summary>
+              <DisclosureSummary>{describeConfigDiagnosticGroup(t, group.code, group.diagnostics.length)}</DisclosureSummary>
               <ul className="mt-1 flex flex-col gap-0.5 pl-4">
                 {group.diagnostics.map((diagnostic, index) => (
                   <li key={`${configDiagnosticPlace(diagnostic)}-${index}`} className="break-all font-mono text-ink-muted">

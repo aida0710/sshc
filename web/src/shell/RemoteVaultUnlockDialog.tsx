@@ -5,6 +5,7 @@ import { useTranslate } from "../i18n/context";
 import { useRemoteVaultUnlockForm } from "../terminal/useRemoteVaultUnlockForm";
 import { ModalShell } from "../ui/ModalShell";
 import { PasswordField } from "../ui/PasswordField";
+import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { Button } from "../ui/surface";
 
 // RemoteVaultUnlockDialog asks for the Vault password of a run-target engine
@@ -50,7 +51,7 @@ export function RemoteVaultUnlockDialog({
         <form onSubmit={(event) => void form.unlock(event)} className="flex flex-col gap-3">
           <h2 id={headingId} className={dialogHeading}>{t("runTarget.unlockHeading", { alias })}</h2>
           <p className="text-sm text-ink-muted">{t("runTarget.unlockBody", { alias })}</p>
-          <PasswordField label={t("runTarget.unlockPassword", { alias })} value={form.password} onChange={form.setPassword} error={form.error} disabled={busy} autoFocus />
+          <PasswordField label={t("runTarget.unlockPassword", { alias })} value={form.password} onChange={form.setPassword} error={form.error} disabled={busy} autoFocus={!hasOnScreenKeyboard()} />
           <div className="flex justify-end gap-2">
             <Button disabled={busy} onClick={onClose}>{t("runTarget.unlockCancel")}</Button>
             <Button type="submit" kind="primary" disabled={busy || form.password === ""}>
