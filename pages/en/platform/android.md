@@ -25,9 +25,9 @@ The top-left menu button, or swiping right across the page, opens a drawer with 
 
 ## SFTP on a phone
 
-The file list gets most of the screen. Its toolbar contains the host picker, Back, current folder, Search, and “…”. Tap the folder name to edit its path. Open “…” for folder creation, uploads, opening a terminal here, sorting, and other actions.
+The file list gets most of the screen. Its toolbar contains the host picker, Back, current folder, Search, and “…”. Tap the path to edit it; **Back**, **Forward**, **Home** and **Root** appear under it. Open “…” for folder creation, uploads, opening a terminal here and copying the path; it also shows the free space. The sort order and Refresh sit above the list.
 
-Tap a name once to open a folder or preview a file. Use a checkbox or long press to select items and reveal their actions. While selection is active, tapping another name adds or removes it from the selection. Directory navigation and remote search show progress and temporarily prevent actions on the old listing.
+Tap a name once to open a folder or preview a file. Long press to select an item, which gives every row a checkbox and reveals the actions. While selection is active, tapping another name adds or removes it from the selection. Directory navigation and remote search show progress and temporarily prevent actions on the old listing.
 
 Transfer Manager stays in a single summary row with counts and progress. Tap it to open the detailed sheet without reducing the file list's height. **Transfer settings** opens **Settings → SFTP**. File properties also expand on demand, leaving more space for previews.
 

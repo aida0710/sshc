@@ -54,7 +54,7 @@ test("creates, renames and deletes only the selected local fixtures, with cancel
 
   await changeDisplayLanguage(page, "ja");
   await expect(page.getByRole("button", { name: "renamed.txt", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "ディレクトリを更新" }).click();
+  await page.getByRole("button", { name: "フォルダを更新" }).click();
   await page.getByRole("button", { name: "renamed.txt", exact: true }).click();
   await page.getByRole("button", { name: "created", exact: true }).click({ modifiers: ["ControlOrMeta"] });
   await page.getByRole("button", { name: "shortcut", exact: true }).click({ modifiers: ["ControlOrMeta"] });

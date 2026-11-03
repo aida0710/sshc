@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, openApplication, openSection, test } from "./support/environment";
-import { openLocalSFTPDirectory, openSecondSFTPPane } from "./support/sftp";
+import { chooseEntryOnPhone, openLocalSFTPDirectory, openSecondSFTPPane } from "./support/sftp";
 
 // Mouse and touch controls must align without sacrificing phone tap targets.
 for (const hasTouch of [false, true]) {
@@ -60,7 +60,7 @@ for (const hasTouch of [false, true]) {
           return rows.every((row) => row !== null && row.y >= bounds.y && row.y + row.height <= bounds.y + bounds.height);
         }).toBe(true);
         const before = (await list.boundingBox())!.height;
-        await pane.getByRole("checkbox", { name: "Select alpha.txt", exact: true }).check();
+        await chooseEntryOnPhone(pane, "alpha.txt");
         await expect(pane.getByRole("button", { name: "Actions for alpha.txt", exact: true })).toBeVisible();
         await expect.poll(async () => Math.abs((await list.boundingBox())!.height - before)).toBeLessThanOrEqual(1);
         await pane.getByRole("button", { name: "Clear selection", exact: true }).click();

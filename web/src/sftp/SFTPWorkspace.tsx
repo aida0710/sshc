@@ -117,7 +117,9 @@ export function SFTPWorkspace({
   const focusedPane = panes.find((pane) => pane.id === focusedPaneId) ?? leftPane;
   const focusedLocation = focusedPane === null ? null : activeTab(focusedPane);
   const compactTabs = focusedPane === null ? null : { ...focusedPane, tabs: allTabs(panes) };
-  const comparisonTabs = allTabs(panes).filter((tab) => tab.alias !== "");
+  // Only folders on screen are compared: a tab holding a connection, or this machine's own disk, which needs none.
+  const comparable = (tab: SFTPTab | null) => tab !== null && (tab.alias === localHostAlias || connectedTabs.has(tab.id));
+  const comparisonTabs = allTabs(panes).filter(comparable);
 
   useEffect(() => { rememberPanes(panes); }, [panes]);
 
@@ -320,8 +322,7 @@ export function SFTPWorkspace({
     if (!compactViewport && leftPane !== null) setFocusedPaneId(leftPane.id);
   }, [target, leftPane, leftLocation, focusedLocation, rightLocation?.alias, visibleSplit, compactViewport, aliases]);
 
-  const compareReady = leftLocation !== null && rightLocation !== null &&
-    leftLocation.alias !== "" && rightLocation.alias !== "";
+  const compareReady = comparable(leftLocation) && comparable(rightLocation);
 
   function selectFileTab(tabId: string) {
     const found = findTab(panes, tabId);
@@ -349,7 +350,7 @@ export function SFTPWorkspace({
     }
   }
 
-  const canCompare = comparisonTabs.length > 1;
+  const canCompare = comparisonTabs.length > 1 && comparable(focusedLocation);
   // Compare sits at the end of the last pane's tab strip, the right edge of the workspace.
   const comparisonAction = compactViewport ? null : (
     <div className="my-auto ml-auto flex shrink-0 items-center gap-1.5">
@@ -358,22 +359,24 @@ export function SFTPWorkspace({
           <Icon name="splitView" className="size-[13px]" />{t("sftp.sideBySide")}
         </Button>
       ) : null}
-      <Button small aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")} disabled={!canCompare}
-        onClick={requestComparison} className="inline-flex items-center gap-1.5">
-        <Icon name="arrowLeftRight" className="size-[13px]" />{t("sftp.compare.action")}
-      </Button>
+      {canCompare ? (
+        <Button small aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
+          onClick={requestComparison} className="inline-flex items-center gap-1.5">
+          <Icon name="arrowLeftRight" className="size-[13px]" />{t("sftp.compare.action")}
+        </Button>
+      ) : null}
     </div>
   );
   // The transfer queue's card does not clip: its resize grip reaches above its top edge.
   const boardFrame = "rounded-xl border border-line bg-sidebar shadow-pane";
   const boardLook = `overflow-hidden ${boardFrame}`;
-  const compactComparisonButton = (
+  const compactComparisonButton = canCompare ? (
     <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
-      disabled={!canCompare} onClick={requestComparison}
+      onClick={requestComparison}
       className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded text-sm text-ink-muted hover:bg-card/50 hover:text-ink">
       <Icon name="arrowLeftRight" className="size-5" />
     </button>
-  );
+  ) : null;
 
   function renderPane(pane: SFTPPane, index: number) {
     const concealed = compactViewport && pane.id !== focusedPane?.id;

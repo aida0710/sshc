@@ -287,10 +287,23 @@ export function useSFTPEntryList({
     onContextMenu(entry, x, y);
   }
 
+  // On a phone a long press starts choosing rows, and the toolbar then offers what can be done with them. Android
+  // reports the same press as a context menu too, so holding a row keeps it chosen rather than switching it back.
+  function holdRow(entry: RemoteEntry, x: number, y: number) {
+    if (!mobileInteraction) {
+      openContextMenu(entry, x, y);
+      return;
+    }
+    if (busy) return;
+    setSelectedPaths((current) => new Set(current).add(entry.path));
+    selectionAnchor.current = entry.path;
+    focusRow(entry.path);
+    onInteract?.();
+  }
+
   function rowContextMenu(event: ReactMouseEvent<HTMLElement>, entry: RemoteEntry) {
-    if (onContextMenu === undefined) return;
     event.preventDefault();
-    openContextMenu(entry, event.clientX, event.clientY);
+    holdRow(entry, event.clientX, event.clientY);
   }
 
   function cancelLongPress() {
@@ -300,7 +313,7 @@ export function useSFTPEntryList({
   }
 
   function beginLongPress(event: ReactPointerEvent<HTMLElement>, entry: RemoteEntry) {
-    if (onContextMenu === undefined || event.pointerType === "mouse" || busy || locked) return;
+    if (event.pointerType === "mouse" || busy || (locked && !mobileInteraction)) return;
     cancelLongPress();
     // A long press that opened a menu but was never followed by a click must
     // not swallow the first tap on some other row.
@@ -309,7 +322,7 @@ export function useSFTPEntryList({
     const timer = globalThis.setTimeout(() => {
       longPress.current = null;
       suppressNextClick.current = true;
-      openContextMenu(entry, clientX, clientY);
+      holdRow(entry, clientX, clientY);
     }, longPressDelay);
     longPress.current = { timer, x: clientX, y: clientY };
   }

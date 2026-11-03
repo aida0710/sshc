@@ -1,5 +1,5 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
-import { connectSFTPHost, moveRightSFTPTabLeft, openSecondSFTPPane, sftpHostPicker } from "./support/sftp";
+import { chooseEntryOnPhone, connectSFTPHost, moveRightSFTPTabLeft, openSecondSFTPPane, sftpHostPicker } from "./support/sftp";
 
 test("keeps a chunked SFTP upload visible while another section is open", async ({ page, installation }) => {
   test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 180_000);
@@ -295,7 +295,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await expect(mobileComparison.getByText("Left only", { exact: true })).toBeVisible();
     await mobileComparison.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("list", { name: "File list" })).toBeVisible();
-    await page.getByRole("checkbox", { name: "Select project", exact: true }).check();
+    await chooseEntryOnPhone(page.getByRole("tabpanel"), "project");
     await page.getByRole("button", { name: "Actions for project" }).click();
     await expect(page.getByRole("menuitem", { name: "Download" })).toBeInViewport();
     await page.keyboard.press("Escape");

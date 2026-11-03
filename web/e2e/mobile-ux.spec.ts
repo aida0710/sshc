@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, openApplication, test, type Installation } from "./support/environment";
 import { samplePNG } from "./support/images";
 import { drawnRowCount, drawnRows, drawnRowsIn, drawnSpan } from "./support/terminal";
@@ -13,6 +13,9 @@ async function capture(page: Page, name: string) {
   await mkdir(directory, { recursive: true });
   await page.screenshot({ path: join(directory, `${name}.png`), animations: "disabled" });
 }
+
+// Longer than the list waits before taking a press for a long one (useSFTPEntryList).
+const longPressHeldMs = 700;
 
 const entry = (name: string, type: "file" | "directory", parent = "/workspace") => ({
   name, path: `${parent}/${name}`, type, size: type === "file" ? 2048 : 0,
@@ -151,7 +154,18 @@ test("home cards connect with one tap and their menus stay inside the cards", as
   await expect.poll(() => requested).toEqual([{ kind: "ssh", alias: "nas" }]);
 });
 
-test("one tap opens folders with immediate loading feedback and checkboxes enter selection mode", async ({ page, installation }) => {
+// holdRow keeps a finger on a row, as a long press does: the browser turns it into the same pointer and context menu
+// events a phone sends.
+async function holdRow(page: Page, row: Locator) {
+  const box = (await row.boundingBox())!;
+  const touch = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const session = await page.context().newCDPSession(page);
+  await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touch] });
+  await page.waitForTimeout(longPressHeldMs);
+  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+}
+
+test("one tap opens folders with immediate loading feedback and a long press enters selection mode", async ({ page, installation }) => {
   let finishProjects: (() => void) | undefined;
   const projectsGate = new Promise<void>((resolve) => { finishProjects = resolve; });
   const requested = await mockFiles(page, projectsGate);
@@ -173,13 +187,42 @@ test("one tap opens folders with immediate loading feedback and checkboxes enter
   await page.getByRole("button", { name: "Parent directory", exact: true }).tap();
   await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/workspace");
   const callsBeforeSelect = requested.length;
-  await page.getByRole("checkbox", { name: "Select projects", exact: true }).check();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await holdRow(page, page.getByRole("button", { name: "projects", exact: true }));
+  await expect(page.getByRole("checkbox", { name: "Select projects", exact: true })).toBeChecked();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "archives", exact: true }).tap();
   await expect(page.getByRole("checkbox", { name: "Select archives", exact: true })).toBeChecked();
   expect(requested).toHaveLength(callsBeforeSelect);
   await expect(page.getByRole("button", { name: "Actions for 2 selected items", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Clear selection", exact: true }).tap();
   await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/workspace");
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+});
+
+test("the folder menu holds what is done to the folder, and the order is chosen at the head of the list", async ({ page, installation }) => {
+  await mockFiles(page);
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  await openMobileFiles(page);
+
+  await page.getByRole("button", { name: "Folder actions", exact: true }).tap();
+  const sheet = page.getByRole("dialog", { name: "Folder actions", exact: true });
+  for (const name of ["New folder", "Upload", "Copy full path"]) await expect(sheet.getByRole("menuitem", { name, exact: true })).toBeVisible();
+  for (const name of [/sort/u, "Home directory", "Root directory", "Back", "Forward", "Refresh directory", "Select all entries"]) {
+    await expect(sheet.getByRole("menuitem", { name })).toHaveCount(0);
+  }
+  await sheet.getByRole("button", { name: "Close", exact: true }).tap();
+
+  await page.getByRole("button", { name: "Sorted by Name", exact: true }).tap();
+  const sortSheet = page.getByRole("dialog", { name: "Sort", exact: true });
+  await sortSheet.getByRole("menuitemradio", { name: /^Size/u }).tap();
+  await expect(sortSheet).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sorted by Size", exact: true })).toBeVisible();
+
+  await page.getByTestId("sftp-current-path").tap();
+  await page.getByRole("button", { name: "Root", exact: true }).tap();
+  await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/");
 });
 
 // mockTerminalSession stands in for one shell whose output is the given text, and returns what the page sends it.
