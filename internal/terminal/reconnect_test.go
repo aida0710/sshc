@@ -1120,3 +1120,67 @@ func TestOnlyTheFirstReconnectWaitSaysTheConnectionDropped(t *testing.T) {
 	}
 	testwait.Until(t, func() bool { return !session.Live() })
 }
+
+// あきらめたセッションの最後の行は、つなぎ直し方を言う。理由の行のあとに書く。
+func TestAReconnectThatGaveUpEndsWithTheWayToConnectAgain(t *testing.T) {
+	first := newFakeProcess()
+	opens := 0
+	registry := &terminal.Registry{
+		ReconnectDelay: func(int) time.Duration { return time.Millisecond },
+		ReconnectLimit: func() int { return 1 },
+	}
+	session, err := registry.Open(t.Context(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "web-01",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) {
+			opens++
+			if opens == 1 {
+				return first, nil
+			}
+			return nil, errors.New("connection refused")
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.exit(transportLost)
+	<-session.Done()
+	requireInOrder(t, snapshotOf(session), "再接続できる回数の上限に達しました", "Enterで再接続します")
+}
+
+func TestAShellThatExitedDoesNotOfferToConnectAgain(t *testing.T) {
+	process := newFakeProcess()
+	registry := &terminal.Registry{}
+	session, err := registry.Open(t.Context(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "web-01",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) { return process, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	process.exit(terminal.ExitInfo{Code: 0})
+	<-session.Done()
+	if strings.Contains(string(snapshotOf(session)), "Enterで再接続します") {
+		t.Fatalf("a shell that exited by itself offers to reconnect: %q", snapshotOf(session))
+	}
+}
+
+func TestAConnectionThatFailedKeepsTheReasonInItsProblem(t *testing.T) {
+	process := newReadyProcess()
+	refused := errors.New("refused")
+	registry := &terminal.Registry{}
+	session, err := registry.Open(t.Context(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "web-01",
+		Open:           func(context.Context, terminal.Size) (terminal.Process, error) { return process, nil },
+		ReconnectError: func(error) (bool, string) { return true, "connect_refused" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	process.finishOpen(refused)
+	process.exit(terminal.ExitInfo{Code: 255})
+	<-session.Done()
+	if got := session.View().Problem; got != "connect_refused" {
+		t.Fatalf("Problem = %q, want the reason", got)
+	}
+	requireInOrder(t, snapshotOf(session), "Enterで再接続します")
+}

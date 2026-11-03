@@ -19,7 +19,9 @@ export type TerminalNotice =
 export function terminalNoticeFor(session: TerminalSession, link: StreamLink, asksNotificationPermission = false): TerminalNotice | null {
   if (session.state === "exited" && session.exited !== undefined) {
     if (session.problem === "" && !exitedAbnormally(session)) return null;
-    return { kind: "ended", key: `${noticeKeyPrefix(session.id)}ended:${session.exited.at}` };
+    // Not exited.at: the stream reports the end before the list says when, and a new key would be a new card, which
+    // takes the focus again. Reconnecting by hand starts the session anew, so its next end is a new occurrence.
+    return { kind: "ended", key: `${noticeKeyPrefix(session.id)}ended:${session.startedAt}` };
   }
   const question = session.hostKeyQuestion;
   if (question !== undefined && (session.state === "connecting" || session.state === "reconnecting")) {

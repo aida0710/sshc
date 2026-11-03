@@ -88,6 +88,21 @@ describe("SessionList", () => {
     expect(line).toHaveAttribute("title", expect.stringMatching(/^The connection could not be established\./u));
   });
 
+  it.each([
+    ["reconnect_exhausted", "Disconnected, could not reconnect"],
+    ["reconnect_stopped", "Disconnected, reconnect stopped"],
+    ["connect_refused", "Connection refused"],
+    ["connect_timed_out", "No answer"],
+    ["connect_host_not_found", "Name not found"],
+    ["connect_no_network", "No network"],
+    ["connect_closed", "Closed by the other side"],
+    ["host_key_changed", "Host key changed"],
+    ["authentication_rejected", "Authentication failed"],
+  ])("says why a session ended with %s in a few words", (problem, words) => {
+    renderList({ sessions: [{ ...live, state: "exited", problem }] });
+    expect(screen.getByText(words, { selector: "[data-session-status-text]" })).toBeVisible();
+  });
+
   it("removes the bar when the engine clears program progress", () => {
     const background = { ...live, programProgress: { state: "normal" as const, percent: 0 } };
     const { rerender, ...props } = renderList({ sessions: [background] });

@@ -109,7 +109,7 @@ test("does not start the automatic reconnect loop when the first connection fail
   // A loop would keep the pane reconnecting for about 40 seconds before it
   // offered a manual reconnect.
   await expect(screen.getByRole("button", { name: "Reconnect", exact: true }).first()).toBeVisible({ timeout: 20_000 });
-  await expect(screen.getByText(/^The connection could not be established\./).first()).toBeVisible();
+  await expect(screen.getByText(/^The connection was refused\./).first()).toBeVisible();
   await expect(screen.getByText(/^reconnecting \d/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Stop reconnecting" })).toHaveCount(0);
 });

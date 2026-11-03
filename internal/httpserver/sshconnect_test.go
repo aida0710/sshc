@@ -1,12 +1,17 @@
 package httpserver
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"testing"
+	"time"
 
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
+	"sshc/internal/terminal"
 	"sshc/internal/vpn"
 )
 
@@ -49,5 +54,52 @@ func TestTheReconnectStopNoticeSaysTheVPNRouteWasDisconnected(t *testing.T) {
 	}
 	if notice := reconnectStopNotice("host_key_changed"); notice != "" {
 		t.Fatalf("既定の文を使う理由に、専用の文を返した: %q", notice)
+	}
+}
+
+// refusedDial は、閉じたポートへ実際に繋いだ失敗を返す。
+func refusedDial(t *testing.T) error {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	_ = listener.Close()
+	conn, err := net.Dial("tcp", address)
+	if err == nil {
+		_ = conn.Close()
+		t.Fatal("the closed port took the connection")
+	}
+	return err
+}
+
+func TestAConnectionFailureThatMayPassByItselfKeepsItsReasonAndIsTriedAgain(t *testing.T) {
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{refusedDial(t), "connect_refused"},
+		{&net.DNSError{Err: "server misbehaving", IsTemporary: true}, "connect_no_network"},
+		{fmt.Errorf("ssh: handshake failed: %w", io.EOF), "connect_closed"},
+		{errors.New("something else"), terminal.ProblemReconnectFailed},
+	}
+	for _, testCase := range cases {
+		retry, problem := reconnectError(testCase.err)
+		if !retry || problem != testCase.want {
+			t.Errorf("reconnectError(%v) = %v, %q, want true, %q", testCase.err, retry, problem, testCase.want)
+		}
+	}
+}
+
+// 画面は始まりと終わりの差で「開いてすぐ終わった」を見る。秒に丸めると、同じ秒の中で終わったものがみな該当する。
+func TestASessionsTimesKeepTheirMilliseconds(t *testing.T) {
+	started := time.Date(2026, 11, 4, 1, 2, 3, 100_000_000, time.UTC)
+	described := describeSession(terminal.View{
+		Started: started,
+		Exited:  &terminal.ExitInfo{At: started.Add(800 * time.Millisecond)},
+	})
+	if described.StartedAt != "2026-11-04T01:02:03.100Z" || described.Exited.At != "2026-11-04T01:02:03.900Z" {
+		t.Errorf("startedAt = %q, exited at = %q", described.StartedAt, described.Exited.At)
 	}
 }

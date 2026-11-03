@@ -10,6 +10,7 @@ import { exitText } from "./exitText";
 import type { NotificationPermissionNotice } from "./useNotificationPermissionNotice";
 import { PasswordSaveCard } from "./PasswordSaveCard";
 import { terminalProblemKey } from "./sessions";
+import { reconnectsOnEnter } from "./sessionStatus";
 import type { TerminalNotice } from "./terminalNotice";
 import { useReconnectCountdown } from "./useReconnectCountdown";
 import type { SessionRecovery } from "./useSessionRecovery";
@@ -92,6 +93,7 @@ function EndedCard({ session, recovery, onCloseSession, frame }: {
       tone="ended"
       title={reason}
       body={recovery.reconnectFailed ? t("terminal.manualReconnectFailed") : undefined}
+      onEnter={reconnectsOnEnter(session) ? recovery.reconnect : undefined}
       {...frame}
     >
       {onCloseSession === undefined ? null : <Button onClick={onCloseSession} className={noticeCardButton}>{t("terminal.noticeCloseSession")}</Button>}
