@@ -215,7 +215,10 @@ func (service *Service) Status() (Job, error) {
 		if !stored.Active() && stored.State != JobRestartRequired {
 			return nil
 		}
-		if stored.RestartVersion() == service.dependencies.Current {
+		// An engine past the job's version was updated another way, as with sshc update after a restart that failed.
+		// Nothing is left to do for that job, and it must not stand in the way of the next update.
+		restartVersion := stored.RestartVersion()
+		if restartVersion == service.dependencies.Current || releasecheck.Newer(restartVersion, service.dependencies.Current) {
 			stored.State, stored.Problem = JobSucceeded, ""
 		} else if stored.State == JobRestarting || stored.State == JobRestartRequired {
 			stored.State, stored.Problem = JobRestartRequired, "update_restart_failed"

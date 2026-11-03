@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -19,6 +20,10 @@ import (
 
 // LatestAPI は、プロジェクトの最新リリースを返す GitHub のエンドポイントである。
 const LatestAPI = "https://api.github.com/repos/aida0710/sshc/releases/latest"
+
+// LatestPage は、最新リリースのページへ転送する GitHub のページである。API は認証なしだと
+// 1 つの IP アドレスにつき 1 時間 60 回までで、職場などで共有すると使い切る。このページはその回数に数えない。
+const LatestPage = "https://github.com/aida0710/sshc/releases/latest"
 
 // maxLatestResponseBytes bounds the single-release JSON response before decoding.
 const maxLatestResponseBytes = 1 << 20
@@ -37,7 +42,9 @@ type Release struct {
 // Checker は、最新リリースが何かを GitHub に尋ねる。
 type Checker struct {
 	// API はリリースのエンドポイント。テストが GitHub に到達しないよう注入する。
-	API  string
+	API string
+	// Page は、API が断ったときに最新の版を尋ねるページである。空なら尋ねない。
+	Page string
 	HTTP *http.Client
 }
 
@@ -73,7 +80,7 @@ func (c Checker) Latest(ctx context.Context) (Release, error) {
 		return Release{}, ErrNoRelease
 	}
 	if response.StatusCode != http.StatusOK {
-		return Release{}, fmt.Errorf("the releases API answered %d", response.StatusCode)
+		return c.latestFromPage(ctx, fmt.Errorf("the releases API answered %d", response.StatusCode))
 	}
 
 	var decoded githubRelease
@@ -84,6 +91,35 @@ func (c Checker) Latest(ctx context.Context) (Release, error) {
 		return Release{}, ErrNoRelease
 	}
 	return decoded.release(), nil
+}
+
+// latestFromPage は、API が refusal で断った代わりに、Page の転送先から最新の版を読む。
+// 分かるのは版とページだけで、公開日時と本文は分からない。
+func (c Checker) latestFromPage(ctx context.Context, refusal error) (Release, error) {
+	if c.Page == "" {
+		return Release{}, refusal
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Page, nil)
+	if err != nil {
+		return Release{}, fmt.Errorf("%w; %w", refusal, err)
+	}
+	client := *c.client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	response, err := client.Do(request)
+	if err != nil {
+		return Release{}, fmt.Errorf("%w; %w", refusal, err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	location, err := response.Location()
+	if err != nil {
+		return Release{}, fmt.Errorf("%w; the latest release page answered %d", refusal, response.StatusCode)
+	}
+	// リリースが 1 つも無いと、タグの無いリリースの一覧へ転送される。
+	tag := path.Base(location.Path)
+	if stable, ok := StableTag(tag); !ok || stable != tag || path.Base(path.Dir(location.Path)) != "tag" {
+		return Release{}, ErrNoRelease
+	}
+	return Release{Version: tag, PageURL: location.String()}, nil
 }
 
 // Newer は、candidate が current より後のバージョンかを報告する。

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"sshc/internal/releasecheck"
@@ -102,5 +103,51 @@ func TestLatestIgnoresADraft(t *testing.T) {
 	})
 	if _, err := checker.Latest(context.Background()); !errors.Is(err, releasecheck.ErrNoRelease) {
 		t.Errorf("Latest = %v, want ErrNoRelease", err)
+	}
+}
+
+// API が回数の上限で断っても、ページの転送先から最新の版が分かることを検証する。
+func TestLatestAsksThePageWhileTheAPIRefuses(t *testing.T) {
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	mux.HandleFunc("/api/releases/latest", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) })
+	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "https://example.invalid/aida0710/sshc/releases/tag/v0.3.0")
+		w.WriteHeader(http.StatusFound)
+	})
+	checker := releasecheck.Checker{API: server.URL + "/api/releases/latest", Page: server.URL + "/releases/latest", HTTP: server.Client()}
+
+	found, err := checker.Latest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.Version != "v0.3.0" || found.PageURL != "https://example.invalid/aida0710/sshc/releases/tag/v0.3.0" {
+		t.Errorf("found = %+v", found)
+	}
+}
+
+// リリースが無いと一覧へ転送される。それを版として読まないことを検証する。
+func TestThePageWithoutATagMeansNoRelease(t *testing.T) {
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	mux.HandleFunc("/api/releases/latest", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTooManyRequests) })
+	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "https://example.invalid/aida0710/sshc/releases")
+		w.WriteHeader(http.StatusFound)
+	})
+	checker := releasecheck.Checker{API: server.URL + "/api/releases/latest", Page: server.URL + "/releases/latest", HTTP: server.Client()}
+
+	if _, err := checker.Latest(context.Background()); !errors.Is(err, releasecheck.ErrNoRelease) {
+		t.Errorf("Latest = %v, want ErrNoRelease", err)
+	}
+}
+
+// ページにも尋ねられなければ、API が断ったことを伝えることを検証する。
+func TestWithoutAPageTheRefusalOfTheAPIIsTheAnswer(t *testing.T) {
+	checker := serve(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) })
+	if _, err := checker.Latest(context.Background()); err == nil || !strings.Contains(err.Error(), "403") {
+		t.Errorf("Latest = %v, want the 403", err)
 	}
 }
