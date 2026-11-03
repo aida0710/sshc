@@ -3,6 +3,7 @@ import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard 
 import { everySection } from "./support/sectionNavigation";
 import { answerNoVPNProfiles } from "./support/vpn";
 import { openKeyCreation } from "./support/keys";
+import { pressHeight } from "./support/touchTarget";
 
 
 const hosts = "Host alpha\n\tHostName 198.51.100.10\n\nHost bravo\n\tHostName 198.51.100.11\n";
@@ -760,6 +761,35 @@ test("keeps key actions in the list and opens private material in a modal", asyn
     await page.setViewportSize({ width: 1440, height: 1000 });
     await expect(table).toBeVisible();
     await table.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-keys-inline-desktop.png` });
+  }
+});
+
+test("the place to press a key's name reaches over the row's padding", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSectionOnPhone(page, "Keys");
+  await openKeyCreation(page);
+  await page.getByLabel("File name").fill("id_keys_reach");
+  await page.getByLabel(/Create without a passphrase/).check();
+  expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+
+  const name = page.getByRole("table", { name: "Files classified by content and permissions" }).getByRole("button", { name: "id_keys_reach", exact: true }).first();
+  await name.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  expect((await name.boundingBox())!.height).toBeLessThan(30);
+  expect(await pressHeight(name)).toBeGreaterThanOrEqual(44);
+});
+
+test("the preview of the key bar shows every key, each as large as a finger", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Menu", exact: true }).click();
+  await page.getByRole("link", { name: "Open Key bar" }).click();
+  const order = page.getByRole("group", { name: "Keys always shown" });
+  await order.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const viewportWidth = page.viewportSize()!.width;
+  for (const key of await order.getByRole("button").all()) {
+    const box = (await key.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.x + box.width).toBeLessThanOrEqual(viewportWidth);
   }
 });
 

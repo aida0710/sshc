@@ -3,6 +3,7 @@ import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
+import { asciiTextEntry } from "../ui/softKeyboard";
 import type { BasicFieldState } from "./basicFields";
 import { inheritsValue, resetValue, typedValue, type DraftField } from "./basicFormDraft";
 
@@ -61,7 +62,7 @@ function DestinationInput({ name, entry, numeric = false }: { name: DestinationN
         <input
           id={id}
           type={numeric ? "number" : "text"}
-          {...(numeric ? { min: 1, max: 65535 } : {})}
+          {...(numeric ? { min: 1, max: 65535 } : asciiTextEntry)}
           value={inherits ? "" : field.value}
           placeholder={placeholder}
           disabled={!field.state.editable || complex}

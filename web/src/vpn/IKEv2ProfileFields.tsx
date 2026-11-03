@@ -47,7 +47,7 @@ export function IKEv2ProfileFields({
       </FieldRow>
       {psk ? secretField("ikev2Psk", t("vpn.psk")) : secretField("ikev2Password", t("vpn.password"))}
       <FieldRow label={t("vpn.serverIdentity")} hint={t("vpn.serverIdentityHint")} warning={errorFor("ikev2.serverIdentity")}>
-        <input
+        <input {...asciiTextEntry}
           className={control}
           value={draft.serverIdentity}
           onChange={(event) => onEdit("serverIdentity")(event.target.value)}

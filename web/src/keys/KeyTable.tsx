@@ -131,13 +131,13 @@ export function KeyTable({
                   ) : null}
                 </td>
                 <td className={`relative min-w-0 border-line align-middle @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:px-2.5 @xl/keytable:py-[9px] ${relatedTo === null ? "" : "pl-4 @xl/keytable:pl-6"}`}>
-                  {/* The name's button reaches over the whole cell (its ::before), so the line under the name
-                      is part of what a finger can tap without making the row taller. */}
+                  {/* The name's button reaches over the whole cell and, on a phone, the row's padding (its ::before), so
+                      the line under the name is part of what a finger can tap without making the row taller. */}
                   <button
                     type="button"
                     aria-pressed={isSelected}
                     onClick={() => actions.onSelect(item)}
-                    className="block min-h-0! max-w-full text-left text-[13.5px] text-ink [overflow-wrap:anywhere] before:absolute before:inset-0 before:content-[''] hover:underline"
+                    className="block min-h-0! max-w-full text-left text-[13.5px] text-ink [overflow-wrap:anywhere] before:absolute before:inset-0 before:content-[''] mobile-layout:before:-inset-y-2 hover:underline"
                   >
                     {keyListPath(item.relativePath)}
                   </button>

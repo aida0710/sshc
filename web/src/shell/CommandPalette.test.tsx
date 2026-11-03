@@ -220,6 +220,11 @@ describe("CommandPalette", () => {
   });
 
 
+  it("does not let a phone's keyboard capitalise a user@host typed into the search", () => {
+    renderPalette();
+    expect(screen.getByRole("searchbox")).toHaveAttribute("autocapitalize", "off");
+  });
+
   it("leads with connecting to a user@host typed into the search, and saving it first", async () => {
     const direct = { connect: vi.fn(), saveAndConnect: vi.fn(), aliasFor: () => "web" };
     const props = renderPalette({ direct });

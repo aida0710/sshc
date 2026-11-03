@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { HostIdentity } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { isValidAlias } from "../rules/rules";
+import { asciiTextEntry } from "../ui/softKeyboard";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { InputDialog } from "../ui/InputDialog";
 import { useToast } from "../ui/useToast";
@@ -123,6 +124,7 @@ export function ConnectionListDialogs({ actions, createGroup, renameGroup, delet
           initialValue={renamingConnection.identity.alias}
           submitLabel={t("tree.rename")}
           cancelLabel={t("groupDialog.cancel")}
+          textEntry={asciiTextEntry}
           validate={(value) => (isValidAlias(value) ? "" : t("conn.createAliasInvalid"))}
           onSubmit={(value) => {
             if (value === renamingConnection.identity.alias) {

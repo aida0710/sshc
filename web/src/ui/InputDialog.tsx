@@ -3,6 +3,7 @@ import { usePendingResult } from "./usePendingResult";
 import { control, dialogHeading, hintText } from "./form";
 import { Button } from "./surface";
 import { ModalShell } from "./ModalShell";
+import { hasOnScreenKeyboard, type asciiTextEntry } from "./softKeyboard";
 
 // InputDialog は、名前など1つの値を尋ねる。
 //
@@ -22,7 +23,7 @@ export function InputDialog({
   validate,
   onSubmit,
   onCancel,
-  inputMode,
+  textEntry,
   returnFocusRef,
   error = "",
 }: {
@@ -36,7 +37,8 @@ export function InputDialog({
   validate?: (value: string) => string;
   onSubmit: (value: string) => void | Promise<unknown>;
   onCancel: () => void;
-  inputMode?: "text" | "numeric";
+  // textEntry says how a phone's keyboard opens for the value (softKeyboard.ts).
+  textEntry?: typeof asciiTextEntry;
   returnFocusRef?: RefObject<HTMLElement | null>;
   error?: string;
 }) {
@@ -85,11 +87,11 @@ export function InputDialog({
         <div className="flex flex-col gap-1">
           <label htmlFor={inputId} className="text-xs font-medium tracking-wide text-ink-muted">{label}</label>
           <input
+            {...textEntry}
             id={inputId}
             ref={inputRef}
             value={value}
             readOnly={submitting}
-            inputMode={inputMode}
             aria-invalid={touched && validation !== ""}
             aria-describedby={touched && validation !== "" ? errorId : undefined}
             onChange={(event) => setValue(event.target.value)}
@@ -118,6 +120,6 @@ function useFocusInputAfterFailure(submitting: boolean, error: string, inputRef:
     }
     if (!wasSubmitting.current) return;
     wasSubmitting.current = false;
-    if (error !== "") inputRef.current?.focus();
+    if (error !== "" && !hasOnScreenKeyboard()) inputRef.current?.focus();
   }, [submitting, error, inputRef]);
 }

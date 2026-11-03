@@ -21,6 +21,9 @@ export const narrowControl = sizedControl("w-40");
 
 // 押せないときの見た目（薄くする、載せても光らない）は index.css の :disabled の決まりが
 // どのボタンにも同じく付けるので、ここでは書かない。
+// touchLinkTarget makes a link on a line of its own 44px tall on a phone, its text in the middle of the height.
+export const touchLinkTarget = "mobile-layout:inline-flex mobile-layout:min-h-11 mobile-layout:items-center";
+
 export const primaryAction =
   "whitespace-nowrap rounded-md bg-accent px-3.5 py-1.5 text-[13px] font-medium leading-5 text-accent-ink " +
   "transition-[background-color,box-shadow,filter] duration-150 hover:brightness-110 active:brightness-95";

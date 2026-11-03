@@ -6,6 +6,7 @@ import { Field, control } from "../ui/form";
 import { InlinePanel } from "../ui/InlinePanel";
 import { phoneCardFrame } from "../ui/page";
 import { PasswordField } from "../ui/PasswordField";
+import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { Button } from "../ui/surface";
 
@@ -37,7 +38,7 @@ export function CredentialAddPanel({ kind, onStore, onCancel }: {
   const compact = useMediaQuery(mobileViewportQuery);
 
   useEffect(() => {
-    nameInput.current?.focus();
+    if (!hasOnScreenKeyboard()) nameInput.current?.focus();
   }, []);
 
   async function store() {

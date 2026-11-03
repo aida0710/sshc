@@ -10,7 +10,7 @@ import { clipboard } from "../ui/clipboard";
 import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
-import { asciiTextEntry } from "../ui/softKeyboard";
+import { asciiTextEntry, hasOnScreenKeyboard } from "../ui/softKeyboard";
 
 type ForwardApi = Pick<TerminalSessionsApi, "startTerminalForward" | "stopTerminalForward">;
 type SaveApi = Pick<typeof configApi, "overview" | "host" | "save">;
@@ -171,7 +171,7 @@ export function TerminalPortForwards({
                 </select>
               </Field>
               <Field label={t(kind === "remote" ? "conn.forwardRemoteListenPort" : "conn.forwardListenPort")} error={listenError}>
-                <input {...asciiTextEntry} autoFocus inputMode="numeric" className={control} value={listenPort} disabled={!connected || busy} onChange={(event) => setListenPort(event.currentTarget.value)} />
+                <input {...asciiTextEntry} autoFocus={!hasOnScreenKeyboard()} inputMode="numeric" className={control} value={listenPort} disabled={!connected || busy} onChange={(event) => setListenPort(event.currentTarget.value)} />
               </Field>
               {kind !== "dynamic" ? (
                 <div className="sm:col-span-2">
