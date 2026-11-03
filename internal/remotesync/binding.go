@@ -150,22 +150,20 @@ func (s *Service) AccessKeySuffix() string {
 // retained by a later response.
 func (s *Service) SyncState() SyncStateView {
 	current, err := s.readState()
-	if err != nil || current.ETag == "" || current.Base == nil {
+	// 設定のときに置いたファイルを含まないスナップショットだけを記録しているあいだは、
+	// このマシンのファイルをまだ一度も送受信していない。同期済みとは言わない。
+	if err != nil || current.ETag == "" || current.Base == nil || current.LastOperation == nil {
 		return SyncStateView{}
 	}
 	binding, err := s.configuredBinding()
 	if err != nil || !stateMatchesTarget(current, binding.config) {
 		return SyncStateView{}
 	}
-	view := SyncStateView{
+	operation := *current.LastOperation
+	return SyncStateView{
 		Synced: true, At: current.Base.CreatedAt, Origin: current.Base.Origin,
-		Files: len(current.Base.Files),
+		Files: len(current.Base.Files), LastOperation: &operation,
 	}
-	if current.LastOperation != nil {
-		operation := *current.LastOperation
-		view.LastOperation = &operation
-	}
-	return view
 }
 
 // DisplayPath は、ワークスペースの絶対パスを、このアプリケーションの他の部分が

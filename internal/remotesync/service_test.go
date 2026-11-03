@@ -3149,9 +3149,9 @@ func TestSetupWaitsForAnInFlightPush(t *testing.T) {
 	if got := oldBucket.keys(); len(got) != 2 || oldBucket.object("old/"+remotesync.ObjectName) == nil {
 		t.Errorf("old binding holds %v, want its live object and dated copy", got)
 	}
-	if got := newBucket.keys(); len(got) != 0 {
-		t.Errorf("new binding was used by an in-flight push: %v", got)
-	}
+	// 新しい同期先には、設定で置いたファイルを含まないスナップショットだけがある。
+	// 走っていた push が新しい接続を使っていれば、履歴の候補とファイルが届いている。
+	requireOnlyTheSetupSnapshot(t, newBucket, "new", syncPassphrase)
 }
 
 func TestPushReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
@@ -3488,9 +3488,8 @@ func TestSetKeyWaitsForSetupPersistenceAndReadsTheNewGeneration(t *testing.T) {
 	if path := <-committedTarget; path != "new" {
 		t.Fatalf("SetKey committed against path %q, want new binding", path)
 	}
-	if got := newBucket.keys(); len(got) != 0 {
-		t.Fatalf("first key setup for a new target unexpectedly rewrote remote objects: %v", got)
-	}
+	// 設定で置いたスナップショットは、保存を待ってから読んだ新しいキーで封じ直してある。
+	requireOnlyTheSetupSnapshot(t, newBucket, "new", "a different strong shared synchronization key")
 }
 
 // Preview evidence belongs to one binding generation. Reconfiguration makes it
