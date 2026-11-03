@@ -442,7 +442,7 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 		if d.DialVPN == nil {
 			return nil, ErrVPNUnavailable
 		}
-		trace.announce("VPNプロファイル「%s」の経路で接続します。", target.VPN)
+		trace.announce("VPNプロファイル「%s」のルートで接続します。", target.VPN)
 		return d.DialVPN(ctx, target.VPN, target.Address())
 	}
 	if target.ProxyCommand != "" {
@@ -589,11 +589,11 @@ func describeHop(trace *tracer, target Target) {
 		target.HostName, target.Port, target.User, identities, target.IdentitiesOnly)
 	switch {
 	case target.VPN != "":
-		trace.say(connectionlog.Detailed, "経路：VPNプロファイル「%s」", target.VPN)
+		trace.say(connectionlog.Detailed, "ルート：VPNプロファイル「%s」", target.VPN)
 	case target.ProxyCommand != "":
-		trace.say(connectionlog.Detailed, "経路：ProxyCommand")
+		trace.say(connectionlog.Detailed, "ルート：ProxyCommand")
 	default:
-		trace.say(connectionlog.Detailed, "経路：直接TCPで接続")
+		trace.say(connectionlog.Detailed, "ルート：直接TCPで接続")
 	}
 }
 

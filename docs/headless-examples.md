@@ -46,7 +46,7 @@ sshc sync auto off --json
 
 接続設定だけを調べる `sshc info <alias> [--json]` は engine を必要としません。実接続と同じ `Include`／`Match`／`ProxyJump` 解決を使いますが、保存済みの認証情報、`SetEnv` の値、`ProxyCommand` の本文は表示しません。
 
-## VPN 経路
+## VPN ルート
 
 VPN プロファイルを付けた接続だけを専用の VPN へ通す。プロファイルは接続先を持たず、接続先は付けた接続の HostName と Port である。Docker が動いているマシンでだけ使える。
 
@@ -62,9 +62,9 @@ sshc vpn down tohoku
 
 `add` と `edit` は対話型のターミナルを要求する。`edit` は保存済みの値を初期値にし、空欄のシークレットは保存済みの値のまま残す。秘密鍵、VPN のパスワード、IPsec の事前共有鍵、OpenConnect のパスワードと二要素認証の TOTP のシークレットは no-echo で読み、argv、環境変数、設定ファイルから渡す option を持たない。engine が Vault へ保存し、応答にも `--json` にもシークレットは現れない。
 
-`vpn --json` は、経路ごとに `running`、`relaySocket`、`connections` に加えて、用意している最中は `phase`（`image`／`container`／`tunnel`／`approval`）、経路があるときは `tunnel`（インターフェース・アドレス・開始時刻）を返す。使えないマシンでは `available` が false になり、`unavailable`（`vpn_docker_missing`／`vpn_docker_not_running`）と docker の生の文の `detail` を返す。`vpn logs <名前> --json` は、engine が経路を用意した記録とコンテナの直近の出力を `lines` として返す。保存済みのシークレットは `[REDACTED]` に置き換わる。
+`vpn --json` は、ルートごとに `running`、`relaySocket`、`connections` に加えて、用意している最中は `phase`（`image`／`container`／`tunnel`／`approval`）、ルートがあるときは `tunnel`（インターフェース・アドレス・開始時刻）を返す。使えないマシンでは `available` が false になり、`unavailable`（`vpn_docker_missing`／`vpn_docker_not_running`）と docker の生の文の `detail` を返す。`vpn logs <名前> --json` は、engine がルートを用意した記録とコンテナの直近の出力を `lines` として返す。保存済みのシークレットは `[REDACTED]` に置き換わる。
 
-プロファイルを付けた接続は Terminal、SFTP、`sshc ssh <接続先>` のいずれからでも同じ経路を通る。経路を作れないマシンでは、素の回線へ落とさずに拒否する。ホストの `ssh`・`scp`・`git` から使う場合は、プロファイルを付けずに `ProxyCommand sshc vpn proxy tohoku %h %p` を書く（`%h %p` は必須）。
+プロファイルを付けた接続は Terminal、SFTP、`sshc ssh <接続先>` のいずれからでも同じルートを通る。ルートを作れないマシンでは、素の回線へ落とさずに拒否する。ホストの `ssh`・`scp`・`git` から使う場合は、プロファイルを付けずに `ProxyCommand sshc vpn proxy tohoku %h %p` を書く（`%h %p` は必須）。
 
 `relaySocket` へ接続するクライアントは、1行目に接続先（`host:port\n`）を送り、engine が返す1行の JSON（`{}` なら接続できた、`{"code":…,"reason":…}` なら理由）を読んでから、バイト列を送る。
 

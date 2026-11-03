@@ -9,6 +9,7 @@ import { PageSection } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { newIdentifier } from "../ui/randomIdentifier";
+import { shortcutLabel } from "./shortcutLabel";
 import { defaultBindings, shortcutActions, shortcutKey, type Bindings, type ShortcutAction } from "./bindings";
 import { maxShortcutPresetNameLength, maxShortcutPresets } from "../rules/shortcuts.generated";
 import { isImeComposing } from "../ui/imeComposition";
@@ -123,7 +124,7 @@ export function KeyConfig({ presetId }: { presetId?: string } = {}) {
                 if (conflict !== undefined) { setError(t("shortcuts.conflict", { action: t(actionLabelKeys[conflict]) })); return; }
                 void save({ ...bindings, [action]: [key] });
               }}>
-              {recording === action ? t("shortcuts.recording") : bindings[action].join(" / ") || t("shortcuts.unassigned")}
+              {recording === action ? t("shortcuts.recording") : bindings[action].map(shortcutLabel).join(" / ") || t("shortcuts.unassigned")}
             </button>
             <Button small onClick={() => { void save({ ...bindings, [action]: [] }); }} disabled={bindings[action].length === 0}
               aria-label={t("shortcuts.clearAction", { action: t(actionLabelKeys[action]) })}>{t("shortcuts.clear")}</Button>

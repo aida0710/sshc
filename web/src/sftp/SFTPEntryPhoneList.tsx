@@ -1,4 +1,5 @@
 import { useLanguage, useTranslate } from "../i18n/context";
+import { formatDateTime } from "../ui/format";
 import type { RemoteEntry } from "./api";
 import { EntryIcon, EntryName, entrySize } from "./sftpEntryLook";
 import { useEntryRowProps } from "./useEntryRowProps";
@@ -13,7 +14,7 @@ function EntryFacts({ entry, entryContext }: { entry: RemoteEntry; entryContext:
       {entryContext === undefined ? null : <span title={entryContext(entry)} className="max-w-full truncate font-mono">{entryContext(entry)}</span>}
       <span className="whitespace-nowrap">
         {entrySize(entry)}{" · "}
-        <time title={new Date(entry.modifiedAt).toLocaleString(locale)} dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleDateString(locale)}</time>
+        <time title={new Date(entry.modifiedAt).toLocaleString(locale)} dateTime={entry.modifiedAt}>{formatDateTime(entry.modifiedAt, locale)}</time>
       </span>
     </span>
   );

@@ -18,7 +18,7 @@ const problemVPNRouteDisconnected = vpnrefusal.CodeRouteDisconnected
 // 当てはまらないものについて、ターミナルへ書く文を返す。
 func reconnectStopNotice(problem string) string {
 	if problem == problemVPNRouteDisconnected {
-		return "VPN経路が切断されたため、自動再接続を停止しました。"
+		return "VPNルートが切断されたため、自動再接続を停止しました。"
 	}
 	return ""
 }

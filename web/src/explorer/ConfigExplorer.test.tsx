@@ -138,7 +138,7 @@ describe("ConfigExplorer", () => {
 
     expect(await screen.findByRole("heading", { name: "Diagnostics: 1" })).toBeInTheDocument();
     expect(screen.getByText(/^OpenSSH cannot read this line \(HostNmae\)\..*\(conf\.d\/10-home\.conf:3\)$/u)).toBeInTheDocument();
-    expect(screen.queryByText("No Include problems")).not.toBeInTheDocument();
+    expect(screen.queryByText("No configuration problems")).not.toBeInTheDocument();
   });
 
   it("names each file in the tree by its file name and keeps the path as its name and tooltip", async () => {

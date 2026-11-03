@@ -377,7 +377,7 @@ export function KeysScreen({
         <SummaryStats>
           <SummaryStat label={t("keys.metricFiles")} value={inventory.items.length} />
           <SummaryStat label={t("keys.metricPrivate")} value={inventory.items.filter((item) => item.kind === "private_key").length} />
-          <SummaryStat label={t("keys.metricAttention")} value={keyAttention} attention={keyAttention > 0} />
+          {keyAttention === 0 ? null : <SummaryStat label={t("keys.metricAttention")} value={keyAttention} attention />}
         </SummaryStats>
       )}
       {failure !== "" && <Notice tone="danger">{failure}</Notice>}

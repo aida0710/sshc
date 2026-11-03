@@ -212,7 +212,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={buildApi(unconfigured, nothingToDo)} />);
 
     expect(
-      await screen.findByText(/may include private keys/),
+      await screen.findByText(/Private keys may be included/),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(
@@ -244,7 +244,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     const lastSynced = `Last synced ${formatDateTime("2026-08-05T00:00:00Z", "en")}, 7 files.`;
-    expect(await screen.findAllByText(lastSynced)).toHaveLength(2);
+    expect(await screen.findAllByText(lastSynced)).toHaveLength(1);
     expect(await screen.findByText(`Bucket checked at ${formatDateTime("2026-08-25T01:55:00Z", "en")}.`)).toBeInTheDocument();
     expect(await screen.findByText(new RegExp(`^${formatDateTime("2026-08-25T01:54:00Z", "en")} · 7 files`))).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
@@ -1221,7 +1221,9 @@ describe("SyncPanel", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/could not authenticate/i);
-    expect(alert).toHaveTextContent("Code: bucket_authentication_failed");
+    // The code stays closed under the cause: it is for a report, not for reading first.
+    expect(within(alert).getByText("bucket_authentication_failed").closest("details")).not.toHaveAttribute("open");
+    expect(alert).not.toHaveTextContent("Code:");
   });
 
   it("shows a specific network cause and a stable diagnostic code", async () => {
@@ -1248,7 +1250,7 @@ describe("SyncPanel", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/hostname could not be resolved/i);
-    expect(alert).toHaveTextContent("Code: bucket_dns_failed");
+    expect(alert).toHaveTextContent("bucket_dns_failed");
   });
 
   it("keeps the automatic cycle failure cause visible after the request returns", async () => {
@@ -1267,7 +1269,7 @@ describe("SyncPanel", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/hostname could not be resolved/i);
-    expect(alert).toHaveTextContent("Code: bucket_dns_failed");
+    expect(alert).toHaveTextContent("bucket_dns_failed");
   });
 
   it("explains an endpoint that carries a path instead of just refusing it", async () => {
@@ -1323,7 +1325,7 @@ describe("SyncPanel", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/starts with https:\/\//i);
-    expect(alert).toHaveTextContent("Code: endpoint_must_be_https");
+    expect(alert).toHaveTextContent("endpoint_must_be_https");
   });
   it("will not apply a pull that removes files until it is told to go ahead", async () => {
     const removing = {

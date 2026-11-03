@@ -1,8 +1,9 @@
 import { useId, useState } from "react";
 import { useTranslate } from "../i18n/context";
 
-// SyncWarning says in one line what the sync sends and that it is encrypted first. The whole of it (what is
-// left out, who can read what) opens under the line: it matters, but not on every visit to the page.
+// SyncWarning says in one line that the sync may send private keys; the page's heading says it is encrypted
+// first. The whole of it (what is left out, who can read what) opens under the line: it matters, but not on
+// every visit to the page.
 export function SyncWarning() {
   const t = useTranslate();
   const [open, setOpen] = useState(false);

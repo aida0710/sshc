@@ -26,7 +26,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("application shortcuts", () => {
   it("shows the paste defaults and preserves saved paste bindings", () => {
     render(<KeyConfig />);
-    expect(screen.getByRole("button", { name: "Assign shortcut: Paste" })).toHaveTextContent("Ctrl+V / Meta+V / Ctrl+Shift+V");
+    expect(screen.getByRole("button", { name: "Assign shortcut: Paste" })).toHaveTextContent("Ctrl+V / Win+V / Ctrl+Shift+V");
   });
 
   it("records, persists, disables and restores shortcuts without accepting duplicates", async () => {

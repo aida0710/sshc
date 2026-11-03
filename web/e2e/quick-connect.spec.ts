@@ -63,7 +63,7 @@ test("drills through group levels and keeps every descendant connection in scope
 
   const rootGroups = page.getByRole("group", { name: "Filter connections by group" });
   await expect(rootGroups).toBeVisible();
-  await expect(page.getByRole("heading", { name: "29 of 29" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "29 total" })).toBeVisible();
   await expect(rootGroups.getByRole("button")).toHaveCount(8);
   await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem")).toHaveCount(29);
   await expect(rootGroups.getByRole("button", { name: "Open Production, 10 connections" })).toBeVisible();

@@ -24,7 +24,7 @@ var ErrRouteDisconnected = errors.New("the vpn route was disconnected by the use
 // 起動を打ち切る。
 var ErrRouteStopped = errors.New("the vpn route was stopped while it was starting")
 
-// Manager は、この engine が持つVPN経路の全体である。
+// Manager は、この engine が持つVPNルートの全体である。
 //
 // Dockerが無い機械でも作れる。使えるかどうかは、使う時点で確かめて理由を返す。
 // engineの起動が、入っていないかもしれないものに依存しないためである。
@@ -88,7 +88,7 @@ type Manager struct {
 	changes atomic.Uint64
 }
 
-// New は、VPN経路の管理を作る。
+// New は、VPNルートの管理を作る。
 //
 // directory は、engineだけが読み書きするディレクトリの下を渡す。workspace の
 // 識別子は、この directory から決まる。environment は、docker を探して起動する
@@ -108,7 +108,7 @@ func New(directory string, owner int, environment Environment) *Manager {
 // Close は、進行中の起動を打ち切る。経路そのものは StopAll で畳む。
 func (manager *Manager) Close() { manager.close() }
 
-// Available は、このマシンでVPN経路を使えるかを返す。
+// Available は、このマシンでVPNルートを使えるかを返す。
 //
 // ここで見るのは Docker だけである。トンネルのデバイスは backend ごとに違うので、
 // そのプロファイルを起こすときに確かめる。使えない理由は隠さない。利用者が何を
@@ -150,7 +150,7 @@ func (manager *Manager) Dial(ctx context.Context, request DialRequest) (net.Conn
 	if err != nil {
 		return nil, err
 	}
-	connectionlog.Say(ctx, connectionlog.Detailed, "%sへ、VPNプロファイル「%s」（%s）の経路で接続します。",
+	connectionlog.Say(ctx, connectionlog.Detailed, "%sへ、VPNプロファイル「%s」（%s）のルートで接続します。",
 		request.Address, profile.Name, profile.Backend)
 	destination, err := profile.Destination(request.Address)
 	if err != nil {
@@ -290,7 +290,7 @@ func (manager *Manager) Start(ctx context.Context, profileName string, source Ro
 	}
 	defer state.transition.unlock()
 	if err := state.beginStart(stops, cancel); err != nil {
-		connectionlog.Say(ctx, connectionlog.Detailed, "起動を待っているあいだにVPN経路が停止されたため、起動を中止しました。")
+		connectionlog.Say(ctx, connectionlog.Detailed, "起動を待っているあいだにVPNルートが停止されたため、起動を中止しました。")
 		return err
 	}
 	defer state.endStart()
@@ -341,7 +341,7 @@ func (manager *Manager) startLocked(ctx context.Context, profileName string, sou
 			// engine の中継へ繋ぐので、そのあいだに停止されないよう、無操作の
 			// 起点をいまにする。
 			state.touch(manager.now())
-			connectionlog.Say(ctx, connectionlog.Detailed, "起動済みのVPN経路（コンテナ「%s」）を使います。", name)
+			connectionlog.Say(ctx, connectionlog.Detailed, "起動済みのVPNルート（コンテナ「%s」）を使います。", name)
 			return nil
 		}
 	}
@@ -353,16 +353,16 @@ func (manager *Manager) startLocked(ctx context.Context, profileName string, sou
 		manager.stopContainer(ctx, name)
 	}
 	defer state.enterPhase("")
-	connectionlog.Say(ctx, connectionlog.Brief, "VPNプロファイル「%s」の経路を起動します（%s）。", profile.Name, profile.Backend)
+	connectionlog.Say(ctx, connectionlog.Brief, "VPNプロファイル「%s」のルートを起動します（%s）。", profile.Name, profile.Backend)
 	started := time.Now()
 	if err := manager.start(ctx, profile, secrets, state.enterPhase); err != nil {
 		elapsed := connectionlog.Elapsed(time.Since(started))
 		if stopCauseOf(ctx) != nil {
 			// 停止で打ち切った起動は失敗ではない。失敗の詳細は経路の記録に残さない。
-			connectionlog.Say(ctx, connectionlog.Brief, "VPN経路の起動を中止しました（%s）。", elapsed)
+			connectionlog.Say(ctx, connectionlog.Brief, "VPNルートの起動を中止しました（%s）。", elapsed)
 			return err
 		}
-		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経路の起動に失敗しました（%s）。", elapsed)
+		connectionlog.Say(ctx, connectionlog.Detailed, "VPNルートの起動に失敗しました（%s）。", elapsed)
 		// 元のエラーは、接続ログでは接続の側（sshclient の「失敗の詳細」）が書く。
 		// こちらからも書くと同じ文が2回並ぶので、経路の記録にだけ残す。
 		state.record.Write(connectionlog.Detailed, fmt.Sprintf("失敗の詳細：%v", err))

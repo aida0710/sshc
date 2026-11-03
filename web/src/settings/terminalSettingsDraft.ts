@@ -1,6 +1,18 @@
-import type { PresetTerminalSettings } from "./terminalSettings";
+import type { MessageKey } from "../i18n/messages";
 import { appearanceOf } from "../terminal/appearance";
+import { maxBrowserScrollbackLines, minBrowserScrollbackLines } from "../terminal/browserScrollback";
 import { fontSizeRange } from "../terminal/fontSize";
+import { maxRetainedTerminals, minRetainedTerminals } from "../terminal/splitView/retainedSessions";
+import type { PresetTerminalSettings } from "./terminalSettings";
+
+const bytesPerKiB = 1024;
+
+// The numbers the engine accepts (terminal.MinScrollback and the limits in internal/application/metadata.go).
+// The replay buffer is typed in KiB and stored in bytes.
+export const maxSessionsRange = { min: 1, max: 200 } as const;
+export const replayBufferKiBRange = { min: 16, max: 4096 } as const;
+export const defaultMaxSessions = 50;
+export const defaultReplayBufferKiB = 256;
 
 // Every field is kept as the text the user typed; numbers are read once, on
 // save, so that a half-typed value never snaps back under the cursor.
@@ -41,7 +53,8 @@ export function draftOf(settings: PresetTerminalSettings): TerminalDraft {
     startDirectory: settings.startDirectory ?? "",
     localShellProfile: settings.localShellProfile ?? "",
     maxSessions: text(settings.maxSessions),
-    scrollback: text(settings.scrollbackBytes),
+    // A value written by hand may not be whole KiB; it reads as the nearest, and is saved so with the next change.
+    scrollback: text(settings.scrollbackBytes === undefined ? undefined : Math.round(settings.scrollbackBytes / bytesPerKiB)),
     browserScrollbackLines: text(settings.browserScrollbackLines),
     retainedTerminals: text(settings.retainedTerminals),
     fontSize: text(settings.fontSize),
@@ -69,27 +82,43 @@ function numberOr(text: string): number | undefined {
   return Number.isSafeInteger(value) ? value : Number.NaN;
 }
 
-// isFontSizeUnusable says whether the typed font size is one the engine would refuse, so a refused save can
-// point at the font size rather than at the limits.
-export function isFontSizeUnusable(draft: TerminalDraft): boolean {
-  const size = numberOr(draft.fontSize);
-  return size !== undefined && (Number.isNaN(size) || size < fontSizeRange.min || size > fontSizeRange.max);
+export type TypedNumber = {
+  field: "maxSessions" | "scrollback" | "browserScrollbackLines" | "retainedTerminals" | "fontSize";
+  range: { readonly min: number; readonly max: number };
+  outOfRange: MessageKey;
+};
+
+const typedNumbers: TypedNumber[] = [
+  { field: "maxSessions", range: maxSessionsRange, outOfRange: "terminal.maxSessionsOutOfRange" },
+  { field: "scrollback", range: replayBufferKiBRange, outOfRange: "terminal.replayBufferOutOfRange" },
+  { field: "browserScrollbackLines", range: { min: minBrowserScrollbackLines, max: maxBrowserScrollbackLines }, outOfRange: "terminal.browserScrollbackOutOfRange" },
+  { field: "retainedTerminals", range: { min: minRetainedTerminals, max: maxRetainedTerminals }, outOfRange: "terminal.retainedTerminalsOutOfRange" },
+  { field: "fontSize", range: fontSizeRange, outOfRange: "terminal.fontSizeOutOfRange" },
+];
+
+// firstUnusableNumber is the first typed number the engine would refuse, so the page can say which and what it
+// accepts before saving. A blank field is the default, and always usable.
+export function firstUnusableNumber(draft: TerminalDraft): TypedNumber | null {
+  return typedNumbers.find(({ field, range }) => {
+    const value = numberOr(draft[field]);
+    return value !== undefined && (Number.isNaN(value) || value < range.min || value > range.max);
+  }) ?? null;
 }
 
 // Turns the draft back into the preset's terminal settings, leaving out every field
-// that still has its default so the stored document says only what changed.
-export function settingsOf(draft: TerminalDraft): PresetTerminalSettings | null {
+// that still has its default so the stored document says only what changed. The caller has
+// checked the numbers with firstUnusableNumber.
+export function settingsOf(draft: TerminalDraft): PresetTerminalSettings {
   const sessions = numberOr(draft.maxSessions);
-  const bytes = numberOr(draft.scrollback);
+  const replayBufferKiB = numberOr(draft.scrollback);
   const lines = numberOr(draft.browserScrollbackLines);
   const retained = numberOr(draft.retainedTerminals);
   const size = numberOr(draft.fontSize);
-  if ([sessions, bytes, lines, retained, size].some(Number.isNaN)) return null;
   const directory = draft.startDirectory.trim();
   return {
     ...(directory === "" ? {} : { startDirectory: directory }),
     ...(sessions === undefined ? {} : { maxSessions: sessions }),
-    ...(bytes === undefined ? {} : { scrollbackBytes: bytes }),
+    ...(replayBufferKiB === undefined ? {} : { scrollbackBytes: replayBufferKiB * bytesPerKiB }),
     ...(lines === undefined ? {} : { browserScrollbackLines: lines }),
     ...(retained === undefined ? {} : { retainedTerminals: retained }),
     ...(size === undefined ? {} : { fontSize: size }),

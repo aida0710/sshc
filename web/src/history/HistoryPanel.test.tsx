@@ -62,6 +62,14 @@ describe("HistoryPanel", () => {
     await waitFor(() => expect(configApi.restore).toHaveBeenCalledWith("20260805T120000.000-abcd", "config"));
   });
 
+  it("leaves out the interrupted count while nothing is interrupted", async () => {
+    vi.mocked(configApi.overview).mockResolvedValue({ pending: [] } as never);
+    render(<HistoryPanel />);
+
+    expect(await screen.findByText("Completed changes", { selector: "dt" })).toBeVisible();
+    expect(screen.queryByText("Interrupted", { selector: "dt" })).toBeNull();
+  });
+
   it("shows an interrupted transaction as unfinished and offers both recoveries", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.recover).mockResolvedValue(undefined);

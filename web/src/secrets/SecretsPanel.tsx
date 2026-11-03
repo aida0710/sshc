@@ -138,9 +138,6 @@ export function SecretsPanel({
       <PageHeader
         title={t(page.title)}
         meta={t("secrets.count", { count: rows.length })}
-        // The one thing the page does not show by itself: stored values stay hidden until edited. A TOTP seed
-        // is never shown, so its page needs no line.
-        description={kind === "totp" ? undefined : t("secrets.valuesShownWhileEditing")}
         actions={
           <>
             {status.passwordless ? null : compact ? (
