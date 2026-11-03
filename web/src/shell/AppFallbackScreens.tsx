@@ -1,4 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
+import { runsInAndroidApp } from "../android/native";
 import type { RequestFailureDiagnostic } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { sectionPath } from "../routing/sectionRoute";
@@ -47,7 +48,7 @@ export function SessionEndedScreen() {
   return (
     <EntryScreen heading={t("shell.sessionEndedHeading")} description={<p role="alert">{t("shell.sessionEnded")}</p>}>
       <div className="flex flex-col gap-3.5">
-        <CommandBlock>$ sshc</CommandBlock>
+        {runsInAndroidApp() ? null : <CommandBlock>$ sshc</CommandBlock>}
         <Button kind="primary" className="h-[38px] w-full text-sm" onClick={reloadHere}>
           {t("shell.sessionReload")}
         </Button>
@@ -65,18 +66,17 @@ function CommandBlock({ children }: { children: ReactNode }) {
   );
 }
 
-// Covers the app while the vault's state is being confirmed after a
-// foreground return, so that nothing is typed into a screen about to lock.
-export function VaultRecheckOverlay({ phase }: { phase: Exclude<VaultRecheckPhase, "idle"> }) {
+// While the vault's state is being confirmed after a foreground return the app stays on screen, so that a person
+// who came back to read it can read it, and only takes no input, so that nothing is typed into a screen about to
+// lock. This small mark says why taps do nothing. A check that answers at once draws nothing (sshc-slow-status).
+export function VaultRecheckMark({ phase }: { phase: Exclude<VaultRecheckPhase, "idle"> }) {
   const t = useTranslate();
   return (
-    <div className="fixed inset-0 z-[100]">
-      <EntryScreen
-        heading={t("shell.title")}
-        description={<p role="status">{t(phase === "checking" ? "shell.vaultChecking" : "shell.vaultCheckRetrying")}</p>}
-      >
-        <Spinner className="size-5 self-center" />
-      </EntryScreen>
+    <div className="pointer-events-none fixed inset-x-0 top-14 z-[100] flex justify-center px-4">
+      <p role="status" className="sshc-slow-status flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1.5 text-xs text-ink-muted shadow-card">
+        <Spinner />
+        {t(phase === "checking" ? "shell.vaultChecking" : "shell.vaultCheckRetrying")}
+      </p>
     </div>
   );
 }

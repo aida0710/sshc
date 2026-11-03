@@ -611,11 +611,11 @@ test("coming back to the app after typing leaves the keyboard down", async ({ pa
   const textBox = page.getByLabel("Text to send to the terminal", { exact: true });
   await expect(textBox).toBeFocused();
 
-  // Coming back to the page hides the app while the vault is rechecked; the field that had the focus is not given
+  // Coming back to the page holds the app while the vault is rechecked; the field that had the focus is not given
   // it back, which on a phone would raise the keyboard (Android keeps the focus in the field when its keyboard is
   // closed with Back).
   const app = page.locator(".sshc-app > .contents");
-  // On a phone the recheck takes long enough for the browser to move the focus off the hidden field. Answered at
+  // On a phone the recheck takes long enough for the browser to move the focus off the inert field. Answered at
   // once, the app could be shown again before the browser does, and the focus would never leave.
   await page.route("**/api/v1/passwords", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 300));
@@ -626,6 +626,35 @@ test("coming back to the app after typing leaves the keyboard down", async ({ pa
   await expect(app).not.toHaveAttribute("inert");
   await expect(textBox).not.toBeFocused();
   expect(await terminalInputFocused(page)).toBe(false);
+});
+
+test("coming back to the app keeps the screen readable while the vault is checked, with a small mark", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await openApplication(page, installation);
+  const homeHeading = page.getByRole("heading", { name: "Home", includeHidden: true }).first();
+  await expect(homeHeading).toBeVisible();
+
+  let answer = () => {};
+  const answered = new Promise<void>((resolve) => { answer = resolve; });
+  await page.route("**/api/v1/passwords", async (route) => {
+    await answered;
+    await route.fallback();
+  });
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+
+  const app = page.locator(".sshc-app > .contents");
+  await expect(app).toHaveAttribute("inert");
+  const mark = page.getByRole("status").filter({ hasText: "Checking that the vault is still unlocked" });
+  await expect(mark).toBeVisible();
+  // The page is still what is on screen: nothing is laid over it but the mark at the top.
+  expect((await mark.boundingBox())!.height).toBeLessThan(48);
+  const covered = await page.evaluate(() => (document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)?.closest(".fixed") ?? null) !== null);
+  expect(covered).toBe(false);
+  await capture(page, "vault-recheck");
+
+  answer();
+  await expect(app).not.toHaveAttribute("inert");
+  await expect(mark).toHaveCount(0);
 });
 
 test("a five-digit port on a phone is not hidden under the button that resets it", async ({ page, installation }) => {

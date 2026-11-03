@@ -1,4 +1,11 @@
+import { runsInAndroidApp } from "../android/native";
 import type { MessageKey } from "../i18n/messages";
+
+// shownHistoryPaths are the files a change names on screen. sshc's own files (under sshc/ in ~/.ssh) mean something
+// where a person can open them; in the Android app nobody can, and the change's name already says what it did.
+export function shownHistoryPaths(paths: readonly string[]): string {
+  return (runsInAndroidApp() ? paths.filter((path) => !path.startsWith("sshc/")) : paths).join(", ");
+}
 
 // historyOperationLabelKey names a recorded change by the kind of thing it changed.
 export function historyOperationLabelKey(operation: string): MessageKey {

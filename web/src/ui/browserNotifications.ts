@@ -9,6 +9,7 @@ import {
   androidNotificationPermission,
   cancelAndroidNotification,
   requestAndroidNotificationPermission,
+  runsInAndroidApp,
   showAndroidNotification,
 } from "../android/native";
 
@@ -42,7 +43,7 @@ function notificationAPI(target: Window): typeof Notification | null {
 // Whether notifications are Android's own, which the user allows in Android's
 // settings rather than in the browser's site settings.
 export function notificationsComeFromAndroid(target: Window = window): boolean {
-  return androidNotificationPermission(target) !== null;
+  return runsInAndroidApp(target);
 }
 
 export function browserNotificationPermission(target: Window = window): BrowserNotificationPermission {

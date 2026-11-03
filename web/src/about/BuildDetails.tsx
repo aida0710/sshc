@@ -25,8 +25,11 @@ export function BuildDetails({ about }: { about: About }) {
   fields.push(
     { label: t("about.goVersion"), value: about.goVersion },
     { label: t("about.platform"), value: `${about.os} / ${about.arch}` },
-    { label: t("about.manager"), value: about.manager === "unknown" ? t("about.unmanaged") : about.manager === "homebrew" ? "Homebrew" : about.manager },
   );
+  // The Android app is installed as an app: no package manager manages it, and its executable is Android's own
+  // app_process, which says nothing about sshc.
+  if (about.os === "android") return <FactRows facts={fields} />;
+  fields.push({ label: t("about.manager"), value: about.manager === "unknown" ? t("about.unmanaged") : about.manager === "homebrew" ? "Homebrew" : about.manager });
   if (about.executable !== "") {
     fields.push({ label: t("about.executable"), value: about.executable });
   }

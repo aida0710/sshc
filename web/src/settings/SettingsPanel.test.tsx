@@ -552,6 +552,37 @@ describe("SettingsPanel", () => {
     await waitFor(() => expect(server.document().machines[1]?.settings).toEqual({ name: "laptop", presetId: "phone" }));
   });
 
+  it("offers no port for the Android app, and names a machine called after its system as people know the system", () => {
+    withSettings({
+      presets: [{ id: "default" }],
+      machines: [{ id: testMachineId, settings: { name: "android" }, facts: { os: "android", version: "v0.59.0" } }],
+    });
+    render(<SettingsPanel api={buildApi()} page="Machines" />);
+    const region = screen.getByRole("region", { name: "Machines" });
+
+    expect(within(region).getByText("Android")).toBeVisible();
+    expect(within(region).getByText("sshc 0.59.0")).toBeVisible();
+    expect(within(region).queryByText(/Android · /u)).toBeNull();
+    expect(within(region).queryByRole("spinbutton", { name: "Port" })).toBeNull();
+    expect(within(region).queryByText(/54447/u)).toBeNull();
+  });
+
+  it("still offers the port of a PC from the Android app's list", () => {
+    const laptop = "1111111111111111111111111111111a";
+    withSettings({
+      presets: [{ id: "default" }],
+      machines: [
+        { id: testMachineId, settings: { name: "android" }, facts: { os: "android" } },
+        { id: laptop, settings: { name: "laptop", port: 54447 }, facts: { os: "darwin" } },
+      ],
+    });
+    render(<SettingsPanel api={buildApi()} page="Machines" />);
+    const region = screen.getByRole("region", { name: "Machines" });
+
+    expect(within(region).getAllByRole("spinbutton", { name: "Port" })).toHaveLength(1);
+    expect(within(region).getByText(/54447/u)).toBeVisible();
+  });
+
   it("does not offer to take this machine off the list", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} page="Machines" />);
