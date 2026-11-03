@@ -34,6 +34,9 @@ type Spec struct {
 	// ReconnectStopNotice は、ReconnectError が止めた再接続について、ターミナルへ
 	// 書く1行を返す。nil か空なら、設定を直すよう促す既定の文を書く。
 	ReconnectStopNotice func(problem string) string
+	// ReopenFailureText は、開き直しが Process を返せなかった理由をターミナルに書く文にする。
+	// nil なら失敗の文をそのまま書く。
+	ReopenFailureText func(error) string
 	// Startup は、Process が使える状態になるたびに（再接続を含む）、その Process へ
 	// 送るものを返す。nil なら何も送らない。
 	Startup func() Startup
@@ -219,6 +222,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		reopen:         spec.Reopen,
 		reconnectError: spec.ReconnectError,
 		stopNotice:     spec.ReconnectStopNotice,
+		reopenFailure:  spec.ReopenFailureText,
 		startup:        spec.Startup,
 		size:           size,
 		stopping:       make(chan struct{}),
