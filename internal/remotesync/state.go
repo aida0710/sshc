@@ -41,7 +41,10 @@ type state struct {
 	Base *Manifest `json:"base"`
 	// Origin は、このインストールの不透明な ID。一度だけ生成され、マシンに関する何から
 	// も導出されない。
-	Origin        string         `json:"origin"`
+	Origin string `json:"origin"`
+	// LastOperation は、最後に成功した push か apply。設定のときに置いたファイルを含まない
+	// スナップショット（placeSetupSnapshot）だけを記録しているあいだは nil で、このマシンは
+	// まだ同期していないと表示する。
 	LastOperation *SyncOperation `json:"lastOperation"`
 }
 
@@ -50,16 +53,13 @@ func (s *Service) statePath() string {
 }
 
 func (s *Service) readState() (state, error) {
-	body, err := s.workspace.FileSystem().ReadFile(s.statePath())
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return state{}, nil
-		}
+	body, err := s.readStateFile()
+	if err != nil || body == nil {
 		return state{}, err
 	}
 	var parsed state
 	if err := strictjson.Decode(body, &parsed); err != nil || parsed.SchemaVersion != stateSchemaVersion ||
-		parsed.ETag == "" || parsed.Key == "" || parsed.Base == nil || parsed.LastOperation == nil ||
+		parsed.ETag == "" || parsed.Key == "" || parsed.Base == nil ||
 		parsed.Base.SchemaVersion != SchemaVersion || !hasOnlySafeModes(*parsed.Base) {
 		// 壊れた state ファイルや、別の版のマニフェスト、checkModeを通らないModeを基準に
 		// 持つ state は回復可能である。次の pull はこのマシンを、一度も同期していない
@@ -68,6 +68,38 @@ func (s *Service) readState() (state, error) {
 		return state{}, nil
 	}
 	return parsed, nil
+}
+
+// readStateFile は、state のファイルの中身をそのまま返す。無ければ nil を返す。
+func (s *Service) readStateFile() ([]byte, error) {
+	body, err := s.workspace.FileSystem().ReadFile(s.statePath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return body, err
+}
+
+// restoreStateFile は、state のファイルを readStateFile が返した中身へ戻す。previous が nil なら
+// ファイルを消す。readState を通さずにバイト列のまま戻すのは、読めなかった state も読めないまま
+// （一度も同期していないマシンとして）残すためである。
+func (s *Service) restoreStateFile(previous []byte) error {
+	precondition, err := s.localPrecondition(s.statePath())
+	if err != nil {
+		return err
+	}
+	request := storage.Request{Operation: "sync.state"}
+	switch {
+	case previous != nil:
+		request.Changes = []storage.Change{{
+			Path: s.statePath(), Contents: previous, Precondition: precondition, SkipBackup: true,
+		}}
+	case precondition.Exists:
+		request.Removals = []storage.Removal{{Path: s.statePath(), Precondition: precondition}}
+	default:
+		return nil
+	}
+	_, err = s.transactions.Commit(request)
+	return err
 }
 
 // hasOnlySafeModesは、manifestのすべてのentryのModeがcheckModeを通るかを返す。
@@ -100,10 +132,8 @@ func (s *Service) stateChange(next state) (storage.Change, error) {
 		return storage.Change{}, err
 	}
 	body = append(body, '\n')
-	precondition := storage.Precondition{}
-	if current, err := s.workspace.FileSystem().ReadFile(s.statePath()); err == nil {
-		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(current)}
-	} else if !errors.Is(err, fs.ErrNotExist) {
+	precondition, err := s.localPrecondition(s.statePath())
+	if err != nil {
 		return storage.Change{}, err
 	}
 	return storage.Change{

@@ -3,10 +3,21 @@ package remotesync
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"sshc/internal/envelope"
 	"sshc/internal/objectstore"
 )
+
+// setupSnapshotMessage は、空の同期先へ設定を保存するときに置く、ファイルを含まない
+// スナップショットの message。manifest は message を空にできないので、何の世代かが分かる文を入れる。
+const setupSnapshotMessage = "Set up the synchronization target"
+
+// setupRollbackTimeout は、設定の保存に失敗したときに、置いたばかりのスナップショットを
+// 消す要求に与える時間。呼び出し元が取り消していても消し終えられるよう、呼び出し元の期限とは
+// 別に持つ。消せないと、誰も知らないキーで封じた世代が残り、次の設定が進めなくなるため。
+const setupRollbackTimeout = 30 * time.Second
 
 type SetupTargetState string
 
@@ -74,6 +85,8 @@ func verifySetupKey(ctx context.Context, client *objectstore.Client, config Conf
 
 // CompleteSetup rechecks the target, validates an existing snapshot key, then
 // persists settings and publishes the binding under one operation boundary.
+// An empty target receives a snapshot without files before the settings are
+// persisted, so that the key shown to the user is already the target's key.
 func (s *Service) CompleteSetup(ctx context.Context, config Config, credentials objectstore.Credentials,
 	client *objectstore.Client, expected SetupInspection, syncKey string, persist func() error) error {
 	s.operationMutex.Lock()
@@ -98,14 +111,89 @@ func (s *Service) CompleteSetup(ctx context.Context, config Config, credentials 
 	if err := ValidateKey(syncKey); err != nil {
 		return err
 	}
-	if actual.State == SetupTargetExisting {
+	undoSetupSnapshot := func() error { return nil }
+	switch actual.State {
+	case SetupTargetExisting:
 		if err := verifySetupKey(ctx, client, config, actual.ETag, syncKey); err != nil {
+			return err
+		}
+	case SetupTargetEmpty:
+		if undoSetupSnapshot, err = s.placeSetupSnapshot(ctx, client, config, syncKey); err != nil {
 			return err
 		}
 	}
 	if err := persist(); err != nil {
-		return err
+		return errors.Join(err, undoSetupSnapshot())
 	}
 	s.configure(config, credentials, client)
 	return nil
+}
+
+// placeSetupSnapshot は、空の同期先へファイルを含まないスナップショットを置き、その世代を
+// このマシンの同期の記録にする。返す関数は、置いたスナップショットを消し、記録を元に戻す。
+//
+// 置くのは、このマシンが最初に同期する前に別のマシンが同じ同期先を設定したとき、そのマシンに
+// このキーを入力させるためである。空のままだと、別のマシンは新しい同期先と見て別のキーを作り、
+// あとで同期したこのマシンはキーが合わなくなる。ファイルを含めないのは、除外の設定と送る内容を
+// 利用者が確かめる前に、~/.ssh の中身を消せない履歴へ送らないためである。同じ理由で受信専用の
+// マシンも置く。このマシンの内容は何も出ていかない。
+//
+// 日付付きの履歴の候補は置かない。候補を置いたあとでライブの書き込みに失敗すると、同期先は
+// 「履歴だけがある」状態になり、参加も新規の設定も断られる。中身の無い世代は、戻す先としての
+// 意味も無い。
+//
+// 記録を残すのは、このマシンの次の送信が、このスナップショットを親にして置き換えるためと、
+// 最初の同期の前にキーを置き換えたとき、このスナップショットも新しいキーで封じ直すためである。
+// 記録は同期した操作を持たないので、画面には「まだ同期していません」と出る。
+func (s *Service) placeSetupSnapshot(ctx context.Context, client *objectstore.Client, config Config,
+	syncKey string) (func() error, error) {
+	previousState, err := s.readStateFile()
+	if err != nil {
+		return nil, err
+	}
+	current, err := s.readState()
+	if err != nil {
+		return nil, err
+	}
+	origin := current.Origin
+	if origin == "" {
+		if origin, err = s.newOrigin(); err != nil {
+			return nil, err
+		}
+	}
+	manifest := Manifest{CreatedAt: s.now(), Origin: origin, Message: setupSnapshotMessage, Files: []Entry{}}
+	if err := FinalizeManifest(&manifest, ""); err != nil {
+		return nil, err
+	}
+	sealed, err := sealSnapshot(manifest, map[string][]byte{}, syncKey)
+	if err != nil {
+		return nil, err
+	}
+	objectKey := ObjectKeyFor(config)
+	etag, err := client.Put(ctx, objectKey, sealed, "", "*")
+	if errors.Is(err, objectstore.ErrPreconditionFailed) {
+		// 確かめてから置くまでのあいだに、別のマシンがこの同期先を設定した。
+		return nil, ErrSetupTargetChanged
+	}
+	if err != nil {
+		return nil, err
+	}
+	// キーはまだ誰にも見せていないので、ほかのマシンがこの世代の上に何かを置いていることは無い。
+	// 条件を付けずに消してよい。
+	removeSnapshot := func() error {
+		removeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), setupRollbackTimeout)
+		defer cancel()
+		if err := client.Delete(removeCtx, objectKey); err != nil {
+			return fmt.Errorf("remove the setup snapshot: %w", err)
+		}
+		return nil
+	}
+	if err := s.writeState(state{
+		ETag: etag, Key: objectKey, Target: targetID(config), Base: &manifest, Origin: origin,
+	}); err != nil {
+		return nil, errors.Join(err, removeSnapshot())
+	}
+	return func() error {
+		return errors.Join(removeSnapshot(), s.restoreStateFile(previousState))
+	}, nil
 }

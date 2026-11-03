@@ -18,6 +18,8 @@ sshc does not provide hosted sync storage or retain your sync data. You choose a
 3. Create an encryption key when the target is empty.
 4. Store the key shown once in a safe place.
 
+Saving places one snapshot without files in the target. Devices added later are asked for the same encryption key even before this device has synced. Files in `~/.ssh` are sent on the first sync.
+
 ## Additional devices
 
 Enter the same bucket path and encryption key. When a remote snapshot already exists, sshc saves the configuration only after the key can decrypt it. Use another path if you intend to create a separate dataset.
