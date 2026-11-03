@@ -310,32 +310,8 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			home := t.TempDir()
-			root := filepath.Join(home, ".ssh")
-			if err := os.MkdirAll(root, 0o700); err != nil {
-				t.Fatal(err)
-			}
-			configPath := filepath.Join(root, "config")
-			if err := os.WriteFile(configPath, []byte(test.contents), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			for relative, contents := range test.files {
-				absolute := filepath.Join(root, filepath.FromSlash(relative))
-				if err := os.MkdirAll(filepath.Dir(absolute), 0o700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(absolute, []byte(contents), 0o600); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
-			if err != nil {
-				t.Fatal(err)
-			}
-			graph, err := configresolver.ForWorkspace(workspace).Resolve(configPath)
-			if err != nil {
-				t.Fatal(err)
-			}
+			configPath := writeSSHConfigFixture(t, home, test.contents, test.files)
+			graph := resolveFixture(t, home, configPath)
 			for _, diagnostic := range graph.Diagnostics {
 				if diagnostic.Severity == config.SeverityError {
 					t.Fatalf("fixture produced an error diagnostic: %#v", diagnostic)
@@ -370,18 +346,51 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 	}
 }
 
+// writeSSHConfigFixture は、home の .ssh に入口の config と、そこから取り込むファイルを
+// 書き、入口のパスを返す。files の鍵は .ssh からのスラッシュ区切りの相対パスである。
+func writeSSHConfigFixture(t *testing.T, home, contents string, files map[string]string) string {
+	t.Helper()
+	root := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(root, "config")
+	if err := os.WriteFile(configPath, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for relative, contents := range files {
+		absolute := filepath.Join(root, filepath.FromSlash(relative))
+		if err := os.MkdirAll(filepath.Dir(absolute), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(absolute, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return configPath
+}
+
+// resolveFixture は、製品と同じリゾルバでフィクスチャの Include グラフを読む。
+func resolveFixture(t *testing.T, home, configPath string) *config.Graph {
+	t.Helper()
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err := configresolver.ForWorkspace(workspace).Resolve(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return graph
+}
+
 // runSSHG は本物の ssh を -G で走らせ、その出力を解析する。
 //
 // このフィクスチャ群は Match exec を持たない。ProxyCommand と RemoteCommand は
 // 持つが、-G は設定を表示するだけで、それらを実行しない。
 func runSSHG(t *testing.T, sshPath, home, configPath, alias string) effective.Values {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	command := exec.CommandContext(ctx, sshPath, "-G", "-F", configPath, "--", alias)
-	command.Env = sshEnvironment(home)
-	stdout, err := command.Output()
+	stdout, err := sshG(sshPath, home, configPath, alias)
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
@@ -390,6 +399,17 @@ func runSSHG(t *testing.T, sshPath, home, configPath, alias string) effective.Va
 		t.Fatalf("ssh -G = %v", err)
 	}
 	return effective.ParseValues(stdout)
+}
+
+// sshG は本物の ssh を -G で走らせる。設定を読めずに止まったときは *exec.ExitError を
+// 返し、その Stderr に ssh の言い分が入る。
+func sshG(sshPath, home, configPath, alias string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	command := exec.CommandContext(ctx, sshPath, "-G", "-F", configPath, "--", alias)
+	command.Env = sshEnvironment(home)
+	return command.Output()
 }
 
 // フィクスチャが ssh -G に読ませる設定と、この解決器が読む設定が同じファイルで

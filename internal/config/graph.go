@@ -32,6 +32,9 @@ const (
 	DiagnosticIncludeUnsupported   = "include_unsupported_expansion"
 	DiagnosticIncludeEmpty         = "include_without_argument"
 	DiagnosticUnstructuredLine     = "unstructured_line"
+	// DiagnosticUnknownDirective は、OpenSSH が知らないキーワードの行である。Detail は
+	// そのキーワード。OpenSSH はこの1行で設定全体を読まずに止まる。
+	DiagnosticUnknownDirective = "unknown_directive"
 )
 
 // ErrPathNotAbsolute は、絶対パスでないパスからグラフの走査を始めるよう求められた
@@ -85,6 +88,8 @@ type Graph struct {
 	// 大小文字違いは同じファイルなので、これが無いと同じ内容が二度読み込まれ、
 	// 循環はいつまでも見つからない。
 	identities map[string]*Node
+	// ignoreUnknown は、読み込み順でここまでに読んだ IgnoreUnknown である。
+	ignoreUnknown ignoreUnknownState
 }
 
 // Resolve は、エントリファイルとそれが include するすべてのファイルを読む。
@@ -100,7 +105,7 @@ func (r Resolver) Resolve(rootPath string) (*Graph, error) {
 		Nodes:      make(map[string]*Node),
 		identities: make(map[string]*Node),
 	}
-	r.walk(graph, graph.Root, nil, 0)
+	r.walk(graph, graph.Root, inclusion{unconditional: true})
 	r.markGroupsFile(graph)
 	return graph, nil
 }
@@ -152,7 +157,17 @@ func (r Resolver) canonical(candidate string) string {
 	return filepath.Join(r.Root, relative)
 }
 
-func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int) {
+// inclusion は、ファイルをどの Include から読んだかである。入口のファイルでは零値に
+// unconditional だけを立てる。
+type inclusion struct {
+	// chain は、取り込み元をたどったファイルの identity の並びで、循環を見つける。
+	chain []string
+	depth int
+	// unconditional は、取り込んだ Include 行がどの接続先でも読まれる位置にあったか。
+	unconditional bool
+}
+
+func (r Resolver) walk(graph *Graph, filePath string, from inclusion) {
 	node := &Node{Path: filePath, Editable: r.insideRoot(filePath), Loads: 1}
 	graph.Nodes[filePath] = node
 	graph.identities[nativepath.Identity(filePath)] = node
@@ -163,7 +178,7 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 		node.Missing = errors.Is(err, fs.ErrNotExist)
 		// ssh は、無い ~/.ssh/config を空のファイルとして読む。入れたばかりのマシンには
 		// まだ無いのがふつうで、問題として知らせることではない（作る操作は画面にある）。
-		if node.Missing && depth == 0 {
+		if node.Missing && from.depth == 0 {
 			return
 		}
 		graph.diagnose(SeverityError, DiagnosticIncludeUnreadable, filePath, 0, err.Error())
@@ -171,17 +186,21 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 	}
 	node.File = Parse(contents)
 
-	currentChain := make([]string, 0, len(chain)+1)
-	currentChain = append(currentChain, chain...)
+	currentChain := make([]string, 0, len(from.chain)+1)
+	currentChain = append(currentChain, from.chain...)
 	currentChain = append(currentChain, nativepath.Identity(filePath))
 
 	generatedStart, generatedEnd, generated := r.generatedLines(node.File)
+	unconditional := unconditionalLines(node.File, from.unconditional)
 
 	for lineIndex, line := range node.File.Lines {
 		lineNumber := lineIndex + 1
 		if line.Kind == LineUnstructured {
 			graph.diagnose(SeverityInfo, DiagnosticUnstructuredLine, filePath, lineNumber, "line is preserved verbatim and can only be edited as raw text")
 			continue
+		}
+		if line.Kind == LineDirective {
+			graph.checkKeyword(filePath, lineNumber, line, unconditional[lineIndex])
 		}
 		if line.Kind != LineDirective || !EqualKeyword(line.Keyword, "Include") {
 			continue
@@ -248,11 +267,11 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 					graph.diagnose(SeverityWarning, DiagnosticIncludeDuplicate, filePath, lineNumber, match)
 					continue
 				}
-				if depth+1 > r.maxDepth() {
+				if from.depth+1 > r.maxDepth() {
 					graph.diagnose(SeverityError, DiagnosticIncludeDepthExceeded, filePath, lineNumber, match)
 					continue
 				}
-				r.walk(graph, match, currentChain, depth+1)
+				r.walk(graph, match, inclusion{chain: currentChain, depth: from.depth + 1, unconditional: unconditional[lineIndex]})
 			}
 		}
 	}
