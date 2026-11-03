@@ -193,13 +193,13 @@ Windowsでは、下記の削除操作で停止とサービス登録の削除を�
 1. `sshc service install`で登録している場合は、`sshc service disable`を実行します。sshcが作成したサービス定義だけを停止、無効化、削除します。サービス以外で起動したsshcエンジンは`sshc stop`で停止します。
 2. 導入方法に合わせて実行ファイルを削除します。
    - Homebrew: `brew uninstall aida0710/tap/sshc`
-   - `install.sh`: 配置先の`sshc`と、同じディレクトリにあるreceipt（`.sshc-install-receipt.json`）を削除します。配置先は通常`~/.local/bin`で、rootで実行した場合は`/usr/local/bin`、`SSHC_INSTALL_DIR`を指定した場合はそのディレクトリです。
+   - `install.sh`: 配置先の`sshc`と、同じフォルダにあるreceipt（`.sshc-install-receipt.json`）を削除します。配置先は通常`~/.local/bin`で、rootで実行した場合は`/usr/local/bin`、`SSHC_INSTALL_DIR`を指定した場合はそのフォルダです。
    - `make install`: `make uninstall`で`~/.local/bin/sshc`を削除します。
    - Windows: 下記の「インストール済みアプリ」または`uninstall.ps1`で削除します。停止とサービスの削除も自動で行います。
    - Android: ほかのアプリと同じ手順でアンインストールします。
 3. 接続ごとのVPNを使った場合は、sshcが作成したコンテナイメージ`sshc-vpn`が残ります。VPNのコンテナはsshcエンジンの停止時に削除されます。イメージが不要なら、`docker image ls sshc-vpn`で確認してから`docker image rm`で削除してください。
 
-Windowsでは、設定の「アプリ」→「インストール済みアプリ」からsshcを選んでアンインストールできます。PowerShellから削除する場合は次を実行します。`SSHC_INSTALL_DIR`で配置先を変えた場合は、`$dir`にそのディレクトリを指定してください。
+Windowsでは、設定の「アプリ」→「インストール済みアプリ」からsshcを選んでアンインストールできます。PowerShellから削除する場合は次を実行します。`SSHC_INSTALL_DIR`で配置先を変えた場合は、`$dir`にそのフォルダを指定してください。
 
 ```powershell
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\sshc'
@@ -221,4 +221,4 @@ launchctl bootout gui/$(id -u)/io.github.aida0710.sshc
 rm ~/Library/LaunchAgents/io.github.aida0710.sshc.plist
 ```
 
-sshcのデータは、アンインストールしても`~/.ssh/sshc`（Windowsでは`%USERPROFILE%\.ssh\sshc`）に残ります。Vault、接続先ごとのsshcの設定、VPNプロファイルの設定、SSH設定を変更する前のバックアップ、削除した鍵を含みます。使い直す予定がなく、中身が不要なことを確認した場合だけ、このディレクトリを削除してください。削除したVaultとバックアップは復元できません。`~/.ssh/config`、`Include`先のファイル、鍵はOpenSSHと共有しているため、sshcをアンインストールしても変更しません。暗号化同期でS3互換ストレージへ保存したスナップショットも残るため、不要な場合はストレージ側で削除してください。
+sshcのデータは、アンインストールしても`~/.ssh/sshc`（Windowsでは`%USERPROFILE%\.ssh\sshc`）に残ります。Vault、接続先ごとのsshcの設定、VPNプロファイルの設定、SSH設定を変更する前のバックアップ、削除した鍵を含みます。使い直す予定がなく、中身が不要なことを確認した場合だけ、このフォルダを削除してください。削除したVaultとバックアップは復元できません。`~/.ssh/config`、`Include`先のファイル、鍵はOpenSSHと共有しているため、sshcをアンインストールしても変更しません。暗号化同期でS3互換ストレージへ保存したスナップショットも残るため、不要な場合はストレージ側で削除してください。

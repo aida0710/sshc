@@ -13,6 +13,7 @@ import type { DragPayload } from "./dragdrop";
 import { applySelectionGesture, emptyMultiSelection, keepVisible, type MultiSelection } from "./multiSelection";
 import { GroupSheet } from "./GroupSheet";
 import { ConnectionRow, type RowColumns } from "./ConnectionRow";
+import { resultCountText } from "./resultCount";
 import { listGroups, ungroupedCount } from "./groupListing";
 import { isImeComposing } from "../ui/imeComposition";
 import { belongsToGroup, buildGroupTree, decorateHosts, hasNothingToList, type DecoratedHost, type GroupNode } from "./connectionTreeIndex";
@@ -56,7 +57,7 @@ export type ConnectionTreeProps = {
   topBar?: ReactNode;
   bottomBar?: ReactNode;
   // rowColumns lays each row out in columns, for a list that has the whole width (ConnectionRow).
-  rowColumns?: ((host: HostEntry, group: string) => RowColumns) | undefined;
+  rowColumns?: ((host: HostEntry) => RowColumns) | undefined;
 };
 
 type SortOrder = "configured" | "name";
@@ -231,7 +232,7 @@ export function ConnectionTree({
       <ConnectionRow
         key={item.projectionIdentity}
         host={host}
-        columns={rowColumns?.(host, item.group)}
+        columns={rowColumns?.(host)}
         os={item.os}
         colour={item.colour}
         tags={item.tags}
@@ -289,7 +290,7 @@ export function ConnectionTree({
             <input {...literalTextEntry} id="connection-filter" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder={t("hostSearch.placeholder")} className={`${control} min-h-10 pl-8 md:min-h-0`} />
           </label>
           <div className="flex items-center justify-between gap-3 whitespace-nowrap text-xs text-ink-faint">
-            <span role="status">{t("tree.resultCount", { visible: visible.length, total: decorated.length })}</span>
+            <span role="status">{resultCountText(t, visible.length, decorated.length)}</span>
             <span className="flex items-center gap-2">
               {compact && onSelectionModeChange !== undefined ? (
                 <button

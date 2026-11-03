@@ -15,7 +15,7 @@ import type { DescribableControlProps } from "../ui/describeControl";
 import { FieldRow } from "../ui/FieldRow";
 import { CheckboxField, control, sizedControl } from "../ui/form";
 import { fontSizeRange } from "../terminal/fontSize";
-import type { TerminalDraft } from "./terminalSettingsDraft";
+import { defaultMaxSessions, defaultReplayBufferKiB, maxSessionsRange, replayBufferKiBRange, type TerminalDraft } from "./terminalSettingsDraft";
 
 // The rows of Settings > Terminal, in the groups the page shows together: on a computer each group (or two)
 // is a tab, on a phone each is a card. All of them edit the one draft the page saves as it changes.
@@ -95,14 +95,7 @@ export function TerminalConnectionFields({ draft, edit, type }: GroupProps) {
     <>
       <FieldRow
         label={t("terminal.limitsLabel")}
-        hint={t("terminal.limitsHint", {
-          scrollbackMin: minBrowserScrollbackLines,
-          scrollbackMax: maxBrowserScrollbackLines,
-          scrollbackDefault: defaultBrowserScrollbackLines,
-          retainedMin: minRetainedTerminals,
-          retainedMax: maxRetainedTerminals,
-          retainedDefault: defaultRetainedTerminals,
-        })}
+        hint={t("terminal.limitsHint")}
         interactiveChildren
       >
         <TerminalLimitInputs draft={draft} edit={edit} type={type} />
@@ -121,13 +114,13 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
         {t("terminal.maxSessionsShort")}
         <input
           type="number"
-          min={1}
-          max={200}
+          min={maxSessionsRange.min}
+          max={maxSessionsRange.max}
           aria-label={t("terminal.maxSessionsLabel")}
           {...description}
           className={`${sizedControl("w-[72px]")} font-mono`}
           value={draft.maxSessions}
-          placeholder="50"
+          placeholder={String(defaultMaxSessions)}
           onChange={(event) => type({ maxSessions: event.target.value })}
         />
       </label>
@@ -135,16 +128,16 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
         {t("terminal.scrollbackShort")}
         <input
           type="number"
-          min={16384}
-          max={4194304}
+          min={replayBufferKiBRange.min}
+          max={replayBufferKiBRange.max}
           aria-label={t("terminal.scrollbackLabel")}
           {...description}
-          className={`${sizedControl("w-[110px]")} font-mono`}
+          className={`${sizedControl("w-[84px]")} font-mono`}
           value={draft.scrollback}
-          placeholder="262144"
+          placeholder={String(defaultReplayBufferKiB)}
           onChange={(event) => type({ scrollback: event.target.value })}
         />
-        {t("terminal.bytesUnit")}
+        KiB
       </label>
       <label className="inline-flex items-center gap-2">
         {t("terminal.browserScrollbackShort")}

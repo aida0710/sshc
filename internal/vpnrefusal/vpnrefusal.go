@@ -180,7 +180,7 @@ var sentences = map[string]string{
 		"Hostだけで定義された接続は、sshcで編集できません。",
 	CodeVaultLocked:  "Vaultがロックされています。sshc vault unlock でロックを解除してからやり直してください。",
 	CodeVaultMissing: "Vaultがまだありません。sshc vault create で作成してからやり直してください。",
-	CodeDockerMissing: "Dockerが見つかりません。VPN経路にはDockerが必要です。" +
+	CodeDockerMissing: "Dockerが見つかりません。VPNルートにはDockerが必要です。" +
 		"Docker Desktopなどをインストールしてください。",
 	CodeDockerNotRunning: "Dockerが起動していません。Docker Desktopなどを起動してからやり直してください。" +
 		"起動している場合は、現在のユーザーにDockerを操作する権限があるかを確認してください。",
@@ -189,11 +189,11 @@ var sentences = map[string]string{
 	CodeContainerForeign:    "sshc以外が作成した同じ名前のコンテナがあるため、操作を中止しました。",
 	// ソケットの場所は、プロファイル名から作る固定長の識別子で決まり、名前の長さに
 	// 左右されない（vpn.routeDirectory）。長さを変えられるのは ~/.ssh の実際の場所だけである。
-	CodeSocketPathTooLong: "sshcのデータの保存場所（~/.ssh/sshc）のパスが長すぎるため、VPN経路の中継を作成できません。" +
+	CodeSocketPathTooLong: "sshcのデータの保存場所（~/.ssh/sshc）のパスが長すぎるため、VPNルートの中継を作成できません。" +
 		"~/.sshをパスの短いフォルダへ移し、元の場所にシンボリックリンクを置いてください。",
 	CodeChangedConcurrently: "ほかの操作と同時に変更されたため、保存しませんでした。もう一度やり直してください。",
-	CodeRouteDisconnected:   "VPN経路が切断されたため、起動を中止しました。",
-	CodeRouteStopped:        "VPN経路が停止されたため、起動を中止しました。",
+	CodeRouteDisconnected:   "VPNルートが切断されたため、起動を中止しました。",
+	CodeRouteStopped:        "VPNルートが停止されたため、起動を中止しました。",
 }
 
 // fieldReasons は、項目を受け取れなかった理由の言い方である。%d を含むものには上限が入る。

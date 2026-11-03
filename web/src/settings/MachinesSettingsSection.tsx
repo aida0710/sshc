@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useLanguage } from "../i18n/context";
 import { ActionMenu } from "../ui/ActionMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { sizedControl } from "../ui/form";
+import { formatDateTime } from "../ui/format";
 import { InputDialog } from "../ui/InputDialog";
 import { isImeComposing } from "../ui/imeComposition";
 import { PanelState } from "../ui/PanelState";
@@ -130,7 +131,7 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
     .filter((fact) => fact !== "").join(" · ");
   const started = machine.facts.startedAt === undefined
     ? t("settings.machineNeverStarted")
-    : new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(new Date(machine.facts.startedAt));
+    : formatDateTime(machine.facts.startedAt, locale);
   // The Android app keeps its own port: the WebView keeps what a page stores per port, so another port would
   // lose the browser's registration.
   const portFixed = machine.facts.os === "android";
@@ -144,16 +145,22 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
         </div>
         {facts === "" ? null : <div className="text-xs text-ink-faint">{facts}</div>}
       </div>
-      <select aria-label={t("settings.machineColumnPreset")} className={`${sizedControl("w-full")} ${onPhoneFullWidth}`} value={presetId}
-        onChange={(event) => {
-          // The value is read now: the write runs later, when the control shows the saved value again.
-          const chosen = event.target.value;
-          void onChange(machine.id, ({ presetId: _previous, ...settings }) => chosen === standardPresetId ? settings : { ...settings, presetId: chosen });
-        }}>
-        {document.presets.map((preset) => <option key={preset.id} value={preset.id}>{presetName(preset, t("settings.presetStandard"))}</option>)}
-      </select>
-      <PortInput machine={machine} disabled={portFixed} onChange={onChange} />
-      <span className={`whitespace-nowrap text-xs text-ink-muted ${onPhoneFullWidth}`}>{started}</span>
+      <PhoneNamedCell name={t("settings.machineColumnPreset")}>
+        <select aria-label={t("settings.machineColumnPreset")} className={sizedControl("w-full")} value={presetId}
+          onChange={(event) => {
+            // The value is read now: the write runs later, when the control shows the saved value again.
+            const chosen = event.target.value;
+            void onChange(machine.id, ({ presetId: _previous, ...settings }) => chosen === standardPresetId ? settings : { ...settings, presetId: chosen });
+          }}>
+          {document.presets.map((preset) => <option key={preset.id} value={preset.id}>{presetName(preset, t("settings.presetStandard"))}</option>)}
+        </select>
+      </PhoneNamedCell>
+      <PhoneNamedCell name={t("settings.machineColumnPort")}>
+        <PortInput machine={machine} disabled={portFixed} onChange={onChange} />
+      </PhoneNamedCell>
+      <PhoneNamedCell name={t("settings.machineColumnStarted")}>
+        <span className="whitespace-nowrap text-xs text-ink-muted">{started}</span>
+      </PhoneNamedCell>
       <div className="col-start-2 row-start-1 md:col-start-auto md:row-start-auto">
         <ActionMenu label={t("settings.machineActions", { name })}
           triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-7"
@@ -162,6 +169,17 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
           { label: t("settings.machineRemove"), onSelect: onRemove, tone: "danger", disabled: self },
         ]} />
       </div>
+    </div>
+  );
+}
+
+// PhoneNamedCell is one column of a machine's row. A PC has the names in the heading above the rows; a phone
+// stacks the row and has no heading, so each value says its name.
+function PhoneNamedCell({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <div className={`min-w-0 ${onPhoneFullWidth}`}>
+      <div aria-hidden="true" className="mb-1 text-[11.5px] text-ink-faint md:hidden">{name}</div>
+      {children}
     </div>
   );
 }
@@ -200,7 +218,7 @@ function PortInput({ machine, disabled, onChange }: {
       min={minimumPort}
       max={maximumPort}
       aria-label={t("settings.machineColumnPort")}
-      className={`${sizedControl("w-full")} ${onPhoneFullWidth} font-mono tabular-nums`}
+      className={`${sizedControl("w-full")} font-mono tabular-nums`}
       value={draft}
       placeholder={t("settings.machinePortAutomatic")}
       disabled={disabled}

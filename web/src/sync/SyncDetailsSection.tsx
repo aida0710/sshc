@@ -2,8 +2,6 @@ import type { SyncHistoryDiff, SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
-import { hintText } from "../ui/form";
-import { describeLastSync } from "./describeLastSync";
 import { SyncBucketStateSection } from "./SyncBucketStateSection";
 import { SyncHistorySection } from "./SyncHistorySection";
 import type { BucketStatusState, HistoryState } from "./useSyncRemoteState";
@@ -42,12 +40,9 @@ export function SyncDetailsSection({
   const t = useTranslate();
   return (
     <details className="border-t border-line pt-4">
-      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 marker:hidden">
-        <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-          <DisclosureChevron className="size-3.5 text-ink-muted" />
-          {t("sync.detailsHeading")}
-        </span>
-        <span className={hintText}>{describeLastSync(t, status, locale)}</span>
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-ink marker:hidden">
+        <DisclosureChevron className="size-3.5 text-ink-muted" />
+        {t("sync.detailsHeading")}
       </summary>
       <div className="grid gap-4 pt-4 lg:grid-cols-2">
         <SyncBucketStateSection

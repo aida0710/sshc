@@ -44,7 +44,7 @@ func TestConnectProblemNamesFailuresThatNeedUserAction(t *testing.T) {
 // 利用者が切断した VPN 経路で再接続を止めたときは、設定を直すよう促す既定の文では
 // なく、切断されたことを書く。
 func TestTheReconnectStopNoticeSaysTheVPNRouteWasDisconnected(t *testing.T) {
-	if notice := reconnectStopNotice("vpn_route_disconnected"); notice != "VPN経路が切断されたため、自動再接続を停止しました。" {
+	if notice := reconnectStopNotice("vpn_route_disconnected"); notice != "VPNルートが切断されたため、自動再接続を停止しました。" {
 		t.Fatalf("notice = %q", notice)
 	}
 	if notice := reconnectStopNotice("host_key_changed"); notice != "" {

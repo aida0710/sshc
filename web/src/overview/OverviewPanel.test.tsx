@@ -439,10 +439,10 @@ describe("OverviewPanel", () => {
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).getByText("deploy@db.example.com:2202")).toBeInTheDocument();
     expect(card).toHaveTextContent("work");
-    // The card shows the day as a badge; the whole time is its name and its tooltip.
+    // The card shows the time as a badge; its name and its tooltip say what the time is.
     const lastConnected = within(card as HTMLElement).getByLabelText(`Last connected ${formatDateTime("2026-08-24T15:30:00Z", "en")}`);
     expect(lastConnected).toHaveAttribute("title", `Last connected ${formatDateTime("2026-08-24T15:30:00Z", "en")}`);
-    expect(lastConnected.textContent).toMatch(/ago$/u);
+    expect(lastConnected).toHaveTextContent(formatDateTime("2026-08-24T15:30:00Z", "en"));
     await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Connect" }));
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));

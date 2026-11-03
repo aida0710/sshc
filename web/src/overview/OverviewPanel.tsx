@@ -4,7 +4,7 @@ import { configApi, type Overview } from "../api/config";
 import { recentConnectionsApi, type RecentConnectionList } from "../api/recentConnections";
 import { syncApi, type SyncStatus } from "../api/sync";
 import { terminalSessionsApi } from "../api/terminalSessions";
-import { useTranslate } from "../i18n/context";
+import { useLanguage } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
@@ -45,7 +45,7 @@ export function OverviewPanel({
   onAddConnection,
   onOpenLocalShell,
 }: OverviewPanelProps) {
-  const t = useTranslate();
+  const { t, locale } = useLanguage();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [sync, setSync] = useState<SyncStatus | null>(null);
@@ -118,7 +118,6 @@ export function OverviewPanel({
       <PageHeader
         title={t("home.heading")}
         headingId="home-heading"
-        meta={overview === null || noConnections ? undefined : t("conn.count", { count: connectionCount })}
         actions={noConnections ? undefined : (
           <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Connections")}>
             {t("home.manageConnections")}
@@ -185,7 +184,7 @@ export function OverviewPanel({
               : !sync.configured
                 ? t("home.syncNotConfigured")
                 : sync.synced
-                  ? t("home.syncLast", { at: formatOptionalDateTime(sync.lastSyncedAt), count: sync.fileCount ?? 0 })
+                  ? t("home.syncLast", { at: formatOptionalDateTime(sync.lastSyncedAt, locale), count: sync.fileCount ?? 0 })
                   : t("home.syncNever")}
           </p>
           <Button small onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>

@@ -5,7 +5,11 @@ export function historyOperationLabelKey(operation: string): MessageKey {
   if (operation.startsWith("connection.")) return "history.operation.connection";
   if (operation.startsWith("key.")) return "history.operation.key";
   if (operation.startsWith("terminal.")) return "history.operation.terminal";
-  if (operation.startsWith("settings.") || operation.startsWith("metadata.")) return "history.operation.settings";
+  if (["settings.", "metadata.", "shortcuts.", "keybar."].some((prefix) => operation.startsWith(prefix))) return "history.operation.settings";
+  if (operation.startsWith("host.")) return "history.operation.hostDetection";
+  if (operation.startsWith("vpn.")) return "history.operation.vpn";
+  if (operation.startsWith("known_hosts.")) return "history.operation.knownHosts";
+  if (operation.startsWith("sftp.")) return "history.operation.sftp";
   if (operation.startsWith("machine.")) return "history.operation.machine";
   if (operation.startsWith("secret.")) return "history.operation.vault";
   if (operation.startsWith("sync.")) return "history.operation.sync";

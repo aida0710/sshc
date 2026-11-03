@@ -3,7 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { ConfigDiagnosticList } from "../sshconfig/ConfigDiagnosticList";
 import { Icon } from "../ui/icons";
 
-// ConfigDiagnostics は、Include階層の下に、Include をたどったときに見つかった問題を出す。
+// ConfigDiagnostics は、Include階層の下に、設定を読んだときに見つかった問題（Include、OpenSSHが知らないキーワードの行など）を出す。
 // 問題が無ければ、無いことを1行で伝える。列の下端に置くので、スマホでは浮いた下タブの上に空ける。
 export function ConfigDiagnostics({ diagnostics }: { diagnostics: Diagnostic[] }) {
   const t = useTranslate();
@@ -11,7 +11,7 @@ export function ConfigDiagnostics({ diagnostics }: { diagnostics: Diagnostic[] }
     return (
       <p className="mx-3 mb-[calc(0.875rem+var(--mobile-navigation-inset))] flex shrink-0 items-center gap-2 border-t border-line px-2.5 pt-2.5 text-[12.5px] text-ink-faint">
         <Icon name="check" className="size-3.5 shrink-0" />
-        {t("explorer.noIncludeProblem")}
+        {t("explorer.noConfigProblem")}
       </p>
     );
   }

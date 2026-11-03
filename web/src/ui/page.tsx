@@ -73,7 +73,8 @@ export function SummaryStats({ children, className = "", ...rest }: ComponentPro
   );
 }
 
-// SummaryStat is one of those counts. attention paints it amber, for a count that asks for a look.
+// SummaryStat is one of those counts. attention paints it amber, for a count that asks for a look; a page leaves
+// such a count out at 0, since nothing asks for a look then.
 export function SummaryStat({ label, value, attention = false }: { label: string; value: string | number; attention?: boolean }) {
   return (
     <div className={`inline-flex h-[30px] items-center gap-2 rounded-md px-3 text-[12.5px] ${attention ? "bg-notice text-notice-ink" : "bg-well text-ink-muted"}`}>

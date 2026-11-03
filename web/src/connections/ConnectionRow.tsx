@@ -12,9 +12,9 @@ function targetFor(host: HostEntry): string {
   return address === "" ? host.file.path ?? host.file.absolute : address;
 }
 
-// RowColumns lay a row out across a list that has the whole width (nothing is open beside it): the group
-// and when it was last connected follow the name and the destination.
-export type RowColumns = { group: string; lastConnected: string };
+// RowColumns lay a row out across a list that has the whole width (nothing is open beside it): when it was
+// last connected follows the name and the destination. The group is the heading above the row.
+export type RowColumns = { lastConnected: string };
 
 type ConnectionRowProps = {
   host: HostEntry;
@@ -108,13 +108,12 @@ export function ConnectionRow({
               {tags.length === 0 ? null : <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">{tagLabels}</span>}
             </span>
           ) : (
-            <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,22rem)_minmax(0,16rem)_minmax(0,10rem)_minmax(0,1fr)] items-center gap-4">
+            <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,22rem)_minmax(0,16rem)_minmax(0,1fr)] items-center gap-4">
               <span className="flex min-w-0 items-center gap-2">
                 {aliasLine}
                 {tags.length === 0 ? null : <span aria-hidden="true" className="flex gap-1">{tagLabels}</span>}
               </span>
               <span className="truncate text-[12.5px] text-ink-muted">{destination}</span>
-              <span className="truncate text-[12.5px] text-ink-muted">{columns.group}</span>
               <span className="truncate text-[12.5px] text-ink-muted">{columns.lastConnected}</span>
             </span>
           )}
