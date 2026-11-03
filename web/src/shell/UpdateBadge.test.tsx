@@ -65,6 +65,21 @@ describe("UpdateBadge", () => {
     expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
   });
 
+  it("leads an Android app to the release page once a newer release exists", async () => {
+    render(<UpdateBadge api={buildApi({
+      current: "0.1.0", latest: "0.2.0", available: true, reason: "update_android_unsupported",
+      pageUrl: "https://example.invalid/releases/v0.2.0",
+    })} />);
+    const link = await screen.findByRole("link", { name: "0.2.0 is available. Open the release page" });
+    expect(link).toHaveAttribute("href", "https://example.invalid/releases/v0.2.0");
+  });
+
+  it("shows only the version on an Android app that is the latest", async () => {
+    render(<UpdateBadge api={buildApi({ current: "0.2.0", latest: "0.2.0", available: false, reason: "update_android_unsupported" })} />);
+    await screen.findByRole("link", { name: /0\.2\.0/ });
+    expect(screen.queryByRole("button", { name: "Toggle update notice" })).not.toBeInTheDocument();
+  });
+
   it("keeps the engine version visible when the remote check cannot run", async () => {
     const api = buildApi({ current: "0.1.0", available: false }, {
       updateStatus: vi.fn().mockRejectedValue(new Error("update_check_failed")),

@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -149,11 +148,7 @@ func runEngineApp(
 	}()
 
 	parts := newPlatformParts()
-	checker := &releasecheck.Checker{
-		API:  latestReleaseAPI,
-		HTTP: &http.Client{Timeout: releaseCheckTimeout},
-	}
-	updates := releasewatch.New(runCtx, func(ctx context.Context) (releasecheck.Catalog, error) { return checker.Catalog(ctx, version) })
+	updates := releasewatch.NewForVersion(runCtx, version)
 	defer updates.Stop()
 	announce := announceReadiness(stdout)
 	spoolRoot, err := sftpDownloadSpoolRoot()
@@ -229,16 +224,10 @@ func terminalOutput(output io.Writer) bool {
 	return ok && term.IsTerminal(int(file.Fd()))
 }
 
-const (
-	// releaseCheckTimeout は、engine が最新リリースを GitHub に 1 回尋ねる HTTP の
-	// 上限である。Web UI の手動確認も同じ Checker を使うので、応答しない GitHub の
-	// 前で画面の利用者を長く待たせない長さにする。
-	releaseCheckTimeout = 3 * time.Second
-	// startupUpdateCheckTimeout は、起動時の確認の上限である。確認は受付開始の通知
-	// （Announce）の中で行い、その間 app.Run は停止の要求や Serve の失敗を待つところ
-	// へ進めない。releaseCheckTimeout より長くしても、先に HTTP の上限で切れるので効かない。
-	startupUpdateCheckTimeout = releaseCheckTimeout
-)
+// startupUpdateCheckTimeout は、起動時の案内のために確認の結果を待つ上限である。確認は受付開始の
+// 通知（Announce）の中で待ち、その間 app.Run は停止の要求や Serve の失敗を待つところへ進めない。
+// 待つのをやめても確認そのものは裏で続き、結果は画面が使う。
+const startupUpdateCheckTimeout = 3 * time.Second
 
 type updateReportOptions struct {
 	Watcher *releasewatch.Watcher

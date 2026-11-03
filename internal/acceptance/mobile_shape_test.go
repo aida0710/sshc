@@ -1,6 +1,7 @@
 package acceptance_test
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"io"
@@ -17,13 +18,15 @@ import (
 
 	"sshc/internal/app"
 	"sshc/internal/handoff"
+	"sshc/internal/releasecheck"
+	"sshc/internal/releasewatch"
 )
 
 // nil は、機能が無いという結果である。
 //
 // Android には ssh-keygen も ssh-agent も居ないので、それを探すツールを持つこと
-// 自体が誤りになる。置き換えられない更新を提示するのも同じである。だから
-// mobile/dependencies.go は、それらを nil のまま engine へ渡す。
+// 自体が誤りになる。だから mobile/dependencies.go は、それらを nil のまま engine へ渡す。
+// 新しいリリースは調べるが、置き換える手段は無い（SelfUpdate を渡さない）。
 //
 // 受け側がそれを扱い損ねると、落ちるのは実機だけである。開発機の go test は
 // 常にツールが在る姿で走るので、nil の枝を一度も通らない。
@@ -54,7 +57,6 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 	handled := map[string]bool{
 		"Toolchain": true,
 		"KeyAgent":  true,
-		"Updates":   true,
 	}
 	for _, name := range nilledByMobile(t) {
 		if !handled[name] {
@@ -84,9 +86,11 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Toolchain: nil,
 		KeyAgent:  nil,
-		Updates:   nil,
-		Lookup:    func(string) (string, bool) { return "", false },
-		Environ:   func() []string { return []string{"HOME=" + home} },
+		Updates: releasewatch.New(t.Context(), func(context.Context) (releasecheck.Catalog, error) {
+			return releasecheck.Catalog{Latest: releasecheck.Release{Version: "v9.9.9", PageURL: "https://example.invalid/releases/v9.9.9"}}, nil
+		}),
+		Lookup:  func(string) (string, bool) { return "", false },
+		Environ: func() []string { return []string{"HOME=" + home} },
 	}, "mobile-shape")
 	if err != nil {
 		t.Fatalf("app.Build with the mobile shape = %v", err)
@@ -201,18 +205,19 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 			cleanSync.Direction, cleanSync.Auto.Phase)
 	}
 
-	// 更新: バージョンだけを結果、「新しいものがある」とは言わない。
-	//
-	// Checker が nil のとき、ここが落ちれば Android の画面は起動直後に赤くなる。
+	// 更新: 新しいリリースがあることとそのページは伝えるが、置き換えられるとは言わない。
+	// Android の APK は、この engine が入れ替えられるものではない。
 	response := get("/api/v1/update")
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("GET /api/v1/update = %d, want 200", response.StatusCode)
 	}
 	var update struct {
-		Current   string  `json:"current"`
-		Available bool    `json:"available"`
-		Latest    *string `json:"latest"`
+		Current   string `json:"current"`
+		Available bool   `json:"available"`
+		CanUpdate bool   `json:"canUpdate"`
+		Latest    string `json:"latest"`
+		PageURL   string `json:"pageUrl"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&update); err != nil {
 		t.Fatal(err)
@@ -220,10 +225,11 @@ func TestTheEngineAnswersInTheShapeMobileGivesIt(t *testing.T) {
 	if update.Current != "mobile-shape" {
 		t.Errorf("current = %q, want the running version", update.Current)
 	}
-	if update.Available || update.Latest != nil {
-		// 置き換えられない更新を提示しない。Android の APK は、この engine が
-		// 入れ替えられるものではない。
-		t.Errorf("an engine with no checker offered an update: %+v", update)
+	if !update.Available || update.Latest != "v9.9.9" || update.PageURL != "https://example.invalid/releases/v9.9.9" {
+		t.Errorf("the engine did not tell of the newer release and its page: %+v", update)
+	}
+	if update.CanUpdate {
+		t.Errorf("an engine with nothing to replace itself offered an update: %+v", update)
 	}
 
 	// ツールが無い枝を実際に踏む。

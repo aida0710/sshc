@@ -97,6 +97,25 @@ describe("OverviewPanel", () => {
     expect(onOpenLocalShell).toHaveBeenCalledOnce();
   });
 
+  it("says nothing about sync until its status has been asked for", async () => {
+    let answerSync: (status: SyncStatus) => void = () => {};
+    render(
+      <OverviewPanel
+        onAddConnection={vi.fn()}
+        onOpenLocalShell={vi.fn()}
+        loadOverview={vi.fn().mockResolvedValue(overview)}
+        loadSync={vi.fn().mockImplementation(() => new Promise((resolve) => { answerSync = resolve; }))}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
+        onNavigate={vi.fn()}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Sync status is unavailable.")).not.toBeInTheDocument();
+    answerSync(sync);
+    await screen.findByRole("region", { name: "Sync" });
+    expect(screen.queryByText("Sync status is unavailable.")).not.toBeInTheDocument();
+  });
+
   it("puts the connection browser first and preserves attention and sync actions", async () => {
     render(
       <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}

@@ -5,6 +5,7 @@ import { updateApi, type UpdateApi } from "../api/update";
 import { useLanguage } from "../i18n/context";
 import { UpdateControls } from "../shell/UpdateControls";
 import { explainedUpdateReason, updateMessage } from "../shell/updateMessage";
+import { ReleasePageLink } from "./ReleasePageLink";
 import { isUpdateActive, useUpdateStatus } from "../shell/useUpdateStatus";
 import { formatDateTime } from "../ui/format";
 import { FactRows, type Fact } from "../ui/FactRows";
@@ -29,6 +30,9 @@ export function AboutPage({ api = aboutApi, updates = updateApi, sessions = term
   // A stored result may be days old; only a successful check on this page
   // can establish whether a newer version exists.
   const [checkedOnThisPage, setCheckedOnThisPage] = useState(false);
+  // The status also carries the failure of the engine's own last check, which may be hours old and says nothing about
+  // the network now. Only a check made on this page is reported as failed.
+  const [checkFailure, setCheckFailure] = useState("");
   const openingCheckHandled = useRef(false);
   const { status, setStatus } = useUpdateStatus(updates);
   const activity = useUpdateActivity(status);
@@ -39,11 +43,13 @@ export function AboutPage({ api = aboutApi, updates = updateApi, sessions = term
     openingCheckHandled.current = true;
     setChecking(true);
     setCheckedOnThisPage(false);
+    setCheckFailure("");
     activity.record(checkStartedActivity);
     try {
       const checked = await updates.checkUpdate();
       setStatus(checked);
       setCheckedOnThisPage(!checked.checkError);
+      setCheckFailure(checked.checkError ?? "");
       activity.record(checkResultActivity(checked));
     } catch {
       activity.record(checkRequestFailedActivity);
@@ -86,11 +92,12 @@ export function AboutPage({ api = aboutApi, updates = updateApi, sessions = term
         <div className="grid gap-3 text-sm text-ink-muted">
           {currentState === null ? null : <p role="status">{currentState}</p>}
           <FactRows facts={updateFacts} />
-          {status?.checkError ? <Notice tone="danger"><span className="grid gap-1"><span>{t("update.checkFailed")}</span><span className="break-words">{status.checkError}</span></span></Notice> : null}
+          {checkFailure === "" ? null : <Notice tone="danger"><span className="grid gap-1"><span>{t("update.checkFailed")}</span><span className="break-words">{checkFailure}</span></span></Notice>}
           {reason === undefined ? null : <p>{t(updateMessage(reason))}</p>}
           <div className="flex flex-wrap items-baseline gap-4">
             <Button disabled={checking} onClick={() => { void checkUpdate(); }}>{t(checking ? "about.checking" : "about.check")}</Button>
             {status === null ? null : <UpdateControls status={status} api={updates} sessions={sessions} onStart={(job) => setStatus({ ...status, canUpdate: false, job })} />}
+            {status === null ? null : <ReleasePageLink status={status} />}
             {/* The sidebar's progress dialog stays closed here, so its reload button is offered on the page. */}
             {status?.job?.state === "restarting" ? <Button onClick={() => window.location.reload()}>{t("update.reload")}</Button> : null}
           </div>

@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"context"
 	"crypto/rand"
 	"log/slog"
 	"net"
@@ -10,6 +11,7 @@ import (
 
 	"sshc/internal/app"
 	"sshc/internal/handoff"
+	"sshc/internal/releasewatch"
 	"sshc/internal/terminal"
 	"sshc/internal/ui"
 )
@@ -22,25 +24,33 @@ import (
 // 共有しない。埋まっていれば、engine が代わりの port を 1 度選んで保存する。
 const mobileDefaultPort = 54448
 
+// dependencyOptions は、モバイル環境用の依存を組み立てるのに要るものである。
+type dependencyOptions struct {
+	// ctx は engine の寿命である。リリースの確認はこれが取り消されると止まる。
+	ctx context.Context
+	// goos はテスト可能にするため引数で受ける。
+	goos     string
+	home     string
+	cache    string
+	logger   *slog.Logger
+	announce func(app.Readiness) error
+}
+
 // newDependencies はモバイル環境用の依存を組み立てる。自己更新、ssh-keygen、
-// ssh-agent など利用できない機能は nil とする。goos はテスト可能にするため引数で受ける。
-func newDependencies(
-	goos, home, cache string,
-	logger *slog.Logger,
-	announce func(app.Readiness) error,
-) (app.Dependencies, error) {
+// ssh-agent など利用できない機能は nil とする。
+func newDependencies(options dependencyOptions) (app.Dependencies, error) {
 	assets, err := ui.FS()
 	if err != nil {
 		return app.Dependencies{}, err
 	}
 	return app.Dependencies{
 		Random:      rand.Reader,
-		Announce:    announce,
+		Announce:    options.announce,
 		Listen:      net.Listen,
 		DefaultPort: mobileDefaultPort,
 		UI:          assets,
-		Logger:      logger,
-		Home:        home,
+		Logger:      options.logger,
+		Home:        options.home,
 		Owner:       handoff.OwnerEngine,
 		PID:         os.Getpid(),
 		// モバイルには ssh-keygen と ssh-agent がない。
@@ -48,12 +58,13 @@ func newDependencies(
 		KeyAgent:  nil,
 		// モバイルアプリの SHELL 環境変数には依存しない。
 		Lookup:  func(string) (string, bool) { return "", false },
-		Environ: mobileEnvironment(goos, home, cache),
-		// モバイルアプリからバイナリを置換できないため、自己更新を無効にする。
-		Updates: nil,
+		Environ: mobileEnvironment(options.goos, options.home, options.cache),
+		// モバイルアプリはバイナリを置換できないので SelfUpdate は無い。新しいリリースは調べて、
+		// 画面がリリースページへ案内する。
+		Updates: releasewatch.NewForVersion(options.ctx, version),
 		// SFTP のダウンロードはアプリのキャッシュで用意する。アプリのプロセスには
 		// HOME が無く、既定の一時ディレクトリ（/data/local/tmp）には書き込めない。
-		SFTPDownloadSpoolRoot: filepath.Join(cache, "sftp-spool"),
+		SFTPDownloadSpoolRoot: filepath.Join(options.cache, "sftp-spool"),
 	}, nil
 }
 
