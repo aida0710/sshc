@@ -24,7 +24,7 @@ import { PanelState } from "../ui/PanelState";
 import { usePendingAction } from "../ui/usePendingAction";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { useToast } from "../ui/useToast";
-import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
+import { asciiTextEntry } from "../ui/softKeyboard";
 
 type KnownHostsPanelProps = { api?: KnownHostsApi };
 type CandidateSort = "host" | "type" | "fingerprint" | "trust";
@@ -321,7 +321,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
               </p>
             </div>
             <Field label={t("kh.expectedFingerprint")}>
-              <input {...literalTextEntry}
+              <input {...asciiTextEntry}
                 value={expectedFingerprint}
                 onChange={(event) => setExpectedFingerprint(event.target.value)}
                 className={control}

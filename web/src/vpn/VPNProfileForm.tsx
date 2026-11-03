@@ -274,7 +274,7 @@ export function VPNProfileForm({
             hint={t("vpn.serverCertificateHint")}
             warning={errorFor("openconnect.serverCertificate")}
           >
-            <input
+            <input {...asciiTextEntry}
               className={control}
               value={draft.serverCertificate}
               onChange={(event) => edit("serverCertificate")(event.target.value)}
@@ -294,7 +294,7 @@ export function VPNProfileForm({
           </FieldRow>
           {draft.secondFactor === "approve" ? (
             <FieldRow label={t("vpn.approvalWord")} hint={t("vpn.approvalWordHint")} warning={errorFor("openconnect.approvalWord")}>
-              <input
+              <input {...asciiTextEntry}
                 className={control}
                 value={draft.approvalWord}
                 onChange={(event) => edit("approvalWord")(event.target.value)}
@@ -330,10 +330,10 @@ export function VPNProfileForm({
           {secretField("l2tpPassword", t("vpn.password"))}
           {secretField("ipsecPsk", t("vpn.psk"))}
           <FieldRow label={t("vpn.ike")} hint={t("vpn.proposalsHint")} warning={errorFor("l2tp.ike")}>
-            <input className={control} value={draft.ike} onChange={(event) => edit("ike")(event.target.value)} />
+            <input {...asciiTextEntry} className={control} value={draft.ike} onChange={(event) => edit("ike")(event.target.value)} />
           </FieldRow>
           <FieldRow label={t("vpn.esp")} hint={t("vpn.proposalsHint")} warning={errorFor("l2tp.esp")}>
-            <input className={control} value={draft.esp} onChange={(event) => edit("esp")(event.target.value)} />
+            <input {...asciiTextEntry} className={control} value={draft.esp} onChange={(event) => edit("esp")(event.target.value)} />
           </FieldRow>
         </>
       )}

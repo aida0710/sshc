@@ -2,6 +2,7 @@ import type { UpdateStatus } from "../api/update";
 import { useLanguage } from "../i18n/context";
 import { isSafeHttpURL } from "../terminal/links";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
+import { touchLinkTarget } from "../ui/form";
 import { formatDateTime } from "../ui/format";
 import { PageSection } from "../ui/page";
 
@@ -28,7 +29,7 @@ export function ReleaseNotes({ releases, current, latest }: ReleaseNotesProps) {
                 </DisclosureSummary>
                 <div className="grid gap-3 pb-4 pl-6 text-sm">
                   <div className="whitespace-pre-wrap [overflow-wrap:anywhere] text-ink">{release.body || t("about.emptyNotes")}</div>
-                  {!isSafeHttpURL(release.pageUrl) ? null : <a href={release.pageUrl} target="_blank" rel="noopener noreferrer" className="justify-self-start text-accent underline">{t("about.viewRelease")}</a>}
+                  {!isSafeHttpURL(release.pageUrl) ? null : <a href={release.pageUrl} target="_blank" rel="noopener noreferrer" className={`${touchLinkTarget} justify-self-start text-accent underline`}>{t("about.viewRelease")}</a>}
                 </div>
               </details>
             );

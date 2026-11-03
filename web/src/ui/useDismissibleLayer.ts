@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { isImeComposing } from "./imeComposition";
+import { focusRaisesKeyboard } from "./softKeyboard";
 
 export type DismissReason = "outside" | "escape" | "android-back" | "superseded";
 
@@ -53,6 +54,16 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
   return [...container.querySelectorAll<HTMLElement>(
     'a[href], button, input, select, textarea, [tabindex]',
   )].filter((element) => !element.hasAttribute("disabled") && element.tabIndex >= 0 && visible(element));
+}
+
+// The element to focus in a layer that opens. In place of a text field on a phone it is the panel, so a form or a
+// dialog opens with the keyboard down and all of it in sight.
+function focusTargetKeepingKeyboardDown(layer: Layer, target: HTMLElement | null): HTMLElement | null {
+  return focusRaisesKeyboard(target) ? layer.containers()[0] ?? null : target;
+}
+
+function giveFocusBack(target: HTMLElement | null) {
+  if (target?.isConnected === true && !focusRaisesKeyboard(target)) target.focus();
 }
 
 function dismissOutside(event: PointerEvent) {
@@ -116,9 +127,7 @@ function dismissAndRestoreFocus(layer: Layer, reason: DismissReason) {
   if (!layer.dismissible()) return;
   const returnTarget = layer.restoreFocus();
   layer.dismiss(reason);
-  queueMicrotask(() => {
-    if (returnTarget?.isConnected === true) returnTarget.focus();
-  });
+  queueMicrotask(() => giveFocusBack(returnTarget));
 }
 
 // A late terminal connection or background widget must not take focus from a modal.
@@ -127,7 +136,7 @@ function keepModalFocus(event: FocusEvent) {
   const layer = layers[index];
   if (layer === undefined || !(event.target instanceof Node)) return;
   if (layers.slice(index).some((candidate) => candidate.containers().some((container) => container?.contains(event.target as Node)))) return;
-  (layer.initialFocus() ?? layer.containers()[0])?.focus();
+  focusTargetKeepingKeyboardDown(layer, layer.initialFocus() ?? layer.containers()[0] ?? null)?.focus();
 }
 
 function dismissForAndroidBack(event: Event) {
@@ -218,7 +227,7 @@ export function useDismissibleLayer({
       const target = layer.initialFocus() ?? layer.containers().flatMap((container) =>
         container === null ? [] : focusableElements(container),
       )[0] ?? layer.containers()[0] ?? null;
-      target?.focus();
+      focusTargetKeepingKeyboardDown(layer, target)?.focus();
     }
     return () => {
       const returnTarget = layer.restoreFocus();
@@ -231,7 +240,7 @@ export function useDismissibleLayer({
       queueMicrotask(() => {
         const current = document.activeElement;
         const stillOwned = current instanceof Node && mountedContainers.some((container) => container?.contains(current) === true);
-        if (returnTarget?.isConnected === true && (current === document.body || stillOwned)) returnTarget.focus();
+        if (current === document.body || stillOwned) giveFocusBack(returnTarget);
       });
     };
   }, [closeOnOutside, open, trapFocus]);

@@ -12,12 +12,12 @@ export const mobileViewportQuery = "(max-width: 767px), (pointer: coarse) and (m
 export const pinnedNavigationQuery = "(pointer: coarse) and (min-width: 600px) and (max-width: 1023px) and (min-height: 480px)";
 export const navigationRailQuery = "(min-width: 600px) and (max-width: 767px) and (max-height: 479px), (pointer: coarse) and (min-width: 600px) and (max-width: 1023px) and (max-height: 479px)";
 
-function matches(query: string): boolean {
+export function matchesMediaQuery(query: string): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia(query).matches;
 }
 
 export function useMediaQuery(query: string): boolean {
-  const [matched, setMatched] = useState(() => matches(query));
+  const [matched, setMatched] = useState(() => matchesMediaQuery(query));
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
