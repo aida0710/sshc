@@ -46,7 +46,7 @@ func New(parent context.Context, fetch Fetch) *Watcher {
 // NewForVersion watches the project's GitHub releases for an engine of this version. The client has no timeout of
 // its own: checkTimeout bounds a whole check, and the list of releases is megabytes on a slow line.
 func NewForVersion(parent context.Context, version string) *Watcher {
-	checker := releasecheck.Checker{API: releasecheck.LatestAPI}
+	checker := releasecheck.Checker{API: releasecheck.LatestAPI, Page: releasecheck.LatestPage}
 	return New(parent, func(ctx context.Context) (releasecheck.Catalog, error) { return checker.Catalog(ctx, version) })
 }
 
@@ -102,7 +102,9 @@ func (w *Watcher) fetchCatalog(pending *releaseCheck) {
 	snapshot := w.snapshot
 	snapshot.CheckedAt = time.Now().UTC()
 	snapshot.Failure = ""
-	if err == nil || errors.Is(err, releasecheck.ErrNoRelease) {
+	if err == nil {
+		snapshot.Catalog = keepWhatWasRead(snapshot.Catalog, catalog)
+	} else if errors.Is(err, releasecheck.ErrNoRelease) {
 		snapshot.Catalog = catalog
 	} else {
 		// A failed refresh must not discard the last successful release and notes.
@@ -112,6 +114,18 @@ func (w *Watcher) fetchCatalog(pending *releaseCheck) {
 	pending.snapshot = cloneSnapshot(snapshot)
 	w.checking = nil
 	close(pending.done)
+}
+
+// keepWhatWasRead keeps what an earlier check read and this one could not: its notes, and the date of the same release
+// when this check learned only the version.
+func keepWhatWasRead(previous, next releasecheck.Catalog) releasecheck.Catalog {
+	if next.Releases == nil {
+		next.Releases = previous.Releases
+	}
+	if next.Latest.Version == previous.Latest.Version && next.Latest.PublishedAt.IsZero() {
+		next.Latest = previous.Latest
+	}
+	return next
 }
 
 func cloneSnapshot(snapshot Snapshot) Snapshot {
