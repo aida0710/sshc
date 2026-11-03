@@ -642,6 +642,7 @@ export function App({
             runTarget={runTargets.selected}
             directDestination={directDestination}
             onOpen={(request, place) => void openSessionInSplit(request, place)}
+            onSplit={() => navigate("Terminal")}
           />
         ) : null}
         {state === "ready" ? (

@@ -32,7 +32,7 @@ export function currentBindings(): Bindings {
   return bindingsOf(shortcutPresetLibrary.currentChosen());
 }
 
-// refreshPresets reads the presets again, with every other preset shortcutPresetLibrary.
+// refreshPresets reads the presets again, with every other preset library.
 export const refreshPresets = refreshPresetLibraries;
 
 // savePresetBindings keeps edited bindings in the shortcut preset a settings preset chose, or in a new preset

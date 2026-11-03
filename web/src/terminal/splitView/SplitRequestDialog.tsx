@@ -26,6 +26,9 @@ type SplitRequestDialogProps = {
   // directDestination names what a user@host[:port] typed into the search would be saved as.
   directDestination: Pick<DirectDestinationActions, "aliasFor">;
   onOpen: (request: OpenTerminalSessionRequest, place: SplitRequest) => void;
+  // onSplit brings up the terminal screen once a session already open has gone beside the target: the command palette
+  // can ask from any page.
+  onSplit: () => void;
 };
 
 // SplitRequestDialog asks what goes beside a session when 右に分割 or 下に分割 is chosen. It lists the sessions that
@@ -35,7 +38,7 @@ export function SplitRequestDialog(props: SplitRequestDialogProps) {
   return request === null ? null : <SplitRequestChoice {...props} request={request} />;
 }
 
-function SplitRequestChoice({ splitView, sessions, aliases, hosts, localShellProfiles, runTarget, directDestination, onOpen, request }: SplitRequestDialogProps & { request: SplitRequest }) {
+function SplitRequestChoice({ splitView, sessions, aliases, hosts, localShellProfiles, runTarget, directDestination, onOpen, onSplit, request }: SplitRequestDialogProps & { request: SplitRequest }) {
   const t = useTranslate();
   const [choosingNew, setChoosingNew] = useState(false);
   const { targetSessionId } = request;
@@ -67,6 +70,7 @@ function SplitRequestChoice({ splitView, sessions, aliases, hosts, localShellPro
         onSelect={(sourceSessionId) => {
           splitView.split({ ...request, sourceSessionId });
           cancelSplitRequest();
+          onSplit();
         }}
       />
     );

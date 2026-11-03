@@ -139,6 +139,19 @@ test("splits, opens and closes sessions by name, and offers what needs a session
   await expect(page.getByRole("dialog", { name: /^Close / })).toBeVisible();
 });
 
+test("shows the terminal when a session chosen on another page goes beside the one shown", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  await expect(drawnRows(page)).toContainText(/[$#%>]/);
+  await openLocalShell(page);
+  await openSection(page, "Home");
+
+  await choose(page, "split right", /Split right/);
+  await page.getByRole("dialog", { name: "Choose a session to split" }).getByRole("listitem").first().getByRole("button").click();
+  await expect(page).toHaveURL(/\/terminal$/);
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
+});
+
 test("changes the theme and OSC 52 by name, and says which is in use", async ({ page, installation }) => {
   await openApplication(page, installation);
   await chooseTheme(page, "dark");
