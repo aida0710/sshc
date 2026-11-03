@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { updateGlobalSettings, useSettings } from "../settings/settingsStore";
+import { runsInAndroidApp } from "../android/native";
+import { androidCatalogue } from "./androidCatalogue";
 import { messages, type MessageKey } from "./messages";
 import { browserLocale, copyLocale, defaultLocale, detectLocale, forgetLocale, isLocale, type Locale } from "./locale";
 
@@ -59,7 +61,7 @@ export function LanguageProvider({ children, initial }: { children: ReactNode; i
   }, []);
 
   const value = useMemo<LanguageState>(() => {
-    const catalogue = messages[locale];
+    const catalogue = runsInAndroidApp() ? androidCatalogue(locale) : messages[locale];
     return {
       locale,
       setLocale,

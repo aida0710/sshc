@@ -111,8 +111,7 @@ export const en = {
   "keyBar.directInput": "Type into the terminal",
   "shell.title": "sshc",
   "shell.starting": "Starting secure local session…",
-  "shell.vaultChecking":
-    "Checking that the vault is still unlocked before restoring protected content…",
+  "shell.vaultChecking": "Checking that the vault is still unlocked…",
   "shell.vaultCheckRetrying":
     "The vault state could not be confirmed. Protected content remains hidden while sshc retries.",
   "shell.active": "Local session active · {version}",

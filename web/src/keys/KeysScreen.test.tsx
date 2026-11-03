@@ -1,3 +1,4 @@
+import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useCallback, useState } from "react";
@@ -780,6 +781,18 @@ describe("KeysScreen", () => {
     expect(within(actions).getByRole("menuitem", { name: "Add to ssh-agent" })).toBeDisabled();
     expect(screen.getByText(/This process cannot connect to ssh-agent/)).toBeInTheDocument();
     expect(api.registerWithAgent).not.toHaveBeenCalled();
+  });
+
+  it("says nothing of ssh-agent in the Android app, which has none", async () => {
+    vi.stubGlobal("sshcAndroid", fakeAndroidBridge());
+    render(<KeysScreen api={buildApi()} />);
+
+    const workRow = await screen.findByRole("row", { name: /id_work/ });
+    const actions = await openKeyActions(workRow);
+    expect(within(actions).queryByRole("menuitem", { name: "Add to ssh-agent" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "ssh-agent" })).toBeNull();
+    expect(screen.queryByText(/SSH_AUTH_SOCK/u)).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("says how to give sshc an agent only for the system its engine runs on", async () => {

@@ -113,8 +113,7 @@ export const ja = {
   "keyBar.directInput": "ターミナルへ直接入力",
   "shell.title": "sshc",
   "shell.starting": "ローカルセッションを開始しています…",
-  "shell.vaultChecking":
-    "保護された内容を再表示する前に、Vaultのロック状態を確認しています…",
+  "shell.vaultChecking": "Vaultのロック状態を確認しています…",
   "shell.vaultCheckRetrying":
     "Vaultの状態を確認できませんでした。保護された内容を隠したまま再試行します。",
   "shell.active": "ローカルセッション稼働中 · {version}",

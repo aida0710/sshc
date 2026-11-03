@@ -10,7 +10,7 @@ import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } fr
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 import { formatDateTime } from "../ui/format";
-import { historyOperationLabelKey, historyStatusLabelKey } from "./historyLabels";
+import { historyOperationLabelKey, historyStatusLabelKey, shownHistoryPaths } from "./historyLabels";
 import { PendingChangeDialog } from "./PendingChangeDialog";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
@@ -116,7 +116,7 @@ export function HistoryPanel() {
                       total: item.paths.length,
                     })}
                   </p>
-                  <p className="mt-2 truncate font-mono text-xs text-ink-muted">{item.paths.join(", ")}</p>
+                  <p className="mt-2 truncate font-mono text-xs text-ink-muted empty:hidden">{shownHistoryPaths(item.paths)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button kind="primary" onClick={() => setInspected(item)}>{t("history.viewChange")}</Button>
@@ -147,7 +147,7 @@ export function HistoryPanel() {
                     <p className="font-medium text-ink">{t(historyOperationLabelKey(entry.operation))}</p>
                     <Tag>{t(historyStatusLabelKey(entry.status))}</Tag>
                   </div>
-                  <p className="mt-1 truncate font-mono text-xs text-ink-faint">{entry.paths.join(", ")}</p>
+                  <p className="mt-1 truncate font-mono text-xs text-ink-faint empty:hidden">{shownHistoryPaths(entry.paths)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 md:justify-end">
                   {(entry.restorable ?? []).map((path) => (

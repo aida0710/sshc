@@ -29,6 +29,12 @@ function operatingSystemName(os: string | undefined): string {
   return operatingSystemNames[os] ?? os;
 }
 
+// hasPort says whether a machine's port can be chosen. The Android app keeps its own: the WebView keeps what a page
+// stores per port, so another port would lose the browser's registration.
+function hasPort(machine: Machine): boolean {
+  return machine.facts.os !== "android";
+}
+
 // columns lays a machine's row out like the heading above it, where the screen is wide enough. On a phone the
 // row stacks, with the "…" beside the machine's name.
 const columns = "md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_112px_120px_28px] md:items-center md:gap-3";
@@ -44,6 +50,8 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
   const [failure, setFailure] = useState("");
   const [renaming, setRenaming] = useState<Machine | null>(null);
   const [removing, setRemoving] = useState<Machine | null>(null);
+
+  const portsOffered = document?.machines.some(hasPort) === true;
 
   function change(id: string, update: Parameters<typeof updateMachine>[1]) {
     setFailure("");
@@ -61,7 +69,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
               <div className={`hidden border-b border-line px-3 py-2 text-[11.5px] text-ink-faint md:grid ${columns}`} aria-hidden="true">
                 <span>{t("settings.machineColumnName")}</span>
                 <span>{t("settings.machineColumnPreset")}</span>
-                <span>{t("settings.machineColumnPort")}</span>
+                <span>{portsOffered ? t("settings.machineColumnPort") : null}</span>
                 <span>{t("settings.machineColumnStarted")}</span>
                 <span />
               </div>
@@ -76,7 +84,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
                 />
               ))}
             </div>
-            <p className="text-xs leading-[18px] text-ink-faint">{t("settings.machinePortHint")}</p>
+            {portsOffered ? <p className="text-xs leading-[18px] text-ink-faint">{t("settings.machinePortHint")}</p> : null}
           </div>
         )}
       {renaming === null ? null : (
@@ -125,16 +133,17 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
 }) {
   const { t, locale } = useLanguage();
   const self = machine.id === document.machineId;
-  const name = machine.settings.name ?? "";
+  const savedName = machine.settings.name ?? "";
+  // A machine whose system gives no host name starts out named after the system (application.ensureMachineSettings).
+  // That name is shown as people know the system, and then the line under it need not say it again.
+  const namedAfterSystem = savedName === machine.facts.os;
+  const name = namedAfterSystem ? operatingSystemName(machine.facts.os) : savedName;
   const presetId = document.presets.some((preset) => preset.id === machine.settings.presetId) ? machine.settings.presetId ?? standardPresetId : standardPresetId;
-  const facts = [operatingSystemName(machine.facts.os), machine.facts.version === undefined ? "" : `sshc ${machine.facts.version.replace(/^v/u, "")}`]
+  const facts = [namedAfterSystem ? "" : operatingSystemName(machine.facts.os), machine.facts.version === undefined ? "" : `sshc ${machine.facts.version.replace(/^v/u, "")}`]
     .filter((fact) => fact !== "").join(" · ");
   const started = machine.facts.startedAt === undefined
     ? t("settings.machineNeverStarted")
     : formatDateTime(machine.facts.startedAt, locale);
-  // The Android app keeps its own port: the WebView keeps what a page stores per port, so another port would
-  // lose the browser's registration.
-  const portFixed = machine.facts.os === "android";
 
   return (
     <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 border-t border-line px-3 py-2.5 first-of-type:border-t-0 ${columns} ${self ? "bg-select-fill" : ""}`}>
@@ -155,9 +164,11 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
           {document.presets.map((preset) => <option key={preset.id} value={preset.id}>{presetName(preset, t("settings.presetStandard"))}</option>)}
         </select>
       </PhoneNamedCell>
-      <PhoneNamedCell name={t("settings.machineColumnPort")}>
-        <PortInput machine={machine} disabled={portFixed} onChange={onChange} />
-      </PhoneNamedCell>
+      {hasPort(machine) ? (
+        <PhoneNamedCell name={t("settings.machineColumnPort")}>
+          <PortInput machine={machine} onChange={onChange} />
+        </PhoneNamedCell>
+      ) : <span aria-hidden="true" className="hidden md:block" />}
       <PhoneNamedCell name={t("settings.machineColumnStarted")}>
         <span className="whitespace-nowrap text-xs text-ink-muted">{started}</span>
       </PhoneNamedCell>
@@ -186,9 +197,8 @@ function PhoneNamedCell({ name, children }: { name: string; children: ReactNode 
 
 // PortInput keeps what is typed until it is confirmed (Enter or leaving the field). An empty field is the
 // machine's own fixed port; a number outside the range is put back.
-function PortInput({ machine, disabled, onChange }: {
+function PortInput({ machine, onChange }: {
   machine: Machine;
-  disabled: boolean;
   onChange: (id: string, update: Parameters<typeof updateMachine>[1]) => Promise<unknown>;
 }) {
   const { t } = useLanguage();
@@ -221,7 +231,6 @@ function PortInput({ machine, disabled, onChange }: {
       className={`${sizedControl("w-full")} font-mono tabular-nums`}
       value={draft}
       placeholder={t("settings.machinePortAutomatic")}
-      disabled={disabled}
       onChange={(event) => setDraft(event.target.value)}
       onBlur={commit}
       onKeyDown={(event) => {

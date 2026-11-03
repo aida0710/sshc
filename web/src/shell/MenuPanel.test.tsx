@@ -1,3 +1,4 @@
+import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -91,6 +92,13 @@ describe("MenuPanel", () => {
 
     await userEvent.click(screen.getByRole("link", { name: "Open Sync" }));
     expect(onNavigate).toHaveBeenCalledWith("/sync");
+  });
+
+  it("offers no sign-out in the Android app, which cannot come back through the URL sshc open prints", () => {
+    vi.stubGlobal("sshcAndroid", fakeAndroidBridge());
+    renderMenu();
+    expect(screen.queryByRole("button", { name: "Sign out of this browser" })).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("signs out only after the confirmation and then reloads", async () => {
