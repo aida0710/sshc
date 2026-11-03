@@ -206,6 +206,28 @@ describe("OverviewPanel", () => {
     expect(loadOverview).toHaveBeenCalledTimes(1);
   });
 
+  it("counts a line OpenSSH cannot read as a problem to fix in SSH Config", async () => {
+    const navigate = vi.fn();
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue({
+          ...overview,
+          diagnostics: [{ severity: "warning", code: "unknown_directive", path: "config", line: 5, detail: "HostNmae" }],
+        })}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
+        launch={vi.fn()}
+        onNavigate={navigate}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+
+    const attention = await screen.findByRole("region", { name: "Needs attention" });
+    expect(attention).toHaveTextContent("The SSH configuration files have 1 problem(s).");
+    await userEvent.click(within(attention).getByRole("button", { name: "Open SSH Config" }));
+    expect(navigate).toHaveBeenCalledWith("Config");
+  });
+
   it("does not ask for attention for a Host * that only explains how connections get their values", async () => {
     render(
       <OverviewPanel

@@ -27,6 +27,8 @@ const sentences: Record<string, { one: MessageKey; many: MessageKey; showsDetail
   include_without_argument: { one: "configDiagnostic.includeEmpty", many: "configDiagnostic.includeEmptyMany", showsDetail: false },
   // The engine's detail here is a fixed English note the sentence already says.
   unstructured_line: { one: "configDiagnostic.unstructuredLine", many: "configDiagnostic.unstructuredLineMany", showsDetail: false },
+  // The detail is the keyword as written, which is what the person looks for to fix the typo.
+  unknown_directive: { one: "configDiagnostic.unknownDirective", many: "configDiagnostic.unknownDirectiveMany", showsDetail: true },
 };
 
 // configDiagnosticPlace is where a problem is: the file and, when known, its line.

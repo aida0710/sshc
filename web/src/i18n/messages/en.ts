@@ -2775,6 +2775,8 @@ export const en = {
   "configDiagnostic.includeEmptyMany": "{count} Include lines have no path",
   "configDiagnostic.unstructuredLine": "sshc cannot read this line; it can only be edited as text ({where})",
   "configDiagnostic.unstructuredLineMany": "sshc cannot read {count} lines; they can only be edited as text",
+  "configDiagnostic.unknownDirective": "OpenSSH cannot read this line ({detail}). While it is there, OpenSSH reads none of the configuration and the ssh command stops working ({where})",
+  "configDiagnostic.unknownDirectiveMany": "OpenSSH cannot read {count} lines. Even one of them makes OpenSSH read none of the configuration, and the ssh command stops working",
   "configDiagnostic.unknown": "Configuration problem ({code}): {detail} ({where})",
   "configDiagnostic.unknownMany": "{count} configuration problems ({code})",
   "explorer.diagnosticsCount": "Diagnostics: {count}",
