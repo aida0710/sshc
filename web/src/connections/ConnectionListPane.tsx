@@ -19,6 +19,7 @@ export function ConnectionListPane({
   treeOptions = {},
   detailOpen = selection !== null,
   listAlone = false,
+  startTiles = null,
 }: {
   compact?: boolean;
   overview: Overview;
@@ -35,13 +36,17 @@ export function ConnectionListPane({
   detailOpen?: boolean;
   // 広い画面で何も開いていないあいだ、一覧がページの幅を全部使う（workspaceColumnsLayout）。
   listAlone?: boolean;
+  // startTiles takes the list's place while there is nothing to list.
+  startTiles?: ReactNode;
 }) {
   const t = useTranslate();
   return (
   <div className={workspaceListPane(compact, detailOpen, { listAlone })}>
     {resizeHandle}
     <div className="min-h-0 flex-1">
-      {invalidLocation ? (
+      {startTiles !== null ? (
+        <div className="flex h-full overflow-y-auto px-5 pb-(--mobile-navigation-inset)">{startTiles}</div>
+      ) : invalidLocation ? (
         <section className="m-3.5 flex flex-col gap-2 rounded-[10px] bg-well p-3 text-sm" role="status">
           <p className="font-medium">{t("browser.invalidUrl")}</p>
           <Button

@@ -56,7 +56,7 @@ function Screen({ api, targets }: { api: TerminalSessionsApi; targets: RunTarget
   const terminalSessions = useTerminalSessions(api, t);
   const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget: targets.selected });
   return (
-    <TerminalScreen
+    <TerminalScreen onOpenLocalShell={vi.fn()} onAddConnection={vi.fn()} onOpenSync={vi.fn()}
       visible
       terminalSessions={terminalSessions}
       activeSessionId={null}
@@ -218,7 +218,7 @@ function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: Ru
   const { open } = terminalSessions;
   useEffect(() => { void open({ kind: "ssh", alias: "db" }); }, [open]);
   return (
-    <TerminalScreen
+    <TerminalScreen onOpenLocalShell={vi.fn()} onAddConnection={vi.fn()} onOpenSync={vi.fn()}
       visible
       terminalSessions={terminalSessions}
       activeSessionId={null}

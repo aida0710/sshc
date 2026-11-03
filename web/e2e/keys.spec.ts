@@ -70,9 +70,10 @@ test("lists generated keys and reveals one only after an explicit confirmation",
 }) => {
   await openApplication(page, installation);
   await openSection(page, "Keys");
+  await expect(page.getByRole("heading", { name: "No keys yet" })).toBeVisible();
   await expect(
     page.getByRole("table", { name: "Files classified by content and permissions" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
 
   await openKeyCreation(page);
 

@@ -236,6 +236,35 @@ function buildApi(overrides: Partial<KeysApi> = {}): KeysApi {
 }
 
 describe("KeysScreen", () => {
+  it("offers the ways to get a key instead of an empty list while there is none", async () => {
+    const onOpenSync = vi.fn();
+    render(
+      <KeysScreen
+        api={buildApi({
+          inventory: vi.fn().mockResolvedValue({ ...buildInventory(), items: [] }),
+          listTrash: vi.fn().mockResolvedValue({ entries: [] }),
+        })}
+        onOpenSync={onOpenSync}
+      />,
+    );
+
+    await screen.findByRole("heading", { name: "No keys yet" });
+    expect(screen.queryByLabelText("Search keys")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Receive by sync/ }));
+    expect(onOpenSync).toHaveBeenCalledOnce();
+
+    await userEvent.click(screen.getByRole("button", { name: /^Create a key.*ed25519/ }));
+    expect(await screen.findByRole("heading", { name: "Create a key" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No keys yet" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the list while a key waits in the trash, so that it can be restored", async () => {
+    render(<KeysScreen api={buildApi({ inventory: vi.fn().mockResolvedValue({ ...buildInventory(), items: [] }) })} />);
+
+    await screen.findByLabelText("Search keys");
+    expect(screen.queryByRole("heading", { name: "No keys yet" })).not.toBeInTheDocument();
+  });
+
   it("opens key creation from the heading and offers safe next steps after in-process generation", async () => {
     const api = buildApi();
     const onAssignGeneratedKey = vi.fn();

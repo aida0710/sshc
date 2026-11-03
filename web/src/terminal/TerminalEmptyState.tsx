@@ -1,21 +1,41 @@
 import { useTranslate } from "../i18n/context";
-import { BrandMark } from "../ui/BrandMark";
 import { PageBoard } from "../ui/PageBoard";
-import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { StartTiles } from "../ui/StartTiles";
 
-// Nothing is open: a nudge towards the first connection, in the same card as the pages and the terminal.
-export function TerminalEmptyState() {
+// Nothing is open: the ways to open the first session, in the same card as the pages and the terminal.
+export function TerminalEmptyState({
+  runTarget,
+  onOpenLocalShell,
+  onAddConnection,
+  onOpenSync,
+}: {
+  // runTarget is the engine a new shell opens on; null is this machine.
+  runTarget: string | null;
+  onOpenLocalShell: () => void;
+  onAddConnection: () => void;
+  onOpenSync: () => void;
+}) {
   const t = useTranslate();
-  // A phone has no card around the page, so the nudge gets one of its own.
-  const compact = useMediaQuery(mobileViewportQuery);
   return (
     // The card is not named, so it does not become a region beside the panels that explain a refused run target.
-    <PageBoard fill className="items-center justify-center p-6">
-      <div className={`flex max-w-md flex-col items-center text-center ${compact ? "w-full rounded-2xl border border-line bg-sidebar px-5 py-6 shadow-pane" : ""}`} role="status">
-        <BrandMark className="size-10" />
-        <h2 className="mt-4 text-lg font-semibold text-ink">{t("terminal.emptyHeading")}</h2>
-        <p className="mt-1.5 max-w-sm text-[13px] leading-5 text-ink-muted">{t("terminal.emptyHint")}</p>
-        <div aria-hidden="true" className="mt-4 w-full max-w-xs rounded-md bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink"><span className="text-live">$</span> sshc ssh host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div>
+    <PageBoard fill className="overflow-y-auto p-6">
+      <div className="m-auto flex w-full" role="status">
+        <StartTiles
+          heading={t("terminal.emptyHeading")}
+          headingLevel="h2"
+          brand
+          tiles={[
+            {
+              icon: "terminal",
+              title: t("start.openLocalShell"),
+              note: runTarget === null ? t("start.openLocalShellNote") : t("start.openLocalShellNoteOnRunTarget", { alias: runTarget }),
+              primary: true,
+              onSelect: onOpenLocalShell,
+            },
+            { icon: "connections", title: t("conn.new"), note: t("start.addConnectionNote"), onSelect: onAddConnection },
+            { icon: "sync", title: t("start.receiveSync"), note: t("start.receiveSyncNote"), onSelect: onOpenSync },
+          ]}
+        />
       </div>
     </PageBoard>
   );

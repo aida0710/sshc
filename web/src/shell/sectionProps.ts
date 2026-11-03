@@ -45,6 +45,10 @@ export type Shell = {
   onShowSession: (id: string) => void;
   // onOpenSSHSession は、接続を開いてからそのターミナルを表示する。cwd は開始位置である。
   onOpenSSHSession: (alias: string, cwd?: string) => Promise<void>;
+  // onOpenLocalShell は、ローカルシェルを開いてそのターミナルを表示する。
+  onOpenLocalShell: () => void;
+  // onAddConnection は、新しい接続の入力を開いた Connections へ移る。
+  onAddConnection: () => void;
   // SFTP locations can name an SSH connection or the engine filesystem.
   onOpenTerminal: (alias: string, cwd?: string) => Promise<void>;
 };
