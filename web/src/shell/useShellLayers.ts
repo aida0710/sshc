@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Section } from "../routing/sectionRoute";
 import type { InspectorContent } from "../ui/Inspector";
 import { isDismissibleLayerOpen, useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { dropTextSelection } from "../ui/textSelection";
 import { useMediaQuery } from "../ui/useMediaQuery";
 
 // Below Tailwind's lg breakpoint the layout has no third column, so the
@@ -22,7 +23,7 @@ type ShellLayersOptions = {
 // useShellLayers は、画面の枠の上に一時的に開く3つの層（ナビゲーション、
 // インスペクタ、コマンドパレット）の開閉と、閉じたときにフォーカスを返す先を持つ。
 // Android の戻るボタンは、開いている層を上から1つ閉じる。開いている層も、メニューやシート（useDismissibleLayer）
-// も無ければ onBackWithoutLayer に渡す。
+// も無ければ、選んでいる文字を外す。それも無ければ onBackWithoutLayer に渡す。
 // 層の判断と同じ受け手で渡すのは、別の受け手にすると、どちらが先に呼ばれるかが受け手を付け直した順で変わるため。
 export function useShellLayers({ mobileLayout, ready, section, onBackWithoutLayer }: ShellLayersOptions) {
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -79,7 +80,8 @@ export function useShellLayers({ mobileLayout, ready, section, onBackWithoutLaye
         event.preventDefault();
         setInspectorOpen(false);
       } else if (!isDismissibleLayerOpen()) {
-        backWithoutLayer.current(event);
+        if (dropTextSelection()) event.preventDefault();
+        else backWithoutLayer.current(event);
       }
     }
     window.addEventListener(androidBackEvent, closeTopLayer);

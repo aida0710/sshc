@@ -85,6 +85,25 @@ describe("attachSelectionOverlay", () => {
     detach();
   });
 
+  it("catches up with the screen when a selection ends without a tap, as Android's Back ends it", () => {
+    const lines = ["before"];
+    const { overlay, detach, repaint } = harness(lines);
+    const range = document.createRange();
+    range.selectNodeContents(overlay);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    lines[0] = "after";
+    repaint();
+    expect(overlay.textContent).toBe("before");
+
+    selection?.removeAllRanges();
+    document.dispatchEvent(new Event("selectionchange"));
+
+    expect(overlay.textContent).toBe("after");
+    detach();
+  });
+
   it("lets go of the selection when the terminal is laid out again", () => {
     const lines = ["before"];
     const { overlay, detach, repaint, screen } = harness(lines);

@@ -8,7 +8,7 @@ import { Button, Notice } from "../ui/surface";
 import { CustomKeyDialog, type CustomKey } from "./CustomKeyDialog";
 import { paletteGroups } from "./keyBarCatalog";
 import { insertKey, isPlaced, keyAt, moveKey, moveToOtherRow, removeKey, replaceKey, type KeyBarLayout, type KeySlot } from "./keyBarLayout";
-import { saveKeyBarLayout, useKeyBarLayout, useKeyBarPresets } from "./keyBarPresets";
+import { builtInKeyBarPresets, saveKeyBarLayout, useKeyBarLayout, useKeyBarPresets } from "./keyBarPresets";
 import { KeyBarPresetSection } from "./KeyBarPresetSection";
 import { KeyBarPreview } from "./KeyBarPreview";
 import { KeyFace, spokenKeyName } from "./KeyFace";
@@ -20,7 +20,7 @@ type Editing = { kind: "create" } | { kind: "edit"; slot: KeySlot };
 // KeyBarConfig arranges the phone's key bar of a settings preset (the one being edited): a tap selects a key
 // in the order shown, the buttons under it move it, and a tap on a key on offer puts it after the selected one.
 // Every change is saved at once, in the key bar preset the settings preset chose, or in a new one when it
-// chose the default layout.
+// chose the default layout or a built-in one.
 export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
   const t = useTranslate();
   const library = useKeyBarPresets(presetId);
@@ -31,6 +31,7 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
   const unavailable = library.loading || library.busy || library.error;
   const selectedKey = selected === null ? undefined : keyAt(layout, selected);
   const slot = selectedKey === undefined ? null : selected;
+  const builtIn = builtInKeyBarPresets.find((preset) => preset.id === library.selected);
 
   // Another key bar preset is another order: what was selected in the last one means nothing in it.
   useEffect(() => { setSelected(null); }, [library.selected, presetId]);
@@ -38,7 +39,7 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
   async function save(next: KeyBarLayout, nextSelected: KeySlot | null) {
     setError("");
     try {
-      await saveKeyBarLayout(next, t("keyBar.newPresetName"), presetId);
+      await saveKeyBarLayout(next, builtIn === undefined ? t("keyBar.newPresetName") : t("keyBar.newPresetNameFrom", { name: builtIn.name }), presetId);
       setSelected(nextSelected);
     } catch { setError(t("keyBar.saveFailed")); }
   }

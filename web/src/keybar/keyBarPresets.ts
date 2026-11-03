@@ -1,14 +1,21 @@
 import type { components } from "../api/schema";
 import { createPresetLibrary } from "../settings/presetLibrary";
 import { newIdentifier } from "../ui/randomIdentifier";
-import { defaultKeyBarLayout, type KeyBarLayout } from "./keyBarLayout";
+import { claudeCodeKeyBarLayout, defaultKeyBarLayout, type KeyBarLayout } from "./keyBarLayout";
 
 export type KeyBarPreset = components["schemas"]["KeyBarPreset"];
+
+// builtInKeyBarPresets are the key bars sshc ships besides the default one. Only the choice of one is synced, in
+// the settings preset: the list a person edits on every device stays their own.
+export const builtInKeyBarPresets: readonly KeyBarPreset[] = [
+  { id: "claude-code", name: "Claude Code", ...claudeCodeKeyBarLayout },
+];
 
 const library = createPresetLibrary<KeyBarPreset>({
   endpoint: "/api/v1/metadata/keybar",
   read: (metadata) => metadata.keyBarPresets,
   choice: "keyBarPreset",
+  builtIn: builtInKeyBarPresets,
 });
 
 // useKeyBarPresets is the key bar presets and the one a settings preset chose (the one this machine uses when
@@ -26,7 +33,7 @@ export const selectKeyBarPreset = library.select;
 export const updateKeyBarPresets = library.update;
 
 // saveKeyBarLayout keeps an edited layout in the key bar preset a settings preset chose, or in a new preset
-// named newPresetName when it chose the default layout.
+// named newPresetName when it chose the default layout or a built-in one.
 export function saveKeyBarLayout(layout: KeyBarLayout, newPresetName: string, settingsPresetId?: string) {
   return library.saveChosen((chosen) => chosen === undefined
     ? { id: newIdentifier(), name: newPresetName, ...layout }

@@ -5251,6 +5251,9 @@ components:
         # 接続が known_hosts に無いホスト鍵を受け入れるかの答えを待っているあいだだけある。
         # 答えは POST /sessions/{id}/host-key か、ターミナルで yes／no と打つ。
         hostKeyQuestion: { $ref: "#/components/schemas/TerminalHostKeyQuestion" }
+        # 接続が認証の問い（パスワードなど）への入力を待っているあいだだけ true。接続の途中で届く入力のうち、
+        # エンジンが捨てないのはこの答えだけなので、スマホの入力欄はこれを見て送れるかを決める。
+        awaitingPrompt: { type: boolean }
         # プログラムの OSC 9;4。消去時は省略する。SSH 接続の段階とは独立。
         programProgress: { $ref: "#/components/schemas/TerminalProgramProgress" }
         # プログラムが OSC 7501 で知らせた状態のうち、いちばん利用者の手を要するもの。無ければ省略する。
@@ -6782,7 +6785,7 @@ components:
       properties:
         key:
           type: string
-          enum: [DirectInput, Control, Alt, Escape, Tab, Enter, Backspace, Delete, Insert, ArrowLeft, ArrowUp, ArrowDown, ArrowRight, Home, End, PageUp, PageDown, "Ctrl+C", "Ctrl+D", "Ctrl+Z", "Ctrl+L", "Ctrl+R", "Ctrl+A", "Ctrl+E", F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12]
+          enum: [DirectInput, Control, Alt, Escape, Tab, "Shift+Tab", Enter, Backspace, Delete, Insert, ArrowLeft, ArrowUp, ArrowDown, ArrowRight, Home, End, PageUp, PageDown, "Ctrl+C", "Ctrl+D", "Ctrl+Z", "Ctrl+L", "Ctrl+R", "Ctrl+A", "Ctrl+E", F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12]
         # 自作のキーに出す文字。
         label: { type: string, minLength: 1, maxLength: 8 }
         # 自作のキーが送る内容。Tab と改行のほかの制御文字は送れない。
