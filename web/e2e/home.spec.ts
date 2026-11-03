@@ -55,6 +55,25 @@ test("starts with a searchable host launcher and contacts nothing unasked", asyn
   await expect(page.getByRole("navigation", { name: "Connections" })).toBeVisible();
 });
 
+test("asks for attention to a line OpenSSH cannot read and shows it in SSH Config", async ({
+  page,
+  installation,
+}) => {
+  await installation.write("conf.d/20-typo.conf", "Host typo-host\n\tHostNmae 192.0.2.77\n\tUser deploy\n");
+  await openApplication(page, installation);
+
+  const attention = page.getByRole("region", { name: "Needs attention" });
+  await expect(attention).toContainText("The SSH configuration files have 1 problem(s).");
+  await attention.getByRole("button", { name: "Open SSH Config" }).click();
+
+  await expect(page.getByRole("heading", { name: "Diagnostics: 1" })).toBeVisible();
+  await expect(page.getByText(
+    "OpenSSH cannot read this line (HostNmae). While it is there, OpenSSH reads none of the configuration " +
+      "and the ssh command stops working (conf.d/20-typo.conf:2)",
+    { exact: true },
+  )).toBeVisible();
+});
+
 test("requires a double click for a mouse", async ({
   page,
   installation,

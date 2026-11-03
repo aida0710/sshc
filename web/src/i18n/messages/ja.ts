@@ -2777,6 +2777,8 @@ export const ja = {
   "configDiagnostic.includeEmptyMany": "パスの無いIncludeが{count}件あります",
   "configDiagnostic.unstructuredLine": "sshcが読み取れない行です。テキストとしてだけ編集できます（{where}）",
   "configDiagnostic.unstructuredLineMany": "sshcが読み取れない行が{count}件あります。テキストとしてだけ編集できます",
+  "configDiagnostic.unknownDirective": "OpenSSHが読めない行です（{detail}）。この行があると、OpenSSHは設定全体を読まず、sshコマンドが使えなくなります（{where}）",
+  "configDiagnostic.unknownDirectiveMany": "OpenSSHが読めない行が{count}件あります。1行でもあると、OpenSSHは設定全体を読まず、sshコマンドが使えなくなります",
   "configDiagnostic.unknown": "設定の問題（{code}）：{detail}（{where}）",
   "configDiagnostic.unknownMany": "設定の問題（{code}）が{count}件あります",
   "explorer.diagnosticsCount": "診断{count}件",
