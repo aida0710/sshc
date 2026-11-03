@@ -748,7 +748,7 @@ test("writes a comment into the configuration file above the Host line", async (
   const after = await installation.read("config");
   expect(after).toContain("# the production bastion\n# ask infra before changing it\nHost bastion\n");
 
-  expect(after).toContain("# Managed by hand since 2019. Do not reformat.\n\nInclude conf.d/*.conf");
+  expect(after).toContain("# Managed by hand since 2019. Do not reformat.\n\nIgnoreUnknown UnknownFutureDirective\nInclude conf.d/*.conf");
   expect(after.replace("# the production bastion\n# ask infra before changing it\n", "")).toBe(before);
 });
 

@@ -28,6 +28,19 @@ describe("config diagnostics", () => {
     expect(sentence).toBe("sshc cannot read this line; it can only be edited as text (conf.d/old.conf:7)");
   });
 
+  it("names the keyword OpenSSH cannot read, says that ssh stops working, and says where", () => {
+    const typo = { severity: "warning", code: "unknown_directive", path: "conf.d/work.conf", line: 5, detail: "HostNmae" };
+    expect(describeConfigDiagnostic(translator("ja"), typo)).toBe(
+      "OpenSSHが読めない行です（HostNmae）。この行があると、OpenSSHは設定全体を読まず、sshコマンドが使えなくなります（conf.d/work.conf:5）",
+    );
+    expect(describeConfigDiagnostic(translator("en"), typo)).toBe(
+      "OpenSSH cannot read this line (HostNmae). While it is there, OpenSSH reads none of the configuration and the ssh command stops working (conf.d/work.conf:5)",
+    );
+    expect(describeConfigDiagnosticGroup(translator("ja"), "unknown_directive", 2)).toBe(
+      "OpenSSHが読めない行が2件あります。1行でもあると、OpenSSHは設定全体を読まず、sshコマンドが使えなくなります",
+    );
+  });
+
   it("keeps the code of a kind this screen does not know, so it can be looked up", () => {
     expect(describeConfigDiagnostic(translator("en"), { severity: "warning", code: "include_new_kind", path: "config", line: 0, detail: "x" }))
       .toBe("Configuration problem (include_new_kind): x (config)");

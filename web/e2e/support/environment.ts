@@ -41,9 +41,13 @@ function isolatedEnvironment(home: string): NodeJS.ProcessEnv {
   };
 }
 
+// UnknownFutureDirective (in includedConfig) stands for a keyword sshc does not model and must keep as written.
+// OpenSSH stops at a keyword it does not know, so the entry file names it in IgnoreUnknown, as a person keeping
+// such a line would. It sits above every Include, so the line is still covered after a test moves it into a group.
 const entryConfig = [
   "# Managed by hand since 2019. Do not reformat.",
   "",
+  "IgnoreUnknown UnknownFutureDirective",
   "Include conf.d/*.conf",
   "",
   "Host bastion",

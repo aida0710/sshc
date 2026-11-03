@@ -129,6 +129,18 @@ describe("ConfigExplorer", () => {
     expect(screen.getByText("No file matches this Include: conf.d/*.conf (config:2)")).toBeInTheDocument();
   });
 
+  it("counts a line OpenSSH cannot read among the problems instead of saying there are none", async () => {
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      diagnostics: [{ severity: "warning", code: "unknown_directive", path: "conf.d/10-home.conf", line: 3, detail: "HostNmae" }],
+    } as never);
+    render(<ConfigExplorer />);
+
+    expect(await screen.findByRole("heading", { name: "Diagnostics: 1" })).toBeInTheDocument();
+    expect(screen.getByText(/^OpenSSH cannot read this line \(HostNmae\)\..*\(conf\.d\/10-home\.conf:3\)$/u)).toBeInTheDocument();
+    expect(screen.queryByText("No Include problems")).not.toBeInTheDocument();
+  });
+
   it("names each file in the tree by its file name and keeps the path as its name and tooltip", async () => {
     render(<ConfigExplorer />);
 
