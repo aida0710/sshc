@@ -70,7 +70,7 @@ import { useMobileNotices } from "./useMobileNotices";
 import { forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
 import { terminalNoticeFor } from "./terminalNotice";
 import { useSessionRecovery } from "./useSessionRecovery";
-import { useHostKeyAnswer } from "./useHostKeyAnswer";
+import { useHostKeyAnswer } from "../shell/useHostKeyAnswer";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import { createStreamLink, type StreamLink, type StreamLinkController } from "./streamLink";
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
@@ -88,7 +88,7 @@ import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion"
 import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
-import { isInTerminalNotice, isTypingElsewhere } from "./terminalFocus";
+import { isInNoticeCard, isTypingElsewhere } from "./terminalFocus";
 import { resizeRewritingCursorLine } from "./cursorLineRewrite";
 
 type TerminalViewProps = {
@@ -518,7 +518,7 @@ export function TerminalView({
         output.abandonReplay();
         // A new stream starts as shown to the engine; it is told the truth at once.
         linkController.currentStream()?.reportShown(isTerminalShown(container));
-        if (activeRef.current && !touchTerminalRef.current && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current) && !isInTerminalNotice()) {
+        if (activeRef.current && !touchTerminalRef.current && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current) && !isInNoticeCard()) {
           view.focus();
         }
         fitAndSync();

@@ -122,6 +122,20 @@ type HostKeyQuestion struct {
 	Fingerprint string
 }
 
+// HostKeyQuestionAbout returns the question a connection waits on, when it is
+// checking a host key (this progress) and the yes/no question it waits on
+// (openQuestion, in the words of sshclient.UnknownHostPrompt) is about that
+// key. A question already answered, or one about the key of another hop, is not
+// shown again. The terminal and an SFTP tab both ask this way.
+func (p ConnectionProgress) HostKeyQuestionAbout(openQuestion string) (HostKeyQuestion, bool) {
+	if p.Phase != ConnectionHostKey || p.HostKey == nil || !strings.Contains(openQuestion, p.HostKey.Fingerprint) {
+		return HostKeyQuestion{}, false
+	}
+	return HostKeyQuestion{
+		Alias: p.Alias, HostName: p.HostName, KeyType: p.HostKey.Type, Fingerprint: p.HostKey.Fingerprint,
+	}, true
+}
+
 // HostKeyQuestioning is implemented by SSH processes that can tell the
 // question they wait on and take its answer from a button rather than typing.
 type HostKeyQuestioning interface {

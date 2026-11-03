@@ -36,6 +36,7 @@ const api = vi.hoisted(() => ({
   previewFile: vi.fn(),
   clearFinishedTransfers: vi.fn(),
   connectionAttempt: vi.fn(),
+  answerHostKey: vi.fn(),
 }));
 const permissions = vi.hoisted(() => ({ plan: vi.fn(), apply: vi.fn() }));
 const clipboard = vi.hoisted(() => ({ writeText: vi.fn(async () => undefined) }));
@@ -49,8 +50,9 @@ vi.mock("./chmodApi", async (importOriginal) => ({
 vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: clipboard.writeText } }));
 vi.mock("../api/recentConnections", () => ({ recentConnectionsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) } }));
 
-// The listing that opens a host's SSH connection names the attempt the pane reads its stage from.
-const connecting = { attempt: expect.any(String) };
+// The listing that opens a host's SSH connection names the attempt the pane reads its stage from, and can be ended
+// when the pane moves on.
+const connecting = { attempt: expect.any(String), signal: expect.any(AbortSignal) };
 
 async function chooseHost(alias: string) {
   await userEvent.click(screen.getByRole("button", { name: "Host" }));
@@ -844,6 +846,82 @@ describe("SFTPPanel uploads", () => {
     failConnection(new ApiError("sftp_failed", 502, null));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not connect.");
     expect(screen.getByLabelText("Connection log")).toHaveTextContent("sshc: ssh: handshake failed");
+  });
+
+  describe("a host whose key known_hosts does not have", () => {
+    const fingerprint = "SHA256:ZncdGvxXvUJOYNkbZuT4Ew+KkguCa24nYGfahfgoh+E";
+    const checkingKey = { phase: "host_key", alias: "edge", hostName: "edge.example", user: "deploy", hop: 1, hops: 1 };
+    const asking = { progress: checkingKey, hostKeyQuestion: { alias: "edge", hostName: "edge.example", keyType: "ssh-ed25519", fingerprint }, log: [], finished: false };
+    const authenticating = { progress: { ...checkingKey, phase: "authenticating" }, log: [], finished: false };
+
+    it("asks about the key in the tab, as the terminal does, and lists once it is accepted", async () => {
+      let finishListing: (listing: unknown) => void = () => undefined;
+      api.list.mockImplementationOnce(() => new Promise((resolve) => { finishListing = resolve; }));
+      api.connectionAttempt.mockResolvedValue(asking);
+      api.answerHostKey.mockImplementation(async () => {
+        api.connectionAttempt.mockResolvedValue(authenticating);
+        return authenticating;
+      });
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+
+      const card = await screen.findByRole("region", { name: "Check the host key of edge" }, { timeout: 2000 });
+      expect(card).toHaveTextContent("First connection to this host");
+      expect(card).toHaveTextContent(`ED25519 ${fingerprint}`);
+      // The card, not Connect, takes the focus: an Enter typed for something else does not trust the key.
+      expect(card).toHaveFocus();
+      await userEvent.click(within(card).getByRole("button", { name: "Connect" }));
+      const attempt = (api.list.mock.calls[0]?.[2] as { attempt: string }).attempt;
+      expect(api.answerHostKey).toHaveBeenCalledExactlyOnceWith("edge", attempt, { fingerprint, accept: true });
+      await waitFor(() => expect(screen.queryByRole("region", { name: "Check the host key of edge" })).not.toBeInTheDocument());
+
+      finishListing({ path: "/remote", entries: [] });
+      expect(await screen.findByTestId("sftp-current-path")).toHaveAttribute("data-path", "/remote");
+    });
+
+    it("says the key was not trusted when the person declines it, and keeps the log", async () => {
+      let failListing: (reason: unknown) => void = () => undefined;
+      api.list.mockImplementationOnce(() => new Promise((_, reject) => { failListing = reject; }));
+      api.connectionAttempt.mockResolvedValue(asking);
+      api.answerHostKey.mockImplementation(async () => {
+        api.connectionAttempt.mockResolvedValue({ ...authenticating, log: ["sshc: ssh: handshake failed: this host is not in known_hosts; its host key was not trusted"], finished: true });
+        failListing(new ApiError("host_key_declined", 502, null));
+        return null;
+      });
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+
+      const card = await screen.findByRole("region", { name: "Check the host key of edge" }, { timeout: 2000 });
+      await userEvent.click(within(card).getByRole("button", { name: "Cancel" }));
+      expect(api.answerHostKey).toHaveBeenCalledWith("edge", expect.any(String), { fingerprint, accept: false });
+      expect(await screen.findByRole("alert")).toHaveTextContent("The host key was not trusted, so sshc did not connect.");
+      // The English reason stays in the connection log, not on the screen's own line.
+      expect(screen.getByLabelText("Connection log")).toHaveTextContent("its host key was not trusted");
+    });
+
+    it("ends the listing still waiting on the question when the tab moves to another host", async () => {
+      let signal: AbortSignal | undefined;
+      api.list.mockImplementationOnce((_alias: string, _path: string, options: { signal: AbortSignal }) => {
+        signal = options.signal;
+        return new Promise(() => undefined);
+      });
+      api.connectionAttempt.mockResolvedValue(asking);
+      render(<SFTPPanel aliases={["edge", "db"]} />);
+      await chooseHost("edge");
+      await screen.findByRole("region", { name: "Check the host key of edge" }, { timeout: 2000 });
+
+      await chooseHost("db");
+      expect(signal?.aborted).toBe(true);
+    });
+
+    it("says a changed key is refused, in the terminal's words, without asking", async () => {
+      api.list.mockRejectedValueOnce(new ApiError("host_key_changed", 502, null));
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("The host key changed. Review Known Hosts before connecting again.");
+      expect(screen.queryByRole("region", { name: "Check the host key of edge" })).not.toBeInTheDocument();
+    });
   });
 
   it("shows a friendly inline message when SFTP cannot connect", async () => {

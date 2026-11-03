@@ -3,9 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import { forgetAllDismissedTerminalNotices, forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
-import { TerminalNoticeCard, type NoticeFocus } from "./TerminalNoticeCard";
+import type { NoticeFocus } from "../ui/NoticeFrame";
+import { TerminalNoticeCard } from "./TerminalNoticeCard";
 import { terminalNoticeFor } from "./terminalNotice";
-import type { HostKeyAnswer } from "./useHostKeyAnswer";
+import type { HostKeyAnswer } from "../shell/useHostKeyAnswer";
 import type { SessionRecovery } from "./useSessionRecovery";
 
 afterEach(() => forgetAllDismissedTerminalNotices());

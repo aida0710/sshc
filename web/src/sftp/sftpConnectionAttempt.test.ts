@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { watchConnectionAttempt } from "./sftpConnectionAttempt";
 
-const api = vi.hoisted(() => ({ connectionAttempt: vi.fn() }));
+const api = vi.hoisted(() => ({ connectionAttempt: vi.fn(), answerHostKey: vi.fn() }));
 vi.mock("./api", () => ({ sftpApi: api }));
 
 const reading = { log: ["[sshc] line"], finished: false };
@@ -10,6 +10,7 @@ describe("watchConnectionAttempt", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     api.connectionAttempt.mockReset();
+    api.answerHostKey.mockReset();
   });
   afterEach(() => vi.useRealTimers());
 
@@ -43,6 +44,29 @@ describe("watchConnectionAttempt", () => {
     const watch = watchConnectionAttempt("edge", onChange);
     await vi.advanceTimersByTimeAsync(1000);
     expect(onChange).not.toHaveBeenCalled();
+    await watch.stop({ readFinal: false });
+  });
+
+  it("answers the host key question of its attempt and shows the attempt as it is after the answer", async () => {
+    const answered = { ...reading, progress: { phase: "authenticating", alias: "edge", hostName: "edge", user: "ops", hop: 1, hops: 1 } };
+    api.answerHostKey.mockResolvedValue(answered);
+    const onChange = vi.fn();
+    const watch = watchConnectionAttempt("edge", onChange);
+
+    await expect(watch.answerHostKey("SHA256:key", true)).resolves.toBe(true);
+    expect(api.answerHostKey).toHaveBeenCalledExactlyOnceWith("edge", watch.attempt, { fingerprint: "SHA256:key", accept: true });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(answered);
+    await watch.stop({ readFinal: false });
+  });
+
+  it("reads the attempt again when the question had closed before the answer", async () => {
+    api.answerHostKey.mockResolvedValue(null);
+    api.connectionAttempt.mockResolvedValue(reading);
+    const onChange = vi.fn();
+    const watch = watchConnectionAttempt("edge", onChange);
+
+    await expect(watch.answerHostKey("SHA256:key", false)).resolves.toBe(false);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(reading);
     await watch.stop({ readFinal: false });
   });
 });

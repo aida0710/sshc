@@ -29,6 +29,7 @@ import { sftpTransferManager } from "./transferManager";
 import { remoteParentOf } from "./sftpSource";
 import { useSFTPBrowser, type RestoredSFTPLocation } from "./useSFTPBrowser";
 import { SFTPConnectionStatus } from "./SFTPConnectionStatus";
+import { SFTPHostKeyQuestion } from "./SFTPHostKeyQuestion";
 import { connectionStageText } from "../shell/connectionStageText";
 import { SFTPEntryActionDialogs } from "./SFTPEntryActionDialogs";
 import { useSFTPEntryActions } from "./useSFTPEntryActions";
@@ -694,6 +695,10 @@ export function SFTPPanel({
                 title={browser.connection?.progress !== undefined ? connectionStageText(t, browser.connection.progress)
                   : can.connect ? t("sftp.connecting", { alias }) : loadingLabel}
                 log={browser.connection?.log ?? []}
+                question={browser.connection?.hostKeyQuestion === undefined ? undefined : (
+                  // A question about another key (the next ProxyJump hop) is a new card, which takes the focus again.
+                  <SFTPHostKeyQuestion key={browser.connection.hostKeyQuestion.fingerprint} question={browser.connection.hostKeyQuestion} onAnswer={browser.answerHostKey} />
+                )}
               />
             ) : !connected && problem !== "" ? (
               <SFTPConnectionStatus

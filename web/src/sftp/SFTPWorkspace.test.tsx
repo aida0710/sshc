@@ -24,8 +24,9 @@ vi.mock("../api/recentConnections", () => ({
   recentConnectionsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) },
 }));
 
-// The listing that opens a host's SSH connection names the attempt the pane reads its stage from.
-const connecting = { attempt: expect.any(String) };
+// The listing that opens a host's SSH connection names the attempt the pane reads its stage from, and can be ended
+// when the pane moves on.
+const connecting = { attempt: expect.any(String), signal: expect.any(AbortSignal) };
 vi.mock("../editor/MonacoEditor", () => ({
   MonacoEditor: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
     <textarea
