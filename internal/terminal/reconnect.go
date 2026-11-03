@@ -249,7 +249,11 @@ func (s *Session) recordReopenFailure(err error) (retry bool) {
 	s.reconnectAttempts++
 	s.mutex.Unlock()
 	retry, _ = s.recordReconnectFailure(err)
-	s.publish([]byte("\r\n[sshc] " + err.Error() + "\r\n"))
+	reason := err.Error()
+	if s.reopenFailure != nil {
+		reason = s.reopenFailure(err)
+	}
+	s.publish([]byte("\r\n[sshc] " + reason + "\r\n"))
 	return retry
 }
 

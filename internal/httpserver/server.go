@@ -21,7 +21,6 @@ import (
 	"sshc/internal/application"
 	"sshc/internal/browserauth"
 	"sshc/internal/buildinfo"
-	"sshc/internal/connectionattempt"
 	"sshc/internal/diagnostics"
 	"sshc/internal/handoff"
 	"sshc/internal/knownhosts"
@@ -416,7 +415,7 @@ func New(options Options) (*Server, error) {
 			return nil, err
 		}
 		server.transfers = transfers
-		registerSFTPRoutes(e, SFTPHandlers{Service: options.SFTP, Transfers: transfers, Actions: actions, Attempts: connectionattempt.NewRegistry(), MediaTickets: &mediaTickets{}})
+		registerSFTPRoutes(e, SFTPHandlers{Service: options.SFTP, Transfers: transfers, Actions: actions, Attempts: newConnectionAttempts(), MediaTickets: &mediaTickets{}})
 	}
 	if options.Snippets != nil {
 		registerSnippetRoutes(e, SnippetHandlers{Service: options.Snippets, Actions: actions, BaseContext: baseCtx})

@@ -34,12 +34,17 @@ func negotiatedMAC(algorithms ssh.DirectionAlgorithms) string {
 	return algorithms.MAC
 }
 
-func traceAuthentication(trace *tracer) ssh.ClientAuthCallback {
-	if !trace.enabled(connectionlog.Detailed) {
-		return nil
-	}
+// traceAuthentication は、認証の経過を接続ログに書く。
+//
+// serverMethods には、サーバーが受け付けると言った認証方式を、尋ねるたびに書き直す。x/crypto/ssh は
+// これを失敗の文に入れないので、認証に失敗した理由を言えるのはここで覚えた値だけである。
+func traceAuthentication(trace *tracer, serverMethods *[]string) ssh.ClientAuthCallback {
 	started := false
 	return func(auth *ssh.ClientAuthContext) (ssh.AuthMethod, error) {
+		*serverMethods = auth.AllowedMethods
+		if !trace.enabled(connectionlog.Detailed) {
+			return nil, nil
+		}
 		if !started {
 			trace.say(connectionlog.Full, "認証前のサーバーのSSHバージョン：%s", terminal.DisplayText(string(auth.Metadata.ServerVersion()), maxBannerLineRunes))
 			describeNegotiatedAlgorithms(trace, auth.Algorithms)

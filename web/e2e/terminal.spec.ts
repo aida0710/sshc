@@ -1053,7 +1053,7 @@ test("shows why a connection failed in the terminal itself", async ({ page, inst
 
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
-  await expect(screen).toContainText(/sshc:.*(refused|connect)/i, { timeout: 20_000 });
+  await expect(screen).toContainText("[sshc] 接続を拒否されました", { timeout: 20_000 });
 });
 
 test("tells the pseudo-terminal how big it is as soon as it attaches", async ({ page, installation }) => {

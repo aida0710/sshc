@@ -47,6 +47,9 @@ type Snapshot struct {
 
 // Registry は、進行中と終わって間もない試行を alias と識別子で預かる。
 type Registry struct {
+	// FailureLines は、接続の失敗を接続ログの行にする。nil なら元の文に `sshc: ` を付ける。
+	FailureLines func(error) []string
+
 	mutex    sync.Mutex
 	attempts map[attemptKey]*Attempt
 	now      func() time.Time
@@ -153,7 +156,7 @@ func (a *Attempt) Write(contents []byte) (int, error) {
 	return len(contents), nil
 }
 
-// Finish は、試行を終える。err があれば、端末の接続と同じく `sshc: ` を付けてログに残す。
+// Finish は、試行を終える。err があれば、理由をログに残す。
 func (a *Attempt) Finish(err error) {
 	a.registry.mutex.Lock()
 	defer a.registry.mutex.Unlock()
@@ -162,12 +165,19 @@ func (a *Attempt) Finish(err error) {
 		a.partial = ""
 	}
 	if err != nil {
-		for _, line := range strings.Split("sshc: "+err.Error(), "\n") {
+		for _, line := range a.registry.failureLines(err) {
 			a.appendLineLocked(line)
 		}
 	}
 	a.finished = true
 	a.finishedAt = a.registry.now()
+}
+
+func (r *Registry) failureLines(err error) []string {
+	if r.FailureLines != nil {
+		return r.FailureLines(err)
+	}
+	return strings.Split("sshc: "+err.Error(), "\n")
 }
 
 func (a *Attempt) appendLineLocked(line string) {

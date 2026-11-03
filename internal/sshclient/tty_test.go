@@ -184,8 +184,8 @@ func TestAttachWritesHowTheSessionEndedAfterTheRemoteOutput(t *testing.T) {
 	defer func() { _ = reader.Close() }()
 	defer func() { _ = writer.Close() }()
 
-	const reason = "\r\nssh: connection lost\r\n"
-	process := newFakeProcess(terminal.ExitInfo{Code: terminal.ExitCodeUnknown, TransportLost: true, Notice: reason})
+	const reason = "ssh: connection lost"
+	process := newFakeProcess(terminal.ExitInfo{Code: terminal.ExitCodeUnknown, TransportLost: true, TransportLossReason: reason})
 	var output strings.Builder
 	done := make(chan struct{})
 	go func() {
@@ -204,7 +204,7 @@ func TestAttachWritesHowTheSessionEndedAfterTheRemoteOutput(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Attach kept waiting after the session ended")
 	}
-	if got := output.String(); got != "from the remote\n"+reason {
+	if got := output.String(); got != "from the remote\n\r\n"+reason+"\r\n" {
 		t.Fatalf("output = %q, want the remote output and then the reason", got)
 	}
 }

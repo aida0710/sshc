@@ -248,12 +248,12 @@ func TestATransportCutDuringTheShellIsALostConnection(t *testing.T) {
 	if !info.TransportLost {
 		t.Fatalf("exit = %+v; a cut transport was reported as the end of the shell", info)
 	}
-	// 切れた理由は出力に書かずに返す。engine がモードを戻してから書く。
-	if strings.TrimSpace(info.Notice) == "" {
+	// 切れた理由の元の文は、`sshc ssh` が出す。画面のターミナルへ英語の文を流さない。
+	if info.TransportLossReason == "" {
 		t.Fatalf("exit = %+v; the reason the transport was lost is missing", info)
 	}
-	if output += string(rest); strings.Contains(output, strings.TrimSpace(info.Notice)) {
-		t.Fatalf("output = %q; the reason was written before the modes could be reset", output)
+	if output += string(rest) + info.Notice; strings.Contains(output, info.TransportLossReason) {
+		t.Fatalf("output = %q; the terminal shows the reason in the words of the SSH library", output)
 	}
 }
 
@@ -713,7 +713,7 @@ func TestAFailedHandshakeWritesItsReasonToTheTerminal(t *testing.T) {
 	}
 	defer func() { _ = process.Close() }()
 
-	readUntil(t, process, "sshc:")
+	readUntil(t, process, "[sshc] 認証に失敗しました。サーバーが受け付ける方式：publickey")
 	if info := process.Wait(); info.Code == 0 {
 		t.Fatalf("a failed handshake reported a clean exit: %+v", info)
 	}
@@ -744,10 +744,7 @@ func TestAChangedHostKeyStopsTheConnectionBeforeAuthentication(t *testing.T) {
 		t.Fatalf("Ready error = %v, want ErrHostKeyChanged", readyErr)
 	}
 
-	seen := readUntil(t, process, "sshc:")
-	if !strings.Contains(seen, sshclient.ErrHostKeyChanged.Error()) {
-		t.Fatalf("the terminal does not say why: %q", seen)
-	}
+	readUntil(t, process, "[sshc] ホスト鍵が変わりました。")
 }
 
 // 未知のホストの問いは端末に出て、結果がそこから戻る。
@@ -965,6 +962,8 @@ func TestAServerThatFallsSilentAfterTheHostKeyIsAcceptedFailsWithinTheConnectTim
 	const giveUpWithin = 10 * connectTimeout
 	server := newTestServer(t, serverOptions{Password: "hunter2"})
 	dialed := make(chan *silencingConn, 1)
+	// 答えを待つ間に切れたと見てつなぎ直す接続も、最初から応答しない。
+	var serverSilent atomic.Bool
 	dialer := sshclient.Dialer{
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			conn, err := (&net.Dialer{}).DialContext(ctx, network, address)
@@ -972,6 +971,10 @@ func TestAServerThatFallsSilentAfterTheHostKeyIsAcceptedFailsWithinTheConnectTim
 				return nil, err
 			}
 			transport := newSilencingConn(conn)
+			if serverSilent.Load() {
+				transport.silence()
+				return transport, nil
+			}
 			dialed <- transport
 			return transport, nil
 		},
@@ -999,6 +1002,7 @@ func TestAServerThatFallsSilentAfterTheHostKeyIsAcceptedFailsWithinTheConnectTim
 		t.Fatalf("the connection gave up while the user was deciding: %v", process.(terminal.Readier).ReadyErr())
 	default:
 	}
+	serverSilent.Store(true)
 	transport.silence()
 	if _, err := process.Write([]byte("yes\r")); err != nil {
 		t.Fatal(err)

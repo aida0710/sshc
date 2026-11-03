@@ -81,10 +81,11 @@ type Opener struct {
 	// RequireWorkspace は、ワークスペースが有るかを確かめる。Reopen が、消えた
 	// ワークスペースを default に置き換えるのに使う。
 	RequireWorkspace func(id string) error
-	// ReconnectError と ReconnectStopNotice は terminal.Spec の同じ名前の欄へ渡す。
-	// 接続の失敗を通信形式の語へ変えるのは HTTP の層なので、呼び出し側が渡す。
+	// ReconnectError、ReconnectStopNotice、ReopenFailureText は terminal.Spec の同じ名前の欄へ渡す。
+	// 接続の失敗を通信形式の語や文へ変えるのは HTTP の層なので、呼び出し側が渡す。
 	ReconnectError      func(err error) (retry bool, problem string)
 	ReconnectStopNotice func(problem string) string
+	ReopenFailureText   func(error) string
 }
 
 // Open は、request のセッションを開く。
@@ -223,6 +224,7 @@ func (o Opener) sshSpec(request Request) (terminal.Spec, error) {
 		},
 		ReconnectError:      o.ReconnectError,
 		ReconnectStopNotice: o.ReconnectStopNotice,
+		ReopenFailureText:   o.ReopenFailureText,
 	}, nil
 }
 

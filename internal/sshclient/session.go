@@ -338,17 +338,14 @@ func (s *Session) finish(info terminal.ExitInfo) {
 	})
 }
 
-// fail は、接続できなかった理由を端末へ書いて終わらせる。
+// fail は、接続できなかった理由（line）を端末へ書いて終わらせる。reason は ReadyErr が返す。
 //
 // セッションは残す。接続できなかった理由が読めるのはそこだけである。
 // シェルの終わり方と違い、ExitInfo.Notice ではなく出力へ書く。呼ばれるのは Ready の前だけで、
 // シェルが動いていないので代替画面は無く、出力へ書けば接続ログの行との順番も保てる。
-func (s *Session) fail(reason error) {
-	if reason == nil {
-		reason = errors.New("ssh connection failed")
-	}
+func (s *Session) fail(reason error, line string) {
 	s.markReady(reason)
-	_, _ = io.WriteString(s.writer, "\r\n"+terminalNewlines(reason.Error())+"\r\n")
+	_, _ = io.WriteString(s.writer, "\r\n"+terminalNewlines(line)+"\r\n")
 	s.finish(terminal.ExitInfo{Code: RemoteFailureExit, At: time.Now()})
 	_ = s.writer.Close()
 	_ = s.input.Close()
@@ -435,10 +432,11 @@ func (s *Session) exitInfo(err error, client *ssh.Client, keepAlive keepAliveSet
 		info.Code = RemoteFailureExit
 		info.Notice = exitStatusMissingNotice
 	default:
-		// 接続が落ちた。終了コードではないので、そう分かる形で残す。
+		// 接続が落ちた。終了コードではないので、そう分かる形で残す。元の文は接続ログの「詳しく」に
+		// 残っている（describeSessionExit）。画面のターミナルは再接続の行で切れたことを言う。
 		info.Code = terminal.ExitCodeUnknown
 		info.TransportLost = true
-		info.Notice = "\r\n" + err.Error() + "\r\n"
+		info.TransportLossReason = err.Error()
 	}
 	info.Notice = s.closingLog.before(info.Notice)
 	return info

@@ -446,7 +446,7 @@ func (h TerminalHandlers) opener() terminalopen.Opener {
 		ShellProfiles: h.ShellProfiles, DefaultShellProfile: h.DefaultShellProfile,
 		Environment: h.Environment, StartDirectory: h.StartDirectory,
 		Startup: h.Startup, Connected: h.Connected, RequireWorkspace: h.requireWorkspace,
-		ReconnectError: reconnectError, ReconnectStopNotice: reconnectStopNotice,
+		ReconnectError: reconnectError, ReconnectStopNotice: reconnectStopNotice, ReopenFailureText: sshclient.FailureSentence,
 	}
 }
 
