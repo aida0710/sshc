@@ -62,7 +62,8 @@ import { useDirectDestinationActions } from "./shell/useDirectDestinationActions
 import { useOSC52Setting } from "./shell/useOSC52Setting";
 import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
-import { useAppShortcuts, type SessionShortcut, type SessionShortcutRequest } from "./shell/useAppShortcuts";
+import type { AppActionContext, SessionShortcut } from "./shell/appActions";
+import { useAppShortcuts, type SessionShortcutRequest } from "./shell/useAppShortcuts";
 import { paneSessionIds, type PaneEdge } from "./terminal/splitView/layout";
 import { SplitRequestDialog } from "./terminal/splitView/SplitRequestDialog";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
@@ -308,9 +309,7 @@ export function App({
     ? null
     : (edge: PaneEdge) => requestSplit({ targetSessionId: splittableSessionId, edge }), [requestSplit, splittableSessionId]);
 
-  useAppShortcuts({
-    enabled: state === "ready",
-    shortcuts,
+  const appActionContext: AppActionContext = {
     terminalFace,
     orderedSessions,
     activeSessionId,
@@ -321,7 +320,8 @@ export function App({
     openPalette,
     requestSession,
     toggleNavigation,
-  });
+  };
+  useAppShortcuts({ enabled: state === "ready", shortcuts, ...appActionContext });
 
   // Transfers run in the engine, so the queue keeps up even while this tab is
   // hidden; a couple of seconds is fast enough for progress and cheap enough
@@ -349,8 +349,14 @@ export function App({
     navigate("Connections");
   }
 
+  const changeOSC52 = useOSC52Setting();
   const paletteCommands = usePaletteCommands({
     passwordless: session.passwordless,
+    bindings: shortcuts,
+    actionContext: appActionContext,
+    removeActiveFromSplit: activeSessionId !== null && splitView.groupBySession.has(activeSessionId) ? () => splitView.removeFromSplit(activeSessionId) : null,
+    osc52Enabled: terminalSettings.osc52 ?? false,
+    onOSC52Change: changeOSC52,
     navigate,
     addConnection,
     openLocalShell: () => void openLocalShell(),
@@ -371,8 +377,6 @@ export function App({
     setNavigationOpen(false);
     followSectionLink(event, target);
   }
-
-  const changeOSC52 = useOSC52Setting();
 
   // While the vault is rechecked on coming back to the page, the app is inert; the focus goes back to the terminal
   // (or whatever had it) afterwards, but not to a text field on a phone, where it would raise the keyboard.
@@ -643,7 +647,8 @@ export function App({
         {state === "ready" ? (
           <CommandPalette
             open={commandPaletteOpen}
-            commands={paletteCommands}
+            commands={paletteCommands.commands}
+            laterCommands={paletteCommands.laterCommands}
             returnFocusRef={commandPaletteReturnFocusRef}
             hosts={declared.hosts}
             files={declared.files}

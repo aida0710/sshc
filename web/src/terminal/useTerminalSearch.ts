@@ -46,21 +46,23 @@ export function useTerminalSearch({ shortcutActive, region, returnFocus }: {
   const refreshRef = useRef<() => void>(() => {});
   const clearRef = useRef<() => void>(() => {});
 
+  const show = useCallback(() => {
+    setOpen(true);
+    input.current?.focus();
+    input.current?.select();
+  }, []);
+
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
       if (!(shortcutActive ?? region.current?.contains(document.activeElement))) return;
       if (!matchesShortcut(event, "terminalSearch", currentBindings()) || shortcutsBlocked(event)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (!event.repeat) {
-        setOpen(true);
-        input.current?.focus();
-        input.current?.select();
-      }
+      if (!event.repeat) show();
     };
     window.addEventListener("keydown", openSearch, true);
     return () => window.removeEventListener("keydown", openSearch, true);
-  }, [shortcutActive, region]);
+  }, [shortcutActive, region, show]);
 
   useEffect(() => {
     if (open) refreshRef.current();
@@ -161,6 +163,7 @@ export function useTerminalSearch({ shortcutActive, region, returnFocus }: {
     invalid,
     result,
     step,
+    show,
     toggle,
     close,
     bind,

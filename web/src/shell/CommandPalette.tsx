@@ -20,8 +20,13 @@ import { searchPalette } from "./paletteSearch";
 export type PaletteCommand = {
   id: string;
   label: string;
+  // detail is a second line, or empty for none.
   detail: string;
   search: string;
+  // kind "setting" lists it among the settings; it is an action otherwise.
+  kind?: "setting";
+  // keys are the shortcuts assigned to it, the first of them shown beside it.
+  keys?: readonly string[];
   run: () => void | Promise<void>;
 };
 
@@ -33,6 +38,7 @@ type PaletteItem = {
   search: string;
   action: () => void | Promise<void>;
   host?: HostIdentity;
+  keys?: readonly string[] | undefined;
 };
 
 const kindLabelKeys: Record<PaletteItem["kind"], MessageKey> = {
@@ -44,14 +50,31 @@ const kindLabelKeys: Record<PaletteItem["kind"], MessageKey> = {
   setting: "palette.kind.setting",
 };
 
+// Enough for every command and page with some connections and sessions before them, so all of them can be reached
+// by scrolling; typing narrows it down when there are more.
+const maximumShownResults = 100;
+
 const searchableSections: Section[] = [
   "Connections", "Config", "Keys", "Known Hosts", "Remote Keys",
   "Diagnostics", "Passwords", "Key Passphrases", "OTP", "Snippets", "Settings", "Sync", "VPN", "History",
 ];
 
+function paletteItemOf(command: PaletteCommand): PaletteItem {
+  return {
+    id: `command:${command.id}`,
+    kind: command.kind ?? "command",
+    label: command.label,
+    detail: command.detail,
+    search: `${command.search} ${command.kind === "setting" ? "settings setting 設定" : "command action 実行 コマンド 操作"}`,
+    action: command.run,
+    keys: command.keys,
+  };
+}
+
 export function CommandPalette({
   open,
   commands = [],
+  laterCommands = [],
   hosts,
   files,
   sessions,
@@ -68,7 +91,10 @@ export function CommandPalette({
   returnFocusRef,
 }: {
   open: boolean;
+  // commands lead the list; laterCommands follow everything else until something is typed, when they are found
+  // among the commands. The palette is mostly used to start a connection, which they would otherwise push down.
   commands?: PaletteCommand[];
+  laterCommands?: PaletteCommand[];
   hosts: HostEntry[];
   files: FileNode[];
   sessions: TerminalSession[];
@@ -93,9 +119,13 @@ export function CommandPalette({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
-    setQuery("");
-    setSelected(0);
+    // Forgotten on closing, not on opening: the next opening would first draw, and take a typed character as, the
+    // last query.
+    if (!open) {
+      setQuery("");
+      setSelected(0);
+      return;
+    }
     if (!hasOnScreenKeyboard()) window.requestAnimationFrame(() => input.current?.focus());
     let active = true;
     setLoading(true);
@@ -115,14 +145,7 @@ export function CommandPalette({
   const items = useMemo<PaletteItem[]>(() => [
     // Commands lead: typing "new" should reach the action before it reaches a
     // host whose name happens to contain the word.
-    ...commands.map((command) => ({
-      id: `command:${command.id}`,
-      kind: "command" as const,
-      label: command.label,
-      detail: command.detail,
-      search: `${command.search} command action 実行 コマンド 操作`,
-      action: command.run,
-    })),
+    ...commands.map(paletteItemOf),
     // Hosts come before open sessions: the palette is mostly used to start a
     // connection, and a session to a host is reachable from the session list.
     ...hosts.map((host) => ({
@@ -171,7 +194,8 @@ export function CommandPalette({
       search: `${section} settings setting 設定`,
       action: () => onNavigate(section),
     })),
-  ], [commands, files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessions, snippets, t, unreadBySession]);
+    ...laterCommands.map(paletteItemOf),
+  ], [commands, laterCommands, files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessions, snippets, t, unreadBySession]);
 
   // A destination leads the results whatever else it finds: it is only offered when it was typed whole.
   const directItems = useMemo<PaletteItem[]>(() => {
@@ -195,7 +219,7 @@ export function CommandPalette({
   const visible = useMemo(() => [
     ...directItems,
     ...searchPalette(items.map((item) => ({ ...item, name: item.host?.alias ?? item.label })), query),
-  ].slice(0, 40), [directItems, items, query]);
+  ].slice(0, maximumShownResults), [directItems, items, query]);
 
   useEffect(() => {
     if (selected >= visible.length) setSelected(Math.max(0, visible.length - 1));
@@ -262,11 +286,15 @@ export function CommandPalette({
                 aria-selected={selected === index}
                 onMouseEnter={() => setSelected(index)}
                 onClick={() => void choose(item)}
-                className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-hover"}`}
+                className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-hover"}`}
               >
                 <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-faint">{t(kindLabelKeys[item.kind])}</span>
-                <span className="truncate font-medium text-ink">{item.label}</span>
-                <span className="truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>
+                <span className="col-start-2 truncate font-medium text-ink">{item.label}</span>
+                {item.detail === "" ? null : <span className="col-start-2 truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>}
+                {/* A phone has no keys to press, and its width goes to the name. */}
+                {item.keys?.[0] === undefined ? null : (
+                  <kbd title={item.keys.join(" / ")} className="col-start-3 row-span-2 row-start-1 hidden border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted md:block">{item.keys[0]}</kbd>
+                )}
               </button>
               {item.host === undefined ? null : (
                 <button
