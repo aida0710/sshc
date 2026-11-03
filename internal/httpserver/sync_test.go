@@ -45,6 +45,13 @@ func testSyncIntegrations(secrets *secret.Service) remotesync.IntegrationHooks {
 
 func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 	t.Helper()
+	return syncEngineOn(t, &measuredSyncBucket{})
+}
+
+// syncEngineOn は、bucket を同期先にする、マシン1台分の engine を作る。同じ bucket を
+// 渡せば、同じ同期先を使う複数のマシンになる。
+func syncEngineOn(t *testing.T, bucket *measuredSyncBucket) (*echo.Echo, *remotesync.Service) {
+	t.Helper()
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
 		t.Fatal(err)
@@ -72,7 +79,7 @@ func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 		t.Fatal(err)
 	}
 	engine := echo.New()
-	registerSyncRoutes(engine, SyncHandlers{Service: service, Vault: secrets, ObjectStoreHTTP: inProcessBucket(&measuredSyncBucket{})})
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Vault: secrets, ObjectStoreHTTP: inProcessBucket(bucket)})
 	return engine, service
 }
 
@@ -162,6 +169,26 @@ func syncSetupBody(t *testing.T, changes map[string]any) string {
 		t.Fatal(err)
 	}
 	return string(body)
+}
+
+// checkSyncSetup は、設定画面の［接続を確認］と同じく syncSetupBody の接続先を確かめ、
+// 返った状態を、続けて保存する要求へ添える欄として返す。
+func checkSyncSetup(t *testing.T, engine *echo.Echo) map[string]any {
+	t.Helper()
+	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/setup/check",
+		`{"endpoint":"https://s3.example.invalid","bucket":"sshc","accessKeyId":"AKID","secretAccessKey":"secret","reuseCredentials":false}`)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("setup check = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var checked api.SyncSetupCheckResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &checked); err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string]any{"expectedState": string(checked.State), "historyPresent": checked.HistoryPresent}
+	if checked.Etag != nil {
+		expected["expectedETag"] = *checked.Etag
+	}
+	return expected
 }
 
 type measuredSyncObject struct {
@@ -911,7 +938,10 @@ func TestSetupCarriesTheDirectionThroughToTheService(t *testing.T) {
 	engine, service := syncEngine(t)
 
 	for _, direction := range []string{"push", "pull", "both"} {
-		recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, map[string]any{"direction": direction}))
+		// 最初の設定で同期先にスナップショットが置かれるので、2回目からは既存の同期先として保存する。
+		changes := checkSyncSetup(t, engine)
+		changes["direction"] = direction
+		recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, changes))
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("setup with %q = %d: %s", direction, recorder.Code, recorder.Body.String())
 		}
