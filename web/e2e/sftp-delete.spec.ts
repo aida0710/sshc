@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { RemoteEntry } from "../src/sftp/api";
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
-import { connectSFTPHost, openSecondSFTPPane } from "./support/sftp";
+import { chooseEntryOnPhone, connectSFTPHost, openSecondSFTPPane } from "./support/sftp";
 
 // Fixture paths and metadata let us inspect destructive controls without a live SSH connection.
 const deletionEntries: RemoteEntry[] = [
@@ -38,9 +38,13 @@ for (const layout of deletionLayouts) {
     await connectSFTPHost(page, "bastion");
     if (layout.secondPane) await openSecondSFTPPane(page, "New tab", "Local");
     const pane = page.getByRole("tabpanel").first();
+    const choose = async (name: string, checkboxName: string) => {
+      if (layout.mobile) await chooseEntryOnPhone(pane, name);
+      else await pane.getByRole("checkbox", { name: checkboxName, exact: true }).check();
+    };
 
     for (const entry of deletionEntries) {
-      await pane.getByRole("checkbox", { name: `Select ${entry.name}`, exact: true }).check();
+      await choose(entry.name, `Select ${entry.name}`);
       await expect(pane.getByRole("button", { name: "Delete", exact: true })).toHaveCount(0);
       const actions = pane.getByRole("button", { name: `Actions for ${entry.name}`, exact: true });
       await expect(actions).toBeVisible();
@@ -56,7 +60,7 @@ for (const layout of deletionLayouts) {
       await pane.getByRole("button", { name: "Clear selection", exact: true }).click();
     }
 
-    for (const entry of deletionEntries) await pane.getByRole("checkbox", { name: `Select ${entry.name}`, exact: true }).check();
+    for (const entry of deletionEntries) await choose(entry.name, `Select ${entry.name}`);
     await pane.getByRole("button", { name: "Actions for 3 selected items", exact: true }).click();
     await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Delete 3 remote entries?", exact: true });
@@ -68,7 +72,7 @@ for (const layout of deletionLayouts) {
       await mkdir(visualDirectory, { recursive: true });
       await changeDisplayLanguage(page, "ja");
       await connectSFTPHost(page, "bastion", pane);
-      for (const entry of deletionEntries) await pane.getByRole("checkbox", { name: `${entry.name}を選択`, exact: true }).check();
+      for (const entry of deletionEntries) await choose(entry.name, `${entry.name}を選択`);
       await expect(pane.getByRole("button", { name: "削除", exact: true })).toHaveCount(0);
       await pane.getByRole("button", { name: "選択した3件の操作", exact: true }).click();
       await expect(page.getByRole("menuitem", { name: "削除", exact: true })).toBeVisible();

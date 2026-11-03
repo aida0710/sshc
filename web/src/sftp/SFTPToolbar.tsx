@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { HostEntry } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
+import { PathText } from "../ui/PathText";
 import { Button } from "../ui/surface";
 import { SFTPHostPicker } from "./SFTPHostPicker";
+import { SFTPPathShortcuts } from "./SFTPPathShortcuts";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 import { isImeComposing } from "../ui/imeComposition";
@@ -64,7 +66,6 @@ export function SFTPToolbar({
   const navigationDisabled = busy || locked || !connected;
   const refresh = onRefresh ?? (() => { void browser.refresh(); });
   const crumbs = browser.crumbs;
-  const current = crumbs.at(-1);
 
   // A new directory replaces the draft and closes an edit that was left open.
   useEffect(() => {
@@ -102,7 +103,7 @@ export function SFTPToolbar({
     <button type="button" data-testid="sftp-current-path" data-path={path}
       aria-label={labels.editPath} title={path} disabled={navigationDisabled} onClick={() => setPathEditing(true)}
       className="flex min-h-12 min-w-0 flex-1 items-center gap-1 rounded-md px-2 text-left active:bg-select-fill">
-      <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium">{current?.label ?? "/"}</span>
+      <PathText path={path === "" ? "/" : path} className="flex-1 font-mono text-sm font-medium" />
       <Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
     </button>
   ) : (
@@ -136,24 +137,27 @@ export function SFTPToolbar({
   }
 
   return (
-    <div className={bandClassName}>
-      {hostPicker}
-      {content ?? <>
-        <button type="button" aria-label={t(mobile ? "sftp.parentDirectory" : "sftp.back")} title={t(mobile ? "sftp.parentDirectory" : "sftp.back")}
-          disabled={busy || locked || (mobile ? !canParent : !browser.canBack)} onClick={() => { if (mobile) onParent?.(); else void browser.back(); }}
-          className={`flex shrink-0 items-center justify-center text-ink-muted hover:bg-hover ${mobile ? "size-12 rounded-md" : "size-7 rounded-[7px]"}`}>
-          <Icon name={mobile ? "arrowUp" : "arrowLeft"} className={mobile ? "size-4" : "size-[15px]"} />
-        </button>
-        {mobile ? null : <button type="button" aria-label={t("sftp.forward")} title={t("sftp.forward")}
-          disabled={busy || locked || !browser.canForward} onClick={() => void browser.forward()}
-          className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-ink-muted hover:bg-hover"><Icon name="arrowRight" className="size-[15px]" /></button>}
-        {pathField}
-        <VPNProfileChip name={vpnProfile} className="max-w-24 truncate" />
-        {mobile || pathEditing ? null : <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")}
-          disabled={navigationDisabled} onClick={refresh}
-          className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-ink-muted hover:bg-hover"><Icon name="sync" className="size-[15px]" /></button>}
-        {pathEditing ? null : <>{leading}<div className="flex shrink-0 items-center gap-1">{actions}</div></>}
-      </>}
-    </div>
+    <>
+      <div className={bandClassName}>
+        {hostPicker}
+        {content ?? <>
+          <button type="button" aria-label={t(mobile ? "sftp.parentDirectory" : "sftp.back")} title={t(mobile ? "sftp.parentDirectory" : "sftp.back")}
+            disabled={busy || locked || (mobile ? !canParent : !browser.canBack)} onClick={() => { if (mobile) onParent?.(); else void browser.back(); }}
+            className={`flex shrink-0 items-center justify-center text-ink-muted hover:bg-hover ${mobile ? "size-12 rounded-md" : "size-7 rounded-[7px]"}`}>
+            <Icon name={mobile ? "arrowUp" : "arrowLeft"} className={mobile ? "size-4" : "size-[15px]"} />
+          </button>
+          {mobile ? null : <button type="button" aria-label={t("sftp.forward")} title={t("sftp.forward")}
+            disabled={busy || locked || !browser.canForward} onClick={() => void browser.forward()}
+            className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-ink-muted hover:bg-hover"><Icon name="arrowRight" className="size-[15px]" /></button>}
+          {pathField}
+          <VPNProfileChip name={vpnProfile} className="max-w-24 truncate" />
+          {mobile || pathEditing ? null : <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")}
+            disabled={navigationDisabled} onClick={refresh}
+            className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-ink-muted hover:bg-hover"><Icon name="sync" className="size-[15px]" /></button>}
+          {pathEditing ? null : <>{leading}<div className="flex shrink-0 items-center gap-1">{actions}</div></>}
+        </>}
+      </div>
+      {mobile && pathEditing && content === undefined ? <SFTPPathShortcuts browser={browser} disabled={navigationDisabled} onMove={cancelEdit} /> : null}
+    </>
   );
 }

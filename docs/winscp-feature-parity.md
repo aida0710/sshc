@@ -73,7 +73,7 @@ sshcのSFTPは、ローカル／リモートの2ペイン、ファイル操作�
 | maskで選択／解除 | 未対応 | なし | filter/mask共通構文の後に追加 |
 | 同じ拡張子を選択 | 未対応 | なし | 選択menuへ追加 |
 | double clickでdirectoryを開く | 対応 | あり | 維持 |
-| context menu | 対応 | 右click／長押しで、右上の三点menuと同一のaction一覧を開く | 維持 |
+| context menu | 対応 | 右clickで、右上の三点menuと同一のaction一覧を開く。スマホでは長押しで行を選び、選択中の三点menuから開く | 維持 |
 | file manager shortcut（F2/F4/F5/F7/F8等） | 部分 | F2でrename、Deleteで削除、Escで選択解除、Ctrl/Cmd+Aで全選択 | F4／F5／F7／F8は未割り当て |
 | drag and drop upload | 対応 | file／folder、空directoryを扱う | 維持 |
 | remote rowをfolderへdragして移動 | 未対応 | 同じ一覧内のフォルダへのdropは未対応。2ペイン間のmoveは可能 | 同じ一覧内での操作として検討 |
