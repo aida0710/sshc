@@ -46,6 +46,11 @@ function hostBlockIdentity(host: HostEntry): string {
 
 // decorateHosts は、名前のある接続先を、一覧で一緒に出すもの（色・OS・タグなど）と並べる。
 // パターンの規則（Host * など）は名前が無いので入れない。
+// hasNothingToList tells that there is no connection and no group, so nothing to filter, sort or choose a group from.
+export function hasNothingToList(overview: Overview): boolean {
+  return overview.groups.length === 0 && overview.hosts.every((host) => host.identity.alias === "");
+}
+
 export function decorateHosts(overview: Overview): DecoratedHost[] {
   const metadata = hostMetadataByIdentity(overview.metadata.hosts);
   const duplicates = duplicateAliasesOf(overview.hosts);

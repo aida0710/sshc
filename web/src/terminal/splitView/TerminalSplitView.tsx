@@ -5,7 +5,6 @@ import { shortcutsBlocked } from "../../keyconfig/bindings";
 import { SplitResizeHandle } from "../../ui/SplitResizeHandle";
 import { useTouchTerminal } from "../touchMode";
 import { terminalDisplayTitle } from "../terminalPresentation";
-import { TerminalEmptyState } from "../TerminalEmptyState";
 import { splitViewGeometry } from "./geometry";
 import { maximumSplitViewPanes } from "./layout";
 import { maximumSplitGroups } from "./splitGroups";
@@ -21,7 +20,7 @@ const previewClass = {
   bottom: "inset-x-0 bottom-0 h-1/2",
 };
 
-export function TerminalSplitView({ splitView, sessions, retainedTerminals, renderTerminal }: {
+export function TerminalSplitView({ splitView, sessions, retainedTerminals, renderTerminal, emptyState }: {
   splitView: SplitViewController;
   sessions: TerminalSession[];
   // retainedTerminals is how many terminals shown recently stay hidden behind the panes.
@@ -29,6 +28,8 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
   // inPane is whether the session is one of the panes the section shows, not one kept hidden behind them (whether or
   // not the section itself is on the screen).
   renderTerminal: (session: TerminalSession, headerActions: ReactNode, inPane: boolean) => ReactNode;
+  // emptyState is what the section shows while no session is open.
+  emptyState: ReactNode;
 }) {
   const t = useTranslate();
   const { state, compact, dispatch, selectSession } = splitView;
@@ -46,7 +47,7 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
     if (drag.atGroupLimit) return t("splitView.maxGroups", { count: maximumSplitGroups });
     return t("splitView.drop");
   }
-  if (panes.length === 0) return <TerminalEmptyState />;
+  if (panes.length === 0) return emptyState;
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col" onKeyDownCapture={(event) => {
       if (shortcutsBlocked(event.nativeEvent)) return;

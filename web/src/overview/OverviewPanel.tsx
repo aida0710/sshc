@@ -10,6 +10,7 @@ import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { PageBoard } from "../ui/PageBoard";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
+import { ConnectionStartTiles } from "../connections/ConnectionStartTiles";
 import { attentionNoticesOf } from "../connections/noticeKinds";
 import { PanelState } from "../ui/PanelState";
 import { formatOptionalDateTime } from "../ui/format";
@@ -24,6 +25,8 @@ type OverviewPanelProps = {
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
   onSessionOpened?: (id: string) => void;
+  onAddConnection: () => void;
+  onOpenLocalShell: () => void;
 };
 
 const loadDefaultOverview = () => configApi.overview();
@@ -39,6 +42,8 @@ export function OverviewPanel({
   onNavigate,
   onNavigateLocation,
   onSessionOpened,
+  onAddConnection,
+  onOpenLocalShell,
 }: OverviewPanelProps) {
   const t = useTranslate();
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -104,14 +109,17 @@ export function OverviewPanel({
   const connectionNotices = overview === null ? 0 : attentionNoticesOf(overview.notices).length;
   const pendingRecovery = overview?.pending?.length ?? 0;
   const attention = configProblems + connectionNotices + pendingRecovery;
+  const connectionCount = overview === null ? 0 : overview.hosts.filter((host) => host.identity.alias !== "").length;
+  // With no connection yet there is nothing to search, count or manage, and the tiles lead to Sync.
+  const noConnections = overview !== null && connectionCount === 0;
 
   return (
-    <PageBoard wide labelledBy="home-heading" className="flex flex-col gap-[18px]">
+    <PageBoard wide stretch={noConnections} labelledBy="home-heading" className="flex flex-col gap-[18px]">
       <PageHeader
         title={t("home.heading")}
         headingId="home-heading"
-        meta={overview === null ? undefined : t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
-        actions={(
+        meta={overview === null || noConnections ? undefined : t("conn.count", { count: connectionCount })}
+        actions={noConnections ? undefined : (
           <Button className="min-h-10 md:min-h-0" onClick={() => onNavigate("Connections")}>
             {t("home.manageConnections")}
           </Button>
@@ -123,11 +131,18 @@ export function OverviewPanel({
         <Notice actions={retryButton}>{t("home.listsLoadFailed")}</Notice>
       )}
 
-      <section aria-label={t("home.quickConnect")}>
+      <section aria-label={t("home.quickConnect")} className={noConnections ? "flex flex-1 flex-col" : undefined}>
         {loading ? (
           <PanelState tone="loading" title={t("home.loading")} />
         ) : overview === null ? (
           <PanelState tone="failed" title={t("home.loadFailed")} action={retryButton} />
+        ) : noConnections ? (
+          <ConnectionStartTiles
+            onAddConnection={onAddConnection}
+            onOpenConfig={() => onNavigate("Config")}
+            onOpenSync={() => onNavigate("Sync")}
+            onOpenLocalShell={onOpenLocalShell}
+          />
         ) : (
           <QuickConnectBrowser
             overview={overview}
@@ -160,19 +175,21 @@ export function OverviewPanel({
         </section>
       )}
 
-      <section aria-label={t("home.sync")} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3.5 text-[12.5px] text-ink-muted">
-        <Icon name="sync" className="size-3.5 shrink-0" />
-        <p className="min-w-0 flex-1">
-          {sync === null
-            ? t("home.syncUnavailable")
-            : !sync.configured
-              ? t("home.syncNotConfigured")
-              : sync.synced
-                ? t("home.syncLast", { at: formatOptionalDateTime(sync.lastSyncedAt), count: sync.fileCount ?? 0 })
-                : t("home.syncNever")}
-        </p>
-        <Button small onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
-      </section>
+      {noConnections ? null : (
+        <section aria-label={t("home.sync")} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3.5 text-[12.5px] text-ink-muted">
+          <Icon name="sync" className="size-3.5 shrink-0" />
+          <p className="min-w-0 flex-1">
+            {sync === null
+              ? t("home.syncUnavailable")
+              : !sync.configured
+                ? t("home.syncNotConfigured")
+                : sync.synced
+                  ? t("home.syncLast", { at: formatOptionalDateTime(sync.lastSyncedAt), count: sync.fileCount ?? 0 })
+                  : t("home.syncNever")}
+          </p>
+          <Button small onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
+        </section>
+      )}
     </PageBoard>
   );
 }

@@ -16,5 +16,19 @@ export type CreateConnectionDraft = {
   keyId: string;
 };
 
+// blankConnectionDraft は、何も決まっていない新しい接続である。ほかの画面からこれを渡して Connections を開くと、
+// 新しい接続の入力が開く。
+export const blankConnectionDraft: CreateConnectionDraft = {
+  alias: "",
+  group: "",
+  hostName: "",
+  user: "",
+  port: "",
+  authentication: "dedicated_password",
+  savedCredential: "",
+  newCredential: "",
+  keyId: "",
+};
+
 // CreationPrerequisite は、新しい接続を作る途中で、先に用意しに行く画面である。
 export type CreationPrerequisite = "Keys";

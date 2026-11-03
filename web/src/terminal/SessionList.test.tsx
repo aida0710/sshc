@@ -416,10 +416,9 @@ describe("SessionList", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("shows nothing to open and no list when there is no session", () => {
+  it("shows no list when there is no session", () => {
     renderList({ sessions: [] });
 
-    expect(screen.getByText("No session is open.")).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });
 

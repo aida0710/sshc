@@ -15,7 +15,7 @@ import { GroupSheet } from "./GroupSheet";
 import { ConnectionRow, type RowColumns } from "./ConnectionRow";
 import { listGroups, ungroupedCount } from "./groupListing";
 import { isImeComposing } from "../ui/imeComposition";
-import { belongsToGroup, buildGroupTree, decorateHosts, type DecoratedHost, type GroupNode } from "./connectionTreeIndex";
+import { belongsToGroup, buildGroupTree, decorateHosts, hasNothingToList, type DecoratedHost, type GroupNode } from "./connectionTreeIndex";
 import type { ConnectionDrag } from "./useConnectionDrag";
 import { literalTextEntry } from "../ui/softKeyboard";
 
@@ -109,6 +109,7 @@ export function ConnectionTree({
   const multiSelectable = onCheckedChange !== undefined;
 
   const decorated = useMemo(() => decorateHosts(overview), [overview]);
+  const nothingToList = hasNothingToList(overview);
   const groupTree = useMemo(() => buildGroupTree(overview, decorated), [decorated, overview]);
 
   const orderedGroups = useMemo(() => {
@@ -272,7 +273,7 @@ export function ConnectionTree({
   return (
     <nav aria-label={t("tree.navLabel")} className="flex h-full min-h-0 flex-col">
       <section className="flex min-h-0 flex-1 flex-col" aria-label={t("tree.resultsLabel")}>
-        <header className="flex shrink-0 flex-col gap-2 px-3.5 pb-2 pt-3.5">
+        {nothingToList ? null : <header className="flex shrink-0 flex-col gap-2 px-3.5 pb-2 pt-3.5">
           <button
             type="button"
             onClick={() => setGroupSheetOpen(true)}
@@ -313,9 +314,9 @@ export function ConnectionTree({
             </span>
           </div>
           {!drag.movesDisabled ? <p className="sr-only">{t("tree.dragGroupHint")}</p> : null}
-        </header>
+        </header>}
         {topBar}
-        {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t("tree.noMatch")}</p> : <div data-connection-results className={`min-h-0 flex-1 overflow-y-auto ${bottomBar === null ? "pb-[calc(0.5rem+var(--mobile-navigation-inset))] scroll-pb-(--mobile-navigation-inset)" : "pb-2"}`}>{resultSections.map(renderResultSection)}</div>}
+        {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t(nothingToList ? "tree.nothingYet" : "tree.noMatch")}</p> : <div data-connection-results className={`min-h-0 flex-1 overflow-y-auto ${bottomBar === null ? "pb-[calc(0.5rem+var(--mobile-navigation-inset))] scroll-pb-(--mobile-navigation-inset)" : "pb-2"}`}>{resultSections.map(renderResultSection)}</div>}
         {bottomBar}
       </section>
       {groupSheetOpen ? (

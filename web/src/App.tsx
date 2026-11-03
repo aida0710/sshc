@@ -11,7 +11,7 @@ import { createTerminalRestoreApi, terminalRestoreApi } from "./api/terminalRest
 import { engineTerminalBase } from "./api/remoteEngines";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
 import type { SessionState } from "./session/bootstrap";
-import type { CreationPrerequisite } from "./connections/createConnectionDraft";
+import { blankConnectionDraft, type CreationPrerequisite } from "./connections/createConnectionDraft";
 import { LockScreen } from "./secrets/LockScreen";
 import { useLanguage } from "./i18n/context";
 import { InspectorPane, InspectorToggle } from "./ui/Inspector";
@@ -314,10 +314,15 @@ export function App({
   const seenProgramStatus = useSeenProgramStatus(terminalSessions.sessions, terminalFace ? activeSessionId : null);
 
 
+  function addConnection() {
+    handoffs.setConnectionDraft(blankConnectionDraft);
+    navigate("Connections");
+  }
+
   const paletteCommands = usePaletteCommands({
     passwordless: session.passwordless,
     navigate,
-    startConnectionDraft: handoffs.setConnectionDraft,
+    addConnection,
     openLocalShell: () => void openLocalShell(),
     onLocked: session.lock,
     onStillUnlocked: session.openVault,
@@ -509,6 +514,9 @@ export function App({
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                       onOpenNavigation={navigationPinned ? undefined : () => setNavigationOpen(true)}
+                      onOpenLocalShell={() => void openLocalShell()}
+                      onAddConnection={addConnection}
+                      onOpenSync={() => navigate("Sync")}
                     />
                   </div>
                 ) : null}
@@ -549,6 +557,8 @@ export function App({
                           terminalSessions,
                           onShowSession: showLocalSession,
                           onOpenSSHSession: openSSHSession,
+                          onOpenLocalShell: () => void openLocalShell(),
+                          onAddConnection: addConnection,
                           onOpenTerminal: openSFTPTerminal,
                         }}
                         declared={{ groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN }}
