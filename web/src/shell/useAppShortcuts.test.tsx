@@ -15,6 +15,7 @@ function ShortcutHarness({ ready, openPalette }: { ready: boolean; openPalette: 
     orderedSessions: [],
     activeSessionId: null,
     panes: [],
+    splitBesideActive: null,
     navigate: ignoreNavigation,
     showSession: ignoreSession,
     openPalette,
@@ -70,15 +71,16 @@ describe("useAppShortcuts", () => {
 });
 
 describe("useAppShortcuts on the terminal screen", () => {
-  const bindings = { ...defaultBindings, newSession: ["Alt+N"], closeSession: ["Alt+W"], nextPane: ["Alt+]"], previousPane: ["Alt+["], toggleNavigation: ["Alt+B"] };
+  const bindings = { ...defaultBindings, newSession: ["Alt+N"], closeSession: ["Alt+W"], nextPane: ["Alt+]"], previousPane: ["Alt+["], splitRight: ["Alt+R"], splitBelow: ["Alt+D"], toggleNavigation: ["Alt+B"] };
   const session = (id: string) => ({ id, kind: "shell" as const, workspaceId: "default", title: id, startedAt: "2026-10-31T00:00:00Z", state: "connected" as const, problem: "" });
   function press(key: string) {
     document.dispatchEvent(new KeyboardEvent("keydown", { key, altKey: true, bubbles: true, cancelable: true }));
   }
-  function setUp(panes: string[]) {
+  function setUp(panes: string[], { canSplit = true } = {}) {
     const showSession = vi.fn();
     const requestSession = vi.fn();
     const toggleNavigation = vi.fn();
+    const splitBesideActive = vi.fn();
     renderHook(() => useAppShortcuts({
       enabled: true,
       shortcuts: bindings,
@@ -86,13 +88,14 @@ describe("useAppShortcuts on the terminal screen", () => {
       orderedSessions: [session("one"), session("two"), session("three")],
       activeSessionId: "two",
       panes,
+      splitBesideActive: canSplit ? splitBesideActive : null,
       navigate: ignoreNavigation,
       showSession,
       openPalette: ignoreNavigation,
       requestSession,
       toggleNavigation,
     }));
-    return { showSession, requestSession, toggleNavigation };
+    return { showSession, requestSession, toggleNavigation, splitBesideActive };
   }
 
   it("asks the session list for a new session and to close the session shown", () => {
@@ -100,6 +103,21 @@ describe("useAppShortcuts on the terminal screen", () => {
     press("n");
     press("w");
     expect(requestSession.mock.calls).toEqual([[{ action: "newSession" }], [{ action: "closeSession", sessionId: "two" }]]);
+  });
+
+  it("asks what goes beside the session shown, on the side of the shortcut", () => {
+    const { splitBesideActive } = setUp([]);
+    press("r");
+    press("d");
+    expect(splitBesideActive.mock.calls).toEqual([["right"], ["bottom"]]);
+  });
+
+  it("leaves a split shortcut to the terminal while nothing can go beside the session", () => {
+    const { splitBesideActive } = setUp([], { canSplit: false });
+    const pressed = new KeyboardEvent("keydown", { key: "r", altKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(pressed);
+    expect(pressed.defaultPrevented).toBe(false);
+    expect(splitBesideActive).not.toHaveBeenCalled();
   });
 
   it("moves between the panes of the split shown, going round at either end", () => {

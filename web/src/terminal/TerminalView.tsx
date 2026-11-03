@@ -108,7 +108,8 @@ type TerminalViewProps = {
   onSplit?: (edge: PaneEdge) => void;
   // onRemoveFromSplit takes this session out of the split it is shown in.
   onRemoveFromSplit?: () => void;
-  canSplit?: boolean;
+  // splitRefusal says why nothing can go beside this session; undefined when something can.
+  splitRefusal?: string | undefined;
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   // onExit hands over how the program ended, as the stream reported it.
   onExit?: (exit: ExitReport) => void;
@@ -186,7 +187,7 @@ export function TerminalView({
   headerActions,
   onSplit,
   onRemoveFromSplit,
-  canSplit = false,
+  splitRefusal,
   api = terminalSessionsApi,
   onExit,
   onReconnect,
@@ -949,7 +950,7 @@ export function TerminalView({
             } : {})}
             onSplit={onSplit}
             onRemoveFromSplit={onRemoveFromSplit}
-            canSplit={canSplit}
+            splitRefusal={splitRefusal}
             triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}
             onQuickCommands={() => openQuickCommands.current()}

@@ -63,7 +63,8 @@ import { useOSC52Setting } from "./shell/useOSC52Setting";
 import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
 import { useAppShortcuts, type SessionShortcut, type SessionShortcutRequest } from "./shell/useAppShortcuts";
-import { paneSessionIds } from "./terminal/splitView/layout";
+import { paneSessionIds, type PaneEdge } from "./terminal/splitView/layout";
+import { SplitRequestDialog } from "./terminal/splitView/SplitRequestDialog";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
 import { useFocusBackAfterInert } from "./ui/useFocusBackAfterInert";
 import { Icon } from "./ui/icons";
@@ -200,6 +201,7 @@ export function App({
     openLocalShell,
     openSSHSession,
     duplicateSession,
+    openSessionInSplit,
     reorderSessions: setSessionOrder,
   } = terminalWorkspace;
   const directDestination = useDirectDestinationActions({
@@ -299,6 +301,13 @@ export function App({
     else void openSFTPTerminal(pendingLocalRequest.alias, pendingLocalRequest.cwd);
   }, [openSFTPTerminal, pendingLocalRequest, runTargets.selected, showSession]);
 
+  // Splitting beside the session shown: a phone shows one pane at a time, and has no splitting to ask for.
+  const splittableSessionId = !splitView.compact && activeSessionId !== null && splitView.splitRefusal(activeSessionId) === null ? activeSessionId : null;
+  const { requestSplit } = splitView;
+  const splitBesideActive = useMemo(() => splittableSessionId === null
+    ? null
+    : (edge: PaneEdge) => requestSplit({ targetSessionId: splittableSessionId, edge }), [requestSplit, splittableSessionId]);
+
   useAppShortcuts({
     enabled: state === "ready",
     shortcuts,
@@ -306,6 +315,7 @@ export function App({
     orderedSessions,
     activeSessionId,
     panes,
+    splitBesideActive,
     navigate,
     showSession,
     openPalette,
@@ -490,9 +500,14 @@ export function App({
               closeNavigation();
               navigate("Terminal");
             }}
-            canSplitSession={splitView.canSplit}
+            canSplitSession={(id) => id === activeSessionId ? splitBesideActive !== null : splitView.canSplit(id)}
             onSplitSession={(id, edge) => {
               if (activeSessionId === null) return;
+              // The session shown cannot go beside itself: this asks what goes beside it, as the terminal's 「…」 does.
+              if (id === activeSessionId) {
+                splitBesideActive?.(edge);
+                return;
+              }
               splitView.split({ sourceSessionId: id, targetSessionId: activeSessionId, edge });
               closeNavigation();
               navigate("Terminal");
@@ -611,6 +626,18 @@ export function App({
             api={runTargetApis.restore}
             host={runTargets.selected}
             onRestored={terminalSessions.refresh}
+          />
+        ) : null}
+        {state === "ready" ? (
+          <SplitRequestDialog
+            splitView={splitView}
+            sessions={terminalSessions.sessions}
+            aliases={declared.knownAliases}
+            hosts={declared.hosts}
+            localShellProfiles={localShellProfiles}
+            runTarget={runTargets.selected}
+            directDestination={directDestination}
+            onOpen={(request, place) => void openSessionInSplit(request, place)}
           />
         ) : null}
         {state === "ready" ? (

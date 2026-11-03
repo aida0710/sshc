@@ -2,6 +2,7 @@ import { useLayoutEffect } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import { matchesShortcut, shortcutKey, shortcutsBlocked, type Bindings } from "../keyconfig/bindings";
 import type { Section } from "../routing/sectionRoute";
+import type { PaneEdge } from "../terminal/splitView/layout";
 
 // SessionShortcut is what the new session and close session shortcuts ask of the session list
 // (WorkspaceTree): its picker for a new session, or its confirmation before closing one.
@@ -21,7 +22,7 @@ function cycled(items: readonly string[], current: string | null, delta: number)
 // section, opening and closing sessions, cycling terminal sessions and the panes
 // of a split, and showing or hiding the navigation. Listened for in the capture phase
 // so that xterm never turns one of them into SSH input.
-export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessions, activeSessionId, panes, navigate, showSession, openPalette, requestSession, toggleNavigation }: {
+export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessions, activeSessionId, panes, splitBesideActive, navigate, showSession, openPalette, requestSession, toggleNavigation }: {
   enabled: boolean;
   shortcuts: Bindings;
   terminalFace: boolean;
@@ -29,6 +30,8 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessi
   activeSessionId: string | null;
   // panes are the sessions of the split shown on the terminal screen, in order; one or none outside a split.
   panes: readonly string[];
+  // splitBesideActive asks what goes beside the session shown, or is null when nothing can.
+  splitBesideActive: ((edge: PaneEdge) => void) | null;
   navigate: (section: Section) => void;
   showSession: (id: string) => void;
   openPalette: () => void;
@@ -61,6 +64,9 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessi
       else if (matchesShortcut(event, "newSession", shortcuts)) action = () => requestSession({ action: "newSession" });
       else if (terminalFace && activeSessionId !== null && matchesShortcut(event, "closeSession", shortcuts)) {
         action = () => requestSession({ action: "closeSession", sessionId: activeSessionId });
+      } else if (terminalFace && splitBesideActive !== null && (matchesShortcut(event, "splitRight", shortcuts) || matchesShortcut(event, "splitBelow", shortcuts))) {
+        const edge = matchesShortcut(event, "splitRight", shortcuts) ? "right" : "bottom";
+        action = () => splitBesideActive(edge);
       } else if (terminalFace && panes.length > 1 && (matchesShortcut(event, "nextPane", shortcuts) || matchesShortcut(event, "previousPane", shortcuts))) {
         const pane = cycled(panes, activeSessionId, matchesShortcut(event, "nextPane", shortcuts) ? 1 : -1);
         action = () => {
@@ -81,5 +87,5 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessi
     // Capture before xterm translates an application shortcut into SSH input.
     document.addEventListener("keydown", handleShortcut, true);
     return () => document.removeEventListener("keydown", handleShortcut, true);
-  }, [enabled, shortcuts, navigate, orderedSessions, activeSessionId, panes, showSession, terminalFace, openPalette, requestSession, toggleNavigation]);
+  }, [enabled, shortcuts, navigate, orderedSessions, activeSessionId, panes, splitBesideActive, showSession, terminalFace, openPalette, requestSession, toggleNavigation]);
 }

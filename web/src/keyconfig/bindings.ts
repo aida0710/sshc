@@ -29,6 +29,8 @@ export const defaultBindings = {
   previousSession: ["Alt+PageUp"],
   nextPane: [],
   previousPane: [],
+  splitRight: [],
+  splitBelow: [],
   toggleNavigation: [],
   home: [],
   sftp: [],
