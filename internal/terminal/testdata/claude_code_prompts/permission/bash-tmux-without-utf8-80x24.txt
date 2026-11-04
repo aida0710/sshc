@@ -1,0 +1,24 @@
+
+_ ____________
+
+  ______ note.txt ____________________
+  _  $ date > note.txt && ls -la
+
+────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Tip: auto mode handles these prompts for you _ choose "switch to auto mode"
+ below
+ ______ note.txt ____________________
+________________________________________________________________________________
+ date > note.txt && ls -la
+________________________________________________________________________________
+ Do you want to proceed?
+ _ 1. Yes
+   2. Yes, and always allow access to /tmp/claude-1000/-home-demo-projects-sshc/
+      02e7db62-31bb-457b-a4f3-f6a3ee72c1e7/scratchpad/lab/home/project from this
+      project
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you
+   4. No
+
+ Esc to cancel · Tab to amend
+[lab] 0:2.1.318*                                                          12:00

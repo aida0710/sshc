@@ -1,0 +1,30 @@
+33                  │
+34                  │❯ 書いてください
+35                  │
+36                  │● 確かめます。
+37                  │
+38                  │● Write(hello.txt)
+39                  │
+40                  │───────────────────
+41                  │ Create file
+42                  │ hello.txt
+43                  │╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+44                  │  1 こんにちは
+45                  │╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+46                  │ Do you want to
+47                  │ create hello.txt?
+48                  │ ❯ 1. Yes
+49                  │   2. Yes, and
+50                  │      switch to
+51                  │      accept edits
+52                  │      (auto-approve
+53                  │      file edits
+54                  │      and common
+55                  │      file
+56                  │      commands) for
+57                  │      this session
+58                  │   3. Nohift+tab)
+59                  │
+60                  │ Esc to cancel ·
+$                   │ Tab to amend
+[lab] 0:2.1.318*                  12:00

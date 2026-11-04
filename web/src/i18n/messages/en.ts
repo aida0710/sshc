@@ -1376,7 +1376,7 @@ export const en = {
   "connection.paletteLabel": "Terminal colour scheme",
   "connection.encodingLabel": "Remote text encoding",
   "connection.tmuxLabel": "Open in tmux",
-  "connection.tmuxHint": "You return to the same screen after a disconnect or reopening. The server needs tmux, and the status of programs inside tmux does not show in the sidebar.",
+  "connection.tmuxHint": "You return to the same screen after a disconnect or reopening. The server needs tmux. Of what programs inside tmux are doing, the sidebar shows only a Claude Code question visible on screen.",
   "connection.encodingHint":
     "Used by this connection in the browser terminal and by sshc on the command line.",
   "connection.encodingUTF8": "UTF-8 (default)",

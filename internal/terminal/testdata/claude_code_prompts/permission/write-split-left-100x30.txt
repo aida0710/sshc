@@ -1,0 +1,30 @@
+                                                  │33
+ ▐▛███▛█   Claude Code v2.1.318                   │34
+▝▜██████▀  Opus 5.5 · API Usage Billing           │35
+ ▝▝   ▝▝   ~/project                              │36
+                                                  │37
+                                                  │38
+❯ 書いてください                                  │39
+                                                  │40
+● 確かめます。                                    │41
+                                                  │42
+● Write(hello.txt)                                │43
+                                                  │44
+──────────────────────────────────────────────────│45
+ Create file                                      │46
+ hello.txt                                        │47
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│48
+  1 こんにちは                                    │49
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│50
+ Do you want to create hello.txt?                 │51
+ ❯ 1. Yes                                         │52
+   2. Yes, and switch to accept edits             │53
+      (auto-approve file edits and common file    │54
+      commands) for this session (shift+tab)      │55
+   3. No                                          │56
+                                                  │57
+ Esc to cancel · Tab to amend                     │58
+                                                  │59
+                                                  │60
+                                                  │$
+[lab] 0:2.1.318*                                                                              12:00

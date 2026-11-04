@@ -1,0 +1,30 @@
+33                                                ║
+34                                                ║ ▐▛███▛█   Claude Code v2.1.318
+35                                                ║▝▜██████▀  Opus 5.5 · API Usage Billing
+36                                                ║ ▝▝   ▝▝   ~/project
+37                                                ║
+38                                                ║
+39                                                ║❯ 書いてください
+40                                                ║
+41                                                ║● 確かめます。
+42                                                ║
+43                                                ║● Write(hello.txt)
+44                                                ║
+45                                                ║─────────────────────────────────────────────────
+46                                                ║ Create file
+47                                                ║ hello.txt
+48                                                ║╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+49                                                ║  1 こんにちは
+50                                                ║╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+51                                                ║ Do you want to create hello.txt?
+52                                                ║ ❯ 1. Yes
+53                                                ║   2. Yes, and switch to accept edits
+54                                                ║      (auto-approve file edits and common file
+55                                                ║      commands) for this session (shift+tab)
+56                                                ║   3. No
+57                                                ║
+58                                                ║ Esc to cancel · Tab to amend
+59                                                ║
+60                                                ║
+$                                                 ║
+[lab] 0:2.1.318*                                                                              12:00

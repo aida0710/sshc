@@ -66,6 +66,21 @@ func (r *programStatusRecords) drop(states ...ProgramStatusState) {
 	}
 }
 
+// hasLiveReport reports whether a program is telling what it does right now. A
+// done or failed record does not count: it stays after the program has gone.
+func (r *programStatusRecords) hasLiveReport() bool {
+	for id, record := range r.byID {
+		if id == screenPromptRecordID {
+			continue
+		}
+		switch record.State {
+		case ProgramStatusIdle, ProgramStatusWorking, ProgramStatusBlocked:
+			return true
+		}
+	}
+	return false
+}
+
 // programStatusUrgency orders the states by how much they need the user. A
 // program still working on something is shown working, even when one part of
 // it is done.

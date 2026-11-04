@@ -77,3 +77,106 @@ func TestALongControlStringIsReadToItsEnd(t *testing.T) {
 		t.Fatalf("after the image the screen shows %q", emulator.String())
 	}
 }
+
+// A program's output is not checked by anyone before the emulator reads it, and the emulator runs in the engine: a
+// panic here takes every session down.
+func TestOutputThatPointsOffTheScreenStaysOnIt(t *testing.T) {
+	const width, height = 80, 24
+	tests := map[string]struct {
+		before string
+		// shrink makes the terminal smaller after before, as a person does while a program writes.
+		shrink bool
+		after  string
+	}{
+		"a scroll region past the bottom, then line feeds": {
+			before: "\x1b[1;30r\x1b[24;1Hab\r\n\r\ncd\r\n\r\nef",
+		},
+		"a scroll region past the bottom, then the cursor moved down": {
+			before: "\x1b[1;30r\x1b[24;1H\x1b[5Bhello",
+		},
+		"a scroll region past the bottom, then inserted lines": {
+			before: "\x1b[1;30r\x1b[24;1H\x1b[3Lhello",
+		},
+		"margins past the right, then inserted lines": {
+			before: "\x1b[?69h\x1b[1;90s\x1b[1;1H\x1b[3Lhello",
+		},
+		"leaving the alternate screen after the terminal got smaller": {
+			before: "\x1b[24;1Hhello\x1b[?1049h",
+			shrink: true,
+			after:  "\x1b[?1049lhello\r\nworld",
+		},
+		"restoring a cursor saved before the terminal got smaller": {
+			before: "\x1b[24;80H\x1b7",
+			shrink: true,
+			after:  "\x1b8hello\r\nworld",
+		},
+		"a saved cursor taken back on the alternate screen after the terminal got smaller": {
+			before: "\x1b[?1049h\x1b[24;80H\x1b7\x1b[?1049l",
+			shrink: true,
+			after:  "\x1b[?1049h\x1b8hello\r\nworld",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			emulator := NewSnapshotEmulator(width, height)
+			_, _ = emulator.WriteString(test.before)
+			if test.shrink {
+				emulator.Resize(width/2, height/2)
+			}
+			_, _ = emulator.WriteString(test.after)
+			if position := emulator.CursorPosition(); position.Y >= emulator.Height() || position.X >= emulator.Width() {
+				t.Fatalf("cursor at %v on a screen of %dx%d", position, emulator.Width(), emulator.Height())
+			}
+			_ = emulator.Snapshot()
+		})
+	}
+}
+
+func TestAScrollRegionPastTheBottomScrollsTheWholeScreen(t *testing.T) {
+	emulator := NewSnapshotEmulator(4, 2)
+	_, _ = emulator.WriteString("\x1b[1;30rab\r\ncd\r\nef")
+	if got := emulator.Render(); !strings.Contains(got, "cd") || !strings.Contains(got, "ef") || strings.Contains(got, "ab") {
+		t.Fatalf("screen is %q, want cd and ef", got)
+	}
+}
+
+// randomTerminalOutput is text and sequences chosen to move the cursor and the margins around, with numbers larger
+// than the screen.
+func randomTerminalOutput(random *rand.Rand) string {
+	const finals = "ABCDEFGHJKLMPSTXZ@`abdefhlmnrstu"
+	modes := []int{6, 7, 25, 47, 69, 1047, 1048, 1049}
+	escapes := []string{"\x1b7", "\x1b8", "\x1bD", "\x1bE", "\x1bM", "\x1b[!p", "\x1bc", "\x1b(0", "\x1b(B", "\t", "\b", "\x1b#8"}
+	var output strings.Builder
+	for range 60 {
+		switch random.IntN(6) {
+		case 0:
+			output.WriteString("hello 案 ❯")
+		case 1:
+			output.WriteString("\r\n")
+		case 2:
+			fmt.Fprintf(&output, "\x1b[%d;%d%c", random.IntN(120), random.IntN(120), finals[random.IntN(len(finals))])
+		case 3:
+			fmt.Fprintf(&output, "\x1b[%d%c", random.IntN(120), finals[random.IntN(len(finals))])
+		case 4:
+			fmt.Fprintf(&output, "\x1b[?%d%c", modes[random.IntN(len(modes))], "hl"[random.IntN(2)])
+		case 5:
+			output.WriteString(escapes[random.IntN(len(escapes))])
+		}
+	}
+	return output.String()
+}
+
+func TestRandomOutputAtRandomSizesReadsWithoutAPanic(t *testing.T) {
+	const runs, writesPerRun = 300, 8
+	for seed := range runs {
+		random := rand.New(rand.NewPCG(uint64(seed), 0))
+		emulator := NewSnapshotEmulator(1+random.IntN(100), 1+random.IntN(40))
+		for range writesPerRun {
+			_, _ = emulator.WriteString(randomTerminalOutput(random))
+			if random.IntN(3) == 0 {
+				emulator.Resize(1+random.IntN(100), 1+random.IntN(40))
+			}
+			_ = emulator.Snapshot()
+		}
+	}
+}

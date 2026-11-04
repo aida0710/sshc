@@ -59,6 +59,9 @@ type Session struct {
 	// last. See blocked_program.go.
 	programBlocked  func(BlockedProgramChange)
 	blockedReported bool
+	// screenPrompt reads questions off the screen of a program that cannot report
+	// them. See screen_prompt_watch.go.
+	screenPrompt screenPromptWatch
 	// visibilityReports is whether the program turned visibility reports
 	// (mode 2033) on; visible is whether any attached browser may show the
 	// session. replies holds the answers on their way to the program. See
@@ -423,6 +426,7 @@ func (s *Session) Resize(size Size) error {
 	if exited == nil {
 		s.size = size
 		s.screen.resized(s.buffer.Written(), size)
+		s.resizeFollowedScreenLocked(size)
 	}
 	s.mutex.Unlock()
 	if exited != nil {
@@ -503,6 +507,7 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 	// done or failed stays for the browser to show until it has been seen.
 	s.endActiveProgramStatusLocked()
 	s.programStatus.drop(ProgramStatusIdle)
+	s.screenPrompt.stop()
 	s.commandStartedAt = time.Time{}
 	// The new shell asked for no reports; the old program's answers are not for it.
 	s.visibilityReports = false
@@ -626,12 +631,15 @@ func (s *Session) pump(now func() time.Time) {
 			Reset:         func() { s.acceptTerminalReset(generation) },
 		})
 		visibilityRequests := newVisibilityRequestObserver(func(request visibilityRequest) { s.acceptVisibilityRequest(generation, request) })
+		alternateScreen := newAlternateScreenObserver(func() { s.startFollowingScreen(generation) })
 		buffer := make([]byte, readChunk)
 		for {
 			read, err := process.Read(buffer)
 			if read > 0 {
 				observer.Observe(buffer[:read])
 				visibilityRequests.Observe(buffer[:read])
+				alternateScreen.Observe(buffer[:read])
+				s.followScreenOutput(generation, buffer[:read])
 				s.publish(buffer[:read])
 				if len(commandTimes) > 0 {
 					s.publish(commandTimesSequence(commandTimes))
@@ -733,6 +741,7 @@ func (s *Session) finish(info ExitInfo) {
 	s.exited = &info
 	s.state = StateExited
 	s.reconnectView = nil
+	s.screenPrompt.stop()
 	s.reportBlockedProgramLocked()
 	s.closeStreamsLocked()
 	if s.cleanup != nil {

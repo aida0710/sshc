@@ -1,0 +1,24 @@
+▝▜██████▀  API Usage Billing
+ ▝▝   ▝▝   ~/project
+
+
+❯ 複数してください
+
+● 確かめます。
+────────────────────────────────────────
+←  ☐ 項目  ☐ 時期  ✔ Submit  →
+
+どの項目を入れますか？
+
+❯ 1. [ ] ログ
+         記録を残す
+  2. [ ] 通知
+         知らせる
+  3. [ ] Type something
+     Next
+────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to
+navigate · Esc to cancel
+[lab] 0:2.1.318*                  12:00
