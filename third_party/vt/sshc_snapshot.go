@@ -84,6 +84,7 @@ func NewSnapshotEmulator(w, h int) *SnapshotEmulator {
 	for _, code := range []byte{ansi.LF, ansi.VT, ansi.FF} {
 		e.registerCcHandler(code, e.scrollingLinefeed)
 	}
+	e.keepScrollRegionOnScreen()
 	e.parser.SetHandler(ansi.Handler{
 		Print:     e.print,
 		Execute:   e.handleControl,
@@ -178,6 +179,55 @@ func (e *SnapshotEmulator) scrollUpAtBottom() bool {
 	rows[region.Max.Y-1] = top
 	e.atPhantom = false
 	return true
+}
+
+// keepScrollRegionOnScreen takes DECSTBM and DECSLRM with the far margin held to the screen, as xterm and xterm.js do.
+// The upstream emulator takes it as sent: a line feed then moves the cursor below the last row, and writing there
+// panics. A program sends one, for instance, in what it drew for a taller terminal while its terminal was made smaller.
+func (e *SnapshotEmulator) keepScrollRegionOnScreen() {
+	e.RegisterCsiHandler('r', func(params ansi.Params) bool {
+		if top, bottom, valid := marginsOnScreen(params, e.Height()); valid {
+			e.scr.setVerticalMargins(top, bottom)
+			e.setCursorPosition(0, 0)
+		}
+		return true
+	})
+	e.RegisterCsiHandler('s', func(params ansi.Params) bool {
+		if !e.isModeSet(ansi.ModeLeftRightMargin) {
+			return false // SCOSC, not DECSLRM.
+		}
+		if left, right, valid := marginsOnScreen(params, e.Width()); valid {
+			e.scr.setHorizontalMargins(left, right)
+			e.setCursorPosition(0, 0)
+		}
+		return true
+	})
+}
+
+// marginsOnScreen reads the two margins of a margin sequence for a screen of the given size: the first row or column
+// inside them, the first one past them, and whether they leave more than one between them.
+func marginsOnScreen(params ansi.Params, size int) (first, past int, valid bool) {
+	first, _, _ = params.Param(0, 1)
+	first = max(first, 1) - 1
+	past, _, _ = params.Param(1, size)
+	if past < 1 || past > size {
+		past = size
+	}
+	return first, past, first+1 < past
+}
+
+// Resize is the emulator's, keeping every cursor on the screen. The emulator moves only the cursor of the screen
+// shown, so a program that left the alternate screen or restored its cursor after the terminal got smaller would write
+// below the last row, which panics.
+func (e *SnapshotEmulator) Resize(width, height int) {
+	e.Emulator.Resize(width, height)
+	for index := range e.scrs {
+		screen := &e.scrs[index]
+		for _, cursor := range []*Cursor{&screen.cur, &screen.saved} {
+			cursor.X = min(cursor.X, width-1)
+			cursor.Y = min(cursor.Y, height-1)
+		}
+	}
 }
 
 // AtGround reports whether the emulator has taken every sequence it was given: output read so far does not end
