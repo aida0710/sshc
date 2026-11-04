@@ -147,7 +147,7 @@ function NotificationPermissionCard({ notificationPermission, focus }: {
   const t = useTranslate();
   function enable() {
     notificationPermission.finish();
-    // The answer is the person's in Android's own dialog; Settings > Notifications shows it from then on.
+    // The answer is the person's in Android's or the browser's own dialog; Settings > Notifications shows it from then on.
     requestBrowserNotificationPermission().catch(() => undefined);
   }
   return (

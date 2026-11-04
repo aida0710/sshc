@@ -77,7 +77,7 @@ When a program reports its state (working, waiting for you, done, failed) with [
 - Working and waiting (for permission, an answer or a sign-in) clear when the program returns to the shell prompt (OSC 133 A) or the shell is replaced.
 - Done and failed clear once you view the session. As with unread notifications, this browser decides whether you have seen it.
 - Idle shows no mark. A session that is connecting, reconnecting or has ended shows its connection state instead.
-- In a browser it raises no desktop notification and plays no sound.
+- In a browser, when a program starts waiting for input while the tab is in the background or the window does not have the focus, sshc shows a browser notification and plays the selected sound. Clicking it opens that session, and sshc takes it back once the program stops waiting. A wait that began while you were on another session is announced once, when you leave sshc. sshc asks for permission once with a notice, the first time a program reports its status; you can also allow it later under Settings → Notifications.
 - The Android app raises an Android notification when a program starts waiting for you while sshc is closed. Tapping it opens the session, and it goes away when the program stops waiting. The sound and the pop-up follow the "Programs waiting for you" notification channel in Android's settings. The app asks for the notification permission once, under Notices, the first time it receives a program status. For sessions on a run target, the notification comes only for the run target selected, and while the app's screen keeps running in the background.
 
 To try it, run this inside a pane, then open another session and wait:
