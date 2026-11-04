@@ -25,7 +25,7 @@ Selecting a group while no connection is open shows the group's editor on the ri
 
 When a folder under `~/.ssh/connections/` has no `Include` line, or a group's folder is missing, Folder checks appears above the group column. Make it a group turns a folder without an `Include` line into a group.
 
-On narrow screens, the group button above the list opens the group list with the same … menus and Folder checks.
+In a window narrower than 1280px and on a phone, the group button above the list opens the group list with the same … menus and Folder checks. At these widths, use Move to group… instead of dragging a connection onto a group.
 
 New group in the form for a new connection creates a top-level group without losing what you have typed.
 
