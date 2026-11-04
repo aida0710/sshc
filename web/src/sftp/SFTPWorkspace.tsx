@@ -433,6 +433,7 @@ export function SFTPWorkspace({
                   className={selected ? "flex min-h-0 min-w-0 flex-1 flex-col" : ""}
                 >
                   <SFTPPanel
+                    shown={selected && !concealed}
                     aliases={aliases}
                     hostPickerRequest={hostPickerRequests[tab.id] ?? 0}
                     onChooseHost={() => requestHostChange(tab)}

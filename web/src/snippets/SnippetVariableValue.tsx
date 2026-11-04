@@ -20,7 +20,7 @@ export function SnippetVariableValue({
 }) {
   const t = useTranslate();
   const defaultPlaceholder =
-    variable.default === undefined ? "" : t("workspace.useDefaultValue", { value: variable.default });
+    variable.default === undefined || variable.default === "" ? "" : t("workspace.useDefaultValue", { value: variable.default });
   if (variable.type === "boolean") {
     return (
       <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className={className}>

@@ -11,7 +11,7 @@ export function SFTPWaitingOverlay({ label, detail }: { label: string; detail: s
         <Spinner className="size-4 text-accent" />
         <span className="min-w-0">
           <span className="block">{label}</span>
-          <span className="block truncate font-mono text-xs text-ink-muted">{detail}</span>
+          <span title={detail} className="block truncate font-mono text-xs text-ink-muted">{detail}</span>
         </span>
       </span>
     </div>

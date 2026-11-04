@@ -10,6 +10,12 @@ export async function sftpHostPicker(page: Page, pane: Locator): Promise<Locator
   return page.locator("[data-sftp-pane-tabs] button[data-value]:visible");
 }
 
+// sftpTabStrip is the strip around the tabs that the tablist named label owns: the list holds no element of its own, so
+// a search for its tabs starts from the strip.
+export function sftpTabStrip(page: Page, label: string): Locator {
+  return page.locator("[data-sftp-pane-tabs]").filter({ has: page.getByRole("tablist", { name: label, exact: true }) });
+}
+
 // chooseEntryOnPhone chooses a row of the phone's list, which has no checkboxes until something is chosen: a long press
 // starts choosing (the page takes a right click for one, as it does Android's context menu), and after that a tap chooses.
 export async function chooseEntryOnPhone(pane: Locator, name: string): Promise<void> {

@@ -457,8 +457,8 @@ describe("TerminalView", () => {
       const card = screen.getByRole("region", { name: "The SSH connection was lost." });
       expect(card).toHaveFocus();
       expect(button).toHaveAttribute("aria-expanded", "true");
-      // The strip says it too, over the top of the terminal.
-      expect(screen.getAllByText("The SSH connection was lost.")).toHaveLength(2);
+      // Shown over the terminal together, the strip leaves it to the card.
+      expect(screen.getAllByText("The SSH connection was lost.")).toHaveLength(1);
 
       await userEvent.click(within(card).getByRole("button", { name: "Hide this notice" }));
       expect(screen.queryByText("The SSH connection was lost.")).toBeNull();

@@ -5,6 +5,7 @@ import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
+import { useAndroidBackStop } from "../ui/useAndroidBackStop";
 import { EmptyState } from "../ui/EmptyState";
 import { PanelState } from "../ui/PanelState";
 import { Button, Notice } from "../ui/surface";
@@ -87,6 +88,7 @@ export type SFTPTarget = {
 // never a check on which kind of source it is: the engine's own disk lists
 // and transfers, an SSH host does everything.
 export function SFTPPanel({
+  shown = true,
   aliases,
   hosts = noHosts,
   hostVPN,
@@ -109,6 +111,8 @@ export function SFTPPanel({
   hostPickerRequest,
   onChooseHost,
 }: {
+  // shown is whether this tab is the one on the screen.
+  shown?: boolean;
   aliases: string[];
   hosts?: HostEntry[];
   // hostVPN は、alias ごとに通るVPN経路の名前である。
@@ -455,6 +459,17 @@ export function SFTPPanel({
     ];
   }
 
+  // Android's Back ends the search and then the choosing of rows on a phone, before it leaves the page. A tab not shown
+  // keeps what it had open, for when it is chosen again.
+  useAndroidBackStop({ open: mobileInteraction && shown && selectedEntries.length > 0, close: list.clearSelection });
+  useAndroidBackStop({
+    open: mobileInteraction && shown && search.mobileSearchOpen,
+    close: () => {
+      search.setMobileSearchOpen(false);
+      search.setFilter("");
+    },
+  });
+
   const filterInput = (
     <input {...literalTextEntry}
       type="search"
@@ -477,6 +492,11 @@ export function SFTPPanel({
     ? <SFTPCompactSearch search={search} recursive={can?.search === true} disabled={busy || dirty || !connected} onOptions={() => setSearchOptionsOpen(true)} />
     : selectedEntries.length === 0 ? undefined
       : <SFTPCompactSelection label={selectionLabel} menuLabel={selectionMenuLabel()} expanded={menu?.kind === "selected"} onClear={list.clearSelection} onSearch={() => search.setMobileSearchOpen(true)} onMenu={(button) => toggleMenu("selected", button)} />;
+  const searchSummary = search.search === null ? "" : t(search.search.truncated ? (search.search.mode === "content" ? "sftp.search.contentResultsPartial" : "sftp.searchResultsTruncated") : "sftp.searchResults", {
+    count: search.search.mode === "content" ? search.search.matches?.length ?? 0 : search.search.entries.length,
+    query: search.search.query,
+    path: search.search.root,
+  });
   const loadingLabel = t(local ? "sftp.local.loading" : "sftp.loading");
   const waitingFor = connected && pendingPath !== null ? { label: loadingLabel, detail: pendingPath || t("sftp.homeDirectory") }
     : editor.openingPath !== null ? { label: t("sftp.editorOpening"), detail: editor.openingPath }
@@ -500,6 +520,7 @@ export function SFTPPanel({
           busy={busy}
           locked={dirty}
           mobile={mobileInteraction}
+          shown={shown}
           labels={local
             ? { path: t("sftp.local.path"), editPath: t("sftp.local.editPath"), input: t("sftp.local.pathInput") }
             : { path: t("sftp.path"), editPath: t("sftp.editPath"), input: t("sftp.path") }}
@@ -531,19 +552,14 @@ export function SFTPPanel({
       </ModalShell> : null}
       {search.search === null ? null : (
         <p role="status" className="flex items-center gap-3 rounded-md border border-line bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
-          <span className="min-w-0 grow truncate">
-            {t(search.search.truncated ? (search.search.mode === "content" ? "sftp.search.contentResultsPartial" : "sftp.searchResultsTruncated") : "sftp.searchResults", {
-              count: search.search.mode === "content" ? search.search.matches?.length ?? 0 : search.search.entries.length,
-              query: search.search.query,
-              path: search.search.root,
-            })}
-          </span>
+          {/* A phone has no pointer to rest on the words for a tooltip, so they wrap there. */}
+          <span title={searchSummary} className={`min-w-0 grow ${mobileInteraction ? "[overflow-wrap:anywhere]" : "truncate"}`}>{searchSummary}</span>
           <button type="button" disabled={busy} onClick={search.endSearch} className={`shrink-0 rounded-md text-accent transition-colors duration-150 hover:bg-hover ${mobileInteraction ? "min-h-12 px-2" : "px-1.5"}`}>{t("sftp.searchEnd")}</button>
         </p>
       )}
       {actions.undo === null ? null : (
         <p role="status" className="flex items-center gap-3 rounded-md border border-line bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
-          <span className="min-w-0 grow truncate">{actions.undo.label}</span>
+          <span title={actions.undo.label} className="min-w-0 grow truncate">{actions.undo.label}</span>
           <button type="button" disabled={busy} onClick={() => void actions.undo?.run()} className={`shrink-0 rounded-md text-accent transition-colors duration-150 hover:bg-hover ${mobileInteraction ? "min-h-12 px-2" : "px-1.5"}`}>{t("sftp.undo")}</button>
           <button type="button" aria-label={t("sftp.dismissUndo")} onClick={actions.dismissUndo} className={`${iconAction} ${mobileInteraction ? "size-12" : "size-6"}`}>
             <Icon name="close" className={mobileInteraction ? "size-5" : "size-3"} />
@@ -568,7 +584,7 @@ export function SFTPPanel({
                 <button type="button" aria-label={t("sftp.clearSelection")} onClick={list.clearSelection} className={`${iconAction} ${mobileInteraction ? "size-12" : "size-10 md:size-7"}`}>
                   <Icon name="close" className={mobileInteraction ? "size-5" : "size-3.5"} />
                 </button>
-                <span className={`min-w-0 grow truncate font-medium text-ink ${mobileInteraction ? "text-sm" : "text-xs"}`}>
+                <span title={selectionLabel} className={`min-w-0 grow truncate font-medium text-ink ${mobileInteraction ? "text-sm" : "text-xs"}`}>
                   {selectedEntry === null
                     ? t("sftp.selectedCountSize", {
                         count: selectedEntries.length,
@@ -581,9 +597,9 @@ export function SFTPPanel({
                   <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
                   {filterInput}
                 </label>
-                {compactViewport || !can?.details ? null : <button type="button" disabled={busy} onClick={showDetails} className="rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.details")}</button>}
-                {compactViewport && !local ? null : <button type="button" disabled={busy || !transferableSelection || !transfers.canTransferOut} title={transfers.canTransferOut ? undefined : t("sftp.local.connectRemote")} onClick={() => void transfers.transferOut(selectedEntries)} className={`rounded-md text-ink-muted hover:bg-hover hover:text-ink ${mobileInteraction ? "min-h-12 px-3 text-sm" : "px-2 py-1 text-xs"}`}>{transferOutLabel}</button>}
-                {compactViewport || selectedEntry === null || !can?.rename ? null : <button type="button" disabled={busy} onClick={actions.renameSelection} className="rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.rename")}</button>}
+                {compactViewport || !can?.details ? null : <button type="button" disabled={busy} onClick={showDetails} className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.details")}</button>}
+                {compactViewport && !local ? null : <button type="button" disabled={busy || !transferableSelection || !transfers.canTransferOut} title={transfers.canTransferOut ? undefined : t("sftp.local.connectRemote")} onClick={() => void transfers.transferOut(selectedEntries)} className={`shrink-0 rounded-md text-ink-muted hover:bg-hover hover:text-ink ${mobileInteraction ? "min-h-12 px-3 text-sm" : "px-2 py-1 text-xs"}`}>{transferOutLabel}</button>}
+                {compactViewport || selectedEntry === null || !can?.rename ? null : <button type="button" disabled={busy} onClick={actions.renameSelection} className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.rename")}</button>}
                 <button
                   type="button"
                   aria-label={selectionMenuLabel()}

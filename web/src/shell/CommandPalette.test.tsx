@@ -75,6 +75,27 @@ beforeEach(() => {
 });
 
 describe("CommandPalette", () => {
+  it("names the keys to press on a screen with a keyboard", () => {
+    renderPalette();
+    expect(screen.getByText("Esc")).toBeInTheDocument();
+    expect(screen.getByText(/↑↓/)).toBeInTheDocument();
+  });
+
+  it("names no keys on a phone, and has a button to close instead", async () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    try {
+      const onClose = vi.fn();
+      renderPalette({ onClose });
+      expect(screen.queryByText("Esc")).not.toBeInTheDocument();
+      expect(screen.queryByText(/↑↓/)).not.toBeInTheDocument();
+      expect(screen.getByText("Type user@host to connect")).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Close search" }));
+      expect(onClose).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("leads with the commands and connections until something is typed, and then finds the later commands among the commands", async () => {
     const user = userEvent.setup();
     renderPalette({

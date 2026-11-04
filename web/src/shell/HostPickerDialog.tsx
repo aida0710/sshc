@@ -126,8 +126,8 @@ export function HostPickerDialog({
       className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-select-fill focus:bg-select-fill focus:outline-none ${current ? "bg-select-fill" : ""}`}>
       <Icon name={icon} className="size-4 shrink-0 text-accent" />
       <span className="min-w-0 grow">
-        <span className="block truncate font-medium text-ink">{name}</span>
-        <span className="block truncate text-xs text-ink-muted">{detail || t("sftp.hostNoDetails")}</span>
+        <span title={name} className="block truncate font-medium text-ink">{name}</span>
+        <span title={detail} className="block truncate text-xs text-ink-muted">{detail || t("sftp.hostNoDetails")}</span>
       </span>
       {current ? <span className="text-xs text-accent">{t("sftp.hostCurrent")}</span> : null}
     </button>

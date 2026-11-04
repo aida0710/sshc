@@ -177,7 +177,7 @@ export function AppNavigation({
       >
         <Icon name="search" className="size-[15px] shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">{t("palette.open")}</span>
-        <kbd aria-hidden="true" className="hidden shrink-0 font-mono text-[11px] text-ink-faint md:block">{shortcuts.palette.slice(0, 1).map(shortcutLabel)}</kbd>
+        <kbd aria-hidden="true" className="hidden shrink-0 font-mono text-[11px] text-ink-faint desktop-layout:block">{shortcuts.palette.slice(0, 1).map(shortcutLabel)}</kbd>
       </button>
 
       <div className="shrink-0">
