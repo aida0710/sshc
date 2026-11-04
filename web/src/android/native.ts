@@ -146,6 +146,14 @@ export function subscribeAndroidNotificationOpened(opened: (tag: string) => void
   return () => target.removeEventListener("sshc-android-notification-opened", takeOpened);
 }
 
+// AndroidSaveCancelled is the person leaving the save destination without choosing one. It is their decision, not a
+// failure to report.
+export class AndroidSaveCancelled extends Error {
+  constructor() {
+    super("android_save_cancelled");
+  }
+}
+
 // The save before this one, finished or not. The app opens one save destination at a time and fails a request made while
 // one is open (MainActivity.openSaveDestination), and transfers run side by side, so a save waits for the one before it.
 let previousSave: Promise<unknown> = Promise.resolve();
@@ -176,7 +184,7 @@ async function saveThroughBridge(bridge: AndroidBridge, blob: Blob, suggestedNam
       reject(new Error(failure));
     }
   });
-  if (status === "cancelled") throw new Error("android_save_cancelled");
+  if (status === "cancelled") throw new AndroidSaveCancelled();
   if (status !== "ready") throw new Error("android_save_failed");
 
   try {

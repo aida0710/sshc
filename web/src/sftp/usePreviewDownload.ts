@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AndroidSaveCancelled } from "../android/native";
 import { useTranslate } from "../i18n/context";
 import type { BrowserSave } from "../ui/saveFile";
 import { sftpApi } from "./api";
@@ -38,6 +39,7 @@ export function usePreviewDownload(alias: string): { download: (path: string) =>
         const save = await sftpApi.saveDownload(path, false, [await sftpApi.downloadLocalFile(path)]);
         if (save !== null) saves.current.push(save);
       } catch (error) {
+        if (error instanceof AndroidSaveCancelled) return;
         setProblem(sftpProblemText(t, error));
       }
     })();

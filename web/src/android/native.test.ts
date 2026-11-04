@@ -4,6 +4,7 @@ import {
   notifiesTransfersNatively,
   notifyAndroidTransfer,
   requestAndroidNotificationPermission,
+  AndroidSaveCancelled,
   saveWithAndroid,
   setAndroidAppearance,
   showAndroidNotification,
@@ -129,7 +130,7 @@ describe("Android saves made side by side", () => {
     const second = saveWithAndroid(new Blob(["two"]), "two.txt");
     await settle();
     answer(requests[0] ?? "", "cancelled");
-    await expect(first).rejects.toThrow("android_save_cancelled");
+    await expect(first).rejects.toBeInstanceOf(AndroidSaveCancelled);
     await settle();
 
     answer(requests[1] ?? "", "ready");
