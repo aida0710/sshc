@@ -8,6 +8,7 @@ import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { useLongPress } from "../ui/useLongPress";
 import type { ActionMenuItem } from "../ui/ActionMenu";
+import { draggableCursor } from "../ui/dragAndDropLook";
 import { identityKey } from "./connectionBrowser";
 import type { DragPayload } from "./dragdrop";
 import { applySelectionGesture, emptyMultiSelection, keepVisible, type MultiSelection } from "./multiSelection";
@@ -36,7 +37,7 @@ export type ConnectionTreeProps = {
   overview: Overview;
   selected: HostSelection | null;
   onSelect: (host: HostEntry) => void;
-  // drag は、板の横のグループの一覧と分け合う。行はそのグループの上に落とす。
+  // drag は、板の横のグループの一覧と分け合う。行とグループの見出しはそのグループの上に落とす。
   drag: ConnectionDrag;
   // 以下は複数選択とグループの操作。渡さなければ今までどおり1件ずつ選ぶ一覧になる。
   scope?: Scope;
@@ -122,6 +123,7 @@ export function ConnectionTree({
     groupTree.forEach(visit);
     return ordered;
   }, [groupTree]);
+  const declaredGroups = useMemo(() => new Set(orderedGroups.map((group) => group.name)), [orderedGroups]);
 
   const visible = useMemo(() => {
     const normalizedQuery = normalizeHostQuery(query);
@@ -148,20 +150,19 @@ export function ConnectionTree({
       return [{ name: "", items: exact.get("") ?? [] }];
     }
 
-    const declared = new Set(orderedGroups.map((group) => group.name));
     const sections = orderedGroups
       .filter((group) => scope.kind === "all" || isGroupOrDescendant(group.name, scope.name))
       .filter((group) => visible.some((item) => belongsToGroup(item, group.name)))
       .map((group) => ({ name: group.name, items: exact.get(group.name) ?? [] }));
     const undeclared = [...exact.keys()]
-      .filter((name) => name !== "" && !declared.has(name))
+      .filter((name) => name !== "" && !declaredGroups.has(name))
       .sort((left, right) => left.localeCompare(right, "ja"));
     sections.push(...undeclared.map((name) => ({ name, items: exact.get(name) ?? [] })));
     if (scope.kind === "all" && exact.has("")) {
       sections.push({ name: "", items: exact.get("") ?? [] });
     }
     return sections;
-  }, [orderedGroups, scope, visible]);
+  }, [declaredGroups, orderedGroups, scope, visible]);
 
   // 範囲選択は、見出しで区切られた画面の上から下への順で数える。
   const visibleOrder = useMemo(() => resultSections.flatMap((section) => section.items.map((item) => item.key)), [resultSections]);
@@ -258,9 +259,16 @@ export function ConnectionTree({
   function renderResultSection(section: ResultSection) {
     const name = section.name === "" ? t("tree.ungrouped") : section.name;
     const colour = (overview.metadata.groups ?? []).find((group) => group.name === section.name)?.colour ?? "";
+    // 宣言の無いグループは動かせない。スマホにはドラッグが無い。
+    const headingDraggable = !compact && !drag.movesDisabled && declaredGroups.has(section.name);
     return (
       <section key={section.name || "ungrouped"} data-connection-group={section.name || "ungrouped"} aria-label={t("tree.groupSection", { name, count: section.items.length })}>
-        <header className="sticky top-0 z-[1] flex items-center gap-1.5 bg-sidebar px-3.5 pb-1 pt-2.5 text-xs text-ink-faint">
+        <header
+          draggable={headingDraggable}
+          onDragStart={(event) => drag.startDrag(event, { kind: "group", name: section.name })}
+          onDragEnd={drag.endDrag}
+          className={`sticky top-0 z-[1] flex items-center gap-1.5 bg-sidebar px-3.5 pb-1 pt-2.5 text-xs text-ink-faint ${headingDraggable ? draggableCursor : ""}`}
+        >
           <span className="flex shrink-0" style={colour === "" ? undefined : { color: colour }}>
             <Icon name="groups" className="size-[13px]" />
           </span>
@@ -314,7 +322,7 @@ export function ConnectionTree({
               </label>
             </span>
           </div>
-          {!drag.movesDisabled ? <p className="sr-only">{t("tree.dragGroupHint")}</p> : null}
+          {!compact && !drag.movesDisabled ? <p className="sr-only">{t("tree.dragGroupHint")}</p> : null}
         </header>}
         {topBar}
         {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t(nothingToList ? "tree.nothingYet" : "tree.noMatch")}</p> : <div data-connection-results className={`min-h-0 flex-1 overflow-y-auto ${bottomBar === null ? "pb-[calc(0.5rem+var(--mobile-navigation-inset))] scroll-pb-(--mobile-navigation-inset)" : "pb-2"}`}>{resultSections.map(renderResultSection)}</div>}
@@ -339,6 +347,7 @@ export function ConnectionTree({
             },
           }))}
           folderNotices={folderNotices}
+          {...(compact ? {} : { drag })}
           {...(onDeclareGroup === undefined ? {} : { onDeclare: (name: string) => {
             setGroupSheetOpen(false);
             onDeclareGroup(name);

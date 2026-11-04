@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type { Notice, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, hideOnHoverAtPcSize, revealOnHoverAtPcSize, type ActionMenuItem } from "../ui/ActionMenu";
@@ -19,6 +19,16 @@ const connectionGroupsWidth: ColumnWidth = { key: localStorageKeys.connectionGro
 // 入れ子のグループは、1段ごとにこれだけ右へずらす。
 const depthIndent = "0.875rem";
 
+// 浮かせた一覧とウィンドウの右端のあいだ（index.css の 0.5rem）に、ポインタが一覧の縁に載らないだけの余白を足した幅。
+const floatingListEdgeClearance = 16;
+
+// floatingListSide は、ナビゲーションを隠していて左に場所が無いときに、浮かせる一覧をどちらの端に置くかを返す。
+// 開いている編集欄の上（右端）に出して、接続の一覧を隠さない。ただし一覧の全幅を使っているときに行の右端を掴むと、
+// 右端の一覧がポインタの真下に出て、少し動かして離しただけで移動してしまうので、そのときは左端に出す。
+function floatingListSide(pointerX: number, listWidth: number): "left" | "right" {
+  return pointerX >= window.innerWidth - listWidth - floatingListEdgeClearance ? "left" : "right";
+}
+
 function facetLook(active: boolean): string {
   return `flex min-h-[30px] w-full min-w-0 items-center gap-2.5 rounded-[7px] px-2 text-left text-[13px] transition-colors ${
     active ? "bg-select-fill font-medium text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
@@ -28,7 +38,8 @@ function facetLook(active: boolean): string {
 // ConnectionGroupFacets は、Connections の板の横（Settings がページを並べる位置）に置くグループの一覧である。
 // グループを選ぶと接続の一覧がそのグループに絞られ、グループの上に落とした接続先とグループはそこへ移る。
 // 幅が1280px未満のウィンドウでは、接続の一覧の中のシートからグループを選ぶ。ナビゲーションとこの列と接続の一覧が
-// 並ぶと、1024pxのウィンドウで接続先の編集に170pxほどしか残らず、接続名さえ読めないためである。
+// 並ぶと、1024pxのウィンドウで接続先の編集に170pxほどしか残らず、接続名さえ読めないためである。その幅では、
+// この一覧をドラッグ中だけページの外へ浮かせて落とし先にする（置き場所は index.css の data-floating-group-list）。
 export function ConnectionGroupFacets({
   overview,
   scope,
@@ -147,12 +158,15 @@ export function ConnectionGroupFacets({
 
   const allActive = scope.kind === "all";
   const ungroupedActive = scope.kind === "ungrouped";
+  const floatingSide = drag.floatingListPointerX === null ? undefined : floatingListSide(drag.floatingListPointerX, width);
   return (
     <nav
       aria-label={t("tree.byGroups")}
-      style={{ width: `${width}px` }}
-      className="relative hidden shrink-0 flex-col py-4 pl-2.5 pr-3 xl:flex"
+      style={{ "--connection-groups-width": `${width}px` } as CSSProperties}
+      data-floating-group-list={floatingSide}
+      className={`relative w-(--connection-groups-width) shrink-0 flex-col py-4 pl-2.5 pr-3 xl:flex ${floatingSide === undefined ? "hidden" : "flex"}`}
     >
+      {/* 列が無い幅で浮かせた一覧は落とし先だけを見せるので、落とせない行と操作は出さない。 */}
       <div className="flex items-center justify-between gap-1 px-2 pb-2">
         <h2 className="text-xs font-medium text-ink-faint">{t("tree.byGroups")}</h2>
         {onCreateGroup === undefined ? null : (
@@ -161,19 +175,19 @@ export function ConnectionGroupFacets({
             aria-label={t("tree.newGroup")}
             title={t("tree.newGroup")}
             onClick={onCreateGroup}
-            className="-my-1 flex size-6 items-center justify-center rounded text-ink-faint hover:bg-hover hover:text-ink"
+            className="-my-1 flex size-6 items-center justify-center rounded text-ink-faint hover:bg-hover hover:text-ink max-xl:hidden"
           >
             <Icon name="plus" className="size-3.5" />
           </button>
         )}
       </div>
       {onDeclareGroup === undefined ? null : (
-        <div className="px-0.5 pb-2">
+        <div className="px-0.5 pb-2 max-xl:hidden">
           <GroupFolderNotices notices={folderNotices} onDeclare={onDeclareGroup} />
         </div>
       )}
       <div data-connection-facets className="flex min-h-0 min-w-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
-        <button type="button" aria-label={t("tree.allConnections")} aria-pressed={allActive} onClick={() => onScopeChange({ kind: "all" })} className={facetLook(allActive)}>
+        <button type="button" aria-label={t("tree.allConnections")} aria-pressed={allActive} onClick={() => onScopeChange({ kind: "all" })} className={`${facetLook(allActive)} max-xl:hidden`}>
           {gutter}
           <Icon name="groups" className={`size-[15px] shrink-0 ${allActive ? "text-accent" : ""}`} />
           <span className="min-w-0 flex-1 truncate">{t("tree.allConnections")}</span>
@@ -193,7 +207,7 @@ export function ConnectionGroupFacets({
             type="button"
             aria-pressed={showHidden}
             onClick={() => setShowHidden((current) => !current)}
-            className="mt-2 self-start rounded px-2 py-1 text-xs text-ink-faint hover:bg-hover hover:text-ink"
+            className="mt-2 self-start rounded px-2 py-1 text-xs text-ink-faint hover:bg-hover hover:text-ink max-xl:hidden"
           >
             {t(showHidden ? "tree.hideHiddenGroups" : "tree.showHiddenGroups", { count: hiddenCount })}
           </button>
