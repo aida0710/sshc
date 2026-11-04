@@ -11,6 +11,7 @@ export type AndroidBridge = {
   notificationPermission(): string;
   requestNotificationPermission(): void;
   showNotification(tag: string, title: string, body: string): string;
+  showBlockedProgramNotification(tag: string, title: string, body: string): string;
   cancelNotification(tag: string): void;
   takeOpenedNotification(): string;
   chooseFolder(requestId: string): string;
@@ -92,6 +93,21 @@ export function showAndroidNotification(
   if (bridge === undefined) return false;
   try {
     return bridge.showNotification(tag, title, body) === "";
+  } catch {
+    // renderer の再起動と同時に bridge が消えても、通知が出なかったことにする。
+    return false;
+  }
+}
+
+/** プログラムが利用者を待っていることの通知。音が鳴るチャンネルで出し、同じ待ちは1回だけ出す。 */
+export function showAndroidBlockedProgramNotification(
+  { title, body, tag }: { title: string; body: string; tag: string },
+  target: Window = window,
+): boolean {
+  const bridge = (target as AndroidWindow).sshcAndroid;
+  if (bridge === undefined) return false;
+  try {
+    return bridge.showBlockedProgramNotification(tag, title, body) === "";
   } catch {
     // renderer の再起動と同時に bridge が消えても、通知が出なかったことにする。
     return false;

@@ -845,7 +845,7 @@ export const en = {
   "terminal.remoteIncompatible": "Cannot connect to the engine terminals run on because its sshc version does not work with this machine’s.",
   "terminal.remoteVaultLocked": "The vault of the engine terminals run on is locked.",
   "terminal.remoteEngineUnavailable": "The engine terminals run on cannot be reached. Reconnect, or switch back to localhost.",
-  "terminal.newSessionSearch": "Search connections, or type user@host:port",
+  "terminal.newSessionSearch": "Search, or user@host:port",
   "terminal.newSession": "New session",
   "terminal.rowDetail": "{status} · {destination}",
   "terminal.connecting": "connecting",
@@ -2125,6 +2125,9 @@ export const en = {
   "history.completed": "Completed changes",
   "history.empty": "No change has been made through this application yet.",
   "history.restorePath": "Restore {path}",
+  "history.fileSettings": "the settings",
+  "history.fileVault": "the vault",
+  "history.fileMachine": "the machine's settings",
   "history.backupRetention": "Previous versions of changed files are kept in ~/.ssh/sshc/backups.",
   "history.backupRetentionMore": "The newest 200 changes no older than 90 days are kept; older ones are deleted automatically. A restore is itself a new change, so it can be undone the same way.",
 

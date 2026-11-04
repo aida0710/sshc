@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 import type { HostDetail } from "../api/config";
 import type { EffectiveResponse } from "../api/diagnostics";
 import { ConnectionAnalysis } from "./ConnectionAnalysis";
@@ -68,6 +69,23 @@ describe("ConnectionAnalysis", () => {
     expect(screen.getByText("config:2")).toBeInTheDocument();
     expect(screen.getByText(/These are the values used by this connection/)).toBeInTheDocument();
     expect(api.effective).not.toHaveBeenCalled();
+  });
+
+  it("names a file under ~/.ssh that way in the Android app, whose private folder means nothing on a phone", async () => {
+    vi.stubGlobal("sshcAndroid", fakeAndroidBridge());
+    const absolute = "/data/data/com.example/files/.ssh/config";
+    const api = { effective: vi.fn().mockResolvedValue({ ...effective, sources: [{ ...effective.sources[0], path: absolute }] }) };
+    render(<ConnectionAnalysis
+      detail={{ ...detail, effective: { ...detail.effective, entries: [{ keyword: "User", values: ["deploy"], source: { absolute, line: 3 } }] } }}
+      alias="bastion"
+      api={api}
+    />);
+    expect(screen.getByText("~/.ssh/config:3")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show the sources" }));
+    expect(await screen.findByText("~/.ssh/config:2")).toBeInTheDocument();
+    expect(screen.queryByText(/\/data\/data/u)).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("reads the sources only after the explicit action", async () => {

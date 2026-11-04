@@ -6,6 +6,9 @@ import android.util.Log;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 import mobile.Mobile;
 
 /**
@@ -17,6 +20,12 @@ final class BlockedProgramWatcher {
     private static final String TAG = "sshc";
 
     private static boolean started;
+
+    /**
+     * いまの待ちを知らせたセッションの tag。裏にいる間はこのスレッドが、裏に回る瞬間は Web 画面が知らせる
+     * （見えている間に始まった待ちは、Web 画面しか「見たか」を知らない）。同じ待ちで二度鳴らさない。
+     */
+    private static final Set<String> announcedTags = ConcurrentHashMap.newKeySet();
 
     private final Context context;
     private final TerminalNotifications notifications;
@@ -37,6 +46,15 @@ final class BlockedProgramWatcher {
         thread.start();
     }
 
+    /** この待ちをまだ知らせていなければ、知らせたことにして true を返す。 */
+    static boolean markAnnounced(String tag) {
+        return announcedTags.add(tag);
+    }
+
+    static void forgetAnnounced(String tag) {
+        announcedTags.remove(tag);
+    }
+
     private void watch() {
         while (true) {
             try {
@@ -50,11 +68,12 @@ final class BlockedProgramWatcher {
     private void apply(JSONObject change) throws JSONException {
         String tag = TerminalNotifications.sessionTag(change.getString("sessionId"));
         if (!change.getBoolean("blocked")) {
+            forgetAnnounced(tag);
             notifications.cancel(tag);
             return;
         }
         // 見えている画面にはサイドバーの印がある。Web 画面の通知と同じく、見ていない人にだけ知らせる。
-        if (AppVisibility.isVisible()) return;
+        if (AppVisibility.isVisible() || !markAnnounced(tag)) return;
         notifications.showBlockedProgram(
                 tag,
                 NativeBridge.limitText(

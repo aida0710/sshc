@@ -54,6 +54,13 @@ public final class NativeBridgeTest {
             notified = tag + "|" + title + "|" + body;
         }
 
+        String blockedProgramNotified;
+
+        @Override
+        public void showBlockedProgramNotification(String tag, String title, String body) {
+            blockedProgramNotified = tag + "|" + title + "|" + body;
+        }
+
         String cancelled;
 
         @Override
@@ -111,6 +118,21 @@ public final class NativeBridgeTest {
         Host host = new Host();
         assertEquals("", new NativeBridge(host).showNotification("sshc-terminal-1", "build", "done\nok"));
         assertEquals("sshc-terminal-1|build|done\nok", host.notified);
+    }
+
+    @Test
+    public void プログラムの待ちの通知を渡す() {
+        Host host = new Host();
+        assertEquals("", new NativeBridge(host).showBlockedProgramNotification("sshc-terminal-1", "web-01", "許可待ち"));
+        assertEquals("sshc-terminal-1|web-01|許可待ち", host.blockedProgramNotified);
+    }
+
+    @Test
+    public void 許可されていなければプログラムの待ちの通知も渡さない() {
+        Host host = new Host();
+        host.permission = "default";
+        assertEquals("notifications_blocked", new NativeBridge(host).showBlockedProgramNotification("sshc-terminal-1", "web-01", "許可待ち"));
+        assertEquals(null, host.blockedProgramNotified);
     }
 
     @Test

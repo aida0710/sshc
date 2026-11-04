@@ -47,6 +47,8 @@ type Spec struct {
 	// ResumeProgram は、前のエンジンでこのセッションに動いていた、続きから始められるプログラムの
 	// OSC 7501 の名前である。無ければ空。
 	ResumeProgram string
+	// ResumeStartsInDirectory は、そのプログラムが動いていたフォルダで新しいシェルが始まることを表す。
+	ResumeStartsInDirectory bool
 }
 
 // Startup は、使える状態になった Process へ、接続のたびに送るものである。
@@ -256,6 +258,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 	}
 	if isResumableProgram(spec.ResumeProgram) {
 		session.resumeProgram = spec.ResumeProgram
+		session.resumeStartsInDirectory = spec.ResumeStartsInDirectory
 	}
 	if spec.Alias != "" {
 		session.titleSource = TitleConnection
