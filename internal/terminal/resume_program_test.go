@@ -51,9 +51,25 @@ func TestANewShellInPlaceOfOneThatRanClaudeCodeSaysHowToContinue(t *testing.T) {
 	}
 }
 
+func TestAShellWithNoKnownDirectoryOffersNoTapAndSaysWhereToRunTheCommand(t *testing.T) {
+	first := newFakeProcess()
+	session, spy := openLosing(t, first)
+	first.feed(claudeCodeReport)
+	testwait.Until(t, func() bool { return session.View().ProgramStatus != nil })
+
+	first.exit(transportLost)
+	testwait.Until(t, func() bool { return len(spy.seen()) == 2 && session.View().State == terminal.StateConnected })
+	said := "動かしていたフォルダで claude --continue を実行してください"
+	testwait.Until(t, func() bool { return strings.Contains(string(snapshotOf(session)), said) })
+	if hint := session.View().Resume; hint != nil {
+		t.Errorf("Resume = %+v, but running it here would miss the conversation", hint)
+	}
+}
+
 func TestTheHintGoesOnceSomethingIsRunInTheNewShell(t *testing.T) {
 	first := newFakeProcess()
 	session, _ := openLosing(t, first)
+	first.feed("\x1b]7;file://host/home/me/src\x1b\\")
 	first.feed(claudeCodeReport)
 	testwait.Until(t, func() bool { return session.View().ProgramStatus != nil })
 	first.exit(transportLost)
@@ -112,7 +128,7 @@ func TestTheRecordForTheNextEngineNamesTheProgramAndASessionOpenedFromItSaysHowT
 
 	registry, _ := newFastRegistry()
 	reopened, err := registry.Open(context.Background(), terminal.Spec{
-		Kind: terminal.KindSSH, Alias: "web", Title: "web", ResumeProgram: "claude-code",
+		Kind: terminal.KindSSH, Alias: "web", Title: "web", ResumeProgram: "claude-code", ResumeStartsInDirectory: true,
 		Open: func(context.Context, terminal.Size) (terminal.Process, error) { return newFakeProcess(), nil },
 	})
 	if err != nil {

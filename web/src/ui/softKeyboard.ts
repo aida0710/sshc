@@ -28,6 +28,10 @@ function isSoftKeyboardOpen(): boolean {
 // Android brings the keyboard up on any tap while a text field has the focus, and such a key should not.
 export function keepKeyboardAsIs(event: { preventDefault(): void }): void {
   event.preventDefault();
+  letGoOfFieldWhileKeyboardClosed();
+}
+
+export function letGoOfFieldWhileKeyboardClosed(): void {
   if (isSoftKeyboardOpen()) return;
   const active = document.activeElement;
   if (isTextEntry(active)) active.blur();

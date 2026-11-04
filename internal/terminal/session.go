@@ -79,6 +79,8 @@ type Session struct {
 	// resume_program.go.
 	resumeProgram   string
 	resumeDirectory string
+	// resumeStartsInDirectory says the new shell starts where the program ran.
+	resumeStartsInDirectory bool
 
 	reopen         func(ctx context.Context, size Size) (Process, error)
 	reconnectError func(error) (retry bool, problem string)

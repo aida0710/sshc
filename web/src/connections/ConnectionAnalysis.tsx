@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { shownFilePath } from "../android/shownFilePath";
 import type { HostDetail } from "../api/config";
 import type { DiagnosticsApi, EffectiveResponse } from "../api/diagnostics";
 import { useTranslate } from "../i18n/context";
@@ -95,7 +96,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
                     <tr key={`${source.path}:${source.line}:${source.keyword}`} className="border-t border-line">
                       <th scope="row" className="py-1.5 pr-3 text-left font-mono text-xs font-normal text-ink-muted">{source.keyword}</th>
                       <td className="py-1.5 pr-3 font-mono text-xs text-ink">{source.value}</td>
-                      <td className="py-1.5 pr-3 font-mono text-[11.5px] text-ink-faint">{`${source.path}:${source.line}`}</td>
+                      <td className="py-1.5 pr-3 font-mono text-[11.5px] text-ink-faint">{`${shownFilePath(source.path)}:${source.line}`}</td>
                       <td className="py-1.5 text-xs text-ink-faint">{t(source.winner ? "diag.inEffect" : "diag.superseded")}</td>
                     </tr>
                   ))}
@@ -111,5 +112,5 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
 
 // sourceText は、値を読んだ場所（~/.ssh からのファイルと行）である。
 function sourceText(source: { path?: string; absolute?: string; line?: number }): string {
-  return `${source.path ?? source.absolute ?? ""}:${source.line ?? 0}`;
+  return `${shownFilePath(source.path ?? source.absolute ?? "")}:${source.line ?? 0}`;
 }
