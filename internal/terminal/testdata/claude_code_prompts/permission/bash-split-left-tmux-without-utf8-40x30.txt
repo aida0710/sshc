@@ -1,0 +1,30 @@
+ ______ note.txt __ │33
+ __________________ │34
+____________________│35
+ date > note.txt && │36
+ ls -la             │37
+____________________│38
+ Do you want to     │39
+ proceed?           │40
+ _ 1. Yes           │41
+   2. Yes, and      │42
+      always allow  │43
+      access to     │44
+      /tmp/claude-10│45
+      00/-home-demo-│46
+      projects-sshc/│47
+      02e7db62-31bb-│48
+      457b-a4f3-f6a3│49
+      ee72c1e7/scrat│50
+      chpad/lab/home│51
+      /project from │52
+   3. Yes, and ect  │53
+      switch to auto│54
+      mode · auto   │55
+      mode handles  │56
+      these prompts │57
+   4. Nor you       │58
+                    │59
+ Esc to cancel ·    │60
+ Tab to amend       │$
+[lab] 0:2.1.318*                  12:00

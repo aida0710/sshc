@@ -1,0 +1,30 @@
+ ▝▝   ▝▝   ~/project                              │33
+                                                  │34
+                                                  │35
+❯ このフォルダの中身を一覧して                    │36
+                                                  │37
+● 確かめます。                                    │38
+                                                  │39
+● 日時を note.txt に書いてから一覧する            │40
+  ⎿  $ date > note.txt && ls -la                  │41
+                                                  │42
+──────────────────────────────────────────────────│43
+ Bash command                                     │44
+ Tip: auto mode handles these prompts for you —   │45
+ choose "switch to auto mode" below               │46
+ 日時を note.txt に書いてから一覧する             │47
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│48
+ date > note.txt && ls -la                        │49
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│50
+ Do you want to proceed?                          │51
+ ❯ 1. Yes                                         │52
+   2. Yes, and always allow access to             │53
+      /tmp/claude-1000/-home-demo-projects-sshc/02│54
+      e7db62-31bb-457b-a4f3-f6a3ee72c1e7/scratchpa│55
+      d/lab/home/project from this project        │56
+   3. Yes, and switch to auto mode · auto mode    │57
+      handles these prompts for you               │58
+   4. No                                          │59
+                                                  │60
+ Esc to cancel · Tab to amend                     │$
+[lab] 0:2.1.318*                                                                              12:00

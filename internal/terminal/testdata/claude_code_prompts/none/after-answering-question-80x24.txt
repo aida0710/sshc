@@ -1,0 +1,24 @@
+
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Opus 5.5 · API Usage Billing
+ ▝▝   ▝▝   ~/project
+
+
+❯ 質問してください
+
+● 確かめます。
+
+● User declined to answer questions
+  ⎿  · どちらの案で進めますか？ (案A / 案B)
+
+● 確かめました。
+
+✻ Brewed for 0s · done 10:28 PM
+
+
+  tmux detected · scroll with PgUp/PgDn · or add 'set -g mouse on' to ~/.tmux…
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+[lab] 0:2.1.318*                                                          12:00
