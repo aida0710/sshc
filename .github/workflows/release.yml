@@ -325,27 +325,17 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
-      - run: npm ci --prefix demo && npm ci --prefix web
-      - run: npm test --prefix demo
-      - name: Build the versioned VM images and UI
-        env:
-          VERSION: ${{ env.RELEASE_TAG }}
+      - name: Install what the VM images are packed with
         run: |
           sudo apt-get update
           sudo apt-get install -y cpio
-          bash demo/scripts/build-images.sh
-          npm run build --prefix web -- --base=./ --outDir ../demo/images/ui
-          npm run build --prefix demo
       # runner に最初から入っている Google Chrome で確かめ、Chromium をダウンロードしない。
       # ダウンロードは遅い日に止まることがある（CI の a11y の検査も同じ理由でやめた）。
-      - name: Verify browser SSH and SFTP
+      - name: Build the versioned demo and verify browser SSH and SFTP
         env:
+          VERSION: ${{ env.RELEASE_TAG }}
           SSHC_DEMO_CHROMIUM: /usr/bin/google-chrome
-        run: |
-          node demo/scripts/serve.mjs > "$RUNNER_TEMP/demo-server.log" 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid"' EXIT
-          node demo/scripts/check-browser.mjs
+        run: bash demo/scripts/verify-browser-demo.sh
       - name: Package the complete demo
         run: node demo/scripts/package-release.mjs dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
