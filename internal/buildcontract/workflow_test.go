@@ -104,6 +104,66 @@ func TestVPNImageTestsNeededScriptFollowsTheVPNTestDependencies(t *testing.T) {
 	}
 }
 
+// ブラウザデモの確認が Release でしか流れないと、落ちたときにはタグを打ったあとで、バージョンを作り直すことになる
+// （v0.58.0、v0.60.1）。CI と Release は同じスクリプトを流し、CI は PR の差分で要るかを決める。
+func TestCIAndReleaseVerifyTheBrowserDemoWithOneScript(t *testing.T) {
+	const verifyCommand = "bash demo/scripts/verify-browser-demo.sh"
+	ci := readWorkflowDocument(t)
+	release, _ := readReleaseWorkflow(t)
+	for name, job := range map[string]workflowJob{"ci.yml": ci.Jobs["browser-demo"], "release.yml": release.Jobs["browser-demo"]} {
+		found := false
+		for _, step := range job.Steps {
+			found = found || strings.TrimSpace(step.Run) == verifyCommand
+		}
+		if !found {
+			t.Errorf("%s jobs.browser-demo must run %q", name, verifyCommand)
+		}
+	}
+	decide, found := namedStep(ci.Jobs["changes"], "Decide whether the browser demo check runs")
+	if !found || !strings.Contains(decide.Run, "git diff --name-only HEAD^1 HEAD | scripts/ci/browser-demo-needed.sh") {
+		t.Error("jobs.changes must decide the browser demo check from the change with scripts/ci/browser-demo-needed.sh")
+	}
+	if condition := ci.Jobs["browser-demo"].If; !strings.Contains(condition, "needs.changes.outputs.browser-demo != 'false'") || !strings.Contains(condition, "!cancelled()") {
+		t.Errorf("jobs.browser-demo if = %q; it must run unless the change says it is not needed, also when jobs.changes failed", condition)
+	}
+}
+
+// browser-demo-needed.sh は、画面、デモ、エンジン、判定と workflow 自身のどれかが変わったときだけ true を返す。
+func TestBrowserDemoNeededScriptFollowsWhatTheDemoRuns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the script runs on the Linux runner")
+	}
+	cases := []struct {
+		name  string
+		paths string
+		want  string
+	}{
+		{"the documents only", "pages/guide/install.md\ndocs/releasing.md\nREADME.md\n", "false"},
+		{"the Android app only", "android/app/build.gradle\n", "false"},
+		{"the web UI", "pages/guide/install.md\nweb/src/App.tsx\n", "true"},
+		{"the demo", "demo/scripts/check-browser.mjs\n", "true"},
+		{"the engine", "internal/terminal/session.go\n", "true"},
+		{"the command", "cmd/sshc/main.go\n", "true"},
+		{"the module file", "go.sum\n", "true"},
+		{"the workflow itself", ".github/workflows/release.yml\n", "true"},
+		{"the decision itself", "scripts/ci/browser-demo-needed.sh\n", "true"},
+		{"nothing given", "", "true"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			command := exec.Command("bash", filepath.Join("..", "..", "scripts", "ci", "browser-demo-needed.sh"))
+			command.Stdin = strings.NewReader(testCase.paths)
+			output, err := command.Output()
+			if err != nil {
+				t.Fatalf("run script: %v", err)
+			}
+			if got := strings.TrimSpace(string(output)); got != testCase.want {
+				t.Fatalf("browser demo check needed = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
 // 全E2E は実バイナリをブラウザから操作するため時間がかかる。独立jobにはせず、
 // Makefile のローカル実行経路を維持する。主要画面のaxe検査だけはweb jobで走る。
 func TestCIWorkflowLeavesTheFullEndToEndSuiteForLocalRuns(t *testing.T) {

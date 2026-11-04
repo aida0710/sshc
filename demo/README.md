@@ -50,6 +50,8 @@ npm test --prefix demo
 npm run test:browser --prefix demo
 ```
 
+`demo/scripts/verify-browser-demo.sh`は、組み立てから確認までを1回で流す。CIの`browser-demo`のjobとReleaseが流すものと同じで、DockerとcpioとGoが要る。
+
 ブラウザ検証にはPlaywrightのChromiumが必要。既存のChromiumは`SSHC_DEMO_CHROMIUM`で指定できる。
 公開先は`SSHC_DEMO_TEST_URL`、画像の保存先は`SSHC_DEMO_ARTIFACTS`で指定する。
 検証は実際のVMで、起動前の取得抑止、両方へのCLI接続、Webターミナル、SFTP編集、リセットを確かめる。
