@@ -1080,6 +1080,8 @@ export const en = {
   "terminal.composer": "Text to send",
   "terminal.composerField": "Text to send to the terminal",
   "terminal.composerPlaceholder": "Type text to send",
+  "terminal.composerSecretField": "Password to send to the terminal",
+  "terminal.composerSecretPlaceholder": "Type the password",
   "terminal.composerReconnectPlaceholder": "Send to reconnect",
   "terminal.composerSend": "Send",
   "terminal.composerPressEnter": "Press Enter",
