@@ -86,7 +86,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
   }
 
   return (
-    <Card as="section" radius="md" aria-labelledby="group-editor-heading" className="flex flex-col gap-5 p-5">
+    <Card as="section" radius="md" aria-labelledby="group-editor-heading" className="flex shrink-0 flex-col gap-5 p-5">
       <header className="flex items-start gap-3">
         <span
           aria-hidden="true"
@@ -97,7 +97,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs text-ink-faint">{t("groupEditor.label")}</p>
-          <h3 id="group-editor-heading" className="truncate text-base font-semibold tracking-tight text-ink">
+          <h3 id="group-editor-heading" title={`${parent}${label}`} className="truncate text-base font-semibold tracking-tight text-ink">
             {parent === "" ? null : <span className="font-normal text-ink-faint">{parent}</span>}
             {label}
           </h3>
@@ -139,7 +139,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
         <ul className="mt-3 flex flex-col gap-1.5">
           {draft.other.map((setting, index) => (
             <li key={`${setting.keyword}-${index}`} className="flex items-center gap-2 rounded-md bg-surface-subtle px-2 py-1.5 font-mono text-xs text-ink">
-              <span className="min-w-0 flex-1 truncate">{`${setting.keyword} ${formatDirectiveValues(setting.keyword, setting.values) ?? ""}`}</span>
+              <span title={`${setting.keyword} ${formatDirectiveValues(setting.keyword, setting.values) ?? ""}`} className="min-w-0 flex-1 truncate">{`${setting.keyword} ${formatDirectiveValues(setting.keyword, setting.values) ?? ""}`}</span>
               <button
                 type="button"
                 aria-label={t("groupEditor.removeOther", { keyword: setting.keyword })}
@@ -173,7 +173,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
             type="color"
             value={draft.colour === "" ? "#8e8e93" /* palette-exempt: ネイティブコントロール自身の中立色 */ : draft.colour}
             onChange={(event) => setDraft({ ...draft, colour: event.currentTarget.value })}
-            className="h-8 w-12 rounded-md border border-control-line bg-control"
+            className="h-8 w-12 rounded-md border border-control-line bg-control mobile-layout:h-11"
           />
         </label>
       </div>

@@ -6,8 +6,6 @@ import {
   control,
   hintText,
   sectionHeading,
-  tableHeadCell,
-  tableHeadRow,
 } from "../ui/form";
 import { useTranslate } from "../i18n/context";
 import {
@@ -19,6 +17,7 @@ import {
 } from "./diagnosticLabels";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader, PageSection } from "../ui/page";
+import { ValueSourceTable } from "../sshconfig/ValueSourceTable";
 import { Icon } from "../ui/icons";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
@@ -148,7 +147,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
             {embedded ? (
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-ink-faint">{t("diag.hostAlias")}</p>
-                <p className="mt-1 truncate font-mono text-base font-semibold text-ink">{alias}</p>
+                <p title={alias} className="mt-1 truncate font-mono text-base font-semibold text-ink">{alias}</p>
               </div>
             ) : (
               <div className="min-w-56 flex-1 sm:max-w-sm">
@@ -158,7 +157,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
                     onChange={(event) => setTypedAlias(event.target.value)}
                     list="diagnostic-host-options"
                     placeholder={t("diag.hostAliasPlaceholder")}
-                    className={`${control} font-mono`}
+                    className={`${control} font-mono [&::-webkit-calendar-picker-indicator]:hidden!`}
                   />
                 </Field>
                 <datalist id="diagnostic-host-options">
@@ -190,23 +189,6 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
         <ExecutableDirectiveConfirmation directives={pendingDirectives} busy={check.busy} onAcknowledge={acknowledgeAndTestAuthentication} />
       )}
 
-      {config ? (
-        <PageSection heading={t("diag.configuration")} meta={String(config.files.length)}>
-          <ul className="divide-y divide-line">
-            {config.files.map((file) => (
-              <li key={file.path} className="flex items-baseline gap-2 py-2.5 font-mono text-xs text-ink-muted">
-                <span className={`size-1.5 shrink-0 -translate-y-px rounded-full ${file.missing ? "bg-notice-ink" : "bg-live"}`} />
-                <span title={file.path} className="min-w-0 break-all">{relativeConfigPath(config.root, file.path)}</span>
-                {file.missing ? <span className="shrink-0 text-notice-ink">{t("diag.missingSuffix")}</span> : null}
-              </li>
-            ))}
-          </ul>
-          {config.diagnostics.length > 0 ? (
-            <ConfigDiagnosticList diagnostics={config.diagnostics} className="mt-2 rounded-[9px] bg-well px-3 py-2" />
-          ) : null}
-        </PageSection>
-      ) : null}
-
       {hasResults ? <div className="flex flex-col border-t border-line">
       {directives.length > 0 ? (
         <section className="mt-5 rounded-[10px] bg-notice px-4 py-4 text-sm">
@@ -232,41 +214,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
       {effective && effective.sources.length > 0 ? (
         <section className="py-4">
-          <p className="mb-2 flex items-center justify-end gap-1 text-xs text-ink-muted md:hidden">
-            {t("diag.tableScrollHint")}
-            <Icon name="arrowRight" className="size-3.5" />
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-
-              <caption className={`mb-2 text-left ${hintText}`}>{t("diag.sourcesCaption")}</caption>
-              <thead>
-                <tr className={tableHeadRow}>
-                  <th scope="col" className={tableHeadCell}>{t("diag.columnKeyword")}</th>
-                  <th scope="col" className={tableHeadCell}>{t("diag.columnValue")}</th>
-                  <th scope="col" className={tableHeadCell}>{t("diag.columnWhere")}</th>
-                  <th scope="col" className={tableHeadCell}>{t("diag.columnCondition")}</th>
-                  <th scope="col" className={tableHeadCell}>{t("diag.columnState")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {effective.sources.map((source) => (
-                  <tr
-                    key={`${source.path}:${source.line}:${source.keyword}`}
-                    className={`border-b border-line ${source.winner ? "" : "opacity-60"}`}
-                  >
-                    <th scope="row" className="py-1.5 pr-3 text-left font-normal text-ink-muted">
-                      {source.keyword}
-                    </th>
-                    <td className="py-1.5 pr-3 font-mono text-xs text-ink">{source.value}</td>
-                    <td className="py-1.5 pr-3 font-mono text-xs text-ink-faint">{`${source.path}:${source.line}`}</td>
-                    <td className="py-1.5 pr-3 font-mono text-xs text-ink-faint">{source.condition}</td>
-                    <td className="py-1.5 text-ink-faint">{source.winner ? t("diag.inEffect") : t("diag.superseded")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ValueSourceTable sources={effective.sources} label={t("diag.sourcesCaption")} captionShown showCondition />
         </section>
       ) : null}
 
@@ -281,7 +229,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
             {effective.route.map((stage) => (
               <li key={`${stage.order}-${stage.hop}`} className="flex items-start gap-3" style={{ marginInlineStart: `${stage.depth}rem` }}>
                 <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-[10px] text-ink-muted">{stage.order + 1}</span>
-                <div><span className="font-medium text-ink">{stage.hop}</span>
+                <div className="min-w-0 [overflow-wrap:anywhere]"><span className="font-medium text-ink">{stage.hop}</span>
                 {stage.complex ? (
                   <span className="ml-2 text-notice-ink">{t("diag.hopComplex")}</span>
                 ) : (
@@ -350,6 +298,22 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
       </div> : null}
       </div> : null}
 
+      {config ? (
+        <PageSection heading={t("diag.configuration")} meta={String(config.files.length)}>
+          <ul className="divide-y divide-line">
+            {config.files.map((file) => (
+              <li key={file.path} className="flex items-baseline gap-2 py-2.5 font-mono text-xs text-ink-muted">
+                <span className={`size-1.5 shrink-0 -translate-y-px rounded-full ${file.missing ? "bg-notice-ink" : "bg-live"}`} />
+                <span title={file.path} className="min-w-0 [overflow-wrap:anywhere]">{relativeConfigPath(config.root, file.path)}</span>
+                {file.missing ? <span className="shrink-0 text-notice-ink">{t("diag.missingSuffix")}</span> : null}
+              </li>
+            ))}
+          </ul>
+          {config.diagnostics.length > 0 ? (
+            <ConfigDiagnosticList diagnostics={config.diagnostics} className="mt-2 rounded-[9px] bg-well px-3 py-2" />
+          ) : null}
+        </PageSection>
+      ) : null}
     </section>
   );
 }

@@ -93,7 +93,7 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
                   } ${dropTargetLook({ accepts: dragging && target !== null, over: over === key })}`}
                 >
                   {trash ? <Icon name="delete" className="size-3.5 shrink-0" /> : null}
-                  <span className="min-w-0 flex-1 truncate">{labelOf(row.folder, t)}</span>
+                  <span title={labelOf(row.folder, t)} className="min-w-0 flex-1 truncate">{labelOf(row.folder, t)}</span>
                   <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-ink-faint">{row.count}</span>
                 </button>
               </li>

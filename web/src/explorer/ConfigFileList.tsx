@@ -73,7 +73,7 @@ export function ConfigFileList({
             <li key={node.file.absolute} style={indent} className="flex items-start gap-2 px-2.5 py-2">
               <Icon name="config" className="mt-px size-[15px] shrink-0 text-ink-faint" />
               <p className="min-w-0 text-xs">
-                <span className="block break-all font-mono text-ink-muted">{node.file.absolute}</span>
+                <span className="block [overflow-wrap:anywhere] font-mono text-ink-muted">{node.file.absolute}</span>
                 <span className="mt-1 block leading-5 text-notice-ink">{t("explorer.externalFile")}</span>
               </p>
             </li>
@@ -99,7 +99,7 @@ export function ConfigFileList({
               <span data-config-node-icon aria-hidden="true" className={`shrink-0 ${current ? "text-ink" : "text-ink-muted"}`}>
                 <Icon name="config" className="size-[15px]" />
               </span>
-              <span className={`min-w-0 truncate font-mono text-[13px] text-ink ${current ? "font-semibold" : ""}`}>{fileName(path)}</span>
+              <span title={path} className={`min-w-0 truncate font-mono text-[13px] text-ink ${current ? "font-semibold" : ""}`}>{fileName(path)}</span>
             </button>
             {notes === "" ? null : <p className="-mt-1 pb-2 pl-[35px] pr-2.5 text-xs text-ink-faint">{notes}</p>}
           </li>

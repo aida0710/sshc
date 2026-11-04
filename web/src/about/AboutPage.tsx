@@ -89,8 +89,8 @@ export function AboutPage({ api = aboutApi, updates = updateApi, sessions = term
         {aboutLoad.state === "failed" ? <Notice tone="danger">{t("about.loadFailed")}</Notice> : about === null ? <p role="status" className="text-sm text-ink-muted">{t("about.loading")}</p> : <BuildDetails about={about} />}
       </PageSection>
       <PageSection heading={t("about.updates")} headingId="about-update-heading">
-        <div className="grid gap-3 text-sm text-ink-muted">
-          {currentState === null ? null : <p role="status">{currentState}</p>}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 text-sm text-ink-muted">
+          {currentState === null ? null : <p role="status" className="[overflow-wrap:anywhere]">{currentState}</p>}
           <FactRows facts={updateFacts} />
           {checkFailure === "" ? null : <Notice tone="danger"><span className="grid gap-1"><span>{t("update.checkFailed")}</span><span className="break-words">{checkFailure}</span></span></Notice>}
           {reason === undefined ? null : <p>{t(updateMessage(reason))}</p>}

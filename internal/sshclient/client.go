@@ -321,7 +321,7 @@ func (d Dialer) connectOne(ctx context.Context, request hopConnection) (*ssh.Cli
 	if err == nil || ctx.Err() != nil || !hostKeys.tookConfirmation() || !lostWhileAnswering(err) {
 		return client, err
 	}
-	request.trace.announce("ホスト鍵の確認を待っている間に接続が切れたので、つなぎ直します。")
+	request.trace.announce("ホスト鍵の確認を待っている間に接続が切れたので、再接続します。")
 	return d.attemptHop(ctx, request, hostKeys)
 }
 

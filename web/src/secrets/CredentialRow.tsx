@@ -130,7 +130,7 @@ function AssignedHosts({ hosts, onUnassign }: { hosts: string[]; onUnassign: (ho
         <ul aria-label={t("secrets.assignedHosts")} className="flex flex-col">
           {hosts.map((host) => (
             <li key={host} className="flex min-h-9 items-center gap-2 border-t border-line first:border-t-0">
-              <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-ink">{host}</span>
+              <span title={host} className="min-w-0 flex-1 truncate font-mono text-[13px] text-ink">{host}</span>
               <Button small aria-label={t("secrets.unassignTOTP", { host })} onClick={() => onUnassign(host)}>
                 {t("secrets.unassign")}
               </Button>

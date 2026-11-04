@@ -652,7 +652,7 @@ export const ja = {
   "runTarget.update": "{alias}を更新",
   "runTarget.updating": "{alias}を更新しています…",
   "runTarget.updateProgress": "{alias}でsshc updateを実行しています（{seconds}秒）",
-  "runTarget.updateConsequence": "更新すると、{alias}で動いているセッションはすべて終了します。終わると自動でつなぎ直します。",
+  "runTarget.updateConsequence": "更新すると、{alias}で動いているセッションはすべて終了します。更新が終わると自動で再接続します。",
   "engineInfo.open": "sshcエンジンの情報…",
   "engineInfo.heading": "sshcエンジン{alias}",
   "engineInfo.version": "バージョン",
@@ -1050,7 +1050,7 @@ export const ja = {
   "terminal.reconnectFailed":
     "再接続に失敗しました。設定された上限まで再試行します。",
   "terminal.reconnectExhausted":
-    "SSHの接続が切れ、再接続できる回数の上限まで試してもつながりませんでした。",
+    "SSHの接続が切れ、再接続できる回数の上限まで試しても接続できませんでした。",
   "terminal.noticeFirstConnection": "初めての接続先です",
   "terminal.noticeCheckHostKey": "{target}のホスト鍵を確認してください",
   "terminal.hostKeyReject": "やめる",
@@ -1087,7 +1087,7 @@ export const ja = {
   "terminal.composerReconnectPlaceholder": "送信で再接続します",
   "terminal.composerSend": "送信",
   "terminal.composerPressEnter": "Enterを押す",
-  "terminal.composerWaitForConnection": "まだつながっていません。つながったら、もう一度送信してください。",
+  "terminal.composerWaitForConnection": "まだ接続していません。接続したら、もう一度送信してください。",
   "terminal.composerReconnectFirst": "接続していません。再接続してから、もう一度送信してください。",
   "terminal.composerSessionEnded": "このセッションは終了しています。送るには新しいセッションを開いてください。",
   "terminal.extraKeys": "追加キー",
@@ -1574,7 +1574,7 @@ export const ja = {
   "settings.presetDescription": "選んだプリセットを編集します。",
   "settings.vaultHeading": "Vault",
   "settings.machinesHeading": "Machines",
-  "settings.machinesDescription": "Syncでつながっているマシンです。どのプリセットを使うかとポートは、マシンごとに選びます。",
+  "settings.machinesDescription": "Syncで同期しているマシンです。どのプリセットを使うかとポートは、マシンごとに選びます。",
   "settings.groupGlobal": "全体",
   "settings.groupPreset": "プリセット",
   "settings.groupMachines": "マシン",
@@ -2064,7 +2064,6 @@ export const ja = {
   "diagnostic.showDetails": "診断情報を表示",
   "diagnostic.dismiss": "エラーを閉じる",
 
-  "history.requestRejected": "要求が拒否されました（{code}）。",
   "history.pageTitle": "History",
   "history.pageDescription":
     "復元しても、それより新しい履歴は失われません。",
@@ -2119,6 +2118,7 @@ export const ja = {
   "history.change.removeDirectory": "このフォルダを消します。",
   "history.change.note": "中身のない、変更の記録です。",
   "history.loading": "履歴を読み込んでいます…",
+  "history.readFailed": "履歴を読み込めませんでした。ページを開き直してください。",
   "history.restored": "{path}を復元しました。",
   "history.completedTransaction": "中断していた変更を完了しました。",
   "history.rolledBack": "中断していた変更を取り消しました。",
@@ -2212,8 +2212,7 @@ export const ja = {
     "この変更によりIncludeの参照関係が不正になります。何も書き込んでいません。",
   "preview.conflictError":
     "このファイルはアプリケーションの外で変更されました。何も書き込まれていません。",
-  "preview.rejected":
-    "要求が拒否されました（{code}）。何も書き込まれていません。",
+  "preview.rejected": "要求を完了できませんでした。何も書き込まれていません。",
   "preview.changedOnDisk": "読み込み後にディスク上で変更された内容",
   "preview.pendingChange": "保留中の変更",
   "preview.mergeByHand":
@@ -2619,7 +2618,6 @@ export const ja = {
   "diag.directiveAt": "{keyword}（{path}:{line}）",
   "diag.sourcesCaption":
     "各値の参照元。「不採用」と表示された行は、採用された行より後に読み込まれたため効果がありません。",
-  "diag.tableScrollHint": "横にスワイプするとすべての列を確認できます",
   "diag.columnKeyword": "キーワード",
   "diag.columnValue": "値",
   "diag.columnWhere": "読み込み元",
@@ -2684,8 +2682,6 @@ export const ja = {
   "kh.removeFailed": "エントリを削除できませんでした。何も変更していません。",
   "kh.scanFailed": "このホストをスキャンできませんでした。",
   "kh.addFailed": "鍵を追加できませんでした。何も変更していません。",
-  "kh.addFailedCode":
-    "鍵を追加できませんでした（{code}）。何も変更していません。",
   "kh.removed": "1件のエントリを削除しました。",
   "kh.added": "{host}を追加しました。",
   "kh.search": "検索",
@@ -2751,7 +2747,6 @@ export const ja = {
   "rk.registerFailed": "鍵は登録されませんでした。接続先は変更していません。",
   "rk.publicKeyUnreadable":
     "指定した公開鍵を読み取れませんでした。どこにも接続していません。",
-  "rk.withCode": "{message}（{code}）",
   "rk.confirmHeading": "リモート登録の確認",
   "rk.confirmManyHeading": "{count}台への登録内容を確認",
   "rk.planFor": "{alias}への登録内容",
@@ -3212,7 +3207,7 @@ export const ja = {
   "conn.analysisSources": "この接続先に関係する設定行",
   "advanced.jumpHeading": "踏み台",
   "advanced.jumpVia": "経由する接続先",
-  "advanced.jumpNone": "なし（直接つなぐ）",
+  "advanced.jumpNone": "なし（直接接続）",
   "advanced.forwardListen": "待ち受け",
   "advanced.rowActions": "操作",
   "advanced.pending": "保存前",
@@ -3220,7 +3215,7 @@ export const ja = {
   "advanced.add": "追加",
   "advanced.otherHeading": "その他の設定",
   "advanced.count": "{count}件",
-  "advanced.keywordPlaceholder": "項目（例: ServerAliveInterval）",
+  "advanced.keywordPlaceholder": "ServerAliveInterval",
   "advanced.valuePlaceholder": "値",
   "advanced.keepNamed": "{keyword}を戻す",
   "advanced.removeNamed": "{keyword}を削除",
@@ -3236,7 +3231,7 @@ export const ja = {
   "conn.forwardLocal": "ローカル転送",
   "conn.forwardRemote": "リモート転送",
   "conn.forwardRemoteListenPort": "SSH接続先のポート",
-  "conn.forwardRemoteHint": "SSH接続先のポートから、sshcエンジンが到達できる転送先へつなぎます。接続先の転送許可が必要です。",
+  "conn.forwardRemoteHint": "SSH接続先のポートから、sshcエンジンが到達できる転送先へ接続します。接続先の転送許可が必要です。",
   "conn.forwardDynamic": "SOCKSプロキシ",
   "conn.forwardType": "種類",
   "conn.forwardListenPort": "ローカルポート",
@@ -3309,7 +3304,7 @@ export const ja = {
   "keys.heading": "SSH Keys",
   "keys.listHeading": "鍵",
   "keys.search": "鍵を検索",
-  "keys.searchPlaceholder": "ファイル、接続先、フィンガープリント",
+  "keys.searchPlaceholder": "ファイル名や接続先で検索",
   "keys.metricFiles": "SSHファイル",
   "keys.metricPrivate": "秘密鍵",
   "keys.metricAttention": "確認が必要",

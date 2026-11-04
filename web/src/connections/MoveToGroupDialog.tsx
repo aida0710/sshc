@@ -62,7 +62,7 @@ export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCan
                 className="flex min-h-11 w-full items-center gap-2 rounded-md pr-3 text-left text-sm text-ink transition-colors duration-150 hover:bg-hover md:min-h-9"
               >
                 <Icon name="groups" className="size-4 text-ink-faint" />
-                <span className="min-w-0 flex-1 truncate">{row.label}</span>
+                <span title={row.label} className="min-w-0 flex-1 truncate">{row.label}</span>
                 {moving ? <Spinner /> : null}
               </button>
             </li>

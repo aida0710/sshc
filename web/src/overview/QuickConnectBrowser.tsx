@@ -43,7 +43,7 @@ const homeView: StoredValue<QuickConnectView> = {
 
 // On a phone the groups are one line that scrolls sideways, so many of them leave the connections on the first
 // screen. The negative margin lets the line run to the edges of the card.
-const phoneGroupRow = "-mx-3.5 flex gap-2 overflow-x-auto px-3.5 [scrollbar-width:none]";
+const phoneGroupRow = "-mx-3 flex gap-2 overflow-x-auto px-3 [scrollbar-width:none]";
 const phoneGroupChip = "max-w-[70%] shrink-0";
 
 function connectionDestination(server: BrowserServer): string {

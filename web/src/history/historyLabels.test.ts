@@ -16,6 +16,17 @@ describe("historyOperationLabelKey", () => {
     expect(historyOperationLabelKey(operation)).toBe(key);
   });
 
+  it.each([
+    [["sshc/secrets/vault.json"], "history.operation.vault"],
+    [["sshc/machines/0123.json"], "history.operation.machine"],
+    [["sshc/metadata.json"], "history.operation.settings"],
+    [["known_hosts"], "history.operation.knownHosts"],
+    [["config"], "history.operation.configuration"],
+    [["connections/lab/hosts.conf"], "history.operation.configuration"],
+  ])("names a restore of %s by what the file holds", (paths, key) => {
+    expect(historyOperationLabelKey("config.restore", paths)).toBe(key);
+  });
+
   it("calls an operation it does not know a change, without showing its internal name", () => {
     expect(historyOperationLabelKey("something.new")).toBe("history.operation.other");
   });

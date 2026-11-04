@@ -38,6 +38,9 @@ const proxyJumpKeyword = "ProxyJump";
 // 1行の追加欄と表の行の、小さな文字の入力欄。
 const compactControl = `${control} h-[30px] py-0 text-[12.5px]`;
 
+// Where a forward goes is the one part of its row that gets long, and a finger cannot hover over a title, so it wraps.
+const forwardTargetCell = "py-1.5 pr-2 font-mono [overflow-wrap:anywhere]";
+
 // AdvancedSettings は、接続エディタの「踏み台・転送・その他」のタブである。踏み台・ポート転送・その他の設定の
 // 3つの節に、Host ブロックのディレクティブを並べる。area が Raw のときは、ブロックの文を直接編集する。
 // ディレクティブの下書きと文の下書きは、同時には持たない（片方を変えている間はもう片方を止める）。
@@ -226,8 +229,8 @@ export function AdvancedSettings({
           <table className="w-full table-fixed text-[12.5px]">
             <thead>
               <tr className="text-left text-[11.5px] text-ink-faint">
-                <th scope="col" className="w-[10rem] pb-1.5 pr-2 font-normal">{t("conn.forwardType")}</th>
-                <th scope="col" className="w-[6.5rem] pb-1.5 pr-2 font-normal">{t("advanced.forwardListen")}</th>
+                <th scope="col" className="w-[6.5rem] pb-1.5 pr-2 font-normal">{t("conn.forwardType")}</th>
+                <th scope="col" className="w-[5rem] pb-1.5 pr-2 font-normal">{t("advanced.forwardListen")}</th>
                 <th scope="col" className="pb-1.5 pr-2 font-normal">{t("conn.forwardDestination")}</th>
                 <th scope="col" className="w-14 pb-1.5"><span className="sr-only">{t("advanced.rowActions")}</span></th>
               </tr>
@@ -239,8 +242,8 @@ export function AdvancedSettings({
                 return (
                   <tr key={fieldKey(field)} className={`border-t border-line ${gone ? "text-ink-faint line-through" : "text-ink"}`}>
                     <td className="truncate py-1.5 pr-2">{t(forwardLabelKeys[forwardKindForKeyword(field.keyword) ?? "local"])}</td>
-                    <td className="truncate py-1.5 pr-2 font-mono">{ends.listen}</td>
-                    <td className="truncate py-1.5 pr-2 font-mono">{ends.target}</td>
+                    <td title={ends.listen} className="truncate py-1.5 pr-2 font-mono">{ends.listen}</td>
+                    <td className={forwardTargetCell}>{ends.target}</td>
                     <td className="py-1.5 text-right">{removeButton(field)}</td>
                   </tr>
                 );
@@ -250,8 +253,8 @@ export function AdvancedSettings({
                 return (
                   <tr key={`new-forward-${index}`} className="border-t border-line text-ink">
                     <td className="truncate py-1.5 pr-2">{t(forwardLabelKeys[forwardKindForKeyword(addition.keyword ?? "") ?? "local"])}</td>
-                    <td className="truncate py-1.5 pr-2 font-mono">{ends.listen}</td>
-                    <td className="truncate py-1.5 pr-2 font-mono">{ends.target}<span className="ml-2 font-sans text-[11px] text-notice-ink">{t("advanced.pending")}</span></td>
+                    <td title={ends.listen} className="truncate py-1.5 pr-2 font-mono">{ends.listen}</td>
+                    <td className={forwardTargetCell}>{ends.target}<span className="ml-2 font-sans text-[11px] text-notice-ink">{t("advanced.pending")}</span></td>
                     <td className="py-1.5 text-right"><RemoveToggle removed={false} disabled={fieldsDisabled} label={addition.keyword ?? ""} onToggle={() => setAdditions(additions.filter((candidate) => candidate !== addition))} /></td>
                   </tr>
                 );
@@ -259,7 +262,7 @@ export function AdvancedSettings({
             </tbody>
           </table>
         )}
-        <div className="mt-2 grid gap-2 @sm/editor:grid-cols-[10rem_6.5rem_minmax(0,1fr)_auto]">
+        <div className="mt-2 grid gap-2 @sm/editor:grid-cols-[6.5rem_5rem_minmax(0,1fr)_auto]">
           <select aria-label={t("conn.forwardType")} value={newForwardKind} disabled={fieldsDisabled} onChange={(event) => setNewForwardKind(event.currentTarget.value as PortForwardKind)} className={compactControl}>
             <option value="local">{t("conn.forwardLocal")}</option>
             <option value="remote">{t("conn.forwardRemote")}</option>
@@ -300,13 +303,13 @@ export function AdvancedSettings({
           })}
           {pendingOthers.map((addition, index) => (
             <li key={`new-directive-${index}`} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] items-center gap-2 border-t border-line py-1.5 first:border-t-0">
-              <span className="truncate font-mono text-xs text-ink-muted">{addition.keyword}</span>
-              <span className="truncate font-mono text-xs text-ink">{(addition.values ?? []).join(" ")}<span className="ml-2 font-sans text-[11px] text-notice-ink">{t("advanced.pending")}</span></span>
+              <span title={addition.keyword} className="truncate font-mono text-xs text-ink-muted">{addition.keyword}</span>
+              <span title={(addition.values ?? []).join(" ")} className="truncate font-mono text-xs text-ink">{(addition.values ?? []).join(" ")}<span className="ml-2 font-sans text-[11px] text-notice-ink">{t("advanced.pending")}</span></span>
               <RemoveToggle removed={false} disabled={fieldsDisabled} label={addition.keyword ?? ""} onToggle={() => setAdditions(additions.filter((candidate) => candidate !== addition))} />
             </li>
           ))}
         </ul>
-        <div className="mt-2 grid gap-2 @sm/editor:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <div className="mt-2 grid gap-2 @sm/editor:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto]">
           <input {...asciiTextEntry} id="new-directive" aria-label={t("host.newDirective")} placeholder={t("advanced.keywordPlaceholder")} value={newKeyword} disabled={fieldsDisabled} onChange={(event) => setNewKeyword(event.target.value)} className={`${compactControl} font-mono`} />
           <input {...literalTextEntry} id="new-value" aria-label={t("host.newValue")} placeholder={t("advanced.valuePlaceholder")} value={newValue} disabled={fieldsDisabled} onChange={(event) => setNewValue(event.target.value)} className={`${compactControl} font-mono`} />
           <Button className="h-[30px] py-0" disabled={fieldsDisabled} onClick={addDirective}>{t("advanced.add")}</Button>

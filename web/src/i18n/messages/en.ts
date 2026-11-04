@@ -2066,7 +2066,6 @@ export const en = {
   "diagnostic.showDetails": "Show diagnostic details",
   "diagnostic.dismiss": "Dismiss error",
 
-  "history.requestRejected": "The request was rejected ({code}).",
   "history.pageTitle": "History",
   "history.pageDescription":
     "Restoring a file keeps the newer history.",
@@ -2121,6 +2120,7 @@ export const en = {
   "history.change.removeDirectory": "Removes this folder.",
   "history.change.note": "A record of the change with no file contents.",
   "history.loading": "Loading history…",
+  "history.readFailed": "The history could not be read. Open the page again.",
   "history.restored": "Restored {path}.",
   "history.completedTransaction": "The interrupted transaction was completed.",
   "history.rolledBack": "The interrupted transaction was rolled back.",
@@ -2212,7 +2212,7 @@ export const en = {
     "This change would break the Include graph. Nothing was written.",
   "preview.conflictError":
     "The file changed outside this application. Nothing was written.",
-  "preview.rejected": "The request was rejected ({code}). Nothing was written.",
+  "preview.rejected": "The request could not be completed. Nothing was written.",
   "preview.changedOnDisk": "Changed on disk since you loaded it",
   "preview.pendingChange": "Your pending change",
   "preview.mergeByHand":
@@ -2620,7 +2620,6 @@ export const en = {
   "diag.directiveAt": "{keyword} at {path}:{line}",
   "diag.sourcesCaption":
     "Source of each value. A line marked “superseded” was read after the effective value and had no effect.",
-  "diag.tableScrollHint": "Swipe sideways to see every column",
   "diag.columnKeyword": "Keyword",
   "diag.columnValue": "Value",
   "diag.columnWhere": "Read from",
@@ -2685,8 +2684,6 @@ export const en = {
   "kh.removeFailed": "The entry could not be removed. Nothing was changed.",
   "kh.scanFailed": "The host could not be scanned.",
   "kh.addFailed": "The key could not be added. Nothing was changed.",
-  "kh.addFailedCode":
-    "The key could not be added ({code}). Nothing was changed.",
   "kh.removed": "Removed one entry.",
   "kh.added": "Added {host}.",
   "kh.search": "Search",
@@ -2750,7 +2747,6 @@ export const en = {
     "The key was not registered. The remote host was left as it was.",
   "rk.publicKeyUnreadable":
     "The selected public key could not be read. No connection was attempted.",
-  "rk.withCode": "{message} ({code})",
   "rk.confirmHeading": "Confirm remote registration",
   "rk.confirmManyHeading": "Confirm registration on {count} hosts",
   "rk.planFor": "Registration plan for {alias}",
@@ -3218,7 +3214,7 @@ export const en = {
   "advanced.add": "Add",
   "advanced.otherHeading": "Other settings",
   "advanced.count": "{count}",
-  "advanced.keywordPlaceholder": "Setting (e.g. ServerAliveInterval)",
+  "advanced.keywordPlaceholder": "ServerAliveInterval",
   "advanced.valuePlaceholder": "Value",
   "advanced.keepNamed": "Keep {keyword}",
   "advanced.removeNamed": "Remove {keyword}",
@@ -3306,7 +3302,7 @@ export const en = {
   "keys.heading": "Keys",
   "keys.listHeading": "Keys",
   "keys.search": "Search keys",
-  "keys.searchPlaceholder": "file, host or fingerprint",
+  "keys.searchPlaceholder": "File name or connection",
   "keys.metricFiles": "SSH files",
   "keys.metricPrivate": "Private keys",
   "keys.metricAttention": "Needs attention",

@@ -176,7 +176,7 @@ export function SyncHistorySection({
                           </p>
                           <ul className="mt-1 max-h-24 space-y-0.5 overflow-auto font-mono text-[11px] text-ink-muted">
                             {paths.map((path) => (
-                              <li key={path} className="break-all">
+                              <li key={path} className="[overflow-wrap:anywhere]">
                                 {path}
                               </li>
                             ))}

@@ -313,7 +313,7 @@ describe("KnownHostsPanel", () => {
     expect(screen.getByRole("button", { name: "Add to known_hosts" })).toBeDisabled();
   });
 
-  it("surfaces the refusal code from the add endpoint and stores nothing", async () => {
+  it("says the key could not be added when the add endpoint refuses, without its internal code, and stores nothing", async () => {
     const frameworkGlobals = ["IS_REACT_ACT_ENVIRONMENT"];
     const globalsBefore = Object.keys(window);
     const api = buildApi({
@@ -329,7 +329,9 @@ describe("KnownHostsPanel", () => {
     await userEvent.click(screen.getByLabelText(acknowledgement));
     await userEvent.click(screen.getByRole("button", { name: "Add to known_hosts" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("unverified_candidate");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The key could not be added.");
+    expect(alert).not.toHaveTextContent("unverified_candidate");
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
     const added = Object.keys(window).filter(

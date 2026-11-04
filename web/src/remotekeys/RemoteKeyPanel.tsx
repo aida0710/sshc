@@ -413,9 +413,7 @@ const failureMessages: Readonly<Record<string, MessageKey>> = {
 };
 
 function describeFailure(failure: unknown, t: Translate, fallback: MessageKey): string {
-  const code = failureCode(failure);
-  if (code === "") return t(fallback);
-  return t("rk.withCode", { message: t(failureMessages[code] ?? fallback), code });
+  return t(failureMessages[failureCode(failure)] ?? fallback);
 }
 
 async function settleWithLimit<Input, Output>(

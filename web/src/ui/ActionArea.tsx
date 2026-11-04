@@ -7,7 +7,7 @@ export function ActionArea({ children, status }: { children: ReactNode; status?:
   return (
     <div className="mt-6 flex min-h-12 flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
       <div className="min-w-0 flex-1">{status}</div>
-      <div className="max-w-full shrink-0">{children}</div>
+      <div className="flex max-w-full shrink-0 flex-wrap justify-end gap-2">{children}</div>
     </div>
   );
 }

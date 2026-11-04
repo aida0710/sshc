@@ -3,6 +3,7 @@ import { shownFilePath } from "../android/shownFilePath";
 import type { HostDetail } from "../api/config";
 import type { DiagnosticsApi, EffectiveResponse } from "../api/diagnostics";
 import { useTranslate } from "../i18n/context";
+import { ValueSourceTable } from "../sshconfig/ValueSourceTable";
 import { hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { EditorSection } from "./EditorSection";
@@ -42,7 +43,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
           <tbody>
             {detail.effective.entries.map((entry, index) => (
               <tr key={`${entry.keyword}-${index}`} className="border-t border-line first:border-t-0">
-                <th scope="row" className="w-[36%] truncate py-1.5 pr-2 text-left font-mono text-xs font-normal text-ink-muted">{entry.keyword}</th>
+                <th scope="row" title={entry.keyword} className="w-[36%] truncate py-1.5 pr-2 text-left font-mono text-xs font-normal text-ink-muted">{entry.keyword}</th>
                 <td className="truncate py-1.5 pr-2 font-mono text-xs text-ink" title={entry.values.join(" ")}>{entry.values.join(" ")}</td>
                 <td className="w-[38%] truncate py-1.5 text-right font-mono text-[11.5px] text-ink-faint" title={sourceText(entry.source)}>{sourceText(entry.source)}</td>
               </tr>
@@ -81,28 +82,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
           ) : null}
 
           {effective !== null && effective.sources.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table aria-label={t("conn.analysisSources")} className="w-full text-[12.5px]">
-                <thead>
-                  <tr className="text-left text-[11.5px] text-ink-faint">
-                    <th scope="col" className="pb-1.5 pr-3 font-normal">{t("diag.columnKeyword")}</th>
-                    <th scope="col" className="pb-1.5 pr-3 font-normal">{t("diag.columnValue")}</th>
-                    <th scope="col" className="pb-1.5 pr-3 font-normal">{t("diag.columnWhere")}</th>
-                    <th scope="col" className="pb-1.5 font-normal">{t("diag.columnState")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {effective.sources.map((source) => (
-                    <tr key={`${source.path}:${source.line}:${source.keyword}`} className="border-t border-line">
-                      <th scope="row" className="py-1.5 pr-3 text-left font-mono text-xs font-normal text-ink-muted">{source.keyword}</th>
-                      <td className="py-1.5 pr-3 font-mono text-xs text-ink">{source.value}</td>
-                      <td className="py-1.5 pr-3 font-mono text-[11.5px] text-ink-faint">{`${shownFilePath(source.path)}:${source.line}`}</td>
-                      <td className="py-1.5 text-xs text-ink-faint">{t(source.winner ? "diag.inEffect" : "diag.superseded")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ValueSourceTable sources={effective.sources} label={t("conn.analysisSources")} />
           ) : null}
         </div>
       </EditorSection>

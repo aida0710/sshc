@@ -12,7 +12,7 @@ export type DefaultField = { keyword: string; label: MessageKey; placeholder: st
 export const defaultFields: readonly DefaultField[] = [
   { keyword: "User", label: "groupEditor.user", placeholder: "deploy" },
   { keyword: "Port", label: "groupEditor.port", placeholder: "22" },
-  { keyword: "IdentityFile", label: "groupEditor.identityFile", placeholder: "~/.ssh/keys/id_ed25519" },
+  { keyword: "IdentityFile", label: "groupEditor.identityFile", placeholder: "~/.ssh/id_ed25519" },
   { keyword: "ProxyJump", label: "groupEditor.proxyJump", placeholder: "bastion" },
 ];
 

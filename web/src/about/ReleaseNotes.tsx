@@ -23,7 +23,7 @@ export function ReleaseNotes({ releases, current, latest }: ReleaseNotesProps) {
             return (
               <details key={release.version} open={release.version === latest && !isCurrent} className="group">
                 <DisclosureSummary className="flex-wrap py-3">
-                  <span className="font-medium text-ink">{release.version}</span>
+                  <span className="min-w-0 font-medium text-ink [overflow-wrap:anywhere]">{release.version}</span>
                   {isCurrent ? <span className="text-xs text-ink-muted">{t("about.currentRelease")}</span> : null}
                   {release.publishedAt === undefined ? null : <time dateTime={release.publishedAt} className="text-xs text-ink-muted">{formatDateTime(release.publishedAt, locale)}</time>}
                 </DisclosureSummary>
