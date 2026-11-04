@@ -40,6 +40,7 @@ const replacements: Record<Locale, Partial<Catalogue>> = {
     "history.backupRetention": "変更前のファイルはアプリの中に残します。",
     "conn.basicAgentOrInherited": "継承した鍵",
     "desktop.closeAllNote": "すべてのセッションとポート転送を終了します。",
+    "vpn.description": "Dockerが動いているマシンのsshcで使えます。このデバイスでは動きません。",
   },
   en: {
     "shell.bootstrapFailed": "Secure local session could not be started. Reopen the app.",
@@ -58,6 +59,7 @@ const replacements: Record<Locale, Partial<Catalogue>> = {
     "history.backupRetention": "Previous versions of changed files are kept inside the app.",
     "conn.basicAgentOrInherited": "Inherited keys",
     "desktop.closeAllNote": "This closes every session and port forward.",
+    "vpn.description": "Available in sshc on a machine running Docker. It does not run on this device.",
   },
 };
 

@@ -38,11 +38,22 @@ func (r *programStatusRecords) resumableApp() string {
 // noteProgramToResumeLocked is called as a new process replaces the old one,
 // while the records still say what ran there. A program named by the record of
 // the previous engine (Spec.ResumeProgram) stays until the new shell is up.
+//
+// A hint still waiting stays as it is: the shell that went ran nothing, and what
+// it reported is where it logged in. A shell that never moved says nothing about
+// the program either, since `cd dir && claude` on one line gives it no prompt to
+// report dir from.
 func (s *Session) noteProgramToResumeLocked() {
+	if s.resumeProgram != "" {
+		return
+	}
 	if app := s.programStatus.resumableApp(); app != "" {
 		s.resumeProgram = app
-		s.resumeDirectory = s.workingDirectory
+		s.resumeDirectory = ""
 		s.resumeStartsInDirectory = false
+		if s.workingDirectory != s.shellStartDirectory {
+			s.resumeDirectory = s.workingDirectory
+		}
 	}
 }
 
@@ -114,6 +125,11 @@ func (s *Session) forgetProgramToResumeOnEnter(input []byte) {
 	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	// The hint's command moves the shell on the same line that starts the program,
+	// so the shell has no prompt to report it from.
+	if hint := s.resumeHintLocked(); hint != nil && s.resumeDirectory != "" && bytes.Contains(input, []byte(hint.Command)) {
+		s.workingDirectory = s.resumeDirectory
+	}
 	s.resumeProgram, s.resumeDirectory = "", ""
 }
 

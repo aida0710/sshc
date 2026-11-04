@@ -1346,3 +1346,30 @@ func TestOverviewNeverSendsANullListForARequiredArray(t *testing.T) {
 		}
 	}
 }
+
+func TestRestoringTheVaultFromHistoryReloadsItAndLaterSavesWork(t *testing.T) {
+	harness := newConnectionUpdateHarness(t, "Host web\n  HostName web.example.com\n")
+	if err := setTestBoundPassword(harness, "web", "kept"); err != nil {
+		t.Fatal(err)
+	}
+	if err := setTestBoundPassword(harness, "web", "replaced"); err != nil {
+		t.Fatal(err)
+	}
+	history, err := harness.service.History()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 新しい順に並ぶ。先頭の変更の前の世代に "kept" が入っている。
+	if _, err := harness.service.Restore(history[0].ID, secret.WorkspacePath); err != nil {
+		t.Fatal(err)
+	}
+	if got := testBoundPasswordFor(harness.secrets, "web"); got != "kept" {
+		t.Errorf("password after restore = %q", got)
+	}
+	if err := setTestBoundPassword(harness, "web", "next"); err != nil {
+		t.Errorf("a save after restoring the vault: %v", err)
+	}
+	if got := testBoundPasswordFor(harness.secrets, "web"); got != "next" {
+		t.Errorf("password after the next save = %q", got)
+	}
+}

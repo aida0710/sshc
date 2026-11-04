@@ -106,7 +106,13 @@ public final class MainActivity extends ComponentActivity {
         }
 
         @Override
+        public void showBlockedProgramNotification(String tag, String title, String body) {
+            if (BlockedProgramWatcher.markAnnounced(tag)) terminalNotifications.showBlockedProgram(tag, title, body);
+        }
+
+        @Override
         public void cancelNotification(String tag) {
+            BlockedProgramWatcher.forgetAnnounced(tag);
             terminalNotifications.cancel(tag);
         }
 

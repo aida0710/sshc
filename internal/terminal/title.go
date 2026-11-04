@@ -56,7 +56,7 @@ func (s *Session) acceptTitle(generation uint64, title string) {
 	}
 	s.terminalTitle = title
 	if directory, ok := workingDirectoryFromTitle(title); ok {
-		s.workingDirectory = directory
+		s.noteWorkingDirectoryLocked(directory)
 	}
 	s.recomputeTitleLocked()
 }

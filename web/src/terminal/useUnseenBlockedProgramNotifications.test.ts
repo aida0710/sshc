@@ -43,10 +43,10 @@ describe("useUnseenBlockedProgramNotifications", () => {
 
   it("notifies on leaving about a program that started waiting out of the person's sight", () => {
     renderWith(waiting, nothingSeen);
-    expect(bridge.showNotification).not.toHaveBeenCalled();
+    expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
     setPageHidden(true);
-    expect(bridge.showNotification).toHaveBeenCalledTimes(1);
-    const [tag, title, body] = vi.mocked(bridge.showNotification).mock.calls[0] as unknown as [string, string, string];
+    expect(bridge.showBlockedProgramNotification).toHaveBeenCalledTimes(1);
+    const [tag, title, body] = vi.mocked(bridge.showBlockedProgramNotification).mock.calls[0] as unknown as [string, string, string];
     expect(title).toBe("osaka（Claude Code）");
     expect(body).toContain("approve Bash");
     expect(tag).toBe(terminalNotificationTag("one"));
@@ -55,13 +55,13 @@ describe("useUnseenBlockedProgramNotifications", () => {
   it("stays quiet about a wait the person saw", () => {
     renderWith(waiting, new Map([["one", 2]]));
     setPageHidden(true);
-    expect(bridge.showNotification).not.toHaveBeenCalled();
+    expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
   });
 
   it("stays quiet about a program that is not waiting", () => {
     renderWith(working, nothingSeen);
     setPageHidden(true);
-    expect(bridge.showNotification).not.toHaveBeenCalled();
+    expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
   });
 
   it("announces one wait once, however many times the person comes and goes", () => {
@@ -69,12 +69,12 @@ describe("useUnseenBlockedProgramNotifications", () => {
     setPageHidden(true);
     setPageHidden(false);
     setPageHidden(true);
-    expect(bridge.showNotification).toHaveBeenCalledTimes(1);
+    expect(bridge.showBlockedProgramNotification).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing where notifications are not the app's", () => {
     renderWith(waiting, nothingSeen, false);
     setPageHidden(true);
-    expect(bridge.showNotification).not.toHaveBeenCalled();
+    expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
   });
 });

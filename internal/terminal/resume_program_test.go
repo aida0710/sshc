@@ -11,6 +11,9 @@ import (
 
 const claudeCodeReport = "\x1b]7501;state=idle:app=claude-code\x1b\\"
 
+// shellMovesToSource は、ログインしたシェルが ~ を言い、cd して /home/me/src を言う出力である。
+const shellMovesToSource = "\x1b]7;file://host/home/me\x1b\\\x1b]7;file://host/home/me/src\x1b\\"
+
 // openLosing は、最初の接続に first を返し、次からは新しい Process を返すセッションを開く。
 // 返す spy は、開いた回数を言う。
 func openLosing(t *testing.T, first *fakeProcess) (*terminal.Session, *tmuxNameSpy) {
@@ -35,7 +38,7 @@ func openLosing(t *testing.T, first *fakeProcess) (*terminal.Session, *tmuxNameS
 func TestANewShellInPlaceOfOneThatRanClaudeCodeSaysHowToContinue(t *testing.T) {
 	first := newFakeProcess()
 	session, _ := openLosing(t, first)
-	first.feed("\x1b]7;file://host/home/me/src\x1b\\")
+	first.feed(shellMovesToSource)
 	first.feed(claudeCodeReport)
 	testwait.Until(t, func() bool { return session.View().ProgramStatus != nil })
 
@@ -66,10 +69,99 @@ func TestAShellWithNoKnownDirectoryOffersNoTapAndSaysWhereToRunTheCommand(t *tes
 	}
 }
 
+func TestAShellThatNeverMovedDoesNotTellWhereTheProgramRan(t *testing.T) {
+	first := newFakeProcess()
+	session, spy := openLosing(t, first)
+	first.feed("\x1b]7;file://host/home/me\x1b\\")
+	first.feed(claudeCodeReport) // `cd src && claude` を1行で打った場合、シェルが言う機会は無い。
+	testwait.Until(t, func() bool { return session.View().ProgramStatus != nil })
+
+	first.exit(transportLost)
+	testwait.Until(t, func() bool { return len(spy.seen()) == 2 && session.View().State == terminal.StateConnected })
+	testwait.Until(t, func() bool {
+		return strings.Contains(string(snapshotOf(session)), "動かしていたフォルダで claude --continue")
+	})
+	if hint := session.View().Resume; hint != nil {
+		t.Errorf("Resume = %+v", hint)
+	}
+}
+
+func TestASecondLossBeforeAnythingRanKeepsTheDirectoryOfTheHint(t *testing.T) {
+	first, second := newFakeProcess(), newFakeProcess()
+	spy := &tmuxNameSpy{process: func(open int) terminal.Process {
+		switch open {
+		case 1:
+			return first
+		case 2:
+			return second
+		}
+		return newFakeProcess()
+	}}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{Kind: terminal.KindSSH, Alias: "web", Title: "web", Open: spy.open})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
+	first.feed(shellMovesToSource)
+	first.feed("\x1b]7501;state=done:app=claude-code\x1b\\") // done の記録は次のシェルへ残る。
+	testwait.Until(t, func() bool { return session.View().ProgramStatus != nil })
+	first.exit(transportLost)
+	testwait.Until(t, func() bool { return session.View().Resume != nil })
+
+	second.feed("\x1b]7;file://host/home/me\x1b\\")
+	testwait.Until(t, func() bool { return session.View().WorkingDirectory == "/home/me" })
+	second.exit(transportLost)
+	testwait.Until(t, func() bool { return len(spy.seen()) == 3 && session.View().Resume != nil })
+
+	if got, want := session.View().Resume.Command, "cd -- '/home/me/src' && claude --continue"; got != want {
+		t.Errorf("Command = %q, want %q", got, want)
+	}
+}
+
+func TestRunningTheHintKeepsItsDirectoryForTheNextLoss(t *testing.T) {
+	first, second := newFakeProcess(), newFakeProcess()
+	spy := &tmuxNameSpy{process: func(open int) terminal.Process {
+		switch open {
+		case 1:
+			return first
+		case 2:
+			return second
+		}
+		return newFakeProcess()
+	}}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{Kind: terminal.KindSSH, Alias: "web", Title: "web", Open: spy.open})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
+	first.feed(shellMovesToSource)
+	first.feed(claudeCodeReport)
+	testwait.Until(t, func() bool { return session.View().ProgramStatus != nil })
+	first.exit(transportLost)
+	testwait.Until(t, func() bool { return session.View().Resume != nil })
+	command := session.View().Resume.Command
+
+	second.feed("\x1b]7;file://host/home/me\x1b\\")
+	testwait.Until(t, func() bool { return session.View().WorkingDirectory == "/home/me" })
+	if _, err := session.Write([]byte(command + "\r")); err != nil {
+		t.Fatal(err)
+	}
+	second.feed(claudeCodeReport)
+	testwait.Until(t, func() bool { return session.View().ProgramStatus != nil })
+	second.exit(transportLost)
+	testwait.Until(t, func() bool { return len(spy.seen()) == 3 && session.View().Resume != nil })
+
+	if got := session.View().Resume.Command; got != command {
+		t.Errorf("Command = %q, want %q", got, command)
+	}
+}
+
 func TestTheHintGoesOnceSomethingIsRunInTheNewShell(t *testing.T) {
 	first := newFakeProcess()
 	session, _ := openLosing(t, first)
-	first.feed("\x1b]7;file://host/home/me/src\x1b\\")
+	first.feed(shellMovesToSource)
 	first.feed(claudeCodeReport)
 	testwait.Until(t, func() bool { return session.View().ProgramStatus != nil })
 	first.exit(transportLost)

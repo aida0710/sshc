@@ -850,7 +850,7 @@ export const ja = {
   "terminal.remoteIncompatible": "実行先のsshcエンジンに接続できません。このマシンのsshcと組み合わせて使えないバージョンです。",
   "terminal.remoteVaultLocked": "実行先のsshcエンジンのVaultがロックされています。",
   "terminal.remoteEngineUnavailable": "実行先のsshcエンジンに届きません。再接続するか、localhostに戻してください。",
-  "terminal.newSessionSearch": "接続先を検索、またはuser@host:port",
+  "terminal.newSessionSearch": "接続先、またはuser@host:port",
   "terminal.newSession": "新しいセッション",
   "terminal.rowDetail": "{status} · {destination}",
   "terminal.connecting": "接続を開始中",

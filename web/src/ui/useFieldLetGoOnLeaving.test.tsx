@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useFieldLetGoOnLeaving } from "./useFieldLetGoOnLeaving";
 import { matchesMediaQuery } from "./useMediaQuery";
@@ -42,6 +42,32 @@ describe("useFieldLetGoOnLeaving", () => {
     document.documentElement.dataset.keyboardOpen = "true";
     setPageHidden(true);
     expect(screen.getByLabelText("送る文")).toHaveFocus();
+  });
+
+  it("commits what the keyboard is still composing and keeps the field while typing", () => {
+    render(<Field />);
+    const field = screen.getByLabelText("送る文");
+    field.focus();
+    document.documentElement.dataset.keyboardOpen = "true";
+    const committed = vi.fn();
+    field.addEventListener("blur", committed);
+    fireEvent.compositionStart(field);
+    setPageHidden(true);
+    expect(committed).toHaveBeenCalledTimes(1);
+    expect(field).toHaveFocus();
+  });
+
+  it("leaves a field alone once the composition has ended", () => {
+    render(<Field />);
+    const field = screen.getByLabelText("送る文");
+    field.focus();
+    document.documentElement.dataset.keyboardOpen = "true";
+    const committed = vi.fn();
+    field.addEventListener("blur", committed);
+    fireEvent.compositionStart(field);
+    fireEvent.compositionEnd(field);
+    setPageHidden(true);
+    expect(committed).not.toHaveBeenCalled();
   });
 
   it("keeps the field on a screen without an on-screen keyboard", () => {
