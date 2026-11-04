@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import { LanguageProvider } from "../i18n/context";
 import { snippetsApi } from "../snippets/api";
+import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 import { CommandPalette } from "./CommandPalette";
 
 vi.mock("../snippets/api", async (importOriginal) => {
@@ -133,6 +134,15 @@ describe("CommandPalette", () => {
     expect(props.onClose).toHaveBeenCalled();
   });
 
+
+  it("names a file by ~/.ssh in the Android app", async () => {
+    vi.stubGlobal("sshcAndroid", fakeAndroidBridge());
+    renderPalette();
+    await userEvent.setup().type(screen.getByRole("searchbox"), "config");
+    expect(await screen.findByText("~/.ssh/config")).toBeInTheDocument();
+    expect(screen.queryByText("/home/tester/.ssh/config")).toBeNull();
+    vi.unstubAllGlobals();
+  });
 
   it("searches hosts, files, snippets and settings without persisting the query", async () => {
     const user = userEvent.setup();

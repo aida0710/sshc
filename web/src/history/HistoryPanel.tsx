@@ -10,7 +10,7 @@ import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } fr
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 import { formatDateTime } from "../ui/format";
-import { historyOperationLabelKey, historyStatusLabelKey, shownHistoryPaths } from "./historyLabels";
+import { historyOperationLabelKey, historyStatusLabelKey, restorableFileName, shownHistoryPaths } from "./historyLabels";
 import { PendingChangeDialog } from "./PendingChangeDialog";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
@@ -53,7 +53,7 @@ export function HistoryPanel() {
   async function restore(transactionId: string, path: string) {
     try {
       await configApi.restore(transactionId, path);
-      setMessage(t("history.restored", { path }));
+      setMessage(t("history.restored", { path: restorableFileName(path, t) }));
       setProblem(null);
       await reload();
     } catch (error) {
@@ -152,7 +152,7 @@ export function HistoryPanel() {
                 <div className="flex flex-wrap gap-2 md:justify-end">
                   {(entry.restorable ?? []).map((path) => (
                     <Button key={path} onClick={() => void restore(entry.id, path)}>
-                      {t("history.restorePath", { path })}
+                      {t("history.restorePath", { path: restorableFileName(path, t) })}
                     </Button>
                   ))}
                 </div>

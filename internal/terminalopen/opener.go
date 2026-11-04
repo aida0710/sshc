@@ -140,6 +140,7 @@ func (o Opener) reopeningSpec(saved terminalrestore.Session) (terminal.Spec, err
 		spec, err = o.spec(request)
 	}
 	spec.TmuxSession, spec.ResumeProgram = saved.TmuxSession, saved.ResumeProgram
+	spec.ResumeStartsInDirectory = request.WorkingDirectory != nil
 	spec.Workspace = saved.Workspace
 	if o.RequireWorkspace == nil || o.RequireWorkspace(saved.Workspace) != nil {
 		spec.Workspace = terminalworkspace.DefaultID

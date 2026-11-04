@@ -39,6 +39,8 @@ const replacements: Record<Locale, Partial<Catalogue>> = {
     "reveal.warning": "秘密鍵をこのページに表示します。画面を見られる人や、クリップボードの履歴を読むアプリは、鍵を写し取れます。",
     "history.backupRetention": "変更前のファイルはアプリの中に残します。",
     "conn.basicAgentOrInherited": "継承した鍵",
+    "desktop.closeAllNote": "すべてのセッションとポート転送を終了します。",
+    "vpn.description": "Dockerが動いているマシンのsshcで使えます。このデバイスでは動きません。",
   },
   en: {
     "shell.bootstrapFailed": "Secure local session could not be started. Reopen the app.",
@@ -56,6 +58,8 @@ const replacements: Record<Locale, Partial<Catalogue>> = {
     "reveal.warning": "The private key is shown on this page. Anyone who can see the screen, and apps that read the clipboard history, can copy it.",
     "history.backupRetention": "Previous versions of changed files are kept inside the app.",
     "conn.basicAgentOrInherited": "Inherited keys",
+    "desktop.closeAllNote": "This closes every session and port forward.",
+    "vpn.description": "Available in sshc on a machine running Docker. It does not run on this device.",
   },
 };
 

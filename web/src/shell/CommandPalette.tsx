@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { shownFilePath } from "../android/shownFilePath";
 import type { FileNode, HostEntry, HostIdentity } from "../api/config";
 import { snippetsApi, type Snippet } from "../snippets/api";
 import { useTranslate } from "../i18n/context";
@@ -175,7 +176,7 @@ export function CommandPalette({
       id: `file:${node.file.path ?? node.file.absolute}`,
       kind: "file" as const,
       label: node.file.path ?? node.file.absolute,
-      detail: node.file.absolute,
+      detail: shownFilePath(node.file.absolute),
       search: `file config ssh 設定ファイル ${node.file.path ?? ""}`,
       action: () => onOpenFile(node.file.path ?? node.file.absolute),
     })),

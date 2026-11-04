@@ -1,3 +1,4 @@
+import { shownFilePath } from "../android/shownFilePath";
 import type { Notice } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -35,7 +36,7 @@ const noticeKeys: Record<string, MessageKey> = {
 };
 
 function locationText(location: { path?: string; line?: number }): string {
-  return `${location.path ?? ""}${location.line === undefined ? "" : `:${location.line}`}`;
+  return `${shownFilePath(location.path ?? "")}${location.line === undefined ? "" : `:${location.line}`}`;
 }
 
 // NoticeText は、注意の1件を、何がどこで起きているかが分かる文にする。

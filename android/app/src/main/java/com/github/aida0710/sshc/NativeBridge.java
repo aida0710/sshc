@@ -17,6 +17,8 @@ final class NativeBridge {
         String notificationPermission();
         void requestNotificationPermission();
         void showNotification(String tag, String title, String body);
+        /** プログラムが利用者を待っていることの通知。同じ待ちはエンジンの通知と合わせて1回だけ出す。 */
+        void showBlockedProgramNotification(String tag, String title, String body);
         /** tag の通知を取り下げる。Web 画面がそのセッションを見せたか、閉じたとき。 */
         void cancelNotification(String tag);
         /** 押されたまま Web 画面が受け取っていない通知の tag。無ければ空文字。 */
@@ -150,6 +152,15 @@ final class NativeBridge {
         if (!validNotificationTag(tag)) return "invalid_notification";
         if (!"granted".equals(host.notificationPermission())) return "notifications_blocked";
         host.showNotification(tag, limitText(title, MAX_NOTIFICATION_TITLE), limitText(body, MAX_NOTIFICATION_BODY));
+        return "";
+    }
+
+    /** showNotification と同じ。許可待ちの音が鳴るチャンネルで出す。 */
+    @JavascriptInterface
+    public String showBlockedProgramNotification(String tag, String title, String body) {
+        if (!validNotificationTag(tag)) return "invalid_notification";
+        if (!"granted".equals(host.notificationPermission())) return "notifications_blocked";
+        host.showBlockedProgramNotification(tag, limitText(title, MAX_NOTIFICATION_TITLE), limitText(body, MAX_NOTIFICATION_BODY));
         return "";
     }
 

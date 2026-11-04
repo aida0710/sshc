@@ -37,6 +37,11 @@ describe("the Android app's wording", () => {
     expect(androidCatalogue("en")["shell.bootstrapFailed"]).not.toContain("Run sshc");
   });
 
+  it("does not speak of an agent or an engine when closing every connection", () => {
+    expect(androidCatalogue("ja")["desktop.closeAllNote"]).not.toMatch(/ssh-agent|エンジン/u);
+    expect(androidCatalogue("en")["desktop.closeAllNote"]).not.toMatch(/agent|engine/iu);
+  });
+
   it("keeps a browser's wording as it is", () => {
     expect(messages.ja["settings.languageBrowser"]).toBe("ブラウザに合わせる");
     expect(androidCatalogue("ja")["settings.languageBrowser"]).toBe("デバイスに合わせる");

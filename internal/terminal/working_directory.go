@@ -95,6 +95,13 @@ func (s *Session) acceptWorkingDirectory(generation uint64, directory string) {
 	if generation != s.generation || s.exited != nil {
 		return
 	}
+	s.noteWorkingDirectoryLocked(directory)
+}
+
+func (s *Session) noteWorkingDirectoryLocked(directory string) {
+	if s.shellStartDirectory == "" {
+		s.shellStartDirectory = directory
+	}
 	s.workingDirectory = directory
 }
 
