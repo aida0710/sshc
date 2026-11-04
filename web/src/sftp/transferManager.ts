@@ -10,8 +10,16 @@ import { fingerprintFile } from "./uploadFingerprint";
 import { sftpProblemCode } from "./sftpProblemText";
 import { UploadPlane } from "./uploadPlane";
 import { newIdentifier } from "../ui/randomIdentifier";
+import { detectLocale } from "../i18n/locale";
+import { messages } from "../i18n/messages";
 
 export type { ManagedTransferJob, TransferNotice } from "./transferLedger";
+
+// The engine keeps a batch's name as it is given, so the name of a batch of several items is written here, in the
+// language of whoever starts it.
+function severalItemsName(count: number): string {
+  return messages[detectLocale()]["sftp.manager.batchItems"].replace("{count}", String(count));
+}
 
 // The engine keeps at most this many transfer jobs at once.
 export const maxTransferJobs = 200;
@@ -209,7 +217,7 @@ export class SFTPTransferManager {
     if (selections.length === 0) return [];
     if (this.jobs.length + this.reservedUploads() + selections.length > maxTransferJobs) throw new Error("sftp_transfer_limit");
     const batchId = newIdentifier();
-    const batchName = selections.length === 1 ? selections[0]!.name : `${selections.length} items`;
+    const batchName = selections.length === 1 ? selections[0]!.name : severalItemsName(selections.length);
     const batchKind: TransferKind = selections.length === 1 ? selections[0]!.kind : "folder";
     const ids: string[] = [];
     for (const selection of selections) {
