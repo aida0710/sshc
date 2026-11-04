@@ -1,4 +1,5 @@
 import { retryableTransferFailure, TransferPublicationUncertain } from "./transferRecovery";
+import { AndroidSaveCancelled } from "../android/native";
 import type { BrowserSave } from "../ui/saveFile";
 import { downloadCheckpointInterval } from "./downloadCheckpointInterval";
 import { DownloadSinkStore, type DownloadSink } from "./downloadSinks";
@@ -145,6 +146,11 @@ export class DownloadPlane {
     let save;
     try { save = await this.api.saveDownload(job.remotePath, job.kind === "folder", parts); }
     catch (error) {
+      if (error instanceof AndroidSaveCancelled) {
+        ledger.replaceServer(await this.api.updateTransfer(id, "cancel"));
+        await this.discard(id);
+        return;
+      }
       if (retryableTransferFailure(error)) throw new TransferPublicationUncertain();
       throw error;
     }

@@ -1,3 +1,4 @@
+import { AndroidSaveCancelled } from "../android/native";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import type { BrowserSave } from "../ui/saveFile";
@@ -339,6 +340,16 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(api.createTransfer.mock.invocationCallOrder[0]).toBeLessThan(api.updateTransfer.mock.invocationCallOrder[0]!);
     expect(api.checkpointDownload).toHaveBeenCalledWith(expect.any(String), 4, '"revision"');
     expect(api.saveDownload).toHaveBeenCalledOnce();
+  });
+
+  it("cancels a download whose save destination the person left without choosing, instead of failing it", async () => {
+    const files = privateFileSystem();
+    const api = engineAPI({ saveDownload: vi.fn(async (): Promise<BrowserSave | null> => { throw new AndroidSaveCancelled(); }) });
+    const manager = new SFTPTransferManager(api);
+    const id = await manager.addDownload("edge", "/remote.bin", "file", 4);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("cancelled"));
+    expect(api.updateTransfer).not.toHaveBeenCalledWith(id, "fail", expect.anything());
+    await vi.waitFor(() => expect(files.has(`sshc-sftp-${id}.part`)).toBe(false));
   });
 
   it("keeps a finished download's part file for the browser's save until the job is cleared", async () => {

@@ -146,10 +146,29 @@ export function subscribeAndroidNotificationOpened(opened: (tag: string) => void
   return () => target.removeEventListener("sshc-android-notification-opened", takeOpened);
 }
 
+// AndroidSaveCancelled is the person leaving the save destination without choosing one. It is their decision, not a
+// failure to report.
+export class AndroidSaveCancelled extends Error {
+  constructor() {
+    super("android_save_cancelled");
+  }
+}
+
+// The save before this one, finished or not. The app opens one save destination at a time and fails a request made while
+// one is open (MainActivity.openSaveDestination), and transfers run side by side, so a save waits for the one before it.
+let previousSave: Promise<unknown> = Promise.resolve();
+
 /** Android版ではStorage Access Frameworkへ保存する。Web版ならfalseを返して通常downloadへ委ねる。 */
-export async function saveWithAndroid(blob: Blob, suggestedName: string): Promise<boolean> {
+export function saveWithAndroid(blob: Blob, suggestedName: string): Promise<boolean> {
   const bridge = window.sshcAndroid;
-  if (bridge === undefined) return false;
+  if (bridge === undefined) return Promise.resolve(false);
+  const save = previousSave.then(() => saveThroughBridge(bridge, blob, suggestedName));
+  // A cancelled or failed save does not stop the next: each file has its own destination to choose.
+  previousSave = save.catch(() => undefined);
+  return save;
+}
+
+async function saveThroughBridge(bridge: AndroidBridge, blob: Blob, suggestedName: string): Promise<boolean> {
   const id = newIdentifier();
   const status = await new Promise<string>((resolve, reject) => {
     const listener = (event: Event) => {
@@ -165,7 +184,7 @@ export async function saveWithAndroid(blob: Blob, suggestedName: string): Promis
       reject(new Error(failure));
     }
   });
-  if (status === "cancelled") throw new Error("android_save_cancelled");
+  if (status === "cancelled") throw new AndroidSaveCancelled();
   if (status !== "ready") throw new Error("android_save_failed");
 
   try {
