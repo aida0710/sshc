@@ -1130,6 +1130,7 @@ export const en = {
   "sftp.manager.hideDetails": "Hide details for {name}",
   "sftp.manager.progress": "Progress for {name}",
   "sftp.manager.batchProgress": "{completed}/{total} files",
+  "sftp.manager.batchItems": "{count} items",
   "sftp.manager.close": "Close Transfer Manager",
   "terminal.closeFailed": "The session could not be closed.",
   "terminal.linkConnecting": "Connecting…",
