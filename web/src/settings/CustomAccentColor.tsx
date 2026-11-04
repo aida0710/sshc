@@ -69,7 +69,7 @@ export function CustomAccentColor({ color, disabled, onPreview, onChoose }: {
           value={color}
           disabled={disabled}
           onChange={(event) => onPreview(event.target.value)}
-          className="h-8 w-11 shrink-0 cursor-pointer rounded-md border border-control-line bg-control p-1 disabled:cursor-default"
+          className="h-8 w-11 shrink-0 cursor-pointer rounded-md border border-control-line bg-control p-1 disabled:cursor-default mobile-layout:h-11"
         />
         <input {...asciiTextEntry}
           type="text"

@@ -84,6 +84,7 @@ describe("the catalogue", () => {
         "shell.languageJapanese",
         "shell.navVault",
         "shell.title",
+        "advanced.keywordPlaceholder",
         "keyBar.backspace",
         "keyBar.heading",
         "shortcuts.heading",

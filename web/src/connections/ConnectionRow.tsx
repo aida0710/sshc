@@ -53,7 +53,7 @@ export function ConnectionRow({
   const highlighted = choosing ? chosen : opened;
   const aliasLine = (
     <span className="flex min-w-0 items-center gap-1.5">
-      <span className="truncate">{host.identity.alias}</span>
+      <span title={host.identity.alias} className="truncate">{host.identity.alias}</span>
       {duplicateAlias ? <Icon name="warning" className="size-3.5 text-notice-ink" /> : null}
     </span>
   );
@@ -104,7 +104,7 @@ export function ConnectionRow({
           {columns === undefined ? (
             <span className="min-w-0 flex-1">
               {aliasLine}
-              <span className="block truncate font-mono text-[11px] leading-4 text-ink-faint">{destination}</span>
+              <span title={destination} className="block truncate font-mono text-[11px] leading-4 text-ink-faint">{destination}</span>
               {tags.length === 0 ? null : <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">{tagLabels}</span>}
             </span>
           ) : (
@@ -113,7 +113,7 @@ export function ConnectionRow({
                 {aliasLine}
                 {tags.length === 0 ? null : <span aria-hidden="true" className="flex gap-1">{tagLabels}</span>}
               </span>
-              <span className="truncate text-[12.5px] text-ink-muted">{destination}</span>
+              <span title={destination} className="truncate text-[12.5px] text-ink-muted">{destination}</span>
               <span className="truncate text-[12.5px] text-ink-muted">{columns.lastConnected}</span>
             </span>
           )}

@@ -35,7 +35,7 @@ export function KeyListToolbar({
             <option value="all">{t("keys.listFilterAll")}</option>
           </select>
         </label>
-        {searchShown ? <label className="relative min-w-0 grow sm:w-64 sm:grow-0">
+        {searchShown ? <label className="relative min-w-0 grow sm:w-72 sm:grow-0">
           <span className="sr-only">{t("keys.search")}</span>
           <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
           <input

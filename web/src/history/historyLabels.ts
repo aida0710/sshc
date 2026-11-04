@@ -8,17 +8,44 @@ export function shownHistoryPaths(paths: readonly string[]): string {
   return (runsInAndroidApp() ? paths.filter((path) => !path.startsWith("sshc/")) : paths).join(", ");
 }
 
+type OwnFileKind = "vault" | "machine" | "settings";
+
+// ownFileKind says what one of sshc's own files (under sshc/ in ~/.ssh) holds, or null for any other file.
+function ownFileKind(path: string): OwnFileKind | null {
+  if (!path.startsWith("sshc/")) return null;
+  if (path === "sshc/secrets" || path.startsWith("sshc/secrets/")) return "vault";
+  if (path.startsWith("sshc/machines/")) return "machine";
+  return "settings";
+}
+
+const ownFileNames: Record<OwnFileKind, MessageKey> = {
+  vault: "history.fileVault",
+  machine: "history.fileMachine",
+  settings: "history.fileSettings",
+};
+
+const restoredOwnFileLabels: Record<OwnFileKind, MessageKey> = {
+  vault: "history.operation.vault",
+  machine: "history.operation.machine",
+  settings: "history.operation.settings",
+};
+
 // restorableFileName names a file on the button that restores it. The Android app hides sshc's own files
 // (shownHistoryPaths), but a change can still be undone there, so the button says what the file holds.
 export function restorableFileName(path: string, t: Translate): string {
-  if (!runsInAndroidApp() || !path.startsWith("sshc/")) return path;
-  if (path === "sshc/secrets" || path.startsWith("sshc/secrets/")) return t("history.fileVault");
-  if (path.startsWith("sshc/machines/")) return t("history.fileMachine");
-  return t("history.fileSettings");
+  const kind = ownFileKind(path);
+  return runsInAndroidApp() && kind !== null ? t(ownFileNames[kind]) : path;
 }
 
-// historyOperationLabelKey names a recorded change by the kind of thing it changed.
-export function historyOperationLabelKey(operation: string): MessageKey {
+// historyOperationLabelKey names a recorded change by the kind of thing it changed. A restore is recorded as
+// config.restore whichever file it put back, so its file says what changed: a restored vault is not a change to the
+// SSH configuration.
+export function historyOperationLabelKey(operation: string, paths: readonly string[] = []): MessageKey {
+  if (operation === "config.restore") {
+    const kind = ownFileKind(paths[0] ?? "");
+    if (kind !== null) return restoredOwnFileLabels[kind];
+    if (paths[0] === "known_hosts") return "history.operation.knownHosts";
+  }
   if (operation.startsWith("connection.")) return "history.operation.connection";
   if (operation.startsWith("key.")) return "history.operation.key";
   if (operation.startsWith("terminal.")) return "history.operation.terminal";

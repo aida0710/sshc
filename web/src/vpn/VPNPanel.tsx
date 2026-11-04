@@ -1,3 +1,4 @@
+import { runsInAndroidApp } from "../android/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { vpnApi, type VPNApi, type VPNOverview, type VPNProfile, type VPNSecrets } from "../api/vpn";
@@ -246,6 +247,11 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
     },
   );
 
+  // The Android app has no Docker and never will, and the page's first line says so. Telling it to install Docker, or
+  // offering to add a profile it cannot run, would contradict that. Profiles that came from another machine by Sync
+  // are still listed, since they can be read and edited here.
+  const runsOnThisDevice = !runsInAndroidApp();
+
   if (overview === null) {
     return (
       <PageStateFrame title={t("vpn.heading")} description={t("vpn.description")}>
@@ -264,7 +270,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
     <section className="flex flex-col gap-[22px]">
       <PageHeader title={t("vpn.heading")} description={t("vpn.description")} />
 
-      {overview.available || overview.checking ? null : <VPNUnavailableNotice overview={overview} />}
+      {overview.available || overview.checking || !runsOnThisDevice ? null : <VPNUnavailableNotice overview={overview} />}
       {operation.error === "" ? null : (
         <Notice
           tone="danger"
@@ -278,7 +284,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
         </Notice>
       )}
 
-      <PageSection
+      {!runsOnThisDevice && overview.profiles.length === 0 ? null : <PageSection
         heading={t("vpn.profilesHeading")}
         meta={t("vpn.profileCount", { count: overview.profiles.length })}
         {...(overview.profiles.length === 0 ? {} : { hint: t("vpn.connectionsHint") })}
@@ -326,9 +332,9 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
             </ul>
           </div>
         )}
-      </PageSection>
+      </PageSection>}
 
-      <VPNProfileForm busy={operation.busy} onSave={createProfile} onDirtyChange={setCreateFormDirty} />
+      {runsOnThisDevice ? <VPNProfileForm busy={operation.busy} onSave={createProfile} onDirtyChange={setCreateFormDirty} /> : null}
 
       {draftDiscard.confirming ? (
         <DiscardDraftDialog id="vpn-draft-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />

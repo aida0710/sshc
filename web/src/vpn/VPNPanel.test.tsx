@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 import { ApiError } from "../api/client";
 import type { VPNApi, VPNOverview, VPNProfile } from "../api/vpn";
 import { captureNavigationBlocker } from "../testing/navigationBlocker";
@@ -119,6 +120,10 @@ function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
 }
 
 describe("VPNPanel", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("shows each profile with its type, server, state and the connections that use it", async () => {
     render(<VPNPanel api={buildApi()} />);
 
@@ -162,6 +167,33 @@ describe("VPNPanel", () => {
 
     expect(await screen.findByText("Docker was not found. VPN routes need Docker. Install Docker Desktop or similar.")).toBeVisible();
     expect(screen.getByText(`Details: ${detail}`)).toBeVisible();
+  });
+
+  it("only says that VPN does not run on this device in the Android app, offering nothing to install or add", async () => {
+    vi.stubGlobal("sshcAndroid", fakeAndroidBridge());
+    const api = buildApi({
+      vpnOverview: vi.fn().mockResolvedValue(
+        overview({ available: false, unavailable: "vpn_docker_missing", detail: "docker is not installed or is not on PATH", profiles: [] }),
+      ),
+    });
+    render(<VPNPanel api={api} />);
+
+    await waitFor(() => expect(screen.queryByText(/Loading/)).not.toBeInTheDocument());
+    expect(screen.queryByText(/Docker was not found/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/docker is not installed/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "VPN profiles" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Add a VPN profile" })).not.toBeInTheDocument();
+  });
+
+  it("still lists a profile that came from another machine in the Android app", async () => {
+    vi.stubGlobal("sshcAndroid", fakeAndroidBridge());
+    const stopped = stoppedOverview();
+    const api = buildApi({ vpnOverview: vi.fn().mockResolvedValue({ ...stopped, available: false, unavailable: "vpn_docker_missing" }) });
+    render(<VPNPanel api={api} />);
+
+    expect(await screen.findByText("tohoku")).toBeVisible();
+    expect(screen.queryByText(/Docker was not found/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Add a VPN profile" })).not.toBeInTheDocument();
   });
 
   it("tells a stopped Docker apart from a missing one", async () => {

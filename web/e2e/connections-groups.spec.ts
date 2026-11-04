@@ -1,6 +1,6 @@
 import { chooseConnectionAction } from "./support/connections";
 import type { Page } from "@playwright/test";
-import { expect, openApplication, openSection, test, type Installation } from "./support/environment";
+import { clickAndAwait, expect, openApplication, openSection, test, type Installation } from "./support/environment";
 
 // The entry file keeps its banner and declares one group, "work", with one member.
 // alpha and beta start in the entry file, so they share one file and one save precondition.
@@ -116,7 +116,7 @@ test("saves a group's defaults from the editor shown beside its connections", as
   const editor = page.getByRole("region", { name: "work", exact: true });
   await editor.getByLabel("User name").fill("deploy");
   await editor.getByLabel("Jump host").fill("bastion");
-  await page.getByRole("button", { name: "Save group" }).click();
+  expect(await clickAndAwait(page, "Save group", "/api/v1/config/save")).toBe(200);
   await expect(page.getByRole("button", { name: "Save group" })).toHaveCount(0);
 
   const settings = await installation.read("groups.sshc.conf");

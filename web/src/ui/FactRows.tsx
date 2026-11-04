@@ -12,7 +12,7 @@ export function FactRows({ facts }: { facts: readonly Fact[] }) {
       {facts.map(({ label, value }) => (
         <div key={label} className="col-span-2 grid grid-cols-subgrid border-t border-line py-2.5 first:border-t-0 first:pt-0.5 last:pb-0.5">
           <dt className="max-w-36 text-ink-muted">{label}</dt>
-          <dd className="min-w-0 break-all text-ink">{value}</dd>
+          <dd className="min-w-0 [overflow-wrap:anywhere] text-ink">{value}</dd>
         </div>
       ))}
     </dl>

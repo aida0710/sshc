@@ -67,7 +67,7 @@ export function AgentSection({ inventory, engineOS }: {
                   className="border-b border-line"
                 >
                   <td className="py-2 pr-3">{algorithmText(identity)}</td>
-                  <td className="py-2 pr-3 font-mono text-xs break-all">
+                  <td className="py-2 pr-3 font-mono text-xs [overflow-wrap:anywhere]">
                     {identity.fingerprint}
                   </td>
                   <td className="py-2">{identity.comment}</td>

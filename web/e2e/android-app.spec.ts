@@ -1,17 +1,6 @@
 import type { Page } from "@playwright/test";
+import { behaveAsAndroidApp } from "./support/androidApp";
 import { expect, openApplication, sessionStatus, test, type Installation } from "./support/environment";
-
-// The Android app is this page in a WebView with its bridge on window, on an engine that says it runs on Android. Those
-// two are all the page goes by, so they are all this file stands in for. Every bridge call answers as an idle app would.
-async function behaveAsAndroidApp(page: Page) {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.addInitScript(() => {
-    Object.defineProperty(window, "sshcAndroid", { value: new Proxy({}, { get: () => () => "" }) });
-  });
-  await page.route("**/api/v1/about", (route) => route.fulfill({ json: {
-    version: "v1.0.0", revision: "", goVersion: "go1.26.10", os: "android", arch: "arm64", manager: "unknown", executable: "/system/bin/app_process64",
-  } }));
-}
 
 // The engine answers the settings with the machine it runs on; this makes that machine the phone, named as the engine
 // names a machine whose system gives no host name.
@@ -86,7 +75,7 @@ test("the Android app's About leaves out how sshc was installed and its executab
 test("the Android app's key and known hosts pages say nothing of ssh-agent or the app's private folder", async ({ page, installation }) => {
   await openAndroidApp(page, installation);
   await openFromMenu(page, "Keys");
-  await expect(page.getByRole("heading", { name: "Keys" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Keys", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "ssh-agent" })).toHaveCount(0);
   await expect(page.getByText(/SSH_AUTH_SOCK/u)).toHaveCount(0);
 

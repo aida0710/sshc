@@ -50,7 +50,7 @@ export function GroupSheet({ groups, total, ungrouped, active, onChoose, onCreat
           className={`flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md pr-3 text-left text-sm ${selected ? "bg-select-fill font-medium text-accent" : "text-ink hover:bg-hover"}`}
         >
           <Icon name="groups" className="size-4 text-ink-faint" />
-          <span className="min-w-0 flex-1 truncate">{label}</span>
+          <span title={label} className="min-w-0 flex-1 truncate">{label}</span>
           <span className="shrink-0 text-xs text-ink-faint">{count}</span>
         </button>
         {menu.length === 0 ? <span className="size-11 shrink-0" /> : (

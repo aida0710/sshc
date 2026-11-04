@@ -35,11 +35,12 @@ function hasPort(machine: Machine): boolean {
   return machine.facts.os !== "android";
 }
 
-// columns lays a machine's row out like the heading above it, where the screen is wide enough. On a phone the
-// row stacks, with the "…" beside the machine's name.
-const columns = "md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_112px_120px_28px] md:items-center md:gap-3";
-// onPhoneFullWidth stretches a stacked control across the row, under the name and the "…".
-const onPhoneFullWidth = "col-span-2 md:col-span-1";
+// columns lays a machine's row out like the heading above it, where the list is wide enough for five columns. The
+// list's own width decides, not the window's: beside the settings' navigation a 1024px window leaves it under 500px,
+// and five columns there cut a preset's name to one letter. Narrower, the row stacks, with the "…" beside the name.
+const columns = "@2xl/machines:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_112px_120px_28px] @2xl/machines:items-center @2xl/machines:gap-3";
+// whenStackedFullWidth stretches a stacked control across the row, under the name and the "…".
+const whenStackedFullWidth = "col-span-2 @2xl/machines:col-span-1";
 
 // The machines that sync: which preset each uses, the port its engine listens on, and when it last started.
 // Any machine's settings can be changed from here; its engine reads them when it next starts (the port) or at
@@ -65,8 +66,8 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
         : (
           <div className="flex flex-col gap-3">
             {failure === "" ? null : <Notice tone="danger" compact>{failure}</Notice>}
-            <div className="overflow-hidden rounded-[10px] border border-line">
-              <div className={`hidden border-b border-line px-3 py-2 text-[11.5px] text-ink-faint md:grid ${columns}`} aria-hidden="true">
+            <div className="@container/machines overflow-hidden rounded-[10px] border border-line">
+              <div className={`hidden border-b border-line px-3 py-2 text-[11.5px] text-ink-faint @2xl/machines:grid ${columns}`} aria-hidden="true">
                 <span>{t("settings.machineColumnName")}</span>
                 <span>{t("settings.machineColumnPreset")}</span>
                 <span>{portsOffered ? t("settings.machineColumnPort") : null}</span>
@@ -149,12 +150,12 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
     <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 border-t border-line px-3 py-2.5 first-of-type:border-t-0 ${columns} ${self ? "bg-select-fill" : ""}`}>
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 text-[13.5px] font-medium text-ink">
-          <span className="truncate">{name}</span>
-          {self ? <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 text-[11.5px] font-normal leading-5 text-accent">{t("settings.thisMachine")}</span> : null}
+          <span title={name} className="truncate">{name}</span>
+          {self ? <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 text-[11.5px] font-normal leading-5 text-ink">{t("settings.thisMachine")}</span> : null}
         </div>
         {facts === "" ? null : <div className="text-xs text-ink-faint">{facts}</div>}
       </div>
-      <PhoneNamedCell name={t("settings.machineColumnPreset")}>
+      <StackedNamedCell name={t("settings.machineColumnPreset")}>
         <select aria-label={t("settings.machineColumnPreset")} className={sizedControl("w-full")} value={presetId}
           onChange={(event) => {
             // The value is read now: the write runs later, when the control shows the saved value again.
@@ -163,16 +164,16 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
           }}>
           {document.presets.map((preset) => <option key={preset.id} value={preset.id}>{presetName(preset, t("settings.presetStandard"))}</option>)}
         </select>
-      </PhoneNamedCell>
+      </StackedNamedCell>
       {hasPort(machine) ? (
-        <PhoneNamedCell name={t("settings.machineColumnPort")}>
+        <StackedNamedCell name={t("settings.machineColumnPort")}>
           <PortInput machine={machine} onChange={onChange} />
-        </PhoneNamedCell>
-      ) : <span aria-hidden="true" className="hidden md:block" />}
-      <PhoneNamedCell name={t("settings.machineColumnStarted")}>
+        </StackedNamedCell>
+      ) : <span aria-hidden="true" className="hidden @2xl/machines:block" />}
+      <StackedNamedCell name={t("settings.machineColumnStarted")}>
         <span className="whitespace-nowrap text-xs text-ink-muted">{started}</span>
-      </PhoneNamedCell>
-      <div className="col-start-2 row-start-1 md:col-start-auto md:row-start-auto">
+      </StackedNamedCell>
+      <div className="col-start-2 row-start-1 @2xl/machines:col-start-auto @2xl/machines:row-start-auto">
         <ActionMenu label={t("settings.machineActions", { name })}
           triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-7"
           items={[
@@ -184,12 +185,12 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
   );
 }
 
-// PhoneNamedCell is one column of a machine's row. A PC has the names in the heading above the rows; a phone
-// stacks the row and has no heading, so each value says its name.
-function PhoneNamedCell({ name, children }: { name: string; children: ReactNode }) {
+// StackedNamedCell is one column of a machine's row. A wide list has the names in the heading above the rows; a
+// narrow one stacks the row and has no heading, so each value says its name.
+function StackedNamedCell({ name, children }: { name: string; children: ReactNode }) {
   return (
-    <div className={`min-w-0 ${onPhoneFullWidth}`}>
-      <div aria-hidden="true" className="mb-1 text-[11.5px] text-ink-faint md:hidden">{name}</div>
+    <div className={`min-w-0 ${whenStackedFullWidth}`}>
+      <div aria-hidden="true" className="mb-1 text-[11.5px] text-ink-faint @2xl/machines:hidden">{name}</div>
       {children}
     </div>
   );
