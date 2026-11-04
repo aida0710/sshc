@@ -18,7 +18,7 @@ export function focusRaisesKeyboard(element: Element | null): boolean {
 }
 
 // useAppViewport marks the root while the on-screen keyboard is up.
-function isSoftKeyboardOpen(): boolean {
+export function isSoftKeyboardOpen(): boolean {
   return document.documentElement.dataset.keyboardOpen === "true";
 }
 

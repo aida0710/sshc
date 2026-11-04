@@ -1084,6 +1084,8 @@ export const ja = {
   "terminal.composer": "送る文の入力欄",
   "terminal.composerField": "ターミナルに送る文",
   "terminal.composerPlaceholder": "送る文を入力",
+  "terminal.composerSecretField": "ターミナルに送るパスワード",
+  "terminal.composerSecretPlaceholder": "パスワードを入力",
   "terminal.composerReconnectPlaceholder": "送信で再接続します",
   "terminal.composerSend": "送信",
   "terminal.composerPressEnter": "Enterを押す",
