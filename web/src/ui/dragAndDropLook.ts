@@ -6,9 +6,10 @@
 // 行の大部分を覆うボタンにも付ける。
 export const draggableCursor = "cursor-grab active:cursor-grabbing";
 
-// ドラッグ中に落とせる場所は点線で示し、ポインタが真上にある1つだけを実線と背景で強める。
-const dropTargetAvailable = "outline outline-1 outline-dashed outline-control-line";
-const dropTargetOver = "bg-accent/20 outline-2 outline-solid outline-accent";
+// ドラッグ中に落とせる場所は点線で示し、ポインタが真上にある1つだけを実線と背景で強める。線は枠の内側に引く。
+// 外側に引くと、スクロールする一覧の端で左右の線が切れ、隣り合う行の線が重なる。
+const dropTargetAvailable = "outline outline-1 -outline-offset-1 outline-dashed outline-control-line";
+const dropTargetOver = "bg-accent/20 outline-2 -outline-offset-2 outline-solid outline-accent";
 
 // dropTargetLook は、落とせる場所の今の見た目を返す。落とせないときは何も足さない。
 export function dropTargetLook({ accepts, over }: { accepts: boolean; over: boolean }): string {
