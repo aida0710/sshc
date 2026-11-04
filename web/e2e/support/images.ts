@@ -37,6 +37,21 @@ export function samplePNG(): Buffer {
   return pngOf(48, 24, (x) => (x < 24 ? [0xd0, 0x30, 0x30] : [0x30, 0x60, 0xd0]));
 }
 
+// A picture shaped like a phone's screenshot.
+export function portraitPNG(): Buffer {
+  return pngOf(1080, 2400, (x) => (x < 540 ? [0xd0, 0x30, 0x30] : [0x30, 0x60, 0xd0]));
+}
+
+// A picture far wider than any window.
+export function panoramaPNG(): Buffer {
+  return pngOf(3000, 300, (x) => (x < 1500 ? [0xd0, 0x30, 0x30] : [0x30, 0x60, 0xd0]));
+}
+
+// One second of a 360×800 video in one colour (VP8, which every browser under test decodes), shaped like a phone's recording.
+export function portraitWebM(): Buffer {
+  return Buffer.from("GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAPhEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggElTbuMU6uEHFO7a1OsggPL7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjIuMy4xMDBXQYxMYXZmNjIuMy4xMDBEiYhAj0AAAAAAABZUrmvKrgEAAAAAAABB14EBc8WICQwT9sBN9SicgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4Q7msoA4JKwggFouoIDIJqBAlWwhFW5gQESVMNn+3Nzn2PAgGfImUWjh0VOQ09ERVJEh4xMYXZmNjIuMy4xMDBzc9ZjwItjxYgJDBP2wE31KGfIoUWjh0VOQ09ERVJEh5RMYXZjNjIuMTEuMTAwIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDEuMDAwMDAwMDAwAB9DtnVCIOeBAKNCGoEAAIDQPwCdASpoASADC8cIhYWImYSIP4ICdPI6OtRh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jsg/su1yfpe/UT2Ed98wAAcU7trkbuPs4EAt4r3gQHxggGl8IED", "base64");
+}
+
 // The largest image the terminal shows, 4096 × 4096 pixels, in about 350 KB:
 // a gradient that compresses well but costs a full decode.
 export function largestPNG(): Buffer {
