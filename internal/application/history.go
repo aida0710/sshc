@@ -84,6 +84,17 @@ func (s *Service) History() ([]HistoryEntry, error) {
 	return entries, nil
 }
 
+// reloadVaultAfterRestore は、復元した保管庫をこの実行へ読み直す。古い中身を配り続けると、次の保存も
+// ディスクとの食い違いで断られる。いまの鍵で開けないときは閉じて、次のロック解除にディスクから読ませる。
+func (s *Service) reloadVaultAfterRestore(absolute string) {
+	if s.vault == nil {
+		return
+	}
+	if err := s.vault.ReloadAfterRecovery([]string{absolute}); err != nil {
+		s.vault.Lock()
+	}
+}
+
 func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 	s.saveMutex.Lock()
 	defer s.saveMutex.Unlock()
@@ -134,6 +145,7 @@ func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 		return SaveResult{}, err
 	}
 	s.applyVaultAutoLock()
+	s.reloadVaultAfterRestore(absolute)
 	return SaveResult{
 		TransactionID: result.ID,
 		Written:       []string{relative},

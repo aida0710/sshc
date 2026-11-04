@@ -46,6 +46,7 @@ import { SectionNotices } from "./shell/SectionNotices";
 import { usePaletteCommands } from "./shell/usePaletteCommands";
 import { setAndroidAppearance } from "./android/native";
 import { useBlockedProgramNotifications } from "./terminal/useBlockedProgramNotifications";
+import { useUnseenBlockedProgramNotifications } from "./terminal/useUnseenBlockedProgramNotifications";
 import { useTerminalNotifications } from "./terminal/useTerminalNotifications";
 import { notificationsComeFromAndroid } from "./ui/browserNotifications";
 import { useSeenProgramStatus } from "./terminal/useSeenProgramStatus";
@@ -53,6 +54,7 @@ import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
 import { mobileViewportQuery, navigationRailQuery, pinnedNavigationQuery, useMediaQuery } from "./ui/useMediaQuery";
 import { useAppViewport } from "./ui/useAppViewport";
+import { useFieldLetGoOnLeaving } from "./ui/useFieldLetGoOnLeaving";
 import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckMark, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
 import { SectionView, navigationId, startSections } from "./shell/sections";
 import { sectionIcons, sectionLabels } from "./shell/sectionPresentation";
@@ -92,6 +94,7 @@ export function App({
 }: AppProps) {
   const { t } = useLanguage();
   useAppViewport();
+  useFieldLetGoOnLeaving();
   const mobileLayout = useMediaQuery(mobileViewportQuery);
   const navigationPinned = useMediaQuery(pinnedNavigationQuery);
   const navigationRail = useMediaQuery(navigationRailQuery);
@@ -342,6 +345,10 @@ export function App({
     t,
   });
   const seenProgramStatus = useSeenProgramStatus(terminalSessions.sessions, terminalFace ? activeSessionId : null);
+  useUnseenBlockedProgramNotifications(terminalSessions.sessions, seenProgramStatus, {
+    enabled: notificationsComeFromAndroid(),
+    t,
+  });
 
 
   function addConnection() {

@@ -38,48 +38,82 @@ func (r *programStatusRecords) resumableApp() string {
 // noteProgramToResumeLocked is called as a new process replaces the old one,
 // while the records still say what ran there. A program named by the record of
 // the previous engine (Spec.ResumeProgram) stays until the new shell is up.
+//
+// A hint still waiting stays as it is: the shell that went ran nothing, and what
+// it reported is where it logged in. A shell that never moved says nothing about
+// the program either, since `cd dir && claude` on one line gives it no prompt to
+// report dir from.
 func (s *Session) noteProgramToResumeLocked() {
+	if s.resumeProgram != "" {
+		return
+	}
 	if app := s.programStatus.resumableApp(); app != "" {
 		s.resumeProgram = app
-		s.resumeDirectory = s.workingDirectory
+		s.resumeDirectory = ""
+		s.resumeStartsInDirectory = false
+		if s.workingDirectory != s.shellStartDirectory {
+			s.resumeDirectory = s.workingDirectory
+		}
 	}
 }
 
-// resumeHintLocked says how to start the program again, once the new shell is
-// there to type into.
+// resumeHintLocked says how to start the program again with one tap, once the
+// new shell is there to type into. Run anywhere else, a program that resumes by
+// its directory finds nothing to continue and asks to trust that directory, so
+// without the directory there is only what announceProgramToResume writes.
 func (s *Session) resumeHintLocked() *ResumeHint {
 	program, resumable := resumablePrograms[s.resumeProgram]
 	if !resumable || s.state != StateConnected {
 		return nil
 	}
-	return &ResumeHint{Program: program.name, Command: resumeCommand(program.command, s.resumeDirectory)}
+	command, inItsDirectory := s.resumeCommandLocked(program.command)
+	if !inItsDirectory {
+		return nil
+	}
+	return &ResumeHint{Program: program.name, Command: command}
 }
 
-// resumeCommand starts the program in the directory it ran in, when that is
-// known and can be written the same way in every login shell. A session opened
-// again after a restart starts there already and has none.
-func resumeCommand(command, directory string) string {
-	if directory == "" {
-		return command
+// resumeCommandLocked is the command to type, and whether it runs in the
+// directory the program ran in. That takes the directory being known and
+// writable the same way in every login shell. A session opened again after a
+// restart starts there already.
+func (s *Session) resumeCommandLocked(command string) (typed string, inItsDirectory bool) {
+	if s.resumeStartsInDirectory {
+		return command, true
 	}
-	change, ok := ChangeRemoteDirectoryCommand(directory)
+	if s.resumeDirectory == "" {
+		return command, false
+	}
+	change, ok := ChangeRemoteDirectoryCommand(s.resumeDirectory)
 	if !ok {
-		return command
+		return command, false
 	}
-	return change + " && " + command
+	return change + " && " + command, true
 }
 
-// announceProgramToResume writes the hint into the new shell's terminal. It is
-// kept with the output, so it reads the same for every browser and after the
-// hint in the view is gone.
+// announceProgramToResume writes how to start the program again into the new
+// shell's terminal. It is kept with the output, so it reads the same for every
+// browser and after the hint in the view is gone.
 func (s *Session) announceProgramToResume() {
 	s.mutex.Lock()
-	hint := s.resumeHintLocked()
+	announcement := s.resumeAnnouncementLocked()
 	s.mutex.Unlock()
-	if hint == nil {
-		return
+	if announcement != "" {
+		s.publish([]byte(announcement))
 	}
-	s.publish([]byte("\r\n[sshc] 前のシェルで" + hint.Program + "が動いていました。続きから始めるには " + hint.Command + " を実行してください。\r\n"))
+}
+
+func (s *Session) resumeAnnouncementLocked() string {
+	program, resumable := resumablePrograms[s.resumeProgram]
+	if !resumable || s.state != StateConnected {
+		return ""
+	}
+	command, inItsDirectory := s.resumeCommandLocked(program.command)
+	where := " "
+	if !inItsDirectory {
+		where = "動かしていたフォルダで "
+	}
+	return "\r\n[sshc] 前のシェルで" + program.name + "が動いていました。続きから始めるには" + where + command + " を実行してください。\r\n"
 }
 
 // forgetProgramToResumeOnEnter drops the hint once the person has run something
@@ -91,6 +125,11 @@ func (s *Session) forgetProgramToResumeOnEnter(input []byte) {
 	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	// The hint's command moves the shell on the same line that starts the program,
+	// so the shell has no prompt to report it from.
+	if hint := s.resumeHintLocked(); hint != nil && s.resumeDirectory != "" && bytes.Contains(input, []byte(hint.Command)) {
+		s.workingDirectory = s.resumeDirectory
+	}
 	s.resumeProgram, s.resumeDirectory = "", ""
 }
 

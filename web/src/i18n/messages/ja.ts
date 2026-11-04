@@ -850,7 +850,7 @@ export const ja = {
   "terminal.remoteIncompatible": "実行先のsshcエンジンに接続できません。このマシンのsshcと組み合わせて使えないバージョンです。",
   "terminal.remoteVaultLocked": "実行先のsshcエンジンのVaultがロックされています。",
   "terminal.remoteEngineUnavailable": "実行先のsshcエンジンに届きません。再接続するか、localhostに戻してください。",
-  "terminal.newSessionSearch": "接続先を検索、またはuser@host:portを入力",
+  "terminal.newSessionSearch": "接続先、またはuser@host:port",
   "terminal.newSession": "新しいセッション",
   "terminal.rowDetail": "{status} · {destination}",
   "terminal.connecting": "接続を開始中",
@@ -2123,6 +2123,9 @@ export const ja = {
   "history.completed": "完了した変更",
   "history.empty": "sshcで行った変更はまだありません。",
   "history.restorePath": "{path}を復元",
+  "history.fileSettings": "設定",
+  "history.fileVault": "Vault",
+  "history.fileMachine": "マシンの設定",
   "history.backupRetention": "変更前のファイルは~/.ssh/sshc/backupsに残します。",
   "history.backupRetentionMore": "新しい方から200件まで、かつ90日以内の変更の分を残し、それより古いものは自動で消します。復元も新しい変更として履歴に残るので、同じ方法で取り消せます。",
 

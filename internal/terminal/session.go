@@ -46,7 +46,9 @@ type Session struct {
 	terminalTitle string
 	// workingDirectory is the last directory the shell reported. See
 	// working_directory.go.
-	workingDirectory    string
+	workingDirectory string
+	// shellStartDirectory is the first directory the current process reported.
+	shellStartDirectory string
 	notificationVersion uint64
 	lastNotification    *Notification
 	programProgress     *ProgramProgress
@@ -79,6 +81,8 @@ type Session struct {
 	// resume_program.go.
 	resumeProgram   string
 	resumeDirectory string
+	// resumeStartsInDirectory says the new shell starts where the program ran.
+	resumeStartsInDirectory bool
 
 	reopen         func(ctx context.Context, size Size) (Process, error)
 	reconnectError func(error) (retry bool, problem string)
@@ -487,6 +491,7 @@ func (s *Session) forceClose() error {
 func (s *Session) observeProcess(pending State, successMessage string) {
 	s.mutex.Lock()
 	s.noteProgramToResumeLocked()
+	s.shellStartDirectory = ""
 	// A replacement shell announces its own title; the previous one must not
 	// linger on the pane while it starts.
 	s.resetTerminalTitleLocked()

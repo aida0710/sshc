@@ -94,6 +94,30 @@ describe("HistoryPanel", () => {
     expect(await screen.findByText("sshc/machines/14c85e4005beb423.json")).toBeVisible();
   });
 
+  it("names sshc's own files by what they hold on the Android app's restore buttons", async () => {
+    vi.mocked(configApi.history).mockResolvedValue([{
+      id: "20260805T120000.000-abcd",
+      operation: "metadata.update",
+      status: "completed",
+      startedAt: "2026-08-05T12:00:00Z",
+      finishedAt: "2026-08-05T12:00:01Z",
+      paths: ["sshc/metadata.json", "sshc/secrets", "sshc/machines/14c85e4005beb423.json", "config"],
+      restorable: ["sshc/metadata.json", "sshc/secrets", "sshc/machines/14c85e4005beb423.json", "config"],
+    }] as never);
+    vi.stubGlobal("sshcAndroid", fakeAndroidBridge());
+    const { unmount } = render(<LanguageProvider initial="ja"><HistoryPanel /></LanguageProvider>);
+    expect(await screen.findByRole("button", { name: "設定を復元" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Vaultを復元" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "マシンの設定を復元" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "configを復元" })).toBeVisible();
+    expect(screen.queryByText(/sshc\//u)).toBeNull();
+    unmount();
+    vi.unstubAllGlobals();
+
+    render(<LanguageProvider initial="ja"><HistoryPanel /></LanguageProvider>);
+    expect(await screen.findByRole("button", { name: "sshc/metadata.jsonを復元" })).toBeVisible();
+  });
+
   it("shows an interrupted transaction as unfinished and offers both recoveries", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.recover).mockResolvedValue(undefined);
