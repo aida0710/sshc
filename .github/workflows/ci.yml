@@ -33,6 +33,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       native: ${{ steps.native.outputs.needed }}
+      browser-demo: ${{ steps.browser-demo.outputs.needed }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -50,6 +51,19 @@ jobs:
             exit 0
           fi
           needed=$(git diff --name-only HEAD^1 HEAD | scripts/ci/native-tests-needed.sh)
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+      - name: Decide whether the browser demo check runs
+        id: browser-demo
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          needed=$(git diff --name-only HEAD^1 HEAD | scripts/ci/browser-demo-needed.sh)
           echo "needed=$needed" >> "$GITHUB_OUTPUT"
 
   # 埋め込む画面を1回だけ組み立て、Go のテストと Android の job へ渡す。画面はリポジトリに
@@ -524,6 +538,34 @@ jobs:
               exit 1
             fi
           done
+
+  # Release と同じ手順で、ブラウザデモを実際の VM で確かめる。ここで落ちなければ、タグを打ったあとの Release の
+  # 同じ確認でも落ちない（タグは動かせないので、Release で落ちると新しいバージョンを作り直すことになる）。
+  browser-demo:
+    name: Browser demo
+    needs: [changes]
+    # jobs.changes が失敗しても、この job は走らせる。
+    if: ${{ !cancelled() && needs.changes.outputs.browser-demo != 'false' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+      - name: Install what the VM images are packed with
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpio
+      # runner に最初から入っている Google Chrome で確かめる（release.yml と同じ理由）。
+      - name: Build the demo and verify browser SSH and SFTP
+        env:
+          SSHC_DEMO_CHROMIUM: /usr/bin/google-chrome
+        run: bash demo/scripts/verify-browser-demo.sh
 
   pages:
     name: Documentation site
