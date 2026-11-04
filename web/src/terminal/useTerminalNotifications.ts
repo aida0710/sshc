@@ -3,11 +3,11 @@ import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import { closeBrowserNotification, showBrowserNotification } from "../ui/browserNotifications";
 import { isUserAway } from "../ui/userAway";
-import { useToast } from "../ui/useToast";
 import { subscribeAndroidNotificationOpened } from "../android/native";
 import { sessionIdFromNotificationTag, terminalNotificationTag } from "./notificationTags";
 import { playNotificationSound, primeNotificationSound } from "./notificationSound";
 import { nextTerminalNotification, type UnreadSessions } from "./terminalNotifications";
+import { useOpenNotifiedSession } from "./useOpenNotifiedSession";
 
 function closeSessionNotifications(sessionId: string): void {
   closeBrowserNotification(terminalNotificationTag(sessionId));
@@ -26,9 +26,7 @@ export function useTerminalNotifications(
   const activeSession = useRef(activeSessionId);
   const openSession = useRef(onOpenSession);
   const [unread, setUnread] = useState<Set<string>>(() => new Set());
-  const showToast = useToast();
-  const currentSessions = useRef(sessions);
-  currentSessions.current = sessions;
+  const openNotifiedSession = useOpenNotifiedSession(sessions, t, onOpenSession);
   // A tapped Android notification can arrive before the session list has
   // loaded (the app was closed or the page reloaded); it opens once it can.
   const [tappedSessionId, setTappedSessionId] = useState<string | null>(null);
@@ -110,18 +108,14 @@ export function useTerminalNotifications(
         title: notification.title,
         body: notification.body,
         tag: terminalNotificationTag(session.id),
-        // The session may have been closed since; then nothing else comes forward.
-        onClick: () => {
-          if (currentSessions.current.some((current) => current.id === session.id)) openSession.current(session.id);
-          else showToast(t("terminal.notificationSessionClosed"));
-        },
+        onClick: () => openNotifiedSession(session.id),
       });
     }
     setUnread((current) => {
       if ([...current].every((id) => currentIds.has(id))) return current;
       return new Set([...current].filter((id) => currentIds.has(id)));
     });
-  }, [sessions, t, showToast]);
+  }, [sessions, t, openNotifiedSession]);
 
   return unread;
 }

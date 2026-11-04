@@ -899,7 +899,7 @@ export const ja = {
   "terminal.browserNotificationsDeliveryFailed":
     "通知は許可されていますが、表示できませんでした。",
   "terminal.notificationSound": "通知音",
-  "terminal.notificationSoundHint": "このタブがバックグラウンドにあるとき、ターミナル内のプログラムが通知（OSC 9／99／777）を送ると鳴ります。",
+  "terminal.notificationSoundHint": "このタブがバックグラウンドにあるとき、ターミナル内のプログラムが通知（OSC 9／99／777）を送るか、許可や入力を待ち始めると鳴ります。",
   "terminal.androidNotificationSoundHint": "sshcを閉じているあいだ、ターミナル内のプログラムが通知（OSC 9／99／777）を送ると鳴ります。",
   "terminal.notificationPreviewSound": "通知音を再生",
   "terminal.notificationSound.none": "音なし",
@@ -1062,7 +1062,7 @@ export const ja = {
   "terminal.savePasswordFailed": "パスワードを保存できませんでした。",
   "terminal.noticeDismiss": "このお知らせを消す",
   "terminal.noticeNotificationPermission": "許可待ち・入力待ちを通知しますか",
-  "terminal.noticeNotificationPermissionBody": "Claude Codeなどが許可や入力を待つと、sshcを閉じているあいだもAndroidの通知で知らせます。",
+  "terminal.noticeNotificationPermissionBody": "Claude Codeなどが許可や入力を待つと、このタブを見ていないあいだブラウザの通知で知らせます。",
   "terminal.noticeReconnecting": "再接続しています（{attempt}/{limit}）",
   "terminal.noticeConnectionLost": "{title}との接続が切れました",
   "terminal.noticeNextTry": "{seconds}秒後にもう一度試します。",

@@ -35,6 +35,13 @@ describe("the Android app's wording", () => {
     expect(androidCatalogue("en")["start.openLocalShellNote"]).toBe("Open a shell on this device right away");
   });
 
+  it("says that Android notifies about a waiting program, where a browser's wording says the browser does", () => {
+    expect(messages.ja["terminal.noticeNotificationPermissionBody"]).toContain("ブラウザの通知");
+    expect(androidCatalogue("ja")["terminal.noticeNotificationPermissionBody"]).toContain("Androidの通知");
+    expect(messages.en["terminal.noticeNotificationPermissionBody"]).toContain("your browser notifies");
+    expect(androidCatalogue("en")["terminal.noticeNotificationPermissionBody"]).toContain("Android notifies");
+  });
+
   it("does not send a person to a command line they do not have", () => {
     expect(androidCatalogue("ja")["shell.sessionEnded"]).not.toContain("ターミナルでsshc");
     expect(androidCatalogue("ja")["shell.bootstrapFailed"]).not.toContain("ターミナルでsshc");

@@ -341,14 +341,12 @@ export function App({
     showSession,
   );
   useBlockedProgramNotifications(terminalSessions.sessions, {
-    enabled: runTargets.selected !== null && notificationsComeFromAndroid(),
+    enabled: !notificationsComeFromAndroid() || runTargets.selected !== null,
     t,
+    onOpenSession: showSession,
   });
   const seenProgramStatus = useSeenProgramStatus(terminalSessions.sessions, terminalFace ? activeSessionId : null);
-  useUnseenBlockedProgramNotifications(terminalSessions.sessions, seenProgramStatus, {
-    enabled: notificationsComeFromAndroid(),
-    t,
-  });
+  useUnseenBlockedProgramNotifications(terminalSessions.sessions, seenProgramStatus, { t, onOpenSession: showSession });
 
 
   function addConnection() {
