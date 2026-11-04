@@ -18,8 +18,9 @@ export function TerminalEmptyState({
   const t = useTranslate();
   return (
     // The card is not named, so it does not become a region beside the panels that explain a refused run target.
-    // A small phone (below 400px) gives the margin up, so that the heading and the notes stay on one line.
-    <PageBoard fill className="overflow-y-auto p-6 max-[399px]:p-3">
+    // A small phone (below 400px) gives the margin up, so that the heading and the notes stay on one line. The list scrolls
+    // clear of a phone's bottom bar, which floats over the page.
+    <PageBoard fill className="overflow-y-auto p-6 pb-[calc(1.5rem+var(--mobile-navigation-inset))] max-[399px]:p-3 max-[399px]:pb-[calc(0.75rem+var(--mobile-navigation-inset))]">
       <div className="m-auto flex w-full" role="status">
         <StartTiles
           heading={t("terminal.emptyHeading")}

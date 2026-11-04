@@ -24,7 +24,12 @@ export function SFTPCompareTabsDialog({ tabs, currentTabId, onCompare, onDismiss
   const firstTab = availableTabs.find((tab) => tab.id === firstTabId);
   const secondTab = availableTabs.find((tab) => tab.id === secondTabId);
   const canCompare = firstTab !== undefined && secondTab !== undefined && firstTab.id !== secondTab.id;
-  const tabLabel = (tab: ComparisonTab) => `${tab.alias === localHostAlias ? t("sftp.local.connection") : tab.alias}:${tab.path}`;
+  // A closed list shows the start of the words. The folder comes first: two tabs under one long path differ only at its end.
+  const tabLabel = (tab: ComparisonTab) => {
+    const host = tab.alias === localHostAlias ? t("sftp.local.connection") : tab.alias;
+    const folder = tab.path.split("/").filter(Boolean).pop();
+    return folder === undefined ? `${host}:${tab.path}` : `${host}:${folder} (${tab.path})`;
+  };
 
   function compare() {
     if (!canCompare) return;

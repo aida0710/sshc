@@ -1,5 +1,5 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
-import { chooseEntryOnPhone, connectSFTPHost, moveRightSFTPTabLeft, openSecondSFTPPane, sftpHostPicker } from "./support/sftp";
+import { chooseEntryOnPhone, connectSFTPHost, moveRightSFTPTabLeft, openSecondSFTPPane, sftpHostPicker, sftpTabStrip } from "./support/sftp";
 
 test("keeps a chunked SFTP upload visible while another section is open", async ({ page, installation }) => {
   test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 180_000);
@@ -216,7 +216,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/transfer-manager-ja.png`, fullPage: true });
     await japaneseTransferManager.getByRole("button", { name: "転送マネージャーを折りたたむ" }).click();
     await openSecondSFTPPane(page, "新しいタブ", "nas");
-    const secondTabs = page.getByRole("tablist", { name: "右ペインのタブ" });
+    const secondTabs = sftpTabStrip(page, "右ペインのタブ");
     await expect(secondTabs.getByRole("tab")).toHaveCount(1);
     const secondPane = page.getByLabel("2つ目のリモートペイン");
     await expect(secondTabs.getByRole("tab", { name: /^nas:/ })).toHaveAttribute("aria-selected", "true");
@@ -280,7 +280,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.getByRole("button", { name: "project", exact: true }).click();
     await openSecondSFTPPane(page, "New tab", "Local");
     await page.setViewportSize({ width: 360, height: 800 });
-    const mobileTabs = page.getByRole("tablist", { name: "File tabs" });
+    const mobileTabs = sftpTabStrip(page, "File tabs");
     await expect(mobileTabs.getByRole("tab", { name: /^Local:/ })).toBeVisible();
     await mobileTabs.getByRole("tab", { name: /^bastion:/ }).first().click();
     await expect(page.getByRole("tablist")).toHaveCount(1);

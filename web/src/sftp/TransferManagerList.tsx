@@ -179,7 +179,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
           <span aria-hidden="true" className="h-1 w-10 rounded-full bg-control-line transition-colors group-hover:bg-ink-muted group-active:bg-accent group-focus-visible:bg-accent" />
         </div>
       )}
-      <div className={`relative flex min-w-0 shrink-0 items-center gap-2.5 ${compactViewport ? "min-h-14 flex-wrap border-b border-line px-3 py-1" : "min-h-10 px-3.5 py-1 text-ink-muted"}`}>
+      <div className={`relative flex min-w-0 shrink-0 items-center ${compactViewport ? "min-h-14 flex-wrap border-b border-line px-3 py-1" : "min-h-10 gap-2.5 px-3.5 py-1 text-ink-muted"}`}>
         {compactViewport ? <h3 id={headingId} className="min-w-0 flex-1 truncate font-medium">{t("sftp.manager.heading")}</h3> : (
         <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-describedby={`${headingId}-summary`} aria-expanded={!collapsed} aria-controls={`${headingId}-jobs`} onClick={() => changeView({ collapsed: !collapsed })} className="flex min-w-0 flex-1 items-center gap-2 rounded text-left hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent">
           <DisclosureChevron expanded={!collapsed} className="size-3" />
@@ -188,7 +188,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
         </button>
         )}
         {compactViewport ? <div className="order-last w-full pb-2">
-          <TransferQueueSummary summary={summary} id={`${headingId}-summary`} compact />
+          <TransferQueueSummary summary={summary} id={`${headingId}-summary`} />
         </div> : null}
         {collapsed && summary.totalBytes > 0 ? <progress className="hidden w-28 sm:block" max={summary.totalBytes} value={summary.transferredBytes} /> : null}
         {collapsed ? null : (

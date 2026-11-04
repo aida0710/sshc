@@ -18,7 +18,7 @@ function SessionNameRow({ session }: { session: TerminalSession }) {
   return (
     <li className="flex items-center gap-2 border-line px-2.5 py-1.5 text-sm [&+&]:border-t">
       <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${sessionMarkerClass(session, false)}`} />
-      <span className="min-w-0 truncate text-ink">{terminalDisplayTitle(session)}</span>
+      <span title={terminalDisplayTitle(session)} className="min-w-0 truncate text-ink">{terminalDisplayTitle(session)}</span>
       <span className="ml-auto shrink-0 text-xs text-ink-muted">{destination}</span>
     </li>
   );

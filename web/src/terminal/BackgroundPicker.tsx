@@ -160,7 +160,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
           {selected === undefined ? null : (
             <span aria-hidden="true" className="shrink-0"><BackgroundThumbnail name={selected.name} chosen className="size-5 rounded" /></span>
           )}
-          <span className={`truncate ${selected === undefined ? "text-ink-faint" : "text-ink"}`}>{selected?.name ?? unchosen}</span>
+          <span title={selected?.name ?? unchosen} className={`truncate ${selected === undefined ? "text-ink-faint" : "text-ink"}`}>{selected?.name ?? unchosen}</span>
         </span>
         <Button ref={openButton} onClick={() => { setDraft(value); setProblem(""); setLibraryOpen(true); }}>{t("terminal.backgroundChoose")}</Button>
         {value === "" ? null : <Button onClick={() => onChange("")}>{t("terminal.backgroundClear")}</Button>}

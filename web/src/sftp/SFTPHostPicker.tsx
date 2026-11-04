@@ -72,7 +72,7 @@ export function SFTPHostPicker({
           <Icon name={value === localHostAlias ? "home" : "terminal"} className="size-5" />
         ) : (
           <>
-            <span className="truncate">
+            <span title={value === localHostAlias ? localName : value} className="truncate">
               {value === localHostAlias
                 ? localName
                 : value || t(aliases.length === 0 && !includeLocal ? "sftp.noHosts" : "sftp.chooseHost")}

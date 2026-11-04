@@ -84,7 +84,7 @@ export function WorkspaceRow({
       >
         <DisclosureChevron expanded={expanded} className="size-[13px] shrink-0 text-ink-faint" />
         {/* The workspace name labels its sessions, so it stays quieter than they are. */}
-        <span className="min-w-0 grow truncate text-xs font-normal text-ink-faint">{name}</span>
+        <span title={name} className="min-w-0 grow truncate text-xs font-normal text-ink-faint">{name}</span>
         {hidden ? <span className="sr-only">{t("workspace.hiddenMark")}</span> : null}
         {unread && !expanded ? (
           <span aria-label={t("terminal.unreadNotification")} className="size-2 shrink-0 rounded-full bg-notice-ink" />

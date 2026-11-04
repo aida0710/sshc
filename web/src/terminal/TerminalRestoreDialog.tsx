@@ -51,10 +51,10 @@ export function TerminalRestoreDialog({
           <ul className="flex flex-col gap-1.5 text-sm">
             {listed.map((session, index) => (
               <li key={index} className="flex min-w-0 flex-col">
-                <span className="truncate text-ink">{session.pinnedTitle ?? session.alias ?? t("terminal.restoreLocalShell")}</span>
+                <span title={session.pinnedTitle ?? session.alias ?? t("terminal.restoreLocalShell")} className="truncate text-ink">{session.pinnedTitle ?? session.alias ?? t("terminal.restoreLocalShell")}</span>
                 {session.workingDirectory === undefined ? null : (
                   // A long path is cut at its start, so the folder it ends in stays readable.
-                  <span dir="rtl" className="truncate text-left font-mono text-xs text-ink-muted">
+                  <span dir="rtl" title={session.workingDirectory} className="truncate text-left font-mono text-xs text-ink-muted">
                     <bdi dir="ltr">{session.workingDirectory}</bdi>
                   </span>
                 )}

@@ -21,7 +21,7 @@ export function BackgroundCard({ background, chosen, onChoose, onRename, onDelet
       <button type="button" onClick={onChoose} className="block w-full text-left">
         <BackgroundThumbnail name={background.name} chosen={chosen} className="aspect-video w-full" />
         <span className="block px-2.5 pb-2.5 pt-2">
-          <span className="block truncate text-sm font-medium text-ink">{background.name}</span>
+          <span title={background.name} className="block truncate text-sm font-medium text-ink">{background.name}</span>
           <span className="mt-0.5 block text-xs text-ink-faint">{formatBytes(background.bytes)}</span>
         </span>
       </button>

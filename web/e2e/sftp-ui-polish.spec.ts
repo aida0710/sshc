@@ -4,7 +4,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { TransferJob, TransferJobList } from "../src/sftp/api";
 import { expect, openApplication, openSection, test } from "./support/environment";
 import { keepMachineState, readMachineState } from "./support/settings";
-import { chooseEntryOnPhone, openLocalSFTPDirectory } from "./support/sftp";
+import { chooseEntryOnPhone, openLocalSFTPDirectory, sftpTabStrip } from "./support/sftp";
 
 // Phones keep touch controls when rotated beyond the portrait breakpoint.
 test.use({ hasTouch: true });
@@ -71,7 +71,7 @@ async function expectTouchTarget(target: Locator): Promise<void> {
 }
 
 async function expectCompactControls(page: Page): Promise<void> {
-  const strip = page.getByRole("tablist", { name: "File tabs", exact: true });
+  const strip = sftpTabStrip(page, "File tabs");
   await expect(strip).toHaveCount(1);
   await expect(page.getByRole("navigation", { name: "SFTP pane switcher", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Open right pane", exact: true })).toHaveCount(0);
@@ -170,7 +170,7 @@ test("adds a compact file tab and preserves both directories and selections with
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await page.getByRole("dialog").getByText("Local", { exact: true }).click();
   await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory: secondPath });
-  const strip = page.getByRole("tablist", { name: "File tabs", exact: true });
+  const strip = sftpTabStrip(page, "File tabs");
   await expect(strip.getByRole("tab")).toHaveCount(2);
   const firstTab = strip.getByRole("tab", { name: "Local:mobile-first", exact: true });
   const secondTab = strip.getByRole("tab", { name: "Local:mobile-second", exact: true });
@@ -218,7 +218,7 @@ test("restores two compact sources in one tab strip and preserves the host, path
   await page.reload();
   await openSection(page, "SFTP");
   await page.setViewportSize({ width: 390, height: 640 });
-  const strip = page.getByRole("tablist", { name: "File tabs", exact: true });
+  const strip = sftpTabStrip(page, "File tabs");
   await expect(strip).toHaveCount(1);
   await expect(strip.getByRole("tab")).toHaveCount(2);
   const localTab = strip.getByRole("tab", { name: "Local:engine", exact: true });

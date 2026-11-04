@@ -281,7 +281,7 @@ export function TerminalQuickCommands({
       role="dialog"
       aria-label={t("terminal.quickCommands")}
       tabIndex={-1}
-      className="focus:outline-none absolute right-2 top-11 z-30 flex max-h-[min(32rem,75vh)] w-[min(24rem,calc(100vw-1rem))] flex-col gap-3 overflow-auto rounded-lg border border-line bg-card p-3 shadow-float"
+      className="focus:outline-none absolute right-2 top-11 z-30 flex max-h-[min(32rem,calc(var(--app-viewport-height,100dvh)-4rem))] w-[min(24rem,calc(100vw-1rem))] mobile-layout:top-[3.375rem] flex-col gap-3 overflow-auto rounded-lg border border-line bg-card p-3 shadow-float"
     >
       <div className="flex items-center gap-2">
         <h3 className="grow text-sm font-semibold">

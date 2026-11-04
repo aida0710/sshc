@@ -117,6 +117,28 @@ describe("SFTPTabStrip", () => {
     expect(document.querySelectorAll("[data-sftp-tab-drop-marker]")).toHaveLength(0);
   });
 
+  it("keeps the tablist to its tabs, with each tab's buttons outside it", () => {
+    render(<SFTPTabStrip {...tabStripProps()} />);
+    const list = screen.getByRole("tablist", { name: "File tabs" });
+
+    expect(list.childElementCount).toBe(0);
+    const owned = (list.getAttribute("aria-owns") ?? "").split(" ");
+    expect(screen.getAllByRole("tab").map((tab) => tab.id)).toEqual(owned);
+  });
+
+  it("moves the focus along the tabs with the arrow keys", async () => {
+    const onSelect = vi.fn();
+    render(<SFTPTabStrip {...tabStripProps()} onSelect={onSelect} />);
+    const tabs = screen.getAllByRole("tab");
+    const selected = tabs.find((tab) => tab.getAttribute("aria-selected") === "true")!;
+    selected.focus();
+
+    await userEvent.keyboard("{End}");
+
+    expect(document.activeElement).toBe(tabs[tabs.length - 1]);
+    expect(onSelect).toHaveBeenCalled();
+  });
+
   it("leaves files dragged from a list or the desktop to the pane under the strip", () => {
     const onDropAt = vi.fn();
     render(<SFTPTabStrip {...tabStripProps()} onDropAt={onDropAt} />);
