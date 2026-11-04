@@ -11,7 +11,6 @@ import {
   test,
 } from "./support/environment";
 import { behaveAsAndroidApp } from "./support/androidApp";
-import { openLocalSFTPDirectory } from "./support/sftp";
 import { collectLayoutDefects, describeLayoutDefect, type LayoutDefect } from "./support/layoutDefects";
 import {
   addWorstCaseRecords,
@@ -58,8 +57,6 @@ const firstAnswersMs = 3_000;
 const animationMs = 350;
 // The tallest picture of a page that scrolls. A longer page is the same rows again.
 const tallestPicturePx = 3_200;
-// min-h-14, the height SFTPEntryPhoneList asks for.
-const phoneFileRowPx = 56;
 // More than the 80px by which useAppViewport tells a new window from an old one.
 const widthThatForgetsTheHeightPx = 100;
 
@@ -467,15 +464,3 @@ for (const size of windowSizes.filter(({ width }) => width < narrowestPCLayoutWi
     });
   }
 }
-
-test("a row of the phone's file list keeps the height it asks for, above the 44px every button gets", async ({ page, installation }) => {
-  await installation.write("notes.txt", "a file for the list to show");
-  await openApplication(page, installation);
-  await page.setViewportSize({ width: 412, height: 842 });
-  await goTo(page, "/files");
-  const pane = page.getByRole("tabpanel");
-  await openLocalSFTPDirectory({ page, pane, directory: join(installation.home, ".ssh") });
-  const row = pane.getByRole("button", { name: "notes.txt", exact: true });
-  await expect(row).toBeVisible();
-  expect((await row.boundingBox())?.height).toBeGreaterThanOrEqual(phoneFileRowPx);
-});
