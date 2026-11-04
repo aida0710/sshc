@@ -48,18 +48,32 @@ type screenPromptWatch struct {
 	goneSince time.Time
 }
 
-func (w *screenPromptWatch) resized(size Size) {
-	if w.emulator != nil {
-		w.emulator.Resize(int(size.Cols), int(size.Rows))
-	}
-}
-
 // stop ends the following. A read already on its way finds no emulator.
 func (w *screenPromptWatch) stop() {
 	if w.timer != nil {
 		w.timer.Stop()
 	}
 	*w = screenPromptWatch{}
+}
+
+// stopFollowingScreenIfPanicked is deferred around every use of the emulator, with Session.mutex held. The output comes
+// from the far side, so a sequence the emulator cannot take is something a server can send. A question nobody is told
+// about is a small loss beside the engine going down with every session.
+func (s *Session) stopFollowingScreenIfPanicked() {
+	if recover() == nil {
+		return
+	}
+	s.screenPrompt.stop()
+	s.programStatus.clear(screenPromptRecordID)
+	s.reportBlockedProgramLocked()
+}
+
+// resizeFollowedScreenLocked keeps the emulator at the session's size.
+func (s *Session) resizeFollowedScreenLocked(size Size) {
+	defer s.stopFollowingScreenIfPanicked()
+	if s.screenPrompt.emulator != nil {
+		s.screenPrompt.emulator.Resize(int(size.Cols), int(size.Rows))
+	}
 }
 
 // newAlternateScreenObserver tells when the output enters the alternate screen. The emulator sees it leave.
@@ -82,6 +96,7 @@ func newAlternateScreenObserver(entered func()) *controlSequenceScanner {
 func (s *Session) startFollowingScreen(generation uint64) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	defer s.stopFollowingScreenIfPanicked()
 	if generation != s.generation || s.exited != nil || s.screenPrompt.emulator != nil {
 		return
 	}
@@ -93,6 +108,7 @@ func (s *Session) startFollowingScreen(generation uint64) {
 func (s *Session) followScreenOutput(generation uint64, chunk []byte) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	defer s.stopFollowingScreenIfPanicked()
 	watch := &s.screenPrompt
 	if generation != s.generation || watch.emulator == nil {
 		return
@@ -121,6 +137,7 @@ func (s *Session) followScreenOutput(generation uint64, chunk []byte) {
 func (s *Session) readScreenPrompt() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	defer s.stopFollowingScreenIfPanicked()
 	watch := &s.screenPrompt
 	if watch.emulator == nil {
 		return

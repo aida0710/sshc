@@ -37,6 +37,23 @@ func TestAQuestionOnScreenIsKeptAsABlockedRecordWithTheSameVersion(t *testing.T)
 	}
 }
 
+func TestAPanicInTheEmulatorEndsTheReadingAndKeepsTheEngine(t *testing.T) {
+	session := sessionFollowingScreen(t, shownBashQuestion)
+	session.readScreenPrompt()
+	func() {
+		session.mutex.Lock()
+		defer session.mutex.Unlock()
+		defer session.stopFollowingScreenIfPanicked()
+		panic("the emulator cannot take this output")
+	}()
+	if session.screenPrompt.emulator != nil {
+		t.Fatal("the session still follows its screen with an emulator that panicked")
+	}
+	if status := session.programStatus.summary(); status != nil {
+		t.Fatalf("status = %+v, want no record once nothing reads the screen", status)
+	}
+}
+
 func TestARecordReadFromTheScreenOffersNoProgramToResume(t *testing.T) {
 	session := sessionFollowingScreen(t, shownBashQuestion)
 	session.readScreenPrompt()
@@ -130,7 +147,7 @@ func TestTheOutputIsFollowedOnlyOnTheAlternateScreen(t *testing.T) {
 
 func TestAResizeReachesTheEmulator(t *testing.T) {
 	session := sessionFollowingScreen(t, "")
-	session.screenPrompt.resized(Size{Cols: 40, Rows: 30})
+	session.resizeFollowedScreenLocked(Size{Cols: 40, Rows: 30})
 	cells := session.screenPrompt.emulator.ShownCells()
 	if len(cells) != 30 || len(cells[0]) != 40 {
 		t.Fatalf("screen is %d rows of %d, want 30 rows of 40", len(cells), len(cells[0]))

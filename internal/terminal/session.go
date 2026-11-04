@@ -426,7 +426,7 @@ func (s *Session) Resize(size Size) error {
 	if exited == nil {
 		s.size = size
 		s.screen.resized(s.buffer.Written(), size)
-		s.screenPrompt.resized(size)
+		s.resizeFollowedScreenLocked(size)
 	}
 	s.mutex.Unlock()
 	if exited != nil {
