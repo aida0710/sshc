@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import { fakeSettingsServer } from "../testing/settingsServer";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -285,6 +285,117 @@ describe("the connection list and the list of groups", () => {
       expect(dropZone(name)).not.toHaveClass("outline-dashed");
       expect(dropZone(name)).not.toHaveClass("outline-solid");
     }
+  });
+
+  describe("floating the list of groups while dragging", () => {
+    function floatingSide() {
+      return screen.getByRole("navigation", { name: "Groups", hidden: true }).getAttribute("data-floating-group-list");
+    }
+
+    function holdFrames() {
+      const frames = new Map<number, FrameRequestCallback>();
+      let nextFrame = 0;
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+        nextFrame += 1;
+        frames.set(nextFrame, callback);
+        return nextFrame;
+      });
+      vi.spyOn(window, "cancelAnimationFrame").mockImplementation((frame) => void frames.delete(frame));
+      return () => act(() => {
+        for (const callback of frames.values()) callback(0);
+        frames.clear();
+      });
+    }
+
+    const nasPayload: DragPayload = { kind: "connection", path: homeNas.identity.path, alias: "nas", group: "home" };
+
+    it("floats it on the frame after the drag starts, not inside dragstart, and puts it away when the drag ends", () => {
+      const runFrames = holdFrames();
+      render(<ConnectionLists />);
+      const source = screen.getByRole("button", { name: "nas" });
+      const dataTransfer = transfer(nasPayload);
+
+      const dragStart = createEvent.dragStart(source, { dataTransfer });
+      Object.defineProperty(dragStart, "clientX", { value: 100 });
+      fireEvent(source, dragStart);
+      expect(floatingSide()).toBeNull();
+
+      runFrames();
+      expect(floatingSide()).toBe("right");
+
+      fireEvent.dragEnd(source, { dataTransfer });
+      expect(floatingSide()).toBeNull();
+    });
+
+    it("does not float it when the drag ends before the next frame", () => {
+      const runFrames = holdFrames();
+      render(<ConnectionLists />);
+      const source = screen.getByRole("button", { name: "nas" });
+      const dataTransfer = transfer(nasPayload);
+
+      fireEvent.dragStart(source, { dataTransfer });
+      fireEvent.dragEnd(source, { dataTransfer });
+      runFrames();
+
+      expect(floatingSide()).toBeNull();
+    });
+
+    it("keeps it away from a pointer that began the drag at the right end of the window", () => {
+      const runFrames = holdFrames();
+      render(<ConnectionLists />);
+
+      const source = screen.getByRole("button", { name: "nas" });
+      const dragStart = createEvent.dragStart(source, { dataTransfer: transfer(nasPayload) });
+      // jsdom has no DragEvent, so the event does not take clientX from its options.
+      Object.defineProperty(dragStart, "clientX", { value: window.innerWidth - 4 });
+      fireEvent(source, dragStart);
+      runFrames();
+
+      expect(floatingSide()).toBe("left");
+    });
+
+    it("does not float it when no group can take what is dragged", () => {
+      const runFrames = holdFrames();
+      const noGroups: Overview = { ...overview, hosts: [bastion], groups: [], metadata: { ...overview.metadata, groups: [] } };
+      render(<ConnectionLists overview={noGroups} />);
+
+      fireEvent.dragStart(screen.getByRole("button", { name: "bastion" }), {
+        dataTransfer: transfer({ kind: "connection", path: bastion.identity.path, alias: "bastion", group: "" }),
+      });
+      runFrames();
+
+      expect(floatingSide()).toBeNull();
+    });
+  });
+
+  describe("dragging a group by its heading in the connection list", () => {
+    const headingOf = (region: string) => within(screen.getByRole("region", { name: region })).getByRole("heading").closest("header")!;
+
+    it("moves the group onto the group it is dropped on", () => {
+      const onDrop = vi.fn();
+      render(<ConnectionLists onDrop={onDrop} />);
+      const dataTransfer = transfer({ kind: "group", name: "home" });
+      const target = screen.getByRole("button", { name: "empty" });
+
+      fireEvent.dragStart(headingOf("home group, 1 connections"), { dataTransfer });
+      fireEvent.dragOver(target, { dataTransfer });
+      fireEvent.drop(target, { dataTransfer });
+
+      expect(onDrop).toHaveBeenCalledWith({ kind: "group", name: "home" }, "empty");
+    });
+
+    it("offers no heading to drag for ungrouped connections, on a phone, or while moves are disabled", () => {
+      const draggable = (region: string) => headingOf(region).getAttribute("draggable");
+      const harness = render(<ConnectionLists />);
+      expect(draggable("home group, 1 connections")).toBe("true");
+      expect(draggable("Ungrouped group, 1 connections")).toBe("false");
+
+      harness.rerender(<ConnectionLists compact />);
+      expect(draggable("home group, 1 connections")).toBe("false");
+
+      harness.rerender(<ConnectionLists movesDisabled />);
+      expect(draggable("home group, 1 connections")).toBe("false");
+    });
   });
 
   describe("choosing several connections", () => {

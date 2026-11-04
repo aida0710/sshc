@@ -2916,7 +2916,7 @@ export const en = {
   "tree.collapse": "Collapse {name}",
   "tree.expand": "Expand {name}",
   "tree.duplicateAlias": "duplicate alias",
-  "tree.dragGroupHint": "Drag a group to nest or reorder it.",
+  "tree.dragGroupHint": "Drag a connection or a group heading onto the list of groups to move it. In a narrow window, the list appears while you drag.",
   "tree.newGroup": "New group",
   "tree.groupActions": "Actions for {name}",
   "tree.newSubgroup": "New group inside",
