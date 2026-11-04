@@ -33,7 +33,7 @@ export function SFTPQuickHosts({ aliases, onChoose, loadRecent = () => recentCon
         className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-ink transition-colors hover:bg-hover"
       >
         <Icon name={icon} className="size-4 shrink-0 text-accent" />
-        <span className="truncate">{label}</span>
+        <span title={label} className="truncate">{label}</span>
       </button>
     </li>
   );

@@ -694,6 +694,8 @@
   max-height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* A name or a path with nowhere to break folds inside the panel; nothing scrolls it sideways to read the rest. */
+  overflow-wrap: break-word;
 }
 /* A select draws the design's chevron instead of the browser's arrow, which differs by platform. Kept
    outside the layers so its right padding wins over a control's px-* utility. The chevron's colour is

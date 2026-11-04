@@ -10,6 +10,7 @@ import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 import { isImeComposing } from "../ui/imeComposition";
 import { iconAction } from "../ui/form";
+import { useAndroidBackStop } from "../ui/useAndroidBackStop";
 import { literalTextEntry } from "../ui/softKeyboard";
 
 // Navigation uses one row; on phones selection or search replaces that row.
@@ -24,6 +25,7 @@ export function SFTPToolbar({
   busy,
   locked = false,
   mobile,
+  shown = true,
   labels,
   leading,
   actions,
@@ -46,6 +48,8 @@ export function SFTPToolbar({
   // An unsaved edit: the host and directory must stay where they are.
   locked?: boolean;
   mobile: boolean;
+  // shown is whether this toolbar's tab is the one on the screen.
+  shown?: boolean;
   // Accessible names for the path bar. The engine's disk and an SSH host
   // describe themselves differently to a screen reader.
   labels: { path: string; editPath: string; input: string };
@@ -88,6 +92,7 @@ export function SFTPToolbar({
     setPathDraft(path);
     setPathEditing(false);
   }
+  useAndroidBackStop({ open: mobile && shown && pathEditing, close: cancelEdit });
 
   const pathField = pathEditing ? (
     <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); submitPath(); }}>

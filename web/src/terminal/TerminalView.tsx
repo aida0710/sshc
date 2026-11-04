@@ -63,12 +63,13 @@ import { isTerminalShown, watchTerminalShown } from "./terminalVisibility";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
 import { isDismissibleLayerOpen, keyboardOwnerProps } from "../ui/useDismissibleLayer";
+import { useAndroidBackStop } from "../ui/useAndroidBackStop";
 import { useTerminalSearch } from "./useTerminalSearch";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
 import { TerminalNoticeCard } from "./TerminalNoticeCard";
 import { TerminalNoticesButton } from "./TerminalNoticesButton";
-import { noticeSeverity, statusBannerRows } from "./statusBannerRows";
+import { noticeSeverity, rowsSaidByCard, statusBannerRows, type StatusBannerRow } from "./statusBannerRows";
 import { useMobileNotices } from "./useMobileNotices";
 import { useNotificationPermissionNotice } from "./useNotificationPermissionNotice";
 import { forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
@@ -291,6 +292,10 @@ export function TerminalView({
     containerRefs: [noticesButton, noticesStrip, noticeCardFrame],
   });
   const cardShown = notice !== null && (mobile ? mobileNotices.open : !noticeDismissal.dismissed);
+  // A wider screen keeps the strip on while the card can be hidden. A phone opens both at once over the terminal, so
+  // the strip leaves out what the card says, and the card's own button is the only one for its action.
+  const stripHiddenRows: readonly StatusBannerRow[] = mobile && cardShown ? rowsSaidByCard(notice.kind) : [];
+  const stripHasRows = noticeRows.some((row) => !stripHiddenRows.includes(row));
   const working = session.state === "connected" && link.phase === "live";
   useEffect(() => {
     if (working) forgetDismissedTerminalNotices(session.id);
@@ -314,6 +319,7 @@ export function TerminalView({
       if (!touchTerminalRef.current) terminal.current?.focus();
     },
   });
+  useAndroidBackStop({ open: search.open && active, close: search.close });
   const copyContext = useRef<() => void>(() => {});
   const copyWithColors = useRef<() => void>(() => {});
   const saveScrollback = useRef<() => void>(() => {});
@@ -878,6 +884,7 @@ export function TerminalView({
       recovery={recovery}
       hostKeyAnswer={hostKeyAnswer}
       onResumeProgram={resumeProgram}
+      hiddenRows={stripHiddenRows}
     />
   );
 
@@ -910,8 +917,8 @@ export function TerminalView({
                     : "bg-live"
               }`}
             />
-            <p className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-[15px]" : "max-w-48 shrink-0 text-[13px]"}`}>{displayTitle}</p>
-            {mobile ? null : <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{destination}</span>}
+            <p title={displayTitle} className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-[15px]" : "max-w-48 shrink-0 text-[13px]"}`}>{displayTitle}</p>
+            {mobile ? null : <span title={destination} className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{destination}</span>}
             {/* While connected the dot says it; the words stay for screen readers. A phone has no room for them
                 either way, but they are still read out there. */}
             <span role="status" className={!headerSaysState || mobile ? "sr-only" : `shrink-0 text-[11.5px] ${sessionStatusTone(session)}`}>{connectionStatus}</span>
@@ -922,7 +929,7 @@ export function TerminalView({
           </div>
           {mobile ? (
             <p className="mt-px flex min-w-0 items-center gap-1 pl-[17px] text-xs text-ink-faint">
-              <span className="truncate">{destination}</span>
+              <span title={destination} className="truncate">{destination}</span>
               {headerSaysState ? <span className={`shrink-0 ${sessionStatusTone(session)}`}>· {connectionStatus}</span> : null}
             </p>
           ) : null}
@@ -1021,7 +1028,7 @@ export function TerminalView({
           <TerminalCommandHeader block={topCommand} onGoTo={() => terminal.current?.scrollToLine(topCommand.start.line)} />
         ) : null}
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
-        {mobile && mobileNotices.open ? (
+        {mobile && mobileNotices.open && stripHasRows ? (
           // Over the top of the terminal, not above it: the terminal keeps its rows, and its program does not draw again.
           <div ref={noticesStrip} tabIndex={-1} className="absolute inset-x-0 top-0 z-20 bg-canvas shadow-float outline-none">
             {statusBanners}

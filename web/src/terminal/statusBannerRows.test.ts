@@ -1,12 +1,30 @@
 import { describe, expect, it } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
-import { noticeSeverity, statusBannerRows } from "./statusBannerRows";
+import { noticeSeverity, rowsSaidByCard, statusBannerRows } from "./statusBannerRows";
 
 const live = { phase: "live" } as const;
 const session: TerminalSession = {
   id: "s1", kind: "ssh", alias: "web-01", workspaceId: "default", title: "web-01", startedAt: "2026-11-02T09:00:00Z", state: "connected", problem: "",
 };
 const quiet = { problem: "", link: live, reconnectFailed: false, answersHostKey: true };
+
+describe("rowsSaidByCard", () => {
+  it("names the row of each card that says the same", () => {
+    expect(rowsSaidByCard("host-key")).toEqual(["host-key"]);
+    expect(rowsSaidByCard("reconnecting")).toEqual(["reconnecting"]);
+    expect(rowsSaidByCard("link-stopped")).toEqual(["link"]);
+    expect(rowsSaidByCard("resume-program")).toEqual(["resume-program"]);
+  });
+
+  it("counts a failed reconnect as said by the card of the ended session, whose body it is", () => {
+    expect(rowsSaidByCard("ended")).toEqual(["ended", "reconnect-failed"]);
+  });
+
+  it("leaves the strip whole for a card that only asks a question of its own", () => {
+    expect(rowsSaidByCard("password-save")).toEqual([]);
+    expect(rowsSaidByCard("notification-permission")).toEqual([]);
+  });
+});
 
 describe("statusBannerRows", () => {
   it("has nothing to say for a session that works", () => {

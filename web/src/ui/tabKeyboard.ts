@@ -1,5 +1,10 @@
 import type { KeyboardEvent } from "react";
 
+// tabsScopeAttribute marks the element around tabs that a tablist owns from outside (aria-owns), for a strip that keeps
+// other buttons between its tabs.
+const tabsScopeAttribute = "data-tabs-scope";
+export const tabsScopeProps = { [tabsScopeAttribute]: "" } as const;
+
 export function activateTabFromKeyboard<T>(
   event: KeyboardEvent<HTMLButtonElement>,
   index: number,
@@ -25,7 +30,7 @@ export function activateTabFromKeyboard<T>(
   }
 
   event.preventDefault();
-  const tablist = event.currentTarget.closest('[role="tablist"]');
+  const tablist = event.currentTarget.closest(`[role="tablist"], [${tabsScopeAttribute}]`);
   const tabs = tablist?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
   tabs?.[next]?.focus();
   const value = values[next];

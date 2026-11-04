@@ -15,7 +15,7 @@ export function SFTPCompactSelection({ label, menuLabel, expanded, onClear, onMe
   const t = useTranslate();
   return <>
     <button type="button" aria-label={t("sftp.clearSelection")} onClick={onClear} className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="close" className="size-5" /></button>
-    <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
+    <span title={label} className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
     <button type="button" aria-label={t("sftp.mobile.search")} aria-expanded="false" onClick={onSearch} className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="search" className="size-5" /></button>
     <button type="button" aria-label={menuLabel} aria-haspopup="dialog" aria-expanded={expanded} onClick={(event) => onMenu(event.currentTarget)} className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="moreHorizontal" className="size-5" /></button>
   </>;
@@ -34,7 +34,7 @@ export function SFTPCompactSearch({ search, recursive, disabled, onOptions }: {
       placeholder={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filterPlaceholder")}
       value={search.filter} onChange={(event) => search.setFilter(event.target.value)}
       onKeyDown={(event) => { if (isImeComposing(event) || event.key !== "Enter") return; event.preventDefault(); if (recursive) void search.runSearch(); event.currentTarget.blur(); }}
-      className="h-12 min-w-0 flex-1 rounded border border-control-line bg-control px-2 text-base outline-none focus:border-accent" />
+      className="ml-2 h-12 min-w-0 flex-1 rounded border border-control-line bg-control px-2 text-base outline-none focus:border-accent" />
     {recursive ? <>
       <button type="button" aria-label={t("sftp.search.mode")} onClick={onOptions} className="flex size-12 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="settings" className="size-5" /></button>
       <button type="button" aria-label={search.searching ? t("sftp.search.stop") : t("sftp.searchBelow")} disabled={!search.searching && (disabled || search.filter.trim() === "")}

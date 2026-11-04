@@ -17,7 +17,7 @@ export function TransferJobRoute({ job, compact = false }: { job: ManagedTransfe
     : job.operation === "copy" ? t("sftp.manager.operation.copy")
     : job.operation === "put" || job.direction === "upload" ? t("sftp.manager.upload") : t("sftp.manager.download");
   return (
-    <span className={`block min-w-0 text-xs text-ink-muted ${compact ? "truncate" : "break-all"}`}>
+    <span title={compact ? `${endpointLabel(source)}${destination === null ? "" : ` → ${endpointLabel(destination)}`}` : undefined} className={`block min-w-0 text-xs text-ink-muted ${compact ? "truncate" : "break-all"}`}>
       {compact ? <span className="mr-2">{operation}</span> : null}
       <span className={compact ? "" : "font-mono"}>{endpointLabel(source)}{destination === null ? "" : ` → ${endpointLabel(destination)}`}</span>
     </span>

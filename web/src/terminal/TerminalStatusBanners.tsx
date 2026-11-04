@@ -4,7 +4,7 @@ import { exitText } from "./exitText";
 import { terminalProblemKey } from "./sessions";
 import { exitedAbnormally } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
-import { hostKeyQuestionOf, statusBannerRows } from "./statusBannerRows";
+import { hostKeyQuestionOf, statusBannerRows, type StatusBannerRow } from "./statusBannerRows";
 import { useReconnectCountdown } from "./useReconnectCountdown";
 import type { HostKeyAnswer } from "../shell/useHostKeyAnswer";
 import type { SessionRecovery } from "./useSessionRecovery";
@@ -51,7 +51,7 @@ function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect
 
 // The strip of one-line notices between the terminal header and the screen: the engine's reconnect progress, the
 // browser's own stream link, and how the program ended. Which rows it shows is statusBannerRows.
-export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, recovery, hostKeyAnswer, onResumeProgram }: {
+export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLinkStop, recovery, hostKeyAnswer, onResumeProgram, hiddenRows = [] }: {
   session: TerminalSession;
   // A message from the view itself, such as a refused clipboard write.
   problem: string;
@@ -64,12 +64,14 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
   hostKeyAnswer?: HostKeyAnswer;
   // onResumeProgram types the command that starts the previous shell's program again.
   onResumeProgram?: (command: string) => void;
+  // hiddenRows are the rows left out because something else on the screen says them now.
+  hiddenRows?: readonly StatusBannerRow[];
 }) {
   const t = useTranslate();
   const question = hostKeyQuestionOf(session);
   const rows = new Set(statusBannerRows({
     session, problem, link, reconnectFailed: recovery?.reconnectFailed === true, answersHostKey: hostKeyAnswer?.answer !== undefined,
-  }));
+  }).filter((row) => !hiddenRows.includes(row)));
 
   return (
     <>

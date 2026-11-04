@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as Reac
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Icon } from "../ui/icons";
-import { activateTabFromKeyboard } from "../ui/tabKeyboard";
+import { activateTabFromKeyboard, tabsScopeProps } from "../ui/tabKeyboard";
 import { draggableCursor } from "../ui/dragAndDropLook";
 import { localHostAlias } from "./localHost";
 import { maxTabsPerPane, type PaneSide, type SFTPPane, type SFTPTab } from "./sftpPanes";
@@ -163,13 +163,14 @@ export function SFTPTabStrip({
     <div data-sftp-pane-tabs={pane.id} className={`flex min-w-0 shrink-0 items-stretch ${stripLook[size]}`}>
       <div
         ref={scroller}
-        role="tablist"
-        aria-label={label}
+        {...tabsScopeProps}
         onDragOver={dragOver}
         onDragLeave={dragLeave}
         onDrop={drop}
         className={`flex min-w-0 items-stretch gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${compact ? "flex-1" : "shrink"}`}
       >
+        {/* A tablist may hold only tabs, and each tab here has its own buttons beside it, so the list owns the tabs by id. */}
+        <div role="tablist" aria-label={label} aria-owns={pane.tabs.map((tab) => tabElementId(tab.id)).join(" ")} className="sr-only" />
         {pane.tabs.map((tab, index) => {
           const labels = tabLabels(tab, t("sftp.newTab"), t("sftp.local.connection"));
           const selected = tab.id === pane.activeId;

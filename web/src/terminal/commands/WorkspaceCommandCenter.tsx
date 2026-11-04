@@ -324,7 +324,7 @@ export function WorkspaceCommandCenter({
             <div className="mt-2 grid max-h-48 gap-2 overflow-auto md:grid-cols-2">
               {prepared.preview.targets.map((target) => (
                 <div key={target.targetId} className="min-w-0">
-                  <p className="truncate text-xs font-medium">
+                  <p title={targetLabel(target)} className="truncate text-xs font-medium">
                     {targetLabel(target)}
                   </p>
                   <pre className={`mt-1 ${codeBlock}`}>

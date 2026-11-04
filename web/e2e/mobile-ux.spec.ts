@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
-import { expect, openApplication, test, type Installation } from "./support/environment";
+import { changeDisplayLanguage, expect, openApplication, test, type Installation } from "./support/environment";
 import { samplePNG } from "./support/images";
+import { chooseEntryOnPhone } from "./support/sftp";
 import { drawnRowCount, drawnRows, drawnRowsIn, drawnSpan } from "./support/terminal";
 
 // All screenshots are opt-in and contain only the isolated installation's
@@ -465,6 +466,274 @@ test("a phone keeps the notices behind a button, shows them over the terminal on
   await expect(card).toHaveCount(0);
   await expect(notices).toHaveAttribute("aria-expanded", "false");
   await expect(page).toHaveURL(/\/terminal$/);
+});
+
+test("a phone says a notice once, in its card, and the strip keeps only what the card does not say", async ({ page, installation }) => {
+  const reconnecting = {
+    id: "once-fixture", kind: "ssh", workspaceId: "default", alias: "gateway", title: "gateway",
+    startedAt: "2026-11-02T00:00:00Z", state: "reconnecting", problem: "reconnect_failed", forwards: [],
+    reconnect: { attempt: 2, limit: 5, retryAt: "2099-01-01T00:00:00Z", problem: "reconnect_failed" },
+  };
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/stream")) {
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: "once" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sessions: [reconnecting], maxSessions: 12 }) });
+  });
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => { socket.send(Buffer.from("before the drop\r\n")); });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).first().tap();
+  await page.getByRole("button", { name: /^gateway/ }).first().tap();
+
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await screen.getByRole("button", { name: "Notices", exact: true }).tap();
+  await expect(screen.getByRole("button", { name: "Stop reconnecting", exact: true })).toHaveCount(1);
+  await expect(screen.locator("[data-notice-card]").getByRole("button", { name: "Stop reconnecting", exact: true })).toBeVisible();
+  // Why the connection is in trouble is not in the card, so the strip still says it.
+  await expect(screen.getByRole("alert")).toBeVisible();
+});
+
+test("Android's Back closes the terminal's search bar first, and leaves the terminal on the next press", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await openShellFromNavigation(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await screen.getByRole("button", { name: "More terminal actions" }).tap();
+  await page.getByRole("menuitem", { name: "Find", exact: true }).tap();
+  const search = screen.getByRole("textbox", { name: "Search terminal output" });
+  await expect(search).toBeVisible();
+
+  expect(await pressAndroidBack(page)).toBe("handled");
+  await expect(search).toHaveCount(0);
+  await expect(page).toHaveURL(/\/terminal$/);
+
+  expect(await pressAndroidBack(page)).toBe("handled");
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("Android's Back ends the SFTP search, the choosing of rows and the editing of the path before it leaves the page", async ({ page, installation }) => {
+  await mockFiles(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await openMobileFiles(page);
+
+  await page.getByRole("button", { name: "Search files", exact: true }).tap();
+  const filter = page.getByRole("searchbox");
+  await expect(filter).toBeVisible();
+  expect(await pressAndroidBack(page)).toBe("handled");
+  await expect(filter).toHaveCount(0);
+
+  await chooseEntryOnPhone(page.getByRole("tabpanel"), "projects");
+  const clear = page.getByRole("button", { name: "Clear selection" }).first();
+  await expect(clear).toBeVisible();
+  expect(await pressAndroidBack(page)).toBe("handled");
+  await expect(clear).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Edit path", exact: true }).tap();
+  const path = page.getByRole("textbox", { name: "Remote path", exact: true });
+  await expect(path).toBeVisible();
+  expect(await pressAndroidBack(page)).toBe("handled");
+  await expect(path).toHaveCount(0);
+  await expect(page).toHaveURL(/\/files$/);
+
+  expect(await pressAndroidBack(page)).toBe("handled");
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("the terminal's search says a bad pattern on a row of its own, and leaves the buttons their width", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openApplication(page, installation);
+  await openShellFromNavigation(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await screen.getByRole("button", { name: "More terminal actions" }).tap();
+  await page.getByRole("menuitem", { name: "Find", exact: true }).tap();
+  await screen.getByRole("button", { name: "Use regular expression" }).tap();
+  await screen.getByRole("textbox", { name: "Search terminal output" }).fill("([");
+
+  const message = screen.getByRole("status").filter({ hasText: "Invalid" });
+  await expect(message).toBeVisible();
+  const close = await screen.getByRole("button", { name: "Close search" }).boundingBox();
+  const said = await message.boundingBox();
+  if (close === null || said === null) throw new Error("the search bar is not on the screen");
+  expect(said.y).toBeGreaterThanOrEqual(close.y + close.height);
+  expect(said.width).toBeGreaterThan(close.width * 4);
+});
+
+// A short screen is what a phone has left over a keyboard, or on its side.
+for (const size of [{ width: 390, height: 420 }, { width: 842, height: 390 }]) {
+  test(`the terminal's menu stays on a ${size.width}x${size.height} screen and scrolls to its last item`, async ({ page, installation }) => {
+    await page.setViewportSize(size);
+    await openApplication(page, installation);
+    await openShellFromNavigation(page);
+    await page.getByRole("button", { name: "More terminal actions" }).tap();
+    const menu = page.getByRole("menu", { name: "More terminal actions" });
+    await expect(menu).toBeInViewport({ ratio: 1 });
+    const last = menu.getByRole("menuitemcheckbox").last();
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toBeInViewport({ ratio: 1 });
+  });
+}
+
+test("the terminal's quick commands open under the phone's top bar, not over it", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await openShellFromNavigation(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  const more = screen.getByRole("button", { name: "More terminal actions" });
+  await more.tap();
+  await page.getByRole("menuitem", { name: "Quick Commands", exact: true }).tap();
+  const panel = page.getByRole("dialog", { name: "Quick Commands" });
+  await expect(panel).toBeVisible();
+  const bar = await more.boundingBox();
+  const opened = await panel.boundingBox();
+  if (bar === null || opened === null) throw new Error("the panel or the top bar is not on the screen");
+  expect(opened.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+});
+
+// openLocalFolderOnPhone opens a folder of the engine's disk in the SFTP tab on the screen.
+async function openLocalFolderOnPhone(page: Page, directory: string) {
+  await page.getByRole("button", { name: "Host", exact: true }).tap();
+  await page.getByRole("dialog").getByText("Local", { exact: true }).first().tap();
+  await page.getByRole("button", { name: "Edit local path", exact: true }).tap();
+  const path = page.getByRole("textbox", { name: "Engine filesystem path", exact: true });
+  await path.fill(directory);
+  await path.press("Enter");
+  await expect(page.getByTestId("sftp-current-path")).toHaveAttribute("data-path", directory);
+}
+
+test("a folder comparison fits a phone, with what each side has under the name", async ({ page, installation }) => {
+  const longName = "a-long-file-name-that-does-not-fit-the-width-of-a-phone-at-all-and-has-nowhere-to-break.txt";
+  for (const [side, contents] of [["left", "short"], ["right", "a different length"]] as const) {
+    await installation.write(`compare/${side}/${longName}`, contents);
+  }
+  const under = join(installation.home, ".ssh", "compare");
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "SFTP", exact: true }).tap();
+  await openLocalFolderOnPhone(page, join(under, "left"));
+  await page.getByRole("button", { name: "New tab", exact: true }).tap();
+  await page.getByRole("dialog").getByText("Local", { exact: true }).first().tap();
+  await page.getByRole("button", { name: "Edit local path", exact: true }).tap();
+  const path = page.getByRole("textbox", { name: "Engine filesystem path", exact: true });
+  await path.fill(join(under, "right"));
+  await path.press("Enter");
+
+  await page.getByRole("button", { name: "Compare directories", exact: true }).tap();
+  const choosing = page.getByRole("dialog", { name: "Choose tabs to compare" });
+  // The folder comes first, where the closed list shows it, so the two tabs can be told apart.
+  await expect(choosing.getByRole("option", { name: /^Local:left / })).toHaveCount(2);
+  await expect(choosing.getByRole("option", { name: /^Local:right / })).toHaveCount(2);
+  await choosing.getByRole("button", { name: "Compare", exact: true }).tap();
+
+  const comparison = page.getByRole("dialog", { name: "Compare directories" });
+  const row = comparison.getByRole("row", { name: new RegExp(longName) });
+  await expect(row).toContainText("Changed");
+  await expect(row).toContainText("5 B");
+  const scroller = comparison.locator("table").locator("xpath=..");
+  const sideways = await scroller.evaluate((element) => element.scrollWidth - element.clientWidth);
+  expect(sideways).toBeLessThanOrEqual(1);
+});
+
+test("the SFTP editor keeps its Japanese buttons on one line on a phone, beside a long path", async ({ page, installation }) => {
+  const longName = "a-long-file-name-that-does-not-fit-the-width-of-a-phone-at-all-and-has-nowhere-to-break.txt";
+  await installation.write(`editing/${longName}`, "text\n");
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openApplication(page, installation);
+  // English does not break a word; Japanese breaks anywhere, so a squeezed button shows it.
+  await changeDisplayLanguage(page, "ja");
+  await page.getByRole("navigation", { name: "クイックナビゲーション" }).getByRole("link", { name: "SFTP", exact: true }).tap();
+  await page.getByRole("button", { name: "接続先", exact: true }).tap();
+  await page.getByRole("dialog").getByText("ローカル", { exact: true }).first().tap();
+  await page.getByRole("button", { name: "ローカルパスを編集", exact: true }).tap();
+  const path = page.getByRole("textbox", { name: "sshcエンジン側のファイルパス", exact: true });
+  await path.fill(join(installation.home, ".ssh", "editing"));
+  await path.press("Enter");
+  await chooseEntryOnPhone(page.getByRole("tabpanel"), longName);
+  await page.getByRole("button", { name: `${longName}の操作` }).tap();
+  await page.getByRole("menuitem", { name: "ファイルを編集", exact: true }).tap();
+
+  const close = page.getByRole("dialog", { name: new RegExp(longName) }).getByRole("button", { name: "閉じる", exact: true });
+  await expect(close).toBeVisible();
+  const lines = await close.evaluate((button) => {
+    const range = document.createRange();
+    range.selectNodeContents(button);
+    return new Set([...range.getClientRects()].map((rectangle) => Math.round(rectangle.top))).size;
+  });
+  expect(lines).toBe(1);
+});
+
+test("the transfer manager's sheet shows the whole summary on a phone", async ({ page, installation }) => {
+  const job = (id: string, overrides: Record<string, unknown>) => ({
+    id: `fixture_${id}`, batchId: `batch-${id}`, batchName: `${id}.txt`, batchKind: "file", alias: "bastion",
+    sourceAlias: "nas", sourcePath: `/source/${id}.txt`, operation: "copy", direction: "remote", kind: "file",
+    name: `${id}.txt`, remotePath: `/destination/${id}.txt`, totalBytes: 4096, transferredBytes: 1024,
+    bytesPerSecond: 0, remainingSeconds: -1, status: "paused", allowedActions: ["resume", "cancel"],
+    attempt: 1, reconnectAttempt: 0, reconnectAt: "", problem: "", lastModified: 0,
+    expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "", downloadParts: [],
+    createdAt: "2026-10-10T00:00:00Z", updatedAt: "2026-10-10T00:00:00Z", ...overrides,
+  });
+  await page.route("**/api/v1/sftp/transfers", (route) => route.fulfill({ json: {
+    maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: true,
+    largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20,
+    speedLimitBytesPerSecond: 0, autoReconnect: true, maxReconnectAttempts: 3,
+    jobs: [
+      job("running", { status: "running", bytesPerSecond: 1048576, allowedActions: ["pause", "cancel"] }),
+      job("paused", {}),
+      job("overwrite", { status: "needs_overwrite" }),
+      job("reconnect", { status: "reconnecting", reconnectAttempt: 2 }),
+      job("failed", { status: "failed", problem: "sftp_connection_lost", allowedActions: ["retry", "remove"] }),
+    ],
+  } }));
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "SFTP", exact: true }).tap();
+  await page.getByRole("button", { name: "Expand Transfer Manager", exact: true }).tap();
+  const sheet = page.getByRole("dialog", { name: "Transfer Manager" });
+  const summary = sheet.locator("[id$='-summary']").first();
+  await expect(summary).toBeVisible();
+  const hidden = await summary.evaluate((element) => element.scrollWidth - element.clientWidth);
+  expect(hidden).toBeLessThanOrEqual(1);
+  const heading = sheet.getByRole("heading", { name: "Transfer Manager" });
+  expect(await heading.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+test("a name with nowhere to break folds inside a dialog on a phone", async ({ page, installation }) => {
+  const title = "x".repeat(120);
+  const session = {
+    id: "long-name-fixture", kind: "shell", workspaceId: "default", title,
+    startedAt: "2026-11-02T00:00:00Z", state: "connected", problem: "", forwards: [],
+  };
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/stream")) {
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: "long-name" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sessions: [session], maxSessions: 12 }) });
+  });
+  await page.routeWebSocket("**/terminal/stream?**", () => undefined);
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).first().tap();
+  await page.getByRole("button", { name: `Close ${title}` }).tap();
+  const dialog = page.getByRole("dialog");
+  const heading = dialog.getByRole("heading");
+  await expect(heading).toBeVisible();
+  const widths = await heading.evaluate((element) => ({ heading: element.scrollWidth, dialog: element.closest("[role=dialog]")?.clientWidth ?? 0 }));
+  expect(widths.heading).toBeLessThanOrEqual(widths.dialog);
+});
+
+test("the search on a phone names no keys, and has a button to close it", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: "Navigation", exact: true }).first().tap();
+  await page.getByRole("button", { name: /^Search everything/ }).first().tap();
+  const palette = page.getByRole("dialog");
+  await expect(palette.getByText("Type user@host to connect")).toBeVisible();
+  await expect(palette.locator("kbd:visible")).toHaveCount(0);
+  await palette.getByRole("button", { name: "Close search" }).tap();
+  await expect(palette).toHaveCount(0);
 });
 
 test("the Android app asks for the notification permission once, behind the notices button, when a program first reports", async ({ page, installation }) => {

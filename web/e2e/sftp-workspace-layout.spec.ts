@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, openApplication, openSection, test } from "./support/environment";
-import { chooseEntryOnPhone, openLocalSFTPDirectory, openSecondSFTPPane } from "./support/sftp";
+import { chooseEntryOnPhone, openLocalSFTPDirectory, openSecondSFTPPane, sftpTabStrip } from "./support/sftp";
 
 // Mouse and touch controls must align without sacrificing phone tap targets.
 for (const hasTouch of [false, true]) {
@@ -48,7 +48,7 @@ for (const hasTouch of [false, true]) {
 
       for (const viewport of hasTouch ? [{ width: 390, height: 640 }, { width: 844, height: 390 }] : []) {
         await page.setViewportSize(viewport);
-        await page.getByRole("tablist", { name: "File tabs", exact: true }).getByRole("tab", { name: "Local:layout", exact: true }).click();
+        await sftpTabStrip(page, "File tabs").getByRole("tab", { name: "Local:layout", exact: true }).click();
         const pane = page.getByRole("tabpanel");
         await expect(pane).toHaveCount(1);
         const list = pane.getByTestId("sftp-file-list");

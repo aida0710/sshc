@@ -3,7 +3,7 @@
 // terminal's menu and its rows' menus), so a menu looks the same whichever one opens.
 
 // menuSurface is the panel. The caller adds where it sits and how wide it is.
-export const menuSurface = "rounded-lg border border-line bg-card p-1 shadow-float";
+export const menuSurface = "rounded-lg border border-line bg-card p-1 shadow-float [overflow-wrap:break-word]";
 
 // Every item's size, hover and focus. Items are taller on touch layouts, where they are tapped. The
 // horizontal padding is left to each kind of item. A disabled item takes index.css's look for :disabled.

@@ -1,5 +1,5 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
-import { openSecondSFTPPane, sftpHostPicker } from "./support/sftp";
+import { openSecondSFTPPane, sftpHostPicker, sftpTabStrip } from "./support/sftp";
 
 test("selects the pinned Local destination beside an SSH host", async ({ page, installation }) => {
   test.setTimeout(60_000);
@@ -62,7 +62,7 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-toolbar-path-ja.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 800 });
   await expect(second).toBeVisible();
-  await page.getByRole("tablist", { name: "ファイルタブ", exact: true }).getByRole("tab", { name: "bastion:projects", exact: true }).click();
+  await sftpTabStrip(page, "ファイルタブ").getByRole("tab", { name: "bastion:projects", exact: true }).click();
   await (await sftpHostPicker(page, first)).click();
   await page.getByRole("dialog").getByRole("button", { name: /ローカル.*sshc/ }).click();
   await expect(first.getByRole("button", { name: "draft.txt" })).toBeVisible();

@@ -16,7 +16,7 @@ it("starts with the current tab and another tab, showing the local connection na
   const first = screen.getByRole("combobox", { name: "Tab to compare" });
   expect(first).toHaveValue("web");
   expect(screen.getByRole("combobox", { name: "Other tab" })).toHaveValue("local");
-  expect(within(first).getByRole("option", { name: "Local:/home/user" })).toBeInTheDocument();
+  expect(within(first).getByRole("option", { name: "Local:user (/home/user)" })).toBeInTheDocument();
   await waitFor(() => expect(first).toHaveFocus());
   await userEvent.click(screen.getByRole("button", { name: "Compare" }));
   expect(onCompare).toHaveBeenCalledWith({ alias: "web", path: "/srv/web" }, { alias: localHostAlias, path: "/home/user" });
@@ -37,7 +37,7 @@ it("prevents comparing a tab with itself, including a submitted invalid selectio
   const onCompare = vi.fn();
   render(<SFTPCompareTabsDialog tabs={tabs} currentTabId="web" onCompare={onCompare} onDismiss={vi.fn()} />);
   const second = screen.getByRole("combobox", { name: "Other tab" });
-  expect(within(second).getByRole("option", { name: "web:/srv/web" })).toBeDisabled();
+  expect(within(second).getByRole("option", { name: "web:web (/srv/web)" })).toBeDisabled();
   fireEvent.change(second, { target: { value: "web" } });
   expect(screen.getByRole("button", { name: "Compare" })).toBeDisabled();
   fireEvent.submit(screen.getByRole("button", { name: "Compare" }).closest("form")!);
@@ -76,4 +76,16 @@ it("dismisses through Cancel and Escape without starting a comparison", async ()
   await userEvent.keyboard("{Escape}");
   expect(onDismiss).toHaveBeenCalledTimes(2);
   expect(onCompare).not.toHaveBeenCalled();
+});
+
+it("names a tab by its folder first, as two tabs under one long path differ only at its end, and a root by its path", () => {
+  const under = "/var/log/customer-acme-corporation-production-environment";
+  render(<SFTPCompareTabsDialog
+    tabs={[{ id: "a", alias: "web", path: `${under}/api` }, { id: "b", alias: "web", path: `${under}/worker` }, { id: "c", alias: "web", path: "/" }]}
+    currentTabId="a" onCompare={vi.fn()} onDismiss={vi.fn()}
+  />);
+  const first = screen.getByRole("combobox", { name: "Tab to compare" });
+  expect(within(first).getByRole("option", { name: `web:api (${under}/api)` })).toBeInTheDocument();
+  expect(within(first).getByRole("option", { name: `web:worker (${under}/worker)` })).toBeInTheDocument();
+  expect(within(first).getByRole("option", { name: "web:/" })).toBeInTheDocument();
 });

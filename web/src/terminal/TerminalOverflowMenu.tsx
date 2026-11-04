@@ -2,6 +2,7 @@ import { useRef, type RefObject } from "react";
 import { Icon } from "../ui/icons";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import { useAnchoredMenu } from "../ui/useAnchoredMenu";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { SwitchMark } from "../ui/SwitchMark";
@@ -47,7 +48,7 @@ export function TerminalOverflowMenu({
   onNextPrompt?: (() => void) | undefined;
   // splitRefusal says why nothing can go beside this terminal; undefined when something can.
   splitRefusal?: string | undefined;
-  triggerRef?: RefObject<HTMLElement | null>;
+  triggerRef: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
   const panel = useRef<HTMLDivElement>(null);
@@ -57,10 +58,11 @@ export function TerminalOverflowMenu({
 
   useDismissibleLayer({
     open: true,
-    containerRefs: triggerRef === undefined ? [panel] : [panel, triggerRef],
+    containerRefs: [panel, triggerRef],
     onDismiss: onClose,
-    ...(triggerRef === undefined ? {} : { returnFocusRef: triggerRef }),
+    returnFocusRef: triggerRef,
   });
+  useAnchoredMenu({ open: true, anchorRef: triggerRef, menuRef: panel });
   useMenuKeyboard({ open: true, menuRef: panel, onClose });
 
   const action = (callback: () => void | Promise<void>) => () => {
@@ -73,7 +75,7 @@ export function TerminalOverflowMenu({
       ref={panel}
       role="menu"
       aria-label={t("terminal.moreActions")}
-      className={`absolute right-2 top-[calc(100%-0.25rem)] z-40 w-64 ${menuSurface}`}
+      className={`fixed z-40 w-72 overflow-y-auto ${menuSurface}`}
     >
       {onSearch === undefined ? null : (
         <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onSearch)}>

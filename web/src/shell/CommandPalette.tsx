@@ -11,6 +11,7 @@ import type { TerminalSession } from "../api/terminalSessions";
 import { terminalDisplayTitle, terminalSubtitle } from "../terminal/terminalPresentation";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { PanelState } from "../ui/PanelState";
 import { isImeComposing } from "../ui/imeComposition";
 import { hasOnScreenKeyboard, literalTextEntry } from "../ui/softKeyboard";
@@ -114,6 +115,7 @@ export function CommandPalette({
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
+  const compact = useMediaQuery(mobileViewportQuery);
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
@@ -261,23 +263,30 @@ export function CommandPalette({
       panelClassName="flex max-h-[72vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg"
     >
         <h2 id="command-palette-heading" className="sr-only">{t("palette.heading")}</h2>
-        <label className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
-          <Icon name="search" className="h-4 w-4 text-ink-muted" />
-          <span className="sr-only">{t("palette.heading")}</span>
-          <input {...literalTextEntry}
-            ref={input}
-            type="search"
-            aria-label={t("palette.heading")}
-            aria-controls="command-palette-results"
-            aria-activedescendant={visible[selected] === undefined ? undefined : `command-palette-option-${selected}`}
-            value={query}
-            onChange={(event) => { setQuery(event.target.value); setSelected(0); }}
-            onKeyDown={navigateResultsByKey}
-            placeholder={t("palette.placeholder")}
-            className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
-          />
-          <kbd className="border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">Esc</kbd>
-        </label>
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line pl-3 pr-1 desktop-layout:pr-3">
+          <label className="flex h-full min-w-0 flex-1 items-center gap-2">
+            <Icon name="search" className="h-4 w-4 text-ink-muted" />
+            <span className="sr-only">{t("palette.heading")}</span>
+            <input {...literalTextEntry}
+              ref={input}
+              type="search"
+              aria-label={t("palette.heading")}
+              aria-controls="command-palette-results"
+              aria-activedescendant={visible[selected] === undefined ? undefined : `command-palette-option-${selected}`}
+              value={query}
+              onChange={(event) => { setQuery(event.target.value); setSelected(0); }}
+              onKeyDown={navigateResultsByKey}
+              placeholder={t("palette.placeholder")}
+              // The row is the field, and the caret says the focus is in it; the ring of other fields would cross the row's edges.
+              className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none! placeholder:text-ink-faint"
+            />
+          </label>
+          {compact ? (
+            <button type="button" aria-label={t("palette.close")} title={t("palette.close")} onClick={onClose} className="flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-surface hover:text-ink">
+              <Icon name="close" className="size-4" />
+            </button>
+          ) : <kbd className="border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">Esc</kbd>}
+        </div>
         <div id="command-palette-results" role="listbox" aria-label={t("palette.results")} className="min-h-0 overflow-y-auto p-1.5">
           {visible.map((item, index) => (
             <div key={item.id} className="relative">
@@ -291,11 +300,11 @@ export function CommandPalette({
                 className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-hover"}`}
               >
                 <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-faint">{t(kindLabelKeys[item.kind])}</span>
-                <span className="col-start-2 truncate font-medium text-ink">{item.label}</span>
-                {item.detail === "" ? null : <span className="col-start-2 truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>}
+                <span title={item.label} className="col-start-2 truncate font-medium text-ink">{item.label}</span>
+                {item.detail === "" ? null : <span title={item.detail} className="col-start-2 truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>}
                 {/* A phone has no keys to press, and its width goes to the name. */}
                 {item.keys?.[0] === undefined ? null : (
-                  <kbd title={item.keys.map(shortcutLabel).join(" / ")} className="col-start-3 row-span-2 row-start-1 hidden border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted md:block">{shortcutLabel(item.keys[0])}</kbd>
+                  <kbd title={item.keys.map(shortcutLabel).join(" / ")} className="col-start-3 row-span-2 row-start-1 hidden border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted desktop-layout:block">{shortcutLabel(item.keys[0])}</kbd>
                 )}
               </button>
               {item.host === undefined ? null : (
@@ -321,7 +330,7 @@ export function CommandPalette({
             <PanelState tone={loading ? "loading" : "empty"} title={loading ? t("palette.loading") : t("palette.empty")} />
           ) : null}
         </div>
-        <p className="shrink-0 border-t border-line px-3 py-2 text-[11px] text-ink-faint">{t("palette.hint")}</p>
+        <p className="shrink-0 border-t border-line px-3 py-2 text-[11px] text-ink-faint">{t(compact ? "palette.hintCompact" : "palette.hint")}</p>
     </ModalShell>
   );
 }

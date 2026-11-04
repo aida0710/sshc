@@ -1,6 +1,7 @@
 import { render } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useAndroidBackStop } from "../ui/useAndroidBackStop";
 import { useShellLayers } from "./useShellLayers";
 
 // PressesBackOnDrawing presses Back as soon as the page is drawn: a layout effect, which comes before the effects that
@@ -34,6 +35,31 @@ describe("useShellLayers", () => {
     afterEach(() => {
       document.getSelection()?.removeAllRanges();
       document.body.replaceChildren();
+    });
+
+    it("closes an open part of the page first, the one opened last before the other, and leaves the page after them", () => {
+      const onBack = vi.fn();
+      const closeFirst = vi.fn();
+      const closeSecond = vi.fn();
+      function Page({ firstOpen, secondOpen }: { firstOpen: boolean; secondOpen: boolean }) {
+        useAndroidBackStop({ open: firstOpen, close: closeFirst });
+        useAndroidBackStop({ open: secondOpen, close: closeSecond });
+        return <Shell onBack={onBack} />;
+      }
+      const { rerender } = render(<Page firstOpen secondOpen />);
+
+      expect(pressBack().defaultPrevented).toBe(true);
+      expect(closeSecond).toHaveBeenCalledOnce();
+      expect(closeFirst).not.toHaveBeenCalled();
+      expect(onBack).not.toHaveBeenCalled();
+
+      rerender(<Page firstOpen secondOpen={false} />);
+      expect(pressBack().defaultPrevented).toBe(true);
+      expect(closeFirst).toHaveBeenCalledOnce();
+
+      rerender(<Page firstOpen={false} secondOpen={false} />);
+      pressBack();
+      expect(onBack).toHaveBeenCalledOnce();
     });
 
     it("lets go of the selection first, and leaves the page on the next press", () => {
