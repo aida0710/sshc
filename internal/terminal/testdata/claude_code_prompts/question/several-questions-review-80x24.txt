@@ -1,0 +1,24 @@
+▝▜██████▀  Opus 5.5 · API Usage Billing
+ ▝▝   ▝▝   ~/project
+
+
+❯ 複数してください
+
+● 確かめます。
+
+────────────────────────────────────────────────────────────────────────────────
+←  ☒ 項目  ☒ 時期  ✔ Submit  →
+
+Review your answers
+
+ ● どの項目を入れますか？
+   → ログ
+ ● いつ出しますか？
+   → 今日
+
+Ready to submit your answers?
+
+❯ 1. Submit answers
+  2. Cancel
+
+[lab] 0:2.1.318*                                                          12:00

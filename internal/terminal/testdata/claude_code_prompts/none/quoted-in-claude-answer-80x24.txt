@@ -1,0 +1,24 @@
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Opus 5.5 · API Usage Billing
+ ▝▝   ▝▝   ~/project
+
+
+❯ 引用してください
+
+● 問いはこのように出ます。
+
+  Do you want to proceed?
+  ❯ 1. Yes
+    2. No
+
+  Esc to cancel
+
+  どちらにしますか？
+
+✻ Cogitated for 0s · done 10:50 PM
+                                                            ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← for agents
+[lab] 0:2.1.318*                                                          12:00

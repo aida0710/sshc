@@ -1376,7 +1376,7 @@ export const ja = {
   "connection.paletteLabel": "配色",
   "connection.encodingLabel": "文字コード",
   "connection.tmuxLabel": "tmuxで開く",
-  "connection.tmuxHint": "切断や開き直しのあとも同じ画面に戻れます。サーバーにtmuxが要り、tmuxの中のプログラムの状態はサイドバーに出ません。",
+  "connection.tmuxHint": "切断や開き直しのあとも同じ画面に戻れます。サーバーにtmuxが要ります。tmuxの中のプログラムの状態でサイドバーに出るのは、画面に見えているClaude Codeの問いだけです。",
   "connection.encodingHint":
     "ブラウザのターミナルとコマンドラインのsshcの両方で、この接続先に使います。",
   "connection.encodingUTF8": "UTF-8（既定）",

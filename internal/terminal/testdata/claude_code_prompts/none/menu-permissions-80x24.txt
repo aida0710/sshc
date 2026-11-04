@@ -1,0 +1,24 @@
+
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Opus 5.5 · API Usage Billing
+ ▝▝   ▝▝   ~/project
+
+
+
+
+
+
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔ ◐ medium · /effort ▔
+   Permissions  Recently blocked   Allow   Ask   Deny   Auto mode
+    Workspace
+
+   Claude Code won't ask before using allowed tools.
+   ╭───────────────────────────────────────────────╮
+   │ ⌕ Search…                                     │
+   ╰───────────────────────────────────────────────╯
+
+     1. Add a new rule…
+
+   ←/→ to switch · ↓ to select · Esc to cancel
+[lab] 0:2.1.318*                                                          12:00
