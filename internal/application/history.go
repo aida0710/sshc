@@ -85,8 +85,7 @@ func (s *Service) History() ([]HistoryEntry, error) {
 }
 
 // reloadVaultAfterRestore は、復元した保管庫をこの実行へ読み直す。古い中身を配り続けると、次の保存も
-// ディスクとの食い違いで断られる。いまの鍵で開けない世代（パスワードの変更より前）に戻したときは閉じて、
-// 次のロック解除にディスクから読ませる。
+// ディスクとの食い違いで断られる。いまの鍵で開けないときは閉じて、次のロック解除にディスクから読ませる。
 func (s *Service) reloadVaultAfterRestore(absolute string) {
 	if s.vault == nil {
 		return
