@@ -295,32 +295,33 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
               ))}
             </ul>
           ) : (
-          <div className="mt-3">
-            <table className="w-full text-[13px]">
-              <caption className="mb-2 text-left text-xs text-ink-faint">{t("kh.scanCandidates")}</caption>              <thead>
-                <tr className={tableHeadRow}>
-                  <SortableTableHeader column="host" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
-                  <SortableTableHeader column="type" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
-                  <SortableTableHeader column="fingerprint" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
-                  <SortableTableHeader column="trust" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnTrust")}</SortableTableHeader>
-                  <th scope="col" className={tableHeadCell}><span className="sr-only">{t("kh.columnActions")}</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayedCandidates.map((candidate) => (
-                  <tr key={`${candidate.host}-${candidate.fingerprint}`} className="border-b border-line last:border-b-0">
-                    <td className={`${tableCell} [overflow-wrap:anywhere]`}>{candidate.host}</td>
-                    <td className={`${tableCell} ${keyTypeCell}`}>{candidate.keyType}</td>
-                    <td className={`${tableCell} ${fingerprintCell}`}>{candidate.fingerprint}</td>
-                    <td className={tableCell}><Tag tone="warn">{candidateTrustText}</Tag></td>
-                    <td className={`${tableCell} text-right`}>
-                      <Button onClick={() => openAdd(candidate)}>{t("kh.add")}</Button>
-                    </td>
+            <div className="mt-3">
+              <table className="w-full text-[13px]">
+                <caption className="mb-2 text-left text-xs text-ink-faint">{t("kh.scanCandidates")}</caption>
+                <thead>
+                  <tr className={tableHeadRow}>
+                    <SortableTableHeader column="host" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
+                    <SortableTableHeader column="type" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
+                    <SortableTableHeader column="fingerprint" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
+                    <SortableTableHeader column="trust" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnTrust")}</SortableTableHeader>
+                    <th scope="col" className={tableHeadCell}><span className="sr-only">{t("kh.columnActions")}</span></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {displayedCandidates.map((candidate) => (
+                    <tr key={`${candidate.host}-${candidate.fingerprint}`} className="border-b border-line last:border-b-0">
+                      <td className={`${tableCell} [overflow-wrap:anywhere]`}>{candidate.host}</td>
+                      <td className={`${tableCell} ${keyTypeCell}`}>{candidate.keyType}</td>
+                      <td className={`${tableCell} ${fingerprintCell}`}>{candidate.fingerprint}</td>
+                      <td className={tableCell}><Tag tone="warn">{candidateTrustText}</Tag></td>
+                      <td className={`${tableCell} text-right`}>
+                        <Button onClick={() => openAdd(candidate)}>{t("kh.add")}</Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )
         ) : null}
 

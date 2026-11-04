@@ -5,6 +5,9 @@ import { hintText } from "../ui/form";
 
 type ValueSource = EffectiveResponse["sources"][number];
 
+// A column of its own only once the table has room for it; narrower, its text is in the value's cell.
+const onlyWhenWide = "hidden @2xl/sources:table-cell";
+
 // ValueSourceTable lists every line of the SSH configuration that sets a value of a connection, and which of them
 // applies. Where the table is narrow (a phone, or the editor beside the list of connections) the place and the state
 // go under the value, so that nothing has to be scrolled sideways: a value is often longer than the whole width.
@@ -55,6 +58,3 @@ export function ValueSourceTable({ sources, label, captionShown = false, showCon
     </div>
   );
 }
-
-// A column of its own only once the table has room for it; narrower, its text is in the value's cell.
-const onlyWhenWide = "hidden @2xl/sources:table-cell";

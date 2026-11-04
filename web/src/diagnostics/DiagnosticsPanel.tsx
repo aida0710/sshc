@@ -157,7 +157,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
                     onChange={(event) => setTypedAlias(event.target.value)}
                     list="diagnostic-host-options"
                     placeholder={t("diag.hostAliasPlaceholder")}
-                    className={`${control} font-mono [&::-webkit-calendar-picker-indicator]:hidden!`}
+                    className={`${control} font-mono`}
                   />
                 </Field>
                 <datalist id="diagnostic-host-options">
