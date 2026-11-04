@@ -18,6 +18,11 @@ function keepQueryFocus(event: { preventDefault(): void }) {
   event.preventDefault();
 }
 
+function statusPlace(mobile: boolean, invalid: boolean): string {
+  if (!mobile) return invalid ? "order-last basis-full" : "w-14";
+  return invalid ? "order-last col-span-6" : "min-w-0";
+}
+
 // The find-in-scrollback bar floating over the terminal.
 export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; mobile: boolean }) {
   const t = useTranslate();
@@ -62,7 +67,8 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
       >
         .*
       </Button>
-      <span role="status" className={`${mobile ? "min-w-0" : "w-14"} text-center text-[11px] ${search.invalid ? "text-danger" : "text-ink-muted"}`}>
+      {/* The one message that does not fit a button's width takes a row of its own under the buttons. */}
+      <span role="status" className={`${statusPlace(mobile, search.invalid)} text-center text-[11px] ${search.invalid ? "text-danger" : "text-ink-muted"}`}>
         {search.invalid
           ? t("terminal.searchInvalidRegex")
           : search.result.total === 0

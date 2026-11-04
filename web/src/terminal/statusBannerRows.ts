@@ -1,6 +1,7 @@
 import type { TerminalSession } from "../api/terminalSessions";
 import { exitedAbnormally } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
+import type { TerminalNotice } from "./terminalNotice";
 
 // StatusBannerRow is one row of the strip of notices about a session (TerminalStatusBanners).
 export type StatusBannerRow =
@@ -43,6 +44,26 @@ export function statusBannerRows({ session, problem, link, reconnectFailed, answ
   if (session.exited !== undefined) rows.push("ended");
   if (session.resume !== undefined) rows.push("resume-program");
   return rows;
+}
+
+// rowsSaidByCard is which rows of the strip say the same as the card of a notice (TerminalNoticeCard), with the same
+// action. The reason an ended session could not reconnect is the body of its card.
+export function rowsSaidByCard(kind: TerminalNotice["kind"]): readonly StatusBannerRow[] {
+  switch (kind) {
+    case "host-key":
+      return ["host-key"];
+    case "reconnecting":
+      return ["reconnecting"];
+    case "ended":
+      return ["ended", "reconnect-failed"];
+    case "link-stopped":
+      return ["link"];
+    case "resume-program":
+      return ["resume-program"];
+    case "password-save":
+    case "notification-permission":
+      return [];
+  }
 }
 
 // hostKeyQuestionOf is the host key question a connecting session waits on, if any.

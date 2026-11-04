@@ -19,7 +19,7 @@ export function TerminalCommandHeader({ block, onGoTo }: { block: CommandBlock; 
       onClick={onGoTo}
       className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-[color-mix(in_srgb,var(--ui-term-bg)_93%,var(--ui-ink))] px-2 py-1 text-left shadow-[0_4px_10px_rgb(0_0_0/0.3)]"
     >
-      <span className="min-w-0 truncate font-mono text-[13px] text-[var(--ui-term-fg)]">$ {name}</span>
+      <span title={name} className="min-w-0 truncate font-mono text-[13px] text-[var(--ui-term-fg)]">$ {name}</span>
       <span className="sshc-command-result shrink-0 text-xs">{commandResult(block, t, now)}</span>
     </button>
   );

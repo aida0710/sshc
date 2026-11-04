@@ -16,8 +16,9 @@ import { useReconnectCountdown } from "./useReconnectCountdown";
 import type { SessionRecovery } from "./useSessionRecovery";
 
 // TerminalNoticeCard shows a state of the session that waits on the person, larger than the strip above the
-// terminal and with the same actions. The strip still says it: the card is not a live region, so a screen reader
-// hears each change once, and the person can hide the card to read the log under it and act from the strip.
+// terminal and with the same actions. A wider screen's strip still says it: the card is not a live region, so a screen
+// reader hears each change once, and the person can hide the card to read the log under it and act from the strip.
+// A phone opens the two together, and leaves out of the strip what the card says (rowsSaidByCard).
 export function TerminalNoticeCard({ notice, session, title, recovery, hostKeyAnswer, notificationPermission, focus, onLinkNow, onCloseSession, onAnswerPasswordSave, onDismiss, onResumeProgram }: {
   notice: TerminalNotice;
   session: TerminalSession;

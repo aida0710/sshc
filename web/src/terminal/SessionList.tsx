@@ -190,13 +190,14 @@ export function SessionList({
             const details = (
               <>
                 {unread && session.lastNotification !== undefined ? (
-                  <span className="block truncate text-[11.5px] leading-4 text-notice-ink">
+                  <span title={notificationText(t, session.lastNotification)} className="block truncate text-[11.5px] leading-4 text-notice-ink">
                     {notificationText(t, session.lastNotification)}
                   </span>
                 ) : null}
                 {(session.forwards ?? []).map((forward) => (
                   <p
                     key={`${forward.kind}:${forward.listen}:${forward.to}`}
+                    title={forward.problem === "" ? describeForward(t, forward) : describeForwardProblem(t, forward.problem)}
                     className={`truncate text-[11px] ${forward.problem === "" ? "text-ink-faint" : "text-notice-ink"}`}
                   >
                     {forward.problem === "" ? describeForward(t, forward) : describeForwardProblem(t, forward.problem)}
@@ -285,7 +286,7 @@ export function SessionList({
                       <span className="min-w-0 grow">
                         {/* The name gets the whole first line; the destination (or the state) is the second. */}
                         <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px]">
-                          <span className={`min-w-0 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
+                          <span title={displayTitle} className={`min-w-0 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
                           {splitGroup === undefined ? null : (
                             // Where this session sits in its split, drawn small; the name is for screen readers.
                             <span data-split-group-badge={splitGroup.number} title={t("splitView.groupName", { number: splitGroup.number })}
@@ -303,7 +304,8 @@ export function SessionList({
                   {/* On a PC-sized screen the name has the whole row, and the actions show only on the hovered (or
                       keyboard-reached) row, over the end of the name line. The phone layout keeps them in the row,
                       always shown. */}
-                  <div className={`flex shrink-0 items-center gap-0.5 desktop-layout:absolute desktop-layout:right-1.5 desktop-layout:top-[2px] desktop-layout:rounded-md ${
+                  {/* While the name is edited its field has the row: the actions would squeeze it on a phone and lie over it on a PC. */}
+                  {renaming === session.id ? null : <div className={`flex shrink-0 items-center gap-0.5 desktop-layout:absolute desktop-layout:right-1.5 desktop-layout:top-[2px] desktop-layout:rounded-md ${
                     isSelected ? "desktop-layout:bg-select-fill" : "desktop-layout:bg-hover"
                   } ${menuFor === session.id ? "" : revealOnHoverAtPcSize}`}>
                     <button
@@ -339,7 +341,7 @@ export function SessionList({
                     >
                       <Icon name="close" className="size-3.5" />
                     </button>
-                  </div>
+                  </div>}
                 </div>
                 {menuFor === session.id ? (
                   <SessionRowMenu

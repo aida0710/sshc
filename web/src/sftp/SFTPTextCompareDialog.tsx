@@ -16,7 +16,7 @@ export function SFTPTextCompareDialog({ path, left, right, onDismiss }: { path: 
   const label = (side: TextComparisonSide) => `${side.alias === localHostAlias ? t("sftp.local.connection") : side.alias}:${side.entry?.path ?? t("sftp.compare.absent")}`;
   return <ModalShell labelledBy={id} onDismiss={onDismiss} panelClassName="flex h-[min(52rem,calc(100dvh-2rem))] w-full max-w-6xl flex-col overflow-hidden rounded-lg">
     <header className="border-b border-line bg-toolbar px-3 py-2">
-      <h2 id={id} className="truncate text-sm font-medium">{t("sftp.compare.textHeading", { path })}</h2>
+      <h2 id={id} title={path} className="truncate text-sm font-medium">{t("sftp.compare.textHeading", { path })}</h2>
       <div className="mt-1 flex flex-wrap gap-x-3 break-all font-mono text-xs text-ink-muted"><span>{label(left)}</span><span>→</span><span>{label(right)}</span></div>
     </header>
     <div className="min-h-0 flex-1">

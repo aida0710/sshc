@@ -150,6 +150,8 @@ export const ja = {
   "directDestination.saveAndConnectDetail": "接続名: {alias}",
   "directDestination.saveFailed": "接続先を保存できませんでした。",
   "palette.hint": "↑↓で選択 · Enterで開く · Escで閉じる · user@hostで接続",
+  "palette.hintTouch": "user@hostと入力すると接続できます",
+  "palette.close": "検索を閉じる",
   "palette.connectHost": "{alias}へ接続",
   "palette.openHostSettings": "{alias}の接続設定を開く",
   "palette.openSection": "セクションを開く",

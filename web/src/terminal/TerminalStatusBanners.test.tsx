@@ -130,3 +130,14 @@ it("types the command that continues the previous shell's program", () => {
   screen.getByRole("button", { name: "Continue where it left off" }).click();
   expect(onResumeProgram).toHaveBeenCalledWith("claude --continue");
 });
+
+it("leaves out a row something else on the screen says, and keeps the others", () => {
+  const reconnecting: TerminalSession = {
+    ...session, kind: "ssh", alias: "web-01", state: "reconnecting", problem: "reconnect_failed",
+    reconnect: { attempt: 1, limit: 5, retryAt: "2099-01-01T00:00:00Z", problem: "reconnect_failed" },
+  };
+  render(<TerminalStatusBanners session={reconnecting} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} recovery={idleRecovery} hiddenRows={["reconnecting"]} />);
+
+  expect(screen.queryByRole("button", { name: "Stop reconnecting" })).not.toBeInTheDocument();
+  expect(screen.getByRole("alert")).toBeVisible();
+});

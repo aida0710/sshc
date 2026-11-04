@@ -51,7 +51,7 @@ export function RunTargetSwitcher({
           className="flex min-h-10 min-w-0 grow items-center gap-2 px-2 text-left text-sm md:min-h-7"
         >
           <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-live" />
-          <span className={`min-w-0 grow truncate font-mono ${chosen ? "font-semibold text-accent" : "text-ink"}`}>{name}</span>
+          <span title={name} className={`min-w-0 grow truncate font-mono ${chosen ? "font-semibold text-accent" : "text-ink"}`}>{name}</span>
           {alias !== null && targets.unread.has(alias) ? <UnreadMark label={t("runTarget.unread")} /> : null}
           {alias === null ? <span className="shrink-0 text-[11px] text-ink-faint">{t("runTarget.thisMachineNote")}</span> : null}
         </button>
@@ -115,7 +115,7 @@ export function RunTargetSwitcher({
       >
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-live" />
         <span className="shrink-0 text-ink-muted">{t("runTarget.label")}</span>
-        <span className="min-w-0 grow truncate text-left font-mono font-semibold text-ink">{current}</span>
+        <span title={current} className="min-w-0 grow truncate text-left font-mono font-semibold text-ink">{current}</span>
         {targets.unread.size > 0 ? <UnreadMark label={t("runTarget.unreadElsewhere")} /> : null}
         <Icon name="chevronRight" className={`size-3.5 shrink-0 text-ink-faint transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />
       </button>
