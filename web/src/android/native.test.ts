@@ -81,6 +81,62 @@ describe("Android native bridge", () => {
   });
 });
 
+describe("Android saves made side by side", () => {
+  // answer stands for the person leaving the save destination the app opened for the request.
+  function answer(requestId: string, status: "ready" | "cancelled") {
+    window.dispatchEvent(new CustomEvent("sshc-android-save", { detail: { requestId, status } }));
+  }
+
+  // Lets the saves that can go on run until each waits for a person.
+  async function settle() {
+    for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setTimeout(resolve));
+  }
+
+  function bridgeRecordingRequests() {
+    const requests: string[] = [];
+    window.sshcAndroid = fakeBridge({
+      chooseSave(requestId) {
+        requests.push(requestId);
+        return "";
+      },
+      writeSaveChunk: () => "",
+      finishSave: () => "",
+    });
+    return requests;
+  }
+
+  it("opens one save destination at a time, the next when the one before has finished", async () => {
+    const requests = bridgeRecordingRequests();
+
+    const first = saveWithAndroid(new Blob(["one"]), "one.txt");
+    const second = saveWithAndroid(new Blob(["two"]), "two.txt");
+    await settle();
+    expect(requests).toHaveLength(1);
+
+    answer(requests[0] ?? "", "ready");
+    await expect(first).resolves.toBe(true);
+    await settle();
+    expect(requests).toHaveLength(2);
+
+    answer(requests[1] ?? "", "ready");
+    await expect(second).resolves.toBe(true);
+  });
+
+  it("still asks about the next file when the person cancels the one before", async () => {
+    const requests = bridgeRecordingRequests();
+
+    const first = saveWithAndroid(new Blob(["one"]), "one.txt");
+    const second = saveWithAndroid(new Blob(["two"]), "two.txt");
+    await settle();
+    answer(requests[0] ?? "", "cancelled");
+    await expect(first).rejects.toThrow("android_save_cancelled");
+    await settle();
+
+    answer(requests[1] ?? "", "ready");
+    await expect(second).resolves.toBe(true);
+  });
+});
+
 describe("Android notifications", () => {
   it("Android以外では許可の状態を持たない", () => {
     expect(androidNotificationPermission()).toBeNull();
