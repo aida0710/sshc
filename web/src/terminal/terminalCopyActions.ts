@@ -1,5 +1,6 @@
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import type { Terminal } from "@xterm/xterm";
+import { AndroidSaveCancelled } from "../android/native";
 import type { Translate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
 import { saveFile, type BrowserSave } from "../ui/saveFile";
@@ -41,7 +42,9 @@ export function terminalCopyActions({ view, serializeAddon, title, t, notice, pr
         lastSave?.release();
         lastSave = save;
       })
-      .catch(() => problem(t("terminal.saveScrollbackFailed")));
+      .catch((error: unknown) => {
+        if (!(error instanceof AndroidSaveCancelled)) problem(t("terminal.saveScrollbackFailed"));
+      });
   };
   return {
     saveScrollback: () => {
