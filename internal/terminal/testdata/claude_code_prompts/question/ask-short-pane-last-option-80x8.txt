@@ -1,0 +1,8 @@
+どちらの案で進めますか？
+
+↑ 3. Type something.
+────────────────────────────────────────────────────────────────────────────────
+❯ 4. Chat about this
+
+Enter to select · ↑/↓ to navigate · ctrl+g to edit in Vim · Esc to cancel
+[lab] 0:2.1.318*                                                          12:00

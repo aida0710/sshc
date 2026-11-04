@@ -119,6 +119,15 @@ set -g allow-passthrough on
 set -g set-titles on
 ```
 
+### Claude Code's permission prompts and questions
+
+tmux does not pass OSC 7501 on, so Claude Code inside tmux cannot report its state. The sshc engine reads the screen instead: while a Claude Code question is visible, the session shows "Needs permission" or "Has a question", as under [Program status](#program-status). The session list, the browser notification and the Android notification work as they do outside tmux. This applies to **Open in tmux** and to a `tmux` you typed yourself.
+
+- Only a question visible on the screen can be read. A question in another tmux window cannot: the status goes when you leave that window and returns when you come back. Nothing can be read while you are detached from tmux.
+- What is read is the wording and layout of Claude Code 2.1.318. An update of Claude Code that changes the wording may stop this from working.
+- The status says only that a program waits and for what kind of answer. Unlike outside tmux, it does not include the command or the text of the question.
+- The same characters with nothing below them may be read as a question, for example a copy of one shown with `watch cat`, or scrolled to its end in `less` outside tmux. A copy shown with `cat` or `less` inside tmux is not.
+
 ## If nothing changes
 
 1. Confirm that `sshc --version` reports v0.35.0 or later.

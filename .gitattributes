@@ -9,3 +9,6 @@
 # 画像は行末を持たない。text=auto の判定に任せず、はっきり除く。
 *.png binary
 *.svg text eol=lf
+
+# 端末へ書かれたバイト列をそのまま記録したテストデータ。CRLF も中身なので変換しない。
+internal/terminal/testdata/claude_code_prompts/tmux-output/*.raw binary

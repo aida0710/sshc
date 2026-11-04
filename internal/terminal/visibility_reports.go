@@ -24,77 +24,20 @@ const (
 	queryVisibilityMode
 )
 
-// maxControlSequenceBytes bounds what one control sequence may collect. The
-// requests here are under 16 bytes; a longer sequence is something else.
-const maxControlSequenceBytes = 32
-
-type controlSequenceState uint8
-
-const (
-	sequenceText controlSequenceState = iota
-	sequenceEscape
-	sequenceCollect
-	sequenceDiscard
-)
-
 // visibilityRequestObserver picks the visibility-report requests out of the
 // output. Like oscObserver it never removes bytes; xterm.js in the browser
 // ignores these sequences (it is told to for DECRQM 2033, so it does not
 // answer that it does not know the mode).
 type visibilityRequestObserver struct {
-	state   controlSequenceState
-	collect []byte
+	controlSequenceScanner
 	request func(visibilityRequest)
 }
 
 func newVisibilityRequestObserver(request func(visibilityRequest)) *visibilityRequestObserver {
-	return &visibilityRequestObserver{request: request}
-}
-
-// Observe scans one chunk. Sequences may span chunk boundaries.
-func (o *visibilityRequestObserver) Observe(chunk []byte) {
-	for _, value := range chunk {
-		switch o.state {
-		case sequenceText:
-			if value == '\x1b' {
-				o.state = sequenceEscape
-			}
-		case sequenceEscape:
-			switch value {
-			case '[':
-				o.state = sequenceCollect
-				o.collect = o.collect[:0]
-			case 'c':
-				o.state = sequenceText
-				o.request(disableVisibilityReports)
-			case '\x1b':
-			default:
-				o.state = sequenceText
-			}
-		case sequenceCollect, sequenceDiscard:
-			o.next(value)
-		}
-	}
-}
-
-// next takes one byte of a control sequence: its parameters and intermediates
-// up to the final byte.
-func (o *visibilityRequestObserver) next(value byte) {
-	switch {
-	case value == '\x1b':
-		o.state = sequenceEscape
-	case value >= 0x40 && value <= 0x7e:
-		if o.state == sequenceCollect {
-			o.complete(string(o.collect), value)
-		}
-		o.state = sequenceText
-	case value < 0x20 || o.state == sequenceDiscard:
-		// C0 controls inside a sequence act on their own and take no part in it.
-	case len(o.collect) >= maxControlSequenceBytes:
-		o.state = sequenceDiscard
-	default:
-		o.collect = append(o.collect, value)
-	}
+	observer := &visibilityRequestObserver{request: request}
+	observer.sequence = observer.complete
+	observer.reset = func() { request(disableVisibilityReports) }
+	return observer
 }
 
 func (o *visibilityRequestObserver) complete(parameters string, final byte) {

@@ -1,0 +1,24 @@
+
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Opus 5.5 · API Usage Billing
+ ▝▝   ▝▝   ~/project
+
+
+❯ 英語してください
+
+● 確かめます。
+────────────────────────────────────────────────────────────────────────────────
+ ☐ Approach
+
+Which approach should we take?
+
+❯ 1. Keep it
+     Fix the current form
+  2. Rewrite
+     Start over
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+[lab] 0:2.1.318*                                                          12:00
