@@ -32,8 +32,9 @@ export const localStorageKeys = {
   sftpSplitRatio: "sshc.sftp.splitRatio",
   // Whether the navigation is hidden on a PC ("hidden", or nothing when shown), chosen with its shortcut.
   navigationHidden: "sshc.navigation.hidden.v1",
-  // Whether this device has finished with the notice that asks for Android's notification permission ("finished", or
-  // nothing). Each device answers for itself, as the permission is its own.
+  // Whether this device has finished with the notice that asks for permission to notify ("finished", or nothing). Each
+  // device answers for itself, as the permission is its own. Only Android asked when the key was named, and it stays
+  // the same so that a person who has answered is not asked again.
   notificationPermissionNoticeFinished: "sshc.android.notification-permission-notice.v1",
 } as const;
 

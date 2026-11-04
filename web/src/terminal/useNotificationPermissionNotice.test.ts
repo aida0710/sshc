@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 import type { TerminalSession } from "../api/terminalSessions";
 import { localStorageKeys } from "../ui/browserStorageKeys";
+import { installFakeBrowserNotification } from "../ui/fakeBrowserNotification";
 import { useNotificationPermissionNotice } from "./useNotificationPermissionNotice";
 
 type Status = Pick<TerminalSession, "programStatus">;
@@ -18,6 +19,7 @@ describe("useNotificationPermissionNotice", () => {
   beforeEach(() => window.localStorage.clear());
   afterEach(() => {
     delete window.sshcAndroid;
+    vi.unstubAllGlobals();
     window.localStorage.clear();
   });
 
@@ -30,7 +32,19 @@ describe("useNotificationPermissionNotice", () => {
     expect(result.current.due).toBe(true);
   });
 
-  it("is never due in a browser, which asks in Settings", () => {
+  it("is due in a browser that has not been answered", () => {
+    installFakeBrowserNotification("default");
+    const { result } = renderHook(() => useNotificationPermissionNotice(programSaidSomething));
+    expect(result.current.due).toBe(true);
+  });
+
+  it.each(["granted", "denied"] as const)("is not due when the browser already answers %s", (permission) => {
+    installFakeBrowserNotification(permission);
+    const { result } = renderHook(() => useNotificationPermissionNotice(programSaidSomething));
+    expect(result.current.due).toBe(false);
+  });
+
+  it("is not due in a browser without notifications", () => {
     const { result } = renderHook(() => useNotificationPermissionNotice(programSaidSomething));
     expect(result.current.due).toBe(false);
   });
