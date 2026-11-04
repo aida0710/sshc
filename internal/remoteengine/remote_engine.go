@@ -30,7 +30,7 @@ var (
 // ストリームの形を、古い相手と通じない形に変えたときに 1 つ上げる。
 // 上げたリリースでは、実行先の sshc も更新が要る（docs/releasing.md）。
 // 0 は、番号を書かない古い sshc の handoff を読んだときの値なので使わない。
-const Compatibility = 1
+const Compatibility = 2
 
 // IncompatibleEngineError は、接続先の sshc の互換の番号がこのマシンと違うことを表す。
 // 番号を書かない古い sshc も含む。Local と Remote は、それぞれの sshc のバージョンである。
