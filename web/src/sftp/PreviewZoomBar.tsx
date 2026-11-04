@@ -5,7 +5,8 @@ import { maxPreviewScale } from "./previewZoom";
 const button = "flex size-8 items-center justify-center rounded-full text-ink-muted hover:bg-hover hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent";
 
 // PreviewZoomBar floats over a picture in a file preview: zoom out, how far it is zoomed (pressing it fits
-// the picture again), and zoom in. It sits at the top of a video, whose own controls take the bottom.
+// the picture again), and zoom in. It sits at the top of a video, whose own controls take the bottom; on a phone
+// that is under the header drawn over the video, whose buttons it would otherwise cover.
 export function PreviewZoomBar({ scale, placement, onZoomIn, onZoomOut, onFit }: {
   scale: number;
   placement: "top" | "bottom";
@@ -18,7 +19,7 @@ export function PreviewZoomBar({ scale, placement, onZoomIn, onZoomOut, onFit }:
   return (
     // A press on the bar is not the start of a drag on the picture under it.
     <div role="group" aria-label={t("sftp.previewZoom")} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}
-      className={`absolute right-2 z-10 flex items-center rounded-full border border-line bg-card/90 p-0.5 shadow-pane ${placement === "top" ? "top-2" : "bottom-2"}`}>
+      className={`absolute right-2 z-10 flex items-center rounded-full border border-line bg-card/90 p-0.5 shadow-pane ${placement === "top" ? "top-2 mobile-layout:top-24" : "bottom-2"}`}>
       <button type="button" className={button} aria-label={t("sftp.previewZoomOut")} title={t("sftp.previewZoomOut")} disabled={scale <= 1} onClick={onZoomOut}>
         <Icon name="zoomOut" className="size-4" />
       </button>
