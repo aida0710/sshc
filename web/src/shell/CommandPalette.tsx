@@ -115,7 +115,7 @@ export function CommandPalette({
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
-  const touchLayout = useMediaQuery(mobileViewportQuery);
+  const compact = useMediaQuery(mobileViewportQuery);
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
@@ -281,7 +281,7 @@ export function CommandPalette({
               className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none! placeholder:text-ink-faint"
             />
           </label>
-          {touchLayout ? (
+          {compact ? (
             <button type="button" aria-label={t("palette.close")} title={t("palette.close")} onClick={onClose} className="flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-surface hover:text-ink">
               <Icon name="close" className="size-4" />
             </button>
@@ -330,7 +330,7 @@ export function CommandPalette({
             <PanelState tone={loading ? "loading" : "empty"} title={loading ? t("palette.loading") : t("palette.empty")} />
           ) : null}
         </div>
-        <p className="shrink-0 border-t border-line px-3 py-2 text-[11px] text-ink-faint">{t(touchLayout ? "palette.hintTouch" : "palette.hint")}</p>
+        <p className="shrink-0 border-t border-line px-3 py-2 text-[11px] text-ink-faint">{t(compact ? "palette.hintCompact" : "palette.hint")}</p>
     </ModalShell>
   );
 }

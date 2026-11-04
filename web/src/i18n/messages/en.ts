@@ -147,7 +147,7 @@ export const en = {
   "directDestination.saveAndConnectDetail": "Connection name: {alias}",
   "directDestination.saveFailed": "The connection could not be saved.",
   "palette.hint": "↑↓ Select · Enter Open · Esc Close · Type user@host to connect",
-  "palette.hintTouch": "Type user@host to connect",
+  "palette.hintCompact":"Type user@host to connect",
   "palette.close": "Close search",
   "palette.connectHost": "Connect to {alias}",
   "palette.openHostSettings": "Open connection settings for {alias}",

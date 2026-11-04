@@ -33,7 +33,7 @@ function canCompareText(difference: DirectoryDifference): boolean {
 export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocation; right: SFTPLocation; onDismiss: () => void }) {
   const t = useTranslate();
   // A phone has no width for a column per side: each side's fact goes under the name, and the table fits the screen.
-  const phone = useMediaQuery(mobileViewportQuery);
+  const compact = useMediaQuery(mobileViewportQuery);
   const [textDifference, setTextDifference] = useState<DirectoryDifference | null>(null);
   const { comparison, changes, selected, problem, busy, readOnly, mode, setMode, toggle, copySelectedDifferences } = useSFTPComparison({ left, right, onCopied: onDismiss });
   const leftLabel = left.alias === localHostAlias ? t("sftp.local.connection") : left.alias;
@@ -64,12 +64,12 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
         <div className="min-h-0 flex-1 overflow-auto">
           {busy && comparison === null ? <PanelState tone="loading" title={t("sftp.compare.loading")} /> : null}
           {!busy && problem === "" && comparison !== null && changes.length === 0 ? <PanelState tone="empty" title={t(mode === "content" ? "sftp.compare.contentNoChanges" : "sftp.compare.noChanges")} /> : null}
-          {changes.length === 0 ? null : <table className={`w-full text-left text-sm ${phone ? "table-fixed" : "min-w-[38rem]"}`}>
+          {changes.length === 0 ? null : <table className={`w-full text-left text-sm ${compact ? "table-fixed" : "min-w-[38rem]"}`}>
             <thead className="sticky top-0 bg-toolbar text-xs text-ink-muted"><tr>
               {readOnly ? null : <th className="w-10 px-3 py-2"><span className="sr-only">{t("sftp.selectAll")}</span></th>}
               <th className="px-2 py-2">{t("sftp.name")}</th>
-              <th className={`px-2 py-2 ${phone ? "w-20" : "w-36"}`}>{t("sftp.compare.status")}</th>
-              {phone ? null : <>
+              <th className={`px-2 py-2 ${compact ? "w-20" : "w-36"}`}>{t("sftp.compare.status")}</th>
+              {compact ? null : <>
                 <th className="w-28 px-2 py-2 text-right">{leftLabel}</th>
                 <th className="w-28 px-2 py-2 text-right">{rightLabel}</th>
               </>}
@@ -78,11 +78,11 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
               <tr key={difference.relativePath} className="border-t border-line/40 hover:bg-select-fill/40">
                 {readOnly ? null : <td className="px-3 py-2"><input type="checkbox" aria-label={t("sftp.selectEntry", { name: difference.relativePath })} disabled={busy || difference.status === "unverified"} checked={selected.has(difference.relativePath)} onChange={() => toggle(difference.relativePath)} className="size-4 accent-accent" /></td>}
                 <td className="px-2 py-2 font-mono text-ink [overflow-wrap:anywhere]">{difference.relativePath}
-                  {phone ? <span className="mt-1 block font-sans text-xs text-ink-muted">{leftLabel}: {sideFact(difference.left, t)} · {rightLabel}: {sideFact(difference.right, t)}</span> : null}
+                  {compact ? <span className="mt-1 block font-sans text-xs text-ink-muted">{leftLabel}: {sideFact(difference.left, t)} · {rightLabel}: {sideFact(difference.right, t)}</span> : null}
                   {canCompareText(difference) ? <button type="button" className="mt-1 block text-xs text-accent hover:underline" aria-label={t("sftp.compare.viewTextFor", { path: difference.relativePath })} onClick={() => setTextDifference(difference)}>{t("sftp.compare.viewText")}</button> : null}
                 </td>
                 <td className="px-2 py-2 text-xs text-ink-muted">{t(comparisonStatusLabelKeys[difference.status])}{difference.omission === undefined ? null : <span className="mt-1 block">{t(difference.omission === "byte_limit" ? "sftp.compare.skipBytes" : "sftp.compare.skipUnsupported")}</span>}</td>
-                {phone ? null : <>
+                {compact ? null : <>
                   <td className="px-2 py-2 text-right text-xs text-ink-muted">{sideFact(difference.left, t)}</td>
                   <td className="px-2 py-2 text-right text-xs text-ink-muted">{sideFact(difference.right, t)}</td>
                 </>}
