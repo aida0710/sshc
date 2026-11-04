@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Locator, Page } from "@playwright/test";
-import { changeDisplayLanguage, expect, openApplication, test, type Installation } from "./support/environment";
+import type { Locator, Page, WebSocketRoute } from "@playwright/test";
+import { changeDisplayLanguage, expect, openApplication, openSection, test, type Installation } from "./support/environment";
 import { samplePNG } from "./support/images";
 import { chooseEntryOnPhone } from "./support/sftp";
 import { drawnRowCount, drawnRows, drawnRowsIn, drawnSpan } from "./support/terminal";
@@ -825,6 +825,268 @@ test("keeps what was written in the phone's text box once the session has ended,
   await expect(textBox).toHaveValue("a long request to Claude Code");
   await expect(textBox).toBeEditable();
   await expect(page.getByText("This session has ended.")).toBeVisible();
+});
+
+// A made-up answer: no password of anyone's. It is also what must not be found anywhere after it is typed.
+const typedSecret = "not-a-real-password";
+
+// askForSecret is a command that asks without echoing, as sudo does, and then says how long the answer it read was.
+const askForSecret = (question: string) => `printf '${question}'; read -s answer; echo; echo "read-\${#answer}"`;
+
+const phoneViewport = { width: 390, height: 844 };
+// An emulated phone raises no keyboard, so its screen is made as short as one would leave it (useAppViewport).
+const screenAboveKeyboard = { width: 390, height: 500 };
+
+async function openShellOnPhone(page: Page, installation: Installation) {
+  await page.setViewportSize(phoneViewport);
+  await openApplication(page, installation);
+  await openShellFromNavigation(page);
+  const rows = drawnRows(page).filter({ visible: true });
+  await expect(rows).toContainText(/[$#%>]/, { timeout: 20_000 });
+  return {
+    rows,
+    textBox: page.getByLabel("Text to send to the terminal", { exact: true }),
+    secretField: page.getByLabel("Password to send to the terminal", { exact: true }),
+    send: page.getByRole("button", { name: "Send", exact: true }),
+    pressEnter: page.getByRole("button", { name: "Press Enter", exact: true }),
+    keyBar: page.getByLabel("On-screen keys", { exact: true }),
+  };
+}
+
+// raiseKeyboardForTextBox taps the terminal as a person does, which types into the text box and raises the keyboard.
+async function raiseKeyboardForTextBox(page: Page) {
+  const screenBox = (await drawnRows(page).filter({ visible: true }).boundingBox())!;
+  await page.touchscreen.tap(screenBox.x + screenBox.width / 2, screenBox.y + screenBox.height / 2);
+  await expect(page.getByLabel("Text to send to the terminal", { exact: true })).toBeFocused();
+  await page.setViewportSize(screenAboveKeyboard);
+  await expect(page.locator("html")).toHaveAttribute("data-keyboard-open", "true");
+}
+
+test("hides what is typed while a program asks for a password, and brings the text box back once it is answered", async ({ page, installation }) => {
+  const requestBodies: string[] = [];
+  page.on("request", (request) => { requestBodies.push(request.postData() ?? ""); });
+  const { rows, textBox, secretField, send } = await openShellOnPhone(page, installation);
+  await expect(textBox).toBeVisible();
+  await expect(secretField).toBeHidden();
+  await raiseKeyboardForTextBox(page);
+
+  await textBox.fill(askForSecret("Password: "));
+  await send.tap();
+
+  await expect(secretField).toBeVisible();
+  await expect(secretField).toHaveAttribute("type", "password");
+  await expect(secretField).toBeFocused();
+  await expect(textBox).toBeHidden();
+
+  await page.keyboard.type(typedSecret);
+  await expect(secretField).toHaveValue(typedSecret);
+  const stored = await page.evaluate(() => JSON.stringify([{ ...localStorage }, { ...sessionStorage }]));
+  expect(stored).not.toContain(typedSecret);
+
+  // Enter sends even though it starts a new line in the text box (the default).
+  await page.keyboard.press("Enter");
+  await expect(rows).toContainText(`read-${typedSecret.length}`);
+  await expect(textBox).toBeVisible();
+  await expect(textBox).toBeFocused();
+  await expect(textBox).toHaveValue("");
+  await expect(secretField).toBeHidden();
+  await expect(secretField).toHaveValue("");
+  await expect(rows).not.toContainText(typedSecret);
+  expect(await page.evaluate(() => JSON.stringify([{ ...localStorage }, { ...sessionStorage }]))).not.toContain(typedSecret);
+  expect(requestBodies.join("\n")).not.toContain(typedSecret);
+
+  // Japanese, and the sentence a shell prints: the box goes back and forth with what the cursor is after.
+  await textBox.fill(askForSecret("[sudo] deploy のパスワード: "));
+  await send.tap();
+  await expect(secretField).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(textBox).toBeVisible();
+});
+
+test("leaves the text box as it is at a shell's prompt and when the word is only in a sentence", async ({ page, installation }) => {
+  const { rows, textBox, secretField, send, pressEnter } = await openShellOnPhone(page, installation);
+  await raiseKeyboardForTextBox(page);
+
+  await textBox.fill("echo your password: is safe; printf 'password: done'; read -s answer");
+  await send.tap();
+  await expect(rows).toContainText("password: done");
+  await expect(textBox).toBeVisible();
+  await expect(secretField).toBeHidden();
+  await pressEnter.tap();
+
+  await textBox.fill("echo password: && echo finished");
+  await send.tap();
+  await expect(rows).toContainText("finished");
+  await expect(textBox).toBeVisible();
+  await expect(secretField).toBeHidden();
+  await expect(textBox).toBeFocused();
+});
+
+test("keeps what was being written in the text box while a password is asked for, and neither sends nor hides it", async ({ page, installation }) => {
+  const { rows, textBox, secretField, send } = await openShellOnPhone(page, installation);
+  await raiseKeyboardForTextBox(page);
+  // The prompt of the isolated shell shows no real names in the screenshots.
+  await textBox.fill("PS1='demo$ '; clear");
+  await send.tap();
+  await expect(rows).toContainText("demo$");
+  await textBox.fill(`sleep 2; ${askForSecret("Password: ")}`);
+  await send.tap();
+  const request = "a long request\nto Claude Code";
+  await textBox.fill(request);
+  await expect(textBox).toBeFocused();
+  const heightWithTwoLines = (await textBox.boundingBox())!.height;
+  await capture(page, "composer-draft-before-question");
+
+  await expect(secretField).toBeVisible();
+  await expect(secretField).toBeFocused();
+  await expect(secretField).toHaveValue("");
+  await page.keyboard.type("short");
+  await capture(page, "composer-draft-during-question");
+  await send.tap();
+
+  await expect(rows).toContainText("read-5");
+  await expect(textBox).toBeVisible();
+  await expect(textBox).toBeFocused();
+  await expect(textBox).toHaveValue(request);
+  expect(await textBox.evaluate((field: HTMLTextAreaElement) => field.selectionStart)).toBe(request.length);
+  expect((await textBox.boundingBox())!.height).toBe(heightWithTwoLines);
+  await expect(rows).not.toContainText("long request");
+  await capture(page, "composer-draft-after-question");
+});
+
+test("drops what was typed for a password when the question goes away unanswered", async ({ page, installation }) => {
+  const { rows, textBox, secretField, send, keyBar } = await openShellOnPhone(page, installation);
+  await raiseKeyboardForTextBox(page);
+  await textBox.fill(askForSecret("Password: "));
+  await send.tap();
+  await expect(secretField).toBeVisible();
+  await page.keyboard.type(typedSecret);
+
+  await keyBar.getByRole("button", { name: "Ctrl+C", exact: true }).tap();
+
+  await expect(textBox).toBeVisible();
+  await expect(textBox).toHaveValue("");
+  await expect(secretField).toBeHidden();
+  await expect(secretField).toHaveValue("");
+  await expect(rows).not.toContainText(typedSecret);
+});
+
+test("drops what was typed for a password when the session ends at the question", async ({ page, installation }) => {
+  const { textBox, secretField, send, pressEnter } = await openShellOnPhone(page, installation);
+  await raiseKeyboardForTextBox(page);
+  await textBox.fill("printf 'Password: '; sleep 2; exit");
+  await send.tap();
+  await expect(secretField).toBeVisible();
+  await page.keyboard.type(typedSecret);
+
+  await expect(pressEnter).toHaveAttribute("aria-disabled", "true", { timeout: 20_000 });
+  await expect(textBox).toBeVisible();
+  await expect(textBox).toHaveValue("");
+  await expect(secretField).toHaveValue("");
+});
+
+test("switching to typing into the terminal drops what was typed for a password, and the password field comes back empty", async ({ page, installation }) => {
+  const { rows, textBox, secretField, send, keyBar } = await openShellOnPhone(page, installation);
+  await raiseKeyboardForTextBox(page);
+  await textBox.fill(askForSecret("Password: "));
+  await send.tap();
+  await expect(secretField).toBeVisible();
+  await page.keyboard.type("half");
+
+  const toggle = keyBar.getByRole("button", { name: "Type into the terminal", exact: true });
+  await toggle.tap();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(secretField).toHaveCount(0);
+  await expect.poll(() => terminalInputFocused(page)).toBe(true);
+  await page.keyboard.type("abc");
+
+  await toggle.tap();
+  await expect(secretField).toBeVisible();
+  await expect(secretField).toHaveValue("");
+  await expect(secretField).toBeFocused();
+  await page.keyboard.type("de");
+  await page.keyboard.press("Enter");
+
+  await expect(rows).toContainText("read-5");
+  await expect(textBox).toBeVisible();
+});
+
+test("a question that appears with the keyboard down leaves it down, and a tap on the terminal types the answer", async ({ page, installation }) => {
+  const { rows, textBox, secretField, send } = await openShellOnPhone(page, installation);
+  await raiseKeyboardForTextBox(page);
+  // Back closes the keyboard and leaves the focus in the field; going by the field's focus alone would raise it again.
+  await textBox.fill(`sleep 1; ${askForSecret("Password: ")}`);
+  await send.tap();
+  await page.setViewportSize(phoneViewport);
+  await expect(page.locator("html")).toHaveAttribute("data-keyboard-open", "false");
+  await expect(textBox).toBeFocused();
+
+  await expect(secretField).toBeVisible();
+  await expect(secretField).not.toBeFocused();
+  await expect(textBox).not.toBeFocused();
+  expect(await terminalInputFocused(page)).toBe(false);
+
+  const screenBox = (await rows.boundingBox())!;
+  await page.touchscreen.tap(screenBox.x + screenBox.width / 2, screenBox.y + screenBox.height / 2);
+  await expect(secretField).toBeFocused();
+  await page.keyboard.type("short");
+  await page.keyboard.press("Enter");
+  await expect(rows).toContainText("read-5");
+});
+
+// The suite has no SSH server to log in to, so the engine's side is played: the session that waits for an answer, and
+// the question as internal/sshclient/auth.go writes it.
+test("answers sshc's own question for a password with what was typed, as it was typed", async ({ page, installation }) => {
+  const asking = {
+    id: "password-question-fixture",
+    kind: "ssh", workspaceId: "default",
+    alias: "web-01",
+    title: "web-01",
+    startedAt: "2026-11-04T00:00:00Z",
+    state: "connecting",
+    awaitingPrompt: true,
+    problem: "",
+    progress: { phase: "authenticating", alias: "web-01", hostName: "10.0.2.15", user: "deploy", hop: 1, hops: 1 },
+    forwards: [],
+  };
+  let session: Record<string, unknown> = asking;
+  const sent: string[] = [];
+  let stream: WebSocketRoute | undefined;
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/stream")) {
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: "password-question" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sessions: [session], maxSessions: 12 }) });
+  });
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => {
+    stream = socket;
+    socket.onMessage((message) => { if (typeof message !== "string") sent.push(message.toString("utf8")); });
+    socket.send(Buffer.from("Password for deploy@10.0.2.15:22 (web-01): "));
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+
+  const secretField = page.getByLabel("Password to send to the terminal", { exact: true });
+  const textBox = page.getByLabel("Text to send to the terminal", { exact: true });
+  await expect(drawnRows(page).filter({ visible: true })).toContainText("Password for");
+  await expect(secretField).toBeVisible();
+  await capture(page, "composer-sshc-password-question-empty");
+  await secretField.fill(typedSecret);
+  await capture(page, "composer-sshc-password-question-typed");
+  const send = page.getByRole("button", { name: "Send", exact: true });
+  await expect(send).toHaveAttribute("aria-disabled", "false");
+  await send.tap();
+
+  await expect.poll(() => sent.join("")).toContain(`${typedSecret}\r`);
+  expect(sent.join("")).not.toContain("\x1b[200~");
+  await expect(secretField).toHaveValue("");
+  session = { ...asking, state: "connected", awaitingPrompt: false };
+  stream?.send(Buffer.from("\r\ndeploy@web-01:~$ "));
+  await expect(textBox).toBeVisible();
+  await expect(secretField).toBeHidden();
+  await capture(page, "composer-after-the-answer");
 });
 
 test("a finger moves the shell's scrollback by the pixel and settles it on a row", async ({ page, installation }) => {
