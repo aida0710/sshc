@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { androidNotificationPermission } from "../android/native";
 import type { TerminalSession } from "../api/terminalSessions";
+import { browserNotificationPermission } from "../ui/browserNotifications";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 
@@ -11,17 +11,17 @@ export type NotificationPermissionNotice = {
   finish: () => void;
 };
 
-// useNotificationPermissionNotice asks for Android's notification permission when it starts to matter: the first time
-// a program says what it is doing (OSC 7501), since it may go on to wait for the person with the app in the background.
-// The answer has to be remembered here: after one refusal Android still lets the app ask, so the permission alone
-// cannot tell that the person has answered.
+// useNotificationPermissionNotice asks for permission to notify when it starts to matter: the first time a program says
+// what it is doing (OSC 7501), since it may go on to wait for the person with sshc out of sight. The answer has to be
+// remembered here: after one refusal Android still lets the app ask, and a person who closes the notice has not answered
+// the browser, so the permission alone cannot tell that the person has answered.
 export function useNotificationPermissionNotice(session: Pick<TerminalSession, "programStatus">): NotificationPermissionNotice {
   const [, setFinishedCount] = useState(0);
   return {
     due:
       session.programStatus !== undefined &&
       readStoredValue(localStorageKeys.notificationPermissionNoticeFinished) === null &&
-      androidNotificationPermission() === "default",
+      browserNotificationPermission() === "default",
     finish: () => {
       writeStoredValue(localStorageKeys.notificationPermissionNoticeFinished, "finished");
       setFinishedCount((count) => count + 1);

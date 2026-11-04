@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { expect, openApplication, openSection, test, openLocalShell } from "./support/environment";
 import { drawnSpan, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
 
@@ -142,6 +143,72 @@ test("shows where an OSC 8 link after Japanese text goes before opening it, unle
   await controlClick(address);
   await popup;
   await expect(actions).toBeHidden();
+});
+
+// recordBrowserNotifications replaces the browser's Notification API, which a headless browser refuses, so a test can
+// read what sshc showed and answer its request for permission.
+async function recordBrowserNotifications(page: Page, permission: NotificationPermission) {
+  await page.addInitScript((initialPermission) => {
+    const shown: { title: string; body: string; closed: boolean }[] = [];
+    class RecordedNotification {
+      static permission = initialPermission;
+      static requestPermission = async () => {
+        RecordedNotification.permission = "granted";
+        return "granted";
+      };
+      private record: { title: string; body: string; closed: boolean };
+      constructor(title: string, options: { body: string }) {
+        this.record = { title, body: options.body, closed: false };
+        shown.push(this.record);
+      }
+      close() {
+        this.record.closed = true;
+      }
+    }
+    Object.assign(window, { Notification: RecordedNotification, shownNotifications: shown });
+  }, permission);
+  return () => page.evaluate(() => (window as unknown as { shownNotifications: { title: string; body: string; closed: boolean }[] }).shownNotifications);
+}
+
+const reportProgramStatus = (fields: string) => `printf '\\033]7501;${fields}\\033\\\\'`;
+
+// A person away from the tab hears that a program waits for them, and that is taken back once it stops waiting.
+test("a browser notifies a person who is away that a program waits for them", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "printf escape sequences are POSIX shell syntax");
+  const notifications = await recordBrowserNotifications(page, "granted");
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await page.evaluate(() => { document.hasFocus = () => false; });
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type(`printf '\\033]0;agent\\a'; ${reportProgramStatus(`state=blocked:kind=permission:msg=${Buffer.from("Run rm -rf build?").toString("base64")}`)}; sleep 2; ${reportProgramStatus("state=working")}`);
+  await page.keyboard.press("Enter");
+
+  await expect.poll(notifications, { timeout: 15_000 }).toEqual([expect.objectContaining({ body: expect.stringContaining("Run rm -rf build?"), closed: false })]);
+  await expect.poll(notifications, { timeout: 15_000 }).toEqual([expect.objectContaining({ closed: true })]);
+});
+
+// Nothing can reach a person who never allowed notifications, so sshc asks the first time it matters, and only once.
+test("a browser asks once for permission to notify when a program first says what it is doing", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "printf escape sequences are POSIX shell syntax");
+  await recordBrowserNotifications(page, "default");
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const question = screen.getByText("Get notified when a program is waiting?");
+  await expect(question).toHaveCount(0);
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type(reportProgramStatus("state=working"));
+  await page.keyboard.press("Enter");
+
+  await expect(question).toBeVisible({ timeout: 15_000 });
+  await expect(screen).toContainText("your browser notifies you while you are away from this tab");
+  if (process.env.SSHC_NOTIFICATION_NOTICE_SHOT) await page.screenshot({ path: process.env.SSHC_NOTIFICATION_NOTICE_SHOT });
+  await screen.getByRole("button", { name: "Enable notifications", exact: true }).click();
+  await expect(question).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => Notification.permission)).toBe("granted");
 });
 
 // Programs say what they are doing with OSC 7501. The session's row shows it in

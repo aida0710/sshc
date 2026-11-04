@@ -894,7 +894,7 @@ export const en = {
   "terminal.browserNotificationsDeliveryFailed":
     "Notifications are allowed but one could not be displayed.",
   "terminal.notificationSound": "Notification sound",
-  "terminal.notificationSoundHint": "Played when a terminal program sends a notification (OSC 9, 99 or 777) while this tab is in the background.",
+  "terminal.notificationSoundHint": "Played when a terminal program sends a notification (OSC 9, 99 or 777) or starts waiting for permission or input while this tab is in the background.",
   "terminal.androidNotificationSoundHint": "Played when a terminal program sends a notification (OSC 9, 99 or 777) while sshc is closed.",
   "terminal.notificationPreviewSound": "Play the notification sound",
   "terminal.notificationSound.none": "No sound",
@@ -1058,7 +1058,7 @@ export const en = {
   "terminal.savePasswordFailed": "The password could not be saved.",
   "terminal.noticeDismiss": "Hide this notice",
   "terminal.noticeNotificationPermission": "Get notified when a program is waiting?",
-  "terminal.noticeNotificationPermissionBody": "When Claude Code or another program needs permission or input, Android notifies you even while sshc is closed.",
+  "terminal.noticeNotificationPermissionBody": "When Claude Code or another program needs permission or input, your browser notifies you while you are away from this tab.",
   "terminal.noticeReconnecting": "Reconnecting ({attempt}/{limit})",
   "terminal.noticeConnectionLost": "The connection to {title} was lost",
   "terminal.noticeNextTry": "Trying again in {seconds} s.",

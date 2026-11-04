@@ -5,6 +5,7 @@ import type { AndroidBridge } from "../android/native";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import { en } from "../i18n/messages";
+import { installFakeBrowserNotification } from "../ui/fakeBrowserNotification";
 import { useBlockedProgramNotifications } from "./useBlockedProgramNotifications";
 
 vi.mock("./notificationSound", () => ({ playNotificationSound: vi.fn() }));
@@ -20,9 +21,9 @@ const waiting: TerminalSession = {
   ...working, programStatus: { state: "blocked", kind: "permission", message: "approve Bash", version: 2 },
 };
 
-function renderWith(initial: TerminalSession, enabled = true) {
+function renderWith(initial: TerminalSession, enabled = true, onOpenSession: (id: string) => void = vi.fn()) {
   return renderHook(
-    ({ session, on }: { session: TerminalSession; on: boolean }) => useBlockedProgramNotifications([session], { enabled: on, t: translate }),
+    ({ session, on }: { session: TerminalSession; on: boolean }) => useBlockedProgramNotifications([session], { enabled: on, t: translate, onOpenSession }),
     { initialProps: { session: initial, on: enabled } },
   );
 }
@@ -87,5 +88,39 @@ describe("useBlockedProgramNotifications", () => {
     rerender({ session: waiting, on: false });
 
     expect(bridge.showNotification).not.toHaveBeenCalled();
+  });
+
+  describe("in a browser", () => {
+    beforeEach(() => {
+      delete window.sshcAndroid;
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("shows a browser notification that opens the session", () => {
+      const { shown } = installFakeBrowserNotification();
+      const open = vi.fn();
+      const { rerender } = renderWith(working, true, open);
+
+      rerender({ session: waiting, on: true });
+
+      expect(shown).toHaveLength(1);
+      expect(shown[0]?.title).toBe("osaka（Claude Code）");
+      expect(shown[0]?.options.body).toContain("approve Bash");
+      shown[0]?.onclick?.();
+      expect(open).toHaveBeenCalledExactlyOnceWith("one");
+    });
+
+    it("takes the browser notification back once the program stops waiting", () => {
+      const { shown } = installFakeBrowserNotification();
+      const { rerender } = renderWith(working);
+      rerender({ session: waiting, on: true });
+
+      rerender({ session: working, on: true });
+
+      expect(shown[0]?.close).toHaveBeenCalledOnce();
+    });
   });
 });

@@ -5,9 +5,12 @@ import type { AndroidBridge } from "../android/native";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import { en } from "../i18n/messages";
+import { installFakeBrowserNotification } from "../ui/fakeBrowserNotification";
 import { terminalNotificationTag } from "./notificationTags";
 import type { SeenProgramStatus } from "./programStatus";
 import { useUnseenBlockedProgramNotifications } from "./useUnseenBlockedProgramNotifications";
+
+vi.mock("./notificationSound", () => ({ playNotificationSound: vi.fn() }));
 
 const translate = ((key) => en[key]) as Translate;
 const waiting: TerminalSession = {
@@ -24,8 +27,8 @@ function setPageHidden(hidden: boolean) {
   document.dispatchEvent(new Event("visibilitychange"));
 }
 
-function renderWith(session: TerminalSession, seen: SeenProgramStatus, enabled = true) {
-  return renderHook(() => useUnseenBlockedProgramNotifications([session], seen, { enabled, t: translate }));
+function renderWith(session: TerminalSession, seen: SeenProgramStatus, onOpenSession: (id: string) => void = vi.fn()) {
+  return renderHook(() => useUnseenBlockedProgramNotifications([session], seen, { t: translate, onOpenSession }));
 }
 
 describe("useUnseenBlockedProgramNotifications", () => {
@@ -72,9 +75,52 @@ describe("useUnseenBlockedProgramNotifications", () => {
     expect(bridge.showBlockedProgramNotification).toHaveBeenCalledTimes(1);
   });
 
-  it("does nothing where notifications are not the app's", () => {
-    renderWith(waiting, nothingSeen, false);
-    setPageHidden(true);
+  it("does not take Android's notification shade for leaving the app", () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    renderWith(waiting, nothingSeen);
+    window.dispatchEvent(new Event("blur"));
     expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
+  });
+
+  describe("in a browser", () => {
+    beforeEach(() => {
+      delete window.sshcAndroid;
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("notifies when the tab goes to the background, and the notification opens the session", () => {
+      const { shown } = installFakeBrowserNotification();
+      const open = vi.fn();
+      renderWith(waiting, nothingSeen, open);
+
+      setPageHidden(true);
+
+      expect(shown).toHaveLength(1);
+      shown[0]?.onclick?.();
+      expect(open).toHaveBeenCalledExactlyOnceWith("one");
+    });
+
+    it("notifies when another window takes the focus", () => {
+      const { shown } = installFakeBrowserNotification();
+      vi.spyOn(document, "hasFocus").mockReturnValue(false);
+      renderWith(waiting, nothingSeen);
+
+      window.dispatchEvent(new Event("blur"));
+
+      expect(shown).toHaveLength(1);
+    });
+
+    it("does not count coming back to the tab as leaving", () => {
+      const { shown } = installFakeBrowserNotification();
+      vi.spyOn(document, "hasFocus").mockReturnValue(false);
+      renderWith(waiting, nothingSeen);
+
+      setPageHidden(false);
+
+      expect(shown).toEqual([]);
+    });
   });
 });
