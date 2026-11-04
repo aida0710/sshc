@@ -108,6 +108,7 @@ func (s *Session) stopReconnecting() {
 
 // reconnect は、落ちた輸送を繋ぎ直せたなら真を返す。
 func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.Time) bool {
+	lostToNetworkChange := s.takeTransportCheckPending() && connectionErr == nil
 	// Dialer.Open は握手前に Process を返す。したがって終了コードが通常の
 	// transport loss でなくても、Ready の失敗は接続失敗として扱う。
 	if !info.TransportLost && connectionErr == nil {
@@ -123,13 +124,23 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 	} else {
 		s.mutex.Lock()
 		s.noNetwork, s.networkWaitAnnounced = false, false
+		if lostToNetworkChange {
+			// 回線が変わって切れたのは新しい切断である。機内モードから戻ると、モバイル回線で繋ぎ直した
+			// 数秒後に Wi-Fi へ替わって切れる。その回数を持ち越すと、上限が1回の設定ではここで止まる。
+			s.reconnectAttempts = 0
+		}
 		s.mutex.Unlock()
+	}
+	wait := s.waitToReconnect
+	if lostToNetworkChange {
+		wait = s.skipWaitAfterNetworkChange
 	}
 	for {
 		attempt, limit, ok := s.nextReconnectAttempt()
-		if !ok || !s.waitToReconnect(attempt, limit, now) {
+		if !ok || !wait(attempt, limit, now) {
 			return false
 		}
+		wait = s.waitToReconnect
 		process, stopped, err := s.reopenForReconnect()
 		if stopped {
 			return false
@@ -201,9 +212,7 @@ func (s *Session) waitToReconnect(attempt, limit int, now func() time.Time) bool
 	}
 	retryAt := now().Add(wait)
 	s.mutex.Lock()
-	s.process = nil
-	s.state = StateReconnecting
-	s.reconnectView = &ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: retryAt}
+	s.showReconnectingLocked(ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: retryAt})
 	s.mutex.Unlock()
 	seconds := int((wait + time.Second - 1) / time.Second)
 	s.publish([]byte(fmt.Sprintf(
@@ -224,6 +233,13 @@ func (s *Session) waitToReconnect(attempt, limit int, now func() time.Time) bool
 	case <-s.stopping:
 		return false
 	}
+}
+
+// showReconnectingLocked は、次の試みを待っていることを一覧に出す。前の process はもう使わない。
+func (s *Session) showReconnectingLocked(view ReconnectView) {
+	s.process = nil
+	s.state = StateReconnecting
+	s.reconnectView = &view
 }
 
 // reconnectLead は、再接続を待つ行の頭である。切れたことを書くのは最初の待ちだけである。

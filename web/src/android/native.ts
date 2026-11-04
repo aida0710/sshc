@@ -192,10 +192,17 @@ export function notifyAndroidTransfer(status: "completed" | "failed"): void {
   }
 }
 
+// longHexColour writes #rgb as #rrggbb, the only form the Android bridge takes. The theme files use six digits, but
+// the CSS minifier shortens the light theme's white to three in the built app.
+function longHexColour(colour: string): string {
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(colour);
+  return short === null ? colour : `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
+}
+
 // setAndroidAppearance paints Android's status and navigation bars like the top bar of the theme on screen:
 // the theme's --ui-toolbar, with light or dark icons by its scheme.
 export function setAndroidAppearance(scheme: ColorScheme): void {
-  const barColour = getComputedStyle(document.documentElement).getPropertyValue("--ui-toolbar").trim();
+  const barColour = longHexColour(getComputedStyle(document.documentElement).getPropertyValue("--ui-toolbar").trim());
   try {
     window.sshcAndroid?.setAppearance(scheme, barColour);
   } catch {

@@ -190,7 +190,10 @@ type checkedProcess struct {
 	checks atomic.Int32
 }
 
-func (p *checkedProcess) CheckTransport(time.Duration) { p.checks.Add(1) }
+func (p *checkedProcess) CheckTransport(time.Duration) bool {
+	p.checks.Add(1)
+	return true
+}
 
 // Wi-Fi とモバイル回線の切り替えでは、前の回線の TCP が黙って止まる。回線があると言われたら確かめる。
 // 回線が無いと言われただけでは確かめない。すぐ戻れば同じ TCP のまま続けられる。
