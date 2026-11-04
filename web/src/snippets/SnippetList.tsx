@@ -77,9 +77,9 @@ export function SnippetList({
                   onClick={() => onOpen(snippet)}
                   className={`w-full min-w-0 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 ${columns ? "grid grid-cols-[minmax(0,16rem)_minmax(0,28rem)_minmax(0,1fr)] items-center gap-4" : "flex flex-col gap-0.5"} ${opened ? "bg-select-fill" : "hover:bg-hover"}`}
                 >
-                  <span className="truncate text-[13.5px] text-ink">{snippet.name}</span>
-                  <code className="truncate font-mono text-[11.5px] text-ink-faint">{snippet.command.split("\n")[0]}</code>
-                  {columns ? <span className="truncate text-[12.5px] text-ink-muted">{snippet.description}</span> : null}
+                  <span title={snippet.name} className="truncate text-[13.5px] text-ink">{snippet.name}</span>
+                  <code title={snippet.command} className="truncate font-mono text-[11.5px] text-ink-faint">{snippet.command.split("\n")[0]}</code>
+                  {columns ? <span title={snippet.description} className="truncate text-[12.5px] text-ink-muted">{snippet.description}</span> : null}
                 </button>
               </li>
             );

@@ -121,11 +121,13 @@ export function PageSection({
     <section aria-labelledby={id} className={frameClass}>
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h3 id={id} className="text-sm font-semibold text-ink">{heading}</h3>
-        {meta === undefined ? null : <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{meta}</span>}
-        {actions === undefined ? null : <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
+        {meta === undefined ? null : <span title={typeof meta === "string" ? meta : undefined} className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{meta}</span>}
+        {/* It takes the room left on its line and keeps its controls at the end of it, so a field marked w-full fills a phone. */}
+        {actions === undefined ? null : <div className="flex min-w-0 grow flex-wrap items-center justify-end gap-2">{actions}</div>}
       </div>
       {hint === undefined ? null : <p className="-mt-1.5 mb-3 text-xs leading-[18px] text-ink-faint">{hint}</p>}
-      {children}
+      {/* Its own box, so that a first row (FieldRow's first:) is first here and not after the heading. */}
+      <div>{children}</div>
     </section>
   );
 }

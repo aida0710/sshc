@@ -27,7 +27,8 @@ function facetLook(active: boolean): string {
 
 // ConnectionGroupFacets は、Connections の板の横（Settings がページを並べる位置）に置くグループの一覧である。
 // グループを選ぶと接続の一覧がそのグループに絞られ、グループの上に落とした接続先とグループはそこへ移る。
-// 狭い画面では、接続の一覧の中のシートからグループを選ぶ。
+// 幅が1280px未満のウィンドウでは、接続の一覧の中のシートからグループを選ぶ。ナビゲーションとこの列と接続の一覧が
+// 並ぶと、1024pxのウィンドウで接続先の編集に170pxほどしか残らず、接続名さえ読めないためである。
 export function ConnectionGroupFacets({
   overview,
   scope,
@@ -150,7 +151,7 @@ export function ConnectionGroupFacets({
     <nav
       aria-label={t("tree.byGroups")}
       style={{ width: `${width}px` }}
-      className="relative hidden shrink-0 flex-col py-4 pl-2.5 pr-3 lg:flex"
+      className="relative hidden shrink-0 flex-col py-4 pl-2.5 pr-3 xl:flex"
     >
       <div className="flex items-center justify-between gap-1 px-2 pb-2">
         <h2 className="text-xs font-medium text-ink-faint">{t("tree.byGroups")}</h2>
@@ -204,7 +205,7 @@ export function ConnectionGroupFacets({
         minimum={connectionGroupsWidth.minimum}
         maximum={connectionGroupsWidth.maximum}
         onWidthChange={setWidth}
-        className="hidden lg:flex"
+        className="hidden xl:flex"
       />
     </nav>
   );

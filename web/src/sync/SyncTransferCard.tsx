@@ -51,7 +51,7 @@ export function SyncTransferCard({ status, busy, pushDraft, pushMessage, onMessa
                 })}
         </span>
       </div>
-      <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
         <Button
           kind="primary"
           disabled={

@@ -27,6 +27,11 @@ import { useToast } from "../ui/useToast";
 import { asciiTextEntry } from "../ui/softKeyboard";
 
 type KnownHostsPanelProps = { api?: KnownHostsApi };
+// A key type is one word, so it keeps its line. A fingerprint keeps its line once the window is wide enough for it
+// beside the host (50 letters), so that it reads as one value, and otherwise breaks wherever it has to.
+const keyTypeCell = "whitespace-nowrap font-mono text-xs text-ink-muted";
+const fingerprintCell = "break-all font-mono text-xs text-ink-muted xl:whitespace-nowrap xl:break-normal";
+
 type CandidateSort = "host" | "type" | "fingerprint" | "trust";
 type TrustedSort = Exclude<CandidateSort, "trust">;
 // KnownHostsAction は、相手のホストか known_hosts の書き込みを待つ操作である。押したボタンに
@@ -171,14 +176,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
         closeAdd();
         await search(query);
       } catch (failure) {
-        const code = failureCode(failure);
-        setError(
-          failureMessage(
-            t,
-            failure,
-            code === "" ? t("kh.addFailed") : t("kh.addFailedCode", { code }),
-          ),
-        );
+        setError(failureMessage(t, failure, t("kh.addFailed")));
         closeAdd();
       }
     });
@@ -282,33 +280,49 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
 
         {scanned ? <p className="mt-3 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}
         {candidates.length > 0 ? (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-[13px]">
-              <caption className="mb-2 text-left text-xs text-ink-faint">{t("kh.scanCandidates")}</caption>
-              <thead>
-                <tr className={tableHeadRow}>
-                  <SortableTableHeader column="host" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
-                  <SortableTableHeader column="type" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
-                  <SortableTableHeader column="fingerprint" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
-                  <SortableTableHeader column="trust" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnTrust")}</SortableTableHeader>
-                  <th scope="col" className={tableHeadCell}><span className="sr-only">{t("kh.columnActions")}</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayedCandidates.map((candidate) => (
-                  <tr key={`${candidate.host}-${candidate.fingerprint}`} className="border-b border-line last:border-b-0">
-                    <td className={tableCell}>{candidate.host}</td>
-                    <td className={`${tableCell} font-mono text-xs text-ink-muted`}>{candidate.keyType}</td>
-                    <td className={`${tableCell} font-mono text-xs text-ink-muted`}>{candidate.fingerprint}</td>
-                    <td className={tableCell}><Tag tone="warn">{candidateTrustText}</Tag></td>
-                    <td className={`${tableCell} text-right`}>
-                      <Button onClick={() => openAdd(candidate)}>{t("kh.add")}</Button>
-                    </td>
+          narrowList ? (
+            <ul aria-label={t("kh.scanCandidates")} className="mt-3 flex flex-col">
+              {displayedCandidates.map((candidate) => (
+                <li key={`${candidate.host}-${candidate.fingerprint}`} className="flex items-center gap-3 border-b border-line py-2 last:border-b-0">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[14px] [overflow-wrap:anywhere]">{candidate.host}</span>
+                    <span className="mt-0.5 block font-mono text-xs text-ink-muted">{candidate.keyType}</span>
+                    <span className="mt-0.5 block break-all font-mono text-xs text-ink-muted">{candidate.fingerprint}</span>
+                    <span className="mt-1 block"><Tag tone="warn">{candidateTrustText}</Tag></span>
+                  </span>
+                  <Button onClick={() => openAdd(candidate)}>{t("kh.add")}</Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-3">
+              <table className="w-full text-[13px]">
+                <caption className="mb-2 text-left text-xs text-ink-faint">{t("kh.scanCandidates")}</caption>
+                <thead>
+                  <tr className={tableHeadRow}>
+                    <SortableTableHeader column="host" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
+                    <SortableTableHeader column="type" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
+                    <SortableTableHeader column="fingerprint" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
+                    <SortableTableHeader column="trust" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnTrust")}</SortableTableHeader>
+                    <th scope="col" className={tableHeadCell}><span className="sr-only">{t("kh.columnActions")}</span></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {displayedCandidates.map((candidate) => (
+                    <tr key={`${candidate.host}-${candidate.fingerprint}`} className="border-b border-line last:border-b-0">
+                      <td className={`${tableCell} [overflow-wrap:anywhere]`}>{candidate.host}</td>
+                      <td className={`${tableCell} ${keyTypeCell}`}>{candidate.keyType}</td>
+                      <td className={`${tableCell} ${fingerprintCell}`}>{candidate.fingerprint}</td>
+                      <td className={tableCell}><Tag tone="warn">{candidateTrustText}</Tag></td>
+                      <td className={`${tableCell} text-right`}>
+                        <Button onClick={() => openAdd(candidate)}>{t("kh.add")}</Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         ) : null}
 
         {adding ? (
@@ -385,10 +399,10 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                     className="min-w-0 flex-1 py-2 text-left"
                   >
                     <span className="flex items-baseline gap-2">
-                      <span className={`min-w-0 flex-1 text-[14px] ${opened ? "break-all" : "truncate"}`}>{host}</span>
+                      <span title={host} className={`min-w-0 flex-1 text-[14px] ${opened ? "[overflow-wrap:anywhere]" : "truncate"}`}>{host}</span>
                       <span className="shrink-0 font-mono text-xs text-ink-muted">{item.keyType}</span>
                     </span>
-                    <span className={`mt-0.5 block font-mono text-xs text-ink-muted ${opened ? "break-all" : "truncate"}`}>{item.fingerprint}</span>
+                    <span title={item.fingerprint} className={`mt-0.5 block font-mono text-xs text-ink-muted ${opened ? "break-all" : "truncate"}`}>{item.fingerprint}</span>
                   </button>
                   <ActionMenu
                     label={t("kh.entryActions", { host })}
@@ -420,9 +434,9 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
             <tbody>
               {displayedEntries.map((item) => (
                 <tr key={`${item.line}-${item.digest}`} className="group/row border-b border-line last:border-b-0 hover:bg-hover">
-                  <td className={`${tableCell} break-all`}>{trustedHostText(item)}</td>
-                  <td className={`${tableCell} break-all font-mono text-xs text-ink-muted`}>{item.keyType}</td>
-                  <td className={`${tableCell} break-all font-mono text-xs text-ink-muted`}>{item.fingerprint}</td>
+                  <td className={`${tableCell} [overflow-wrap:anywhere]`}>{trustedHostText(item)}</td>
+                  <td className={`${tableCell} ${keyTypeCell}`}>{item.keyType}</td>
+                  <td className={`${tableCell} ${fingerprintCell}`}>{item.fingerprint}</td>
                   <td className={`${tableCell} text-right`}>
                     {/* Removing is offered on the row under the pointer (always on touch), in red words only. */}
                     <Button

@@ -77,7 +77,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
                   <DisclosureSummary>
                     {t("sync.bucketObjectName")}
                   </DisclosureSummary>
-                  <p className="mt-1 break-all font-mono text-ink">
+                  <p className="mt-1 [overflow-wrap:anywhere] font-mono text-ink">
                     {bucketState.value.live.key}
                   </p>
                 </details>
@@ -124,7 +124,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
                         <DisclosureSummary>
                           {t("sync.bucketObjectName")}
                         </DisclosureSummary>
-                        <p className="mt-1 break-all font-mono text-ink">
+                        <p className="mt-1 [overflow-wrap:anywhere] font-mono text-ink">
                           {item.key}
                         </p>
                       </details>

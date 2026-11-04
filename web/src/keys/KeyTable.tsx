@@ -142,7 +142,7 @@ export function KeyTable({
                     {keyListPath(item.relativePath)}
                   </button>
                   <span className={`block font-mono text-[11.5px] text-ink-faint @xl/keytable:hidden`}>{kindText(item, t)}</span>
-                  <span className={`hidden truncate text-[11.5px] text-ink-faint @xl/keytable:block`}>{whereText(item, t)}</span>
+                  <span title={whereText(item, t)} className={`hidden truncate text-[11.5px] text-ink-faint @xl/keytable:block`}>{whereText(item, t)}</span>
                 </td>
                 <td className={`hidden whitespace-nowrap border-line align-middle font-mono text-xs text-ink-muted @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:px-2.5 @xl/keytable:py-[9px]`}>
                   {kindText(item, t)}

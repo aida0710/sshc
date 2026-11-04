@@ -139,7 +139,7 @@ func TestAConnectionCutWhileTheHostKeyQuestionWaitsIsOpenedAgainWithoutAskingTwi
 	}
 
 	seen := readUntil(t, process, "connected-again")
-	if !strings.Contains(seen, "つなぎ直します") {
+	if !strings.Contains(seen, "再接続します") {
 		t.Errorf("the terminal does not say it connected again: %q", seen)
 	}
 	if strings.Contains(seen, "Are you sure") {

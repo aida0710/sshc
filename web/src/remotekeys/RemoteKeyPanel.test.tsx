@@ -12,6 +12,7 @@ afterEach(() => {
 
 const publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPr0nHGmQb99GXmUofxJM4BXGwGzO0jGsQFBspODbkvS deploy@laptop";
 const fingerprint = "SHA256:bytFrSjxj2qRszG8sHhWN+YO3b9vDSU3gQtMorwKpEs";
+const registerFailedText = "The key was not registered.";
 
 const plan: RemoteKeyPlan = {
   alias: "bastion",
@@ -318,7 +319,9 @@ describe("RemoteKeyPanel", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Register the key" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("unsupported_remote");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(registerFailedText);
+    expect(alert).not.toHaveTextContent("unsupported_remote");
     expect(await screen.findByText(/Append the public key line shown above/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Register the key" })).not.toBeInTheDocument();
   });
@@ -346,7 +349,7 @@ describe("RemoteKeyPanel", () => {
     );
   });
 
-  it("surfaces the refusal code from the plan endpoint and never offers a confirmation", async () => {
+  it("says the plan failed, without the refusal's internal code, and never offers a confirmation", async () => {
     const api = buildApi({
       plan: vi.fn().mockRejectedValue(
         new ApiError("invalid_public_key", 400, {
@@ -359,7 +362,9 @@ describe("RemoteKeyPanel", () => {
     await fillForm();
     await userEvent.click(screen.getByRole("button", { name: "Show what this would do" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("invalid_public_key");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The change could not be described.");
+    expect(alert).not.toHaveTextContent("invalid_public_key");
     expect(screen.queryByRole("region", { name: "Confirm remote registration" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Register the key" })).toBeDisabled();
   });
@@ -377,10 +382,10 @@ describe("RemoteKeyPanel", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("an Include in the SSH configuration cannot be read");
     expect(alert).toHaveTextContent("more than 4 MiB");
-    expect(alert).toHaveTextContent("config_not_confirmable");
+    expect(alert).not.toHaveTextContent("config_not_confirmable");
   });
 
-  it("surfaces the refusal code from the register endpoint and stores nothing", async () => {
+  it("says the registration failed, without the refusal's internal code, and stores nothing", async () => {
     const frameworkGlobals = ["IS_REACT_ACT_ENVIRONMENT"];
     const globalsBefore = Object.keys(window);
     const api = buildApi({
@@ -395,7 +400,9 @@ describe("RemoteKeyPanel", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Register the key" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("executable_directive_not_acknowledged");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(registerFailedText);
+    expect(alert).not.toHaveTextContent("executable_directive_not_acknowledged");
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
     const added = Object.keys(window).filter(

@@ -79,7 +79,7 @@ describe("DiagnosticsPanel", () => {
     await waitFor(() => expect(api.authentication).toHaveBeenCalledWith("bastion", false));
   });
 
-  it("explains that the source table scrolls sideways on narrow screens", async () => {
+  it("keeps the source table from scrolling sideways, so nothing on a phone is out of reach", async () => {
     const { container } = render(<DiagnosticsPanel api={buildApi()} />);
 
     await userEvent.type(screen.getByLabelText("Host alias"), "bastion");
@@ -87,9 +87,9 @@ describe("DiagnosticsPanel", () => {
     expect(container.firstElementChild).toHaveClass("[&_button]:min-h-10", "md:[&_button]:min-h-0");
     await userEvent.click(explain);
 
-    const hint = await screen.findByText("Swipe sideways to see every column");
-    expect(hint).toHaveClass("md:hidden");
-    expect(screen.getByRole("table").parentElement).toHaveClass("overflow-x-auto");
+    const table = await screen.findByRole("table");
+    expect(table.parentElement).not.toHaveClass("overflow-x-auto");
+    expect(table).not.toHaveClass("min-w-max");
   });
 
   it("runs no check until the user asks for one", async () => {
@@ -197,7 +197,8 @@ describe("DiagnosticsPanel", () => {
 
     await waitFor(() => expect(api.effective).toHaveBeenCalledWith("bastion"));
     expect(await screen.findByText("203.0.113.10")).toBeInTheDocument();
-    expect(screen.getByText(/~\/\.ssh\/config:2/)).toBeInTheDocument();
+    // Once in its column, and once under the value for where the table is too narrow to have that column.
+    expect(screen.getAllByText(/~\/\.ssh\/config:2/).length).toBeGreaterThan(0);
   });
 
 

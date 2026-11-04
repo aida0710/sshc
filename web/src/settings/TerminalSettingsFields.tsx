@@ -78,7 +78,7 @@ function FontSizeInput({ value, onChange, ...description }: { value: string; onC
         max={fontSizeRange.max}
         aria-label={t("terminal.fontSizeLabel")}
         {...description}
-        className={`${sizedControl("w-[90px]")} font-mono`}
+        className={`${sizedControl("w-[110px]")} font-mono`}
         value={value}
         placeholder="15 / 13"
         onChange={(event) => onChange(event.target.value)}
@@ -104,13 +104,17 @@ export function TerminalConnectionFields({ draft, edit, type }: GroupProps) {
   );
 }
 
+// One limit: its short name, its input and its unit. Below sm the limits stack, and their three parts line up in
+// columns (the parent's grid) rather than starting wherever the name happens to end.
+const limitLabel = "col-span-3 grid grid-cols-subgrid items-center sm:inline-flex sm:gap-2";
+
 // TerminalLimitInputs are the four numbers in one sentence-like line. Each input keeps its full name (the
 // short words beside them only make sense together), and all four take the row's description.
 function TerminalLimitInputs({ draft, type, ...description }: GroupProps & DescribableControlProps) {
   const t = useTranslate();
   return (
-    <span className={`flex flex-wrap items-center gap-x-[18px] gap-y-2 ${unitText}`}>
-      <label className="inline-flex items-center gap-2">
+    <span className={`grid grid-cols-[max-content_max-content_minmax(0,1fr)] items-center gap-x-2 gap-y-2 sm:flex sm:flex-wrap sm:gap-x-[18px] ${unitText}`}>
+      <label className={limitLabel}>
         {t("terminal.maxSessionsShort")}
         <input
           type="number"
@@ -124,7 +128,7 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
           onChange={(event) => type({ maxSessions: event.target.value })}
         />
       </label>
-      <label className="inline-flex items-center gap-2">
+      <label className={limitLabel}>
         {t("terminal.scrollbackShort")}
         <input
           type="number"
@@ -139,7 +143,7 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
         />
         KiB
       </label>
-      <label className="inline-flex items-center gap-2">
+      <label className={limitLabel}>
         {t("terminal.browserScrollbackShort")}
         <input
           type="number"
@@ -154,7 +158,7 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
         />
         {t("terminal.linesUnit")}
       </label>
-      <label className="inline-flex items-center gap-2">
+      <label className={limitLabel}>
         {t("terminal.retainedTerminalsShort")}
         <input
           type="number"

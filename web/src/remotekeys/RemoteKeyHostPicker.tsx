@@ -78,7 +78,7 @@ export function RemoteKeyHostPicker({
                 disabled={busy}
                 onChange={() => onToggle(host)}
               />
-              <span className="min-w-0 truncate font-mono text-[12.5px] text-ink">{host}</span>
+              <span title={host} className="min-w-0 truncate font-mono text-[12.5px] text-ink">{host}</span>
             </label>
           ))}
         </div>

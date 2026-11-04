@@ -180,9 +180,12 @@
 }
 
 @media (forced-colors: none) and (hover: hover) and (pointer: fine) {
-  * {
-    scrollbar-color: var(--ui-scrollbar-thumb) transparent;
-    scrollbar-width: thin;
+  /* In a layer, so that a strip of tabs or filters can hide its scrollbar ([scrollbar-width:none]) with a utility. */
+  @layer base {
+    * {
+      scrollbar-color: var(--ui-scrollbar-thumb) transparent;
+      scrollbar-width: thin;
+    }
   }
 
   *::-webkit-scrollbar {
@@ -715,7 +718,9 @@ select:not([multiple]):not([size]) {
 /* The same condition as the mobile-layout variant: a touch screen as large as a PC's keeps the PC's sizes. */
 @media (max-width: 767px), (pointer: coarse) and (max-width: 1023px) {
   /* Compact icon artwork keeps its size; the touch target is large enough. The top bar's page actions
-     reach 44px another way (below). */
+     reach 44px another way (below). These rules are outside Tailwind's layers, so they beat an ordinary utility. That
+     keeps the 44px against a md: class, and it also means that a button wanting to be taller than 44px has to mark its
+     utility important (min-h-14!). */
   :where(button:not([data-touch-compact]):not([data-touch-dense]), [role="button"], [role="menuitem"], summary, nav a):not(.monaco-editor *):not(.xterm *):not([data-page-actions] *) {
     min-height: 44px;
     min-width: 44px;

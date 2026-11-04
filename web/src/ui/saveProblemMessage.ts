@@ -28,6 +28,6 @@ export function saveProblemMessage(problem: Problem, t: Translate): string {
     default:
       return problem.code in refusalKeys
         ? t(refusalKeys[problem.code]!, { detail: problem.detail ?? "" })
-        : t("preview.rejected", { code: problem.code });
+        : t("preview.rejected");
   }
 }

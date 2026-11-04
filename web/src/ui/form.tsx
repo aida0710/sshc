@@ -63,7 +63,7 @@ export const sectionHeading = "text-sm font-medium text-ink";
 
 export const tableHeadRow =
   "border-b border-line text-xs text-ink-faint";
-export const tableHeadCell = "px-2.5 pb-2 text-left font-normal";
+export const tableHeadCell = "whitespace-nowrap px-2.5 pb-2 text-left font-normal";
 // tableCell is a cell of a list row, spaced as in the design. tableCellOnWide applies the same spacing
 // only where the row is a table row; a phone lays such rows out as stacked label and value pairs.
 export const tableCell = "px-2.5 py-[9px] align-middle";
@@ -125,6 +125,8 @@ type CheckboxFieldProps = {
 // CheckboxField is a check box with its label, spaced as the design's check rows. A hint goes under the
 // label inside the same <label>, so the whole block is one touch target, but the box is named by the label
 // alone and the hint is its description.
+// A phone makes the label 44px tall. A label with no hint is usually one line, which the padding puts in the middle of
+// that height: at the top, it would leave a gap under the line that looks like a stray margin.
 export function CheckboxField({
   label,
   hint,
@@ -139,7 +141,7 @@ export function CheckboxField({
   const toneClass = tone === "notice" ? "text-notice-ink" : tone === "danger" ? "text-danger" : disabled ? "text-ink-faint" : "text-ink";
   return (
     <label
-      className={`flex items-start gap-2.5 text-[13.5px] ${toneClass} ${className}`}
+      className={`flex items-start gap-2.5 text-[13.5px] ${hint === undefined ? "mobile-layout:py-3" : ""} ${toneClass} ${className}`}
     >
       <input
         type="checkbox"

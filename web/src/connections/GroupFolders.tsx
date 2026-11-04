@@ -33,7 +33,7 @@ export function GroupFolders({ group, hosts, keys }: GroupFoldersProps) {
             <p className="text-xs text-ink-faint">{t("groupFolders.noConnections")}</p>
           ) : files.map((file) => (
             <div key={file.name} className="min-w-0">
-              <p className="truncate font-mono text-xs text-ink-muted">{file.name}</p>
+              <p title={file.name} className="truncate font-mono text-xs text-ink-muted">{file.name}</p>
               <p className="break-words text-xs text-ink-faint">{file.aliases.join(", ")}</p>
             </div>
           ))}
@@ -47,7 +47,7 @@ export function GroupFolders({ group, hosts, keys }: GroupFoldersProps) {
             <p className="text-xs text-ink-faint">{t("groupFolders.noKeys")}</p>
           ) : keyFiles.map((file) => (
             <p key={file.name} className="flex min-w-0 items-baseline gap-1.5">
-              <span className="min-w-0 truncate font-mono text-xs text-ink-muted">{file.name}</span>
+              <span title={file.name} className="min-w-0 truncate font-mono text-xs text-ink-muted">{file.name}</span>
               {file.companions.length === 0 ? null : (
                 <span className="shrink-0 font-mono text-[11.5px] text-ink-faint">{file.companions.join(" ")}</span>
               )}
@@ -68,7 +68,7 @@ function Folder({ icon, path, children }: { icon: IconName; path: string; childr
     <div className="min-w-0">
       <p className="flex items-center gap-1.5 font-mono text-xs text-ink">
         <Icon name={icon} className="size-3.5 shrink-0 text-ink-faint" />
-        <span className="truncate">{path}</span>
+        <span title={path} className="truncate">{path}</span>
       </p>
       <div className="mt-1.5 flex flex-col gap-1 pl-5">{children}</div>
     </div>
