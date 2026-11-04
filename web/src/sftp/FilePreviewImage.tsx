@@ -1,3 +1,4 @@
+import { previewPictureArea } from "./FilePreviewFrame";
 import type { PreviewSwipe } from "./previewSwipe";
 import { imageTransform } from "./previewZoom";
 import { PreviewZoomBar } from "./PreviewZoomBar";
@@ -9,7 +10,7 @@ export function FilePreviewImage({ url, name, onSwipe }: { url: string; name: st
   const { target, zoom, areaProps, zoomIn, zoomOut, fit } = usePreviewZoom<HTMLImageElement>({ doubleClickZooms: true, onSwipe });
   return (
     <div {...areaProps} data-preview-zoom-area
-      className={`relative grid h-full touch-none select-none place-items-center overflow-hidden ${zoom.scale > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"}`}>
+      className={`${previewPictureArea} touch-none select-none ${zoom.scale > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"}`}>
       <img ref={target} src={url} alt={name} draggable={false}
         className="max-h-full max-w-full object-contain"
         style={{ transform: imageTransform(zoom) }} />

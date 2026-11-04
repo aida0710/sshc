@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HostDetail, HostMetadata } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
-import { control } from "../ui/form";
-import { FieldRow } from "../ui/FieldRow";
+import { CheckboxField, control } from "../ui/form";
+import { FieldRow, FieldRowNote } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { identityKey } from "./connectionBrowser";
@@ -181,14 +181,15 @@ export function HostInspector({
             </select>
           </FieldRow>
 
-          <FieldRow density="editor" label={t("connection.tmuxLabel")} hint={t("connection.tmuxHint")}>
-            <input
-              type="checkbox"
+          <FieldRowNote density="editor">
+            <CheckboxField
+              className="pt-1.5"
+              label={t("connection.tmuxLabel")}
+              hint={t("connection.tmuxHint")}
               checked={draft.tmux === true}
-              onChange={(event) => setDraft({ ...draft, tmux: event.target.checked })}
-              className="mt-1.5 h-4 w-4 accent-accent"
+              onChange={(checked) => setDraft({ ...draft, tmux: checked })}
             />
-          </FieldRow>
+          </FieldRowNote>
         </EditorSection>
 
         <EditorSection title={t("inspector.vpnHeading")}>

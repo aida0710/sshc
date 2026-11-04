@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
+import { previewPictureArea } from "./FilePreviewFrame";
 import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FilePreviewRefusal } from "./FilePreviewRefusal";
 import type { PlayableMediaKind } from "./playableMedia";
@@ -55,7 +56,7 @@ export function FilePreviewMedia({ element, url, name, onDownload, onSwipe }: {
   }
   return (
     <div {...(videosZoom ? areaProps : {})} data-preview-zoom-area={videosZoom ? "" : undefined}
-      className={`relative grid h-full place-items-center overflow-hidden ${videosZoom ? "touch-none" : ""} ${zoom.scale > 1 ? "cursor-grab active:cursor-grabbing" : ""}`}
+      className={`${previewPictureArea} ${videosZoom ? "touch-none" : ""} ${zoom.scale > 1 ? "cursor-grab active:cursor-grabbing" : ""}`}
       aria-busy={waiting}>
       <video ref={target} {...keyboardOwnerProps} {...playerEvents} src={url} controls preload="metadata" aria-label={name}
         className="max-h-full max-w-full"
