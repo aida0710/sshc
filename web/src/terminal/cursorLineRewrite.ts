@@ -1,4 +1,5 @@
 import type { Terminal } from "@xterm/xterm";
+import { cursorLineRows, textBeforeCursor } from "./cursorLineText";
 
 // resizeRewritingCursorLine resizes the terminal and, when its width changed, writes the line holding the cursor again
 // at the new width, as far as the cursor.
@@ -18,28 +19,4 @@ export function resizeRewritingCursorLine(view: Terminal, resize: () => void): v
   const up = (count: number) => (count > 0 ? `\x1b[${count}A` : "");
   const clear = Array.from({ length: rows }, () => "\x1b[2K").join("\x1b[B");
   view.write(`\r${up(rows - 1)}${clear}\r${up(rows - 1)}${text}`);
-}
-
-// textBeforeCursor is the line holding the cursor (with the rows it wrapped from) up to the cursor.
-function textBeforeCursor(view: Terminal): string {
-  const buffer = view.buffer.active;
-  const cursorRow = buffer.baseY + buffer.cursorY;
-  const first = firstRowOfLine(view, cursorRow);
-  let text = "";
-  for (let row = first; row < cursorRow; row += 1) text += buffer.getLine(row)?.translateToString(false) ?? "";
-  return text + (buffer.getLine(cursorRow)?.translateToString(false, 0, buffer.cursorX) ?? "");
-}
-
-// cursorLineRows is how many rows the line holding the cursor takes, up to the cursor.
-function cursorLineRows(view: Terminal): number {
-  const buffer = view.buffer.active;
-  const cursorRow = buffer.baseY + buffer.cursorY;
-  return cursorRow - firstRowOfLine(view, cursorRow) + 1;
-}
-
-function firstRowOfLine(view: Terminal, row: number): number {
-  const buffer = view.buffer.active;
-  let first = row;
-  while (first > 0 && buffer.getLine(first)?.isWrapped === true) first -= 1;
-  return first;
 }

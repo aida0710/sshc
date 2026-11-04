@@ -82,8 +82,10 @@ import { createStreamLink, type StreamLink, type StreamLinkController } from "./
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
-import { TerminalComposer } from "./TerminalComposer";
+import { TerminalComposer, type ComposerField } from "./TerminalComposer";
 import { composerSendBlock, planComposerSend, type ComposerSendBlock } from "./composerSend";
+import { textBeforeCursor } from "./cursorLineText";
+import { asksForSecret, secretPromptRowsRead } from "./secretPrompt";
 import { terminalCommandApiFor } from "./commands/commandApi";
 import { forwardApiFor } from "./forwardApi";
 import { useLocalWindowsPaths } from "./useLocalWindowsPaths";
@@ -346,6 +348,9 @@ export function TerminalView({
     fromComposer?: boolean;
   } | null>(null);
   const [composerText, setComposerText] = useState("");
+  // The answer typed in the phone's password field. It stays in this state and nowhere else, and is sent as it is.
+  const [composerSecret, setComposerSecret] = useState("");
+  const [cursorAtSecretPrompt, setCursorAtSecretPrompt] = useState(false);
   const sendPaste = useRef<(text: string) => void>(() => {});
   const allowWindowsPaths = useLocalWindowsPaths(session.kind, runTarget);
   const windowsPathsRef = useRef(allowWindowsPaths);
@@ -386,8 +391,8 @@ export function TerminalView({
   // Direct input holds only while the key bar offers the key that switches it back: a key bar preset without the
   // key would otherwise leave the text box hidden with no way to bring it back.
   const directInput = useDirectInput() && offersDirectInput(keyBarLayout);
-  // The phone's text box, while it is shown (TerminalComposer).
-  const composerField = useRef<HTMLTextAreaElement>(null);
+  // The phone's field that takes the typing, while it is shown (TerminalComposer).
+  const composerField = useRef<ComposerField>(null);
   // sendKey sends a key of the key bar.
   const sendKey = useRef<(key: KeyBarKey) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
@@ -637,6 +642,8 @@ export function TerminalView({
       sendInput.current(keyBarInput(key, takeModifiers(), { applicationCursorKeys: view.modes.applicationCursorKeysMode }));
     };
     view.onData(typed);
+    // Fires once a frame at most, after what arrived is on the screen; a replayed screen comes through here too.
+    const secretPromptWatch = view.onWriteParsed(() => setCursorAtSecretPrompt(asksForSecret(textBeforeCursor(view, secretPromptRowsRead))));
     // A program that turns on mouse reports without SGR (1006) gets them in the
     // default format, which xterm.js hands out here rather than through onData.
     view.onBinary((data) => linkController.currentStream()?.sendBinary(data));
@@ -700,6 +707,8 @@ export function TerminalView({
       commandOutput.current = null;
       commandCard.close();
       setTopCommand(null);
+      secretPromptWatch.dispose();
+      setCursorAtSecretPrompt(false);
       sequences.dispose();
       promptJump.current = null;
       promptCursor.current = null;
@@ -840,6 +849,7 @@ export function TerminalView({
     if (!directInput) {
       if (document.activeElement === composerField.current) terminal.current?.focus();
       setDirectInput(true);
+      setComposerSecret("");
       return;
     }
     const typingInTerminal = terminal.current?.textarea !== undefined && document.activeElement === terminal.current.textarea;
@@ -848,6 +858,11 @@ export function TerminalView({
   }
 
   const sendBlock = composerSendBlock(session, link);
+  // A question on the screen of a session that has ended waits for nothing. A link that is only trying to connect
+  // keeps the field hidden, with what was typed: the question is still there when it is back.
+  const composerMasked = cursorAtSecretPrompt && sendBlock !== "reconnect-first" && sendBlock !== "session-ended";
+  // What was typed for a question ends with the question, so it never shows in the clear.
+  if (!composerMasked && composerSecret !== "") setComposerSecret("");
 
   function submitComposer() {
     // What is typed in the box stays there, to send to the reconnected shell.
@@ -857,6 +872,13 @@ export function TerminalView({
     }
     if (sendBlock !== null) {
       setTerminalNotice(t(composerSendBlockMessages[sendBlock]));
+      return;
+    }
+    if (composerMasked) {
+      // As if typed: a paste could be bracketed, which a password prompt would take as part of the password, and the
+      // dialog that confirms a risky paste would show it.
+      sendInput.current(`${composerSecret}\r`);
+      setComposerSecret("");
       return;
     }
     const plan = planComposerSend(composerText, { bracketedPaste: terminal.current?.modes.bracketedPasteMode ?? false });
@@ -1140,11 +1162,13 @@ export function TerminalView({
       />
       {directInput ? null : <TerminalComposer
         value={composerText}
+        secret={composerMasked ? composerSecret : null}
         sendable={sendBlock === null || composerReconnects}
         placeholder={composerReconnects ? t("terminal.composerReconnectPlaceholder") : undefined}
         enterSends={composerEnterSends}
         fieldRef={composerField}
         onChange={setComposerText}
+        onSecretChange={setComposerSecret}
         onSubmit={submitComposer}
       />}
     </section>
