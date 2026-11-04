@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 import type { BrowserSave } from "../ui/saveFile";
 import type {
   CreateTransferJob,
@@ -208,6 +209,17 @@ describe("SFTPTransferManager engine ownership", () => {
     const upload = manager.getSnapshot().find((job) => job.direction === "upload")!;
     await manager.pause(upload.id);
     expect(manager.hasBrowserTransfers()).toBe(false);
+  });
+
+  it("names a transfer of several items in the language of whoever starts it", async () => {
+    localStorage.setItem(localStorageKeys.locale, "ja");
+    const api = engineAPI();
+    const manager = new SFTPTransferManager(api, 0);
+    const copyOf = (name: string) => ({
+      sourceAlias: "edge", sourcePath: `/${name}`, targetAlias: "edge", targetPath: `/copy/${name}`, kind: "file" as const, name, totalBytes: 1,
+    });
+    await manager.addRemoteTransfers([copyOf("a.txt"), copyOf("b.txt"), copyOf("c.txt")], "copy");
+    expect(api.createTransfer).toHaveBeenCalledWith(expect.objectContaining({ batchName: "3件の項目" }));
   });
 
   it("sends an upload whose file has no modification time as not known", async () => {

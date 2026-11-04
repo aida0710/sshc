@@ -23,6 +23,11 @@ describe("the Android app's wording", () => {
     expect(strayEnglish).toEqual([]);
   });
 
+  it("calls the files beside the app those of this device, not the engine's", () => {
+    expect(androidCatalogue("ja")["sftp.local.engine"]).toBe("このデバイス");
+    expect(androidCatalogue("en")["sftp.local.engine"]).toBe("This device");
+  });
+
   it("rewords what the catalogue says of this machine", () => {
     expect(androidCatalogue("ja")["settings.thisMachine"]).toBe("このデバイス");
     expect(androidCatalogue("ja")["start.openLocalShellNote"]).toBe("このデバイスのシェルをすぐ開きます");
