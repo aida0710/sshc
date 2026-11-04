@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type Ref } from "react";
 import { useTranslate } from "../i18n/context";
 import type { DescribableControlProps } from "./describeControl";
 import { Field, control } from "./form";
@@ -23,6 +23,41 @@ type PasswordInputProps = Omit<PasswordFieldProps, "hint" | "error" | "inputClas
   placeholder?: string;
 };
 
+// A password is typed as it is meant: a phone's keyboard must not capitalise or correct it.
+const passwordTextEntry = { autoCapitalize: "none", autoCorrect: "off", spellCheck: false } as const;
+
+// AlwaysMaskedPasswordInput is a password input with no button to show it, for answering a question on the spot where
+// the button would crowd the field (the phone's text box while the terminal asks for a password).
+export function AlwaysMaskedPasswordInput({
+  ref,
+  label,
+  value,
+  onChange,
+  className,
+  placeholder,
+}: {
+  ref?: Ref<HTMLInputElement>;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  className: string;
+  placeholder: string;
+}): ReactNode {
+  return (
+    <input {...passwordTextEntry}
+      ref={ref}
+      type="password"
+      autoComplete="off"
+      aria-label={label}
+      value={value}
+      placeholder={placeholder}
+      enterKeyHint="send"
+      onChange={(event) => onChange(event.target.value)}
+      className={className}
+    />
+  );
+}
+
 export function PasswordInput({
   label,
   value,
@@ -40,16 +75,13 @@ export function PasswordInput({
   // The show button sits inside the field's right end, as in the design.
   return (
     <div className="relative flex w-full min-w-0 items-center">
-      <input
+      <input {...passwordTextEntry}
         type={shown ? "text" : "password"}
         aria-label={label}
         aria-describedby={describedBy}
         aria-invalid={invalid}
         value={value}
         autoFocus={autoFocus ?? false}
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
         disabled={disabled}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}

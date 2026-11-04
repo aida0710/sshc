@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, type KeyboardEvent, type RefObject } from "rea
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { isImeComposing } from "../ui/imeComposition";
+import { AlwaysMaskedPasswordInput } from "../ui/PasswordField";
 import { matchesMediaQuery, mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { isSoftKeyboardOpen, literalTextEntry } from "../ui/softKeyboard";
 import { pressesEnterOnly } from "./composerSend";
@@ -130,15 +131,12 @@ export function TerminalComposer({
         className={`${fieldLook} resize-none`}
       />
       {/* An answer has no line breaks, so Enter sends whatever the settings say: the browser submits the form. */}
-      <input {...literalTextEntry}
+      <AlwaysMaskedPasswordInput
         ref={secretField}
-        type="password"
-        autoComplete="off"
+        label={t("terminal.composerSecretField")}
         value={secret ?? ""}
-        aria-label={t("terminal.composerSecretField")}
         placeholder={t("terminal.composerSecretPlaceholder")}
-        enterKeyHint="send"
-        onChange={(event) => onSecretChange(event.target.value)}
+        onChange={onSecretChange}
         className={fieldLook}
       />
       <button
