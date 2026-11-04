@@ -39,6 +39,11 @@ export function FilePreviewFrame({ headingId, header, overlay, onDismiss, return
   );
 }
 
+// previewPictureArea centres a picture or a video in the preview and holds it to the preview's size. The grid's one row
+// and column are sized by the preview rather than by what they hold: an image's max-height against a row that grows
+// with the image does nothing, so a tall picture would run off the top and the bottom.
+export const previewPictureArea = "relative grid h-full grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] place-items-center overflow-hidden";
+
 // FilePreviewArea is the place the file itself is drawn in.
 export function FilePreviewArea({ overlay, children }: { overlay: boolean; children: ReactNode }) {
   const t = useTranslate();
