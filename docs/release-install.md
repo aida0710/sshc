@@ -13,8 +13,8 @@ Homebrewのformulaはソースからビルドするため、GoとNode.js 22もHo
 ## インストールスクリプト（macOS / Linux / FreeBSD / OpenBSD）
 
 ```sh
-SSHC_VERSION=v0.60.1 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.60.1/install.sh | sh'
+SSHC_VERSION=v0.60.2 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.60.2/install.sh | sh'
 ```
 
 FreeBSDとOpenBSDでは、curlの代わりにベースシステムの`fetch -qo -`（FreeBSD）、`ftp -Vo -`（OpenBSD）でスクリプトを取得できます。スクリプトも、curlとwgetが無ければこれらで取得し、`sha256 -q`でSHA-256を確かめます。
@@ -40,7 +40,7 @@ URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`
 
 `SSHC_VERSION`を指定しない場合は、タグを固定せずにReleaseワークフローの署名を確かめます。通常は`~/.local/bin`にインストールし、rootで実行した場合は`/usr/local/bin`を使用します。
 
-手動でダウンロードしたCLIやAPKは、GitHub CLIで次のように検証できます。`<downloaded-file>`にはCLIまたはAPKの実ファイルを、`<tag>`には導入するタグ（例: `v0.60.1`）を指定します。
+手動でダウンロードしたCLIやAPKは、GitHub CLIで次のように検証できます。`<downloaded-file>`にはCLIまたはAPKの実ファイルを、`<tag>`には導入するタグ（例: `v0.60.2`）を指定します。
 
 ```sh
 gh attestation verify <downloaded-file> --repo aida0710/sshc \
@@ -109,8 +109,8 @@ GitHub CLIでattestationを検証できる場合は、exeと`checksums.txt`の�
 再現可能な導入では、スクリプトと成果物を同じタグへ固定します。
 
 ```powershell
-$env:SSHC_VERSION = 'v0.60.1'
-irm https://github.com/aida0710/sshc/releases/download/v0.60.1/install.ps1 | iex
+$env:SSHC_VERSION = 'v0.60.2'
+irm https://github.com/aida0710/sshc/releases/download/v0.60.2/install.ps1 | iex
 ```
 
 手動で配置する場合は、[GitHub Releases](https://github.com/aida0710/sshc/releases)からx64では`sshc-windows-amd64.exe`、Arm64では`sshc-windows-arm64.exe`を取得し、`checksums.txt`と照合してから`sshc.exe`へ名前を変更します。

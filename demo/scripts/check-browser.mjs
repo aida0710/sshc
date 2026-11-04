@@ -137,12 +137,14 @@ try {
   console.log("PASS: WebターミナルでSSH接続とコマンド実行");
 
   await ui.getByRole("link", { name: "SFTP", exact: true }).click();
-  const fileTabs = ui.getByRole("tablist", { name: "左ペインのタブ", exact: true });
-  await fileTabs.getByRole("button", { name: "接続先", exact: true }).click();
+  // The tablist holds no element of its own (it owns its tabs by id), so a search for the tabs starts from the strip around it.
+  const fileTabStrip = ui.locator("[data-sftp-pane-tabs]")
+    .filter({ has: ui.getByRole("tablist", { name: "左ペインのタブ", exact: true }) });
+  await fileTabStrip.getByRole("button", { name: "接続先", exact: true }).click();
   await ui.getByRole("dialog", { name: "接続先を選択", exact: true })
     .getByRole("button", { name: /^demo-a(?:\s|$)/ }).click();
   // Choosing the host connects at once, so the tab goes straight to its first directory.
-  await fileTabs.getByRole("tab", { name: "demo-a:root", selected: true, exact: true }).waitFor();
+  await fileTabStrip.getByRole("tab", { name: "demo-a:root", selected: true, exact: true }).waitFor();
   await ui.getByRole("button", { name: "welcome.txt", exact: true }).dblclick();
   await ui.getByRole("dialog", { name: "welcome.txtの詳細" }).getByRole("button", { name: "ファイルを編集" }).click();
   const editor = ui.getByRole("dialog", { name: "/root/welcome.txt", exact: true });
