@@ -189,7 +189,10 @@ func (s *Session) nextReconnectAttempt() (attempt, limit int, ok bool) {
 // waitToReconnect は、再接続までの待ちを一覧とターミナルに出してから待つ。
 // 待っているあいだに止められたら false を返す。
 func (s *Session) waitToReconnect(attempt, limit int, now func() time.Time) bool {
-	if available, _ := s.network.State(); !available || s.lastAttemptHadNoNetwork() {
+	// 待ちを一覧に出す前に受け取る。出したあとで受け取ると、そのあいだに言われた回線の変化を取りこぼし、
+	// 回線が戻っても待ち時間の最後まで試さない。
+	available, networkChanged := s.network.State()
+	if !available || s.lastAttemptHadNoNetwork() {
 		return s.waitForNetwork(attempt, limit, now)
 	}
 	wait := ReconnectBase(attempt)
@@ -207,7 +210,6 @@ func (s *Session) waitToReconnect(attempt, limit int, now func() time.Time) bool
 		"\r\n[sshc] %s%d秒後に再接続します（%d/%d）。\r\n",
 		reconnectLead(attempt), seconds, attempt+1, limit)))
 
-	_, networkChanged := s.network.State()
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
