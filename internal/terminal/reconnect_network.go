@@ -17,9 +17,9 @@ const transportCheckLimit = 10 * time.Second
 // TransportChecking は、輸送が黙って止まることがある Process である。Wi-Fi とモバイル回線が
 // 切り替わると、前の回線の TCP は切れたとも言われないまま応答しなくなり、ターミナルが固まる。
 type TransportChecking interface {
-	// CheckTransport は、輸送が limit までに応答しなければ閉じる。閉じたら Process は輸送が
-	// 落ちたとして終わる。
-	CheckTransport(limit time.Duration)
+	// CheckTransport は、輸送が limit までに応答しなければ閉じ、応答したかを返す。閉じたら Process は
+	// 輸送が落ちたとして終わる。
+	CheckTransport(limit time.Duration) (answered bool)
 }
 
 // watchNetworkChanges は、OS が回線があると言うたびに、つながっている接続が応答するかを確かめる。
@@ -41,13 +41,45 @@ func (s *Session) watchNetworkChanges(done <-chan struct{}) {
 	}
 }
 
+// checkTransport は、つながっている接続が応答するかを確かめる。切れた知らせは確認の結果より先に pump へ
+// 届くことがあるので、印は確認を始める前に付け、応答があったときだけ消す。
 func (s *Session) checkTransport() {
 	s.mutex.Lock()
-	process, state := s.process, s.state
-	s.mutex.Unlock()
-	if checking, ok := process.(TransportChecking); ok && state == StateConnected {
-		checking.CheckTransport(transportCheckLimit)
+	checking, canCheck := s.process.(TransportChecking)
+	if !canCheck || s.state != StateConnected {
+		s.mutex.Unlock()
+		return
 	}
+	s.transportCheckPending = true
+	s.mutex.Unlock()
+	if checking.CheckTransport(transportCheckLimit) {
+		s.mutex.Lock()
+		s.transportCheckPending = false
+		s.mutex.Unlock()
+	}
+}
+
+// takeTransportCheckPending は、確認に応答しないまま輸送が落ちたかを返し、印を消す。
+func (s *Session) takeTransportCheckPending() bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	pending := s.transportCheckPending
+	s.transportCheckPending = false
+	return pending
+}
+
+// skipWaitAfterNetworkChange は、回線が変わって切れた接続を、待たずに開き直す。waitToReconnect の代わりに
+// 呼ぶ。待ち時間は同じ相手へ繰り返し失敗しないためのもので、新しい回線へ移る今回は待つ理由が無い。
+// 待ち時間の間に回線の知らせが来ることも無い。知らせはこの切断より前に済んでいる。
+func (s *Session) skipWaitAfterNetworkChange(attempt, limit int, now func() time.Time) bool {
+	if available, _ := s.network.State(); !available {
+		return s.waitForNetwork(attempt, limit, now)
+	}
+	s.mutex.Lock()
+	s.showReconnectingLocked(ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: now()})
+	s.mutex.Unlock()
+	s.publish([]byte("\r\n[sshc] 回線が変わったので、すぐ再接続します。\r\n"))
+	return true
 }
 
 func (s *Session) lastAttemptHadNoNetwork() bool {
@@ -91,9 +123,7 @@ func (s *Session) waitForNetwork(attempt, limit int, now func() time.Time) bool 
 // 待つ間の試みは同じ理由で失敗するだけで、書いても行が増えるだけである。
 func (s *Session) announceNetworkWait(attempt, limit int, now func() time.Time) {
 	s.mutex.Lock()
-	s.process = nil
-	s.state = StateReconnecting
-	s.reconnectView = &ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: now(), WaitingForNetwork: true}
+	s.showReconnectingLocked(ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: now(), WaitingForNetwork: true})
 	announced := s.networkWaitAnnounced
 	s.networkWaitAnnounced = true
 	reasonWritten := s.noNetwork

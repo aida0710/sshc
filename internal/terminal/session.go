@@ -93,7 +93,10 @@ type Session struct {
 	// reconnectAttempts は、今の切断から試した自動再接続の回数である。
 	// ReconnectSettled のあいだ安定して繋がったら 0 に戻す。
 	reconnectAttempts int
-	reconnectCancel   context.CancelFunc
+	// transportCheckPending は、回線が変わったあとの確認に輸送がまだ応答していない間だけ真である。
+	// この間に輸送が落ちたら、回線の変化で切れたものとして扱う。
+	transportCheckPending bool
+	reconnectCancel       context.CancelFunc
 	// network は、このマシンの回線について OS が言うことである。nil なら OS は何も言わない。
 	network      *NetworkWatch
 	networkRetry time.Duration
