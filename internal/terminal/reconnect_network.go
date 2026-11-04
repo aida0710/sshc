@@ -25,8 +25,7 @@ type TransportChecking interface {
 // watchNetworkChanges は、OS が回線があると言うたびに、つながっている接続が応答するかを確かめる。
 // 回線が無いと言われただけでは切らない。すぐ戻れば、同じ TCP のまま続けられる。pump が終わる（done）まで
 // 動く。OS が何も言わないマシンでは何もしない。
-func (s *Session) watchNetworkChanges(done <-chan struct{}) {
-	_, changed := s.network.State()
+func (s *Session) watchNetworkChanges(changed <-chan struct{}, done <-chan struct{}) {
 	for changed != nil {
 		select {
 		case <-changed:

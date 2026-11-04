@@ -285,7 +285,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		return nil, ErrShuttingDown
 	}
 	session.observeProcess(StateConnecting, "")
-	go session.pump(r.now)
+	session.startPump(r.now)
 	return session, nil
 }
 
@@ -528,7 +528,7 @@ func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {
 		}
 		return nil, ErrReconnectUnavailable
 	}
-	go session.pump(r.now)
+	session.startPump(r.now)
 	return session, nil
 }
 
