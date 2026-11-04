@@ -2916,7 +2916,7 @@ export const ja = {
   "tree.expand": "{name}を展開する",
   "tree.duplicateAlias": "接続名の重複",
   "tree.dragGroupHint":
-    "グループをドラッグすると、階層と表示順を変更できます。",
+    "接続先とグループの見出しは、グループの一覧へドラッグして移動できます。ウィンドウの幅が狭いときは、ドラッグ中だけ一覧を表示します。",
   "tree.newGroup": "新しいグループ",
   "tree.groupActions": "{name}の操作",
   "tree.newSubgroup": "中にグループを作成",

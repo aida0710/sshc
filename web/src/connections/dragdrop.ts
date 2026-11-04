@@ -11,7 +11,8 @@ export type DragPayload =
 
 export const dragMimeType = "application/x-sshc-drag";
 
-const noGroup = "";
+// グループなしを指す落とし先の名前。
+export const noGroup = "";
 
 
 export function canDrop(payload: DragPayload, target: string, groups: string[]): boolean {
