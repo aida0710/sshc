@@ -273,21 +273,25 @@ func (s *Session) sendWindowChange() error {
 	return remote.WindowChange(int(size.Rows), int(size.Cols))
 }
 
-// CheckTransport は、輸送が limit までに keepalive へ応答しなければ閉じる。リモートのシェルの
-// 待ちが解けて、輸送が落ちたものとして終わる（再接続はそこから始まる）。
-func (s *Session) CheckTransport(limit time.Duration) {
+// CheckTransport は、輸送が limit までに keepalive へ応答しなければ閉じ、応答したかを返す。閉じると
+// リモートのシェルの待ちが解けて、輸送が落ちたものとして終わる（再接続はそこから始まる）。
+func (s *Session) CheckTransport(limit time.Duration) (answered bool) {
 	s.mutex.Lock()
 	client := s.client
 	s.mutex.Unlock()
 	if client == nil {
-		return
+		return false
 	}
 	err := keepAliveReply(client, limit, s.done)
-	if err == nil || errors.Is(err, context.Canceled) {
-		return
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, context.Canceled) {
+		return false
 	}
 	s.closingTrace.say(connectionlog.Detailed, "回線が変わったあと、SSH接続が応答しないので切断します：%v", err)
 	_ = client.Close()
+	return false
 }
 
 // Hangup はリモートへ SIGHUP を送り、SSH チャンネルを閉じる。

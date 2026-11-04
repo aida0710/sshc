@@ -67,6 +67,18 @@ describe("Android native bridge", () => {
     }
     expect(setAppearance).toHaveBeenCalledWith("dark", "#0a0a0b");
   });
+
+  it("ビルドで#fffに縮められた色も、Androidが受け取る#rrggbbで渡す", () => {
+    const setAppearance = vi.fn();
+    window.sshcAndroid = fakeBridge({ setAppearance });
+    document.documentElement.style.setProperty("--ui-toolbar", "#fff");
+    try {
+      setAndroidAppearance("light");
+    } finally {
+      document.documentElement.style.removeProperty("--ui-toolbar");
+    }
+    expect(setAppearance).toHaveBeenCalledWith("light", "#ffffff");
+  });
 });
 
 describe("Android notifications", () => {

@@ -38,7 +38,9 @@ func openShellForCheck(t *testing.T, options serverOptions) terminal.Process {
 func TestATransportThatDoesNotAnswerIsClosedAndEndsAsLost(t *testing.T) {
 	process := openShellForCheck(t, serverOptions{IgnoreKeepAlives: true})
 
-	process.(terminal.TransportChecking).CheckTransport(50 * time.Millisecond)
+	if process.(terminal.TransportChecking).CheckTransport(50 * time.Millisecond) {
+		t.Error("CheckTransport said a transport that ignores keepalives answered")
+	}
 
 	done := make(chan terminal.ExitInfo, 1)
 	go func() { done <- process.Wait() }()
@@ -55,7 +57,9 @@ func TestATransportThatDoesNotAnswerIsClosedAndEndsAsLost(t *testing.T) {
 func TestATransportThatAnswersIsLeftAlone(t *testing.T) {
 	process := openShellForCheck(t, serverOptions{})
 
-	process.(terminal.TransportChecking).CheckTransport(5 * time.Second)
+	if !process.(terminal.TransportChecking).CheckTransport(5 * time.Second) {
+		t.Error("CheckTransport said a working transport did not answer")
+	}
 
 	done := make(chan terminal.ExitInfo, 1)
 	go func() { done <- process.Wait() }()
