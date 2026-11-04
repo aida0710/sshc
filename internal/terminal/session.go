@@ -599,11 +599,18 @@ func (s *Session) sendStartup(process Process) {
 	}
 }
 
+// startPump は、セッションを動かし始める。回線の知らせは、呼び出し側へ戻る前に受け取り始める。
+// セッションが呼び出し側の手に渡ったあとの回線の変化を、取りこぼさないためである。
+func (s *Session) startPump(now func() time.Time) {
+	_, networkChanged := s.network.State()
+	go s.watchNetworkChanges(networkChanged, s.done)
+	go s.pump(now)
+}
+
 // pump は PTY を読み、バッファへ書き、アタッチしているものへ配る。
 func (s *Session) pump(now func() time.Time) {
 	defer close(s.done)
 	go s.writeReplies(s.done)
-	go s.watchNetworkChanges(s.done)
 	connectedAt := s.started
 	for {
 		s.mutex.Lock()

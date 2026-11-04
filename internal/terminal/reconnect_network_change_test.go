@@ -22,9 +22,6 @@ const noticeTimedRetry = "秒後に再接続します"
 // neverDuringTheTest は、待ち時間が飛ばされたことを見分けるための待ち時間である。
 const neverDuringTheTest = time.Hour
 
-// answerSettleTime は、確認の答えを受けたセッションが印を消し終えるまでに見込む時間である。
-const answerSettleTime = 100 * time.Millisecond
-
 // checkableProcess は、回線が変わったあとの確認に何と答えるかを試験が決める接続である。
 type checkableProcess struct {
 	*readyProcess
@@ -178,7 +175,7 @@ func TestAConnectionThatAnsweredItsCheckWaitsAsUsualWhenItIsLostLater(t *testing
 	registry.Network.SetAvailable(true)
 	process.waitForCheck(t)
 	process.answers <- true
-	time.Sleep(answerSettleTime)
+	testwait.Until(t, func() bool { return !session.TransportCheckPending() })
 
 	process.exit(transportLost)
 
