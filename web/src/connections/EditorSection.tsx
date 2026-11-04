@@ -9,7 +9,7 @@ export function EditorSection({ title, meta, children }: { title: string; meta?:
     <section aria-labelledby={headingId} className="border-t border-line py-3.5 first:border-t-0 first:pt-0">
       <div className="mb-2.5 flex min-w-0 items-baseline gap-2">
         <h3 id={headingId} className="shrink-0 text-[13.5px] font-semibold text-ink">{title}</h3>
-        {meta === undefined ? null : <span className="ml-auto min-w-0 truncate text-right font-mono text-[11.5px] text-ink-faint">{meta}</span>}
+        {meta === undefined ? null : <span title={typeof meta === "string" ? meta : undefined} className="ml-auto min-w-0 truncate text-right font-mono text-[11.5px] text-ink-faint">{meta}</span>}
       </div>
       {children}
     </section>

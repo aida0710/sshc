@@ -278,10 +278,10 @@ export function ConnectionTree({
           <button
             type="button"
             onClick={() => setGroupSheetOpen(true)}
-            className={`${control} flex min-h-10 items-center gap-2 py-2 text-left lg:hidden`}
+            className={`${control} flex min-h-10 items-center gap-2 py-2 text-left xl:hidden`}
           >
             <Icon name="groups" className="size-4 text-ink-faint" />
-            <span className="min-w-0 flex-1 truncate">{t("tree.groupButton", { name: scopeLabel })}</span>
+            <span title={t("tree.groupButton", { name: scopeLabel })} className="min-w-0 flex-1 truncate">{t("tree.groupButton", { name: scopeLabel })}</span>
             <DisclosureChevron expanded={false} className="size-3.5 rotate-90" />
           </button>
           <label className="relative block min-w-0" htmlFor="connection-filter">

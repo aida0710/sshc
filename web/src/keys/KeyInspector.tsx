@@ -13,7 +13,7 @@ export function KeyInspector({ item, related, now }: { item: KeyItem; related: K
   return (
     <div className="flex flex-col gap-4">
       <header className="rounded-lg bg-surface-subtle p-3">
-        <p className="break-all font-mono text-sm font-semibold text-ink">{item.relativePath}</p>
+        <p className="[overflow-wrap:anywhere] font-mono text-sm font-semibold text-ink">{item.relativePath}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
           <span className="rounded-md bg-surface px-2 py-1">{describeKeyKind(item.kind, t)}</span>
           <span className="font-mono">{describeAlgorithm(item.algorithm, item.bits)}</span>
@@ -50,9 +50,9 @@ export function KeyInspector({ item, related, now }: { item: KeyItem; related: K
               <ul className="flex flex-col gap-2">
                 {related.map((file) => (
                   <li key={file.id}>
-                    <span className="block break-all font-mono text-xs">{file.relativePath}</span>
+                    <span className="block [overflow-wrap:anywhere] font-mono text-xs">{file.relativePath}</span>
                     {file.certificate === undefined ? null : (
-                      <ul className="mt-0.5 break-all text-xs text-ink-muted">
+                      <ul className="mt-0.5 [overflow-wrap:anywhere] text-xs text-ink-muted">
                         {certificateLines(file.certificate, now, t).map((line) => (
                           <li key={line.text} className={line.expired ? "text-danger" : undefined}>{line.text}</li>
                         ))}
@@ -75,7 +75,7 @@ export function KeyInspector({ item, related, now }: { item: KeyItem; related: K
       )}
 
       {item.certificate === undefined ? null : (
-        <ul className="flex flex-col gap-1 break-all text-xs text-ink-muted">
+        <ul className="flex flex-col gap-1 [overflow-wrap:anywhere] text-xs text-ink-muted">
           {certificateLines(item.certificate, now, t).map((line) => (
             <li key={line.text} className={line.expired ? "text-danger" : undefined}>
               {line.text}

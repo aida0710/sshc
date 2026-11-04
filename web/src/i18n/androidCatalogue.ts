@@ -33,7 +33,7 @@ const replacements: Record<Locale, Partial<Catalogue>> = {
     "terminal.browserScrollbackLabel": "アプリのスクロールバック（行）",
     "connection.encodingHint": "ターミナルでこの接続先に使います。",
     "menu.machinesDescription": "マシンごとのプリセット",
-    "settings.machinesDescription": "Syncでつながっているマシンです。どのプリセットを使うかは、マシンごとに選びます。",
+    "settings.machinesDescription": "Syncで同期しているマシンです。どのプリセットを使うかは、マシンごとに選びます。",
     "settings.languageBrowser": "デバイスに合わせる",
     "copy.refused": "クリップボードへの書き込みを拒否されました。",
     "reveal.warning": "秘密鍵をこのページに表示します。画面を見られる人や、クリップボードの履歴を読むアプリは、鍵を写し取れます。",

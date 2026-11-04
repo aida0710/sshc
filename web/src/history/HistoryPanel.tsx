@@ -10,16 +10,28 @@ import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } fr
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 import { formatDateTime } from "../ui/format";
+import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { historyOperationLabelKey, historyStatusLabelKey, restorableFileName, shownHistoryPaths } from "./historyLabels";
 import { PendingChangeDialog } from "./PendingChangeDialog";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
+// A change's columns: when, what, and the buttons that restore its files. The buttons' column takes what they need up
+// to 40% and no more. A file's path has no place to break, so left to itself it would take the whole row and squeeze
+// the name of the change to one letter a line.
+const entryColumns = "grid grid-cols-[minmax(0,1fr)] gap-4 py-3.5 md:grid-cols-[10rem_minmax(0,1fr)_fit-content(40%)] md:items-center";
+
+// The name of the file is what the button is for, so a long one wraps rather than being cut off.
+const restoreButtonWraps = "min-w-0 whitespace-normal! text-left [overflow-wrap:anywhere]";
+
 export function HistoryPanel() {
   const { t, locale } = useLanguage();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [pending, setPending] = useState<PendingTransaction[]>([]);
+  // What the last restore or recovery was refused for. Failing to read the history is a different thing to say: nothing
+  // was attempted, so "nothing was written" would not be an answer.
   const [problem, setProblem] = useState<Problem | null>(null);
+  const [readFailed, setReadFailed] = useState(false);
   const [message, setMessage] = useState("");
   const [inspected, setInspected] = useState<PendingTransaction | null>(null);
 
@@ -28,22 +40,17 @@ export function HistoryPanel() {
       configApi.history(),
       configApi.overview(),
     ]);
-    let nextProblem: Problem | null = null;
-
     if (historyResult.status === "fulfilled") {
       setEntries(historyResult.value);
     } else {
       setEntries((current) => current ?? []);
-      nextProblem = toProblem(historyResult.reason);
     }
 
     if (overviewResult.status === "fulfilled") {
       setPending(overviewResult.value.pending ?? []);
-    } else if (nextProblem === null) {
-      nextProblem = toProblem(overviewResult.reason);
     }
 
-    setProblem(nextProblem);
+    setReadFailed(historyResult.status === "rejected" || overviewResult.status === "rejected");
   }, []);
 
   useEffect(() => {
@@ -91,8 +98,9 @@ export function HistoryPanel() {
         <SummaryStat label={t("history.metricRestorable")} value={restorableCount} />
       </SummaryStats>
       {problem === null ? null : (
-        <Notice tone="danger">{t("history.requestRejected", { code: problem.code })}</Notice>
+        <Notice tone="danger">{saveProblemMessage(problem, t)}</Notice>
       )}
+      {readFailed ? <Notice tone="danger">{t("history.readFailed")}</Notice> : null}
       {message === "" ? null : <Notice tone="success">{message}</Notice>}
 
       {pending.length === 0 ? null : (
@@ -105,18 +113,18 @@ export function HistoryPanel() {
           </header>
           <div className="divide-y divide-notice-line">
             {pending.map((item) => (
-              <article key={item.id} className="grid gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <article key={item.id} className="grid grid-cols-[minmax(0,1fr)] gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">{t(historyOperationLabelKey(item.operation))}</p>
+                  <p className="text-sm font-medium text-ink">{t(historyOperationLabelKey(item.operation, item.paths))}</p>
                   <p className="mt-1 text-xs text-ink-muted">
                     {t("history.interruptedDetail", {
-                      operation: t(historyOperationLabelKey(item.operation)),
+                      operation: t(historyOperationLabelKey(item.operation, item.paths)),
                       startedAt: formatDateTime(item.startedAt, locale),
                       committed: item.committed,
                       total: item.paths.length,
                     })}
                   </p>
-                  <p className="mt-2 truncate font-mono text-xs text-ink-muted empty:hidden">{shownHistoryPaths(item.paths)}</p>
+                  <p title={shownHistoryPaths(item.paths)} className="mt-2 truncate font-mono text-xs text-ink-muted empty:hidden">{shownHistoryPaths(item.paths)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button kind="primary" onClick={() => setInspected(item)}>{t("history.viewChange")}</Button>
@@ -140,18 +148,18 @@ export function HistoryPanel() {
         ) : (
           <ol className="divide-y divide-line">
             {entries.map((entry) => (
-              <li key={entry.id} className="grid gap-4 py-3.5 md:grid-cols-[10rem_minmax(0,1fr)_auto] md:items-center">
+              <li key={entry.id} className={entryColumns}>
                 <time dateTime={entry.startedAt} title={new Date(entry.startedAt).toLocaleString(locale)} className="text-xs text-ink-muted">{formatDateTime(entry.startedAt, locale)}</time>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium text-ink">{t(historyOperationLabelKey(entry.operation))}</p>
+                    <p className="font-medium text-ink">{t(historyOperationLabelKey(entry.operation, entry.paths))}</p>
                     <Tag>{t(historyStatusLabelKey(entry.status))}</Tag>
                   </div>
-                  <p className="mt-1 truncate font-mono text-xs text-ink-faint empty:hidden">{shownHistoryPaths(entry.paths)}</p>
+                  <p title={shownHistoryPaths(entry.paths)} className="mt-1 truncate font-mono text-xs text-ink-faint empty:hidden">{shownHistoryPaths(entry.paths)}</p>
                 </div>
-                <div className="flex flex-wrap gap-2 md:justify-end">
+                <div className="flex min-w-0 flex-wrap gap-2 md:justify-end">
                   {(entry.restorable ?? []).map((path) => (
-                    <Button key={path} onClick={() => void restore(entry.id, path)}>
+                    <Button key={path} className={restoreButtonWraps} onClick={() => void restore(entry.id, path)}>
                       {t("history.restorePath", { path: restorableFileName(path, t) })}
                     </Button>
                   ))}

@@ -1010,7 +1010,9 @@ describe("ConnectionsPage", () => {
 
     expect(await screen.findByText("The sshc-only settings could not be saved. Check the error and save again."))
       .toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Save preview" })).toHaveTextContent("metadata_invalid");
+    const preview = screen.getByRole("region", { name: "Save preview" });
+    expect(preview).toHaveTextContent("Nothing was written.");
+    expect(preview).not.toHaveTextContent("metadata_invalid");
     expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
     expect(screen.getByRole("button", { name: "Save sshc-only settings" })).toBeEnabled();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();

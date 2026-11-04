@@ -169,7 +169,7 @@ describe("HistoryPanel", () => {
 
     render(<HistoryPanel />);
 
-    expect(await screen.findByText("The request was rejected (history_unavailable)."))
+    expect(await screen.findByText("The history could not be read. Open the page again."))
       .toBeInTheDocument();
     expect(screen.queryByText("Loading history…")).not.toBeInTheDocument();
   });
@@ -180,7 +180,7 @@ describe("HistoryPanel", () => {
     render(<HistoryPanel />);
 
     expect((await screen.findAllByText("Configuration change")).length).toBeGreaterThan(0);
-    expect(screen.getByText("The request was rejected (overview_unavailable)."))
+    expect(screen.getByText("The history could not be read. Open the page again."))
       .toBeInTheDocument();
     expect(screen.queryByText("Loading history…")).not.toBeInTheDocument();
   });

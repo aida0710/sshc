@@ -92,7 +92,7 @@ export function PendingChangeDialog({
 
   function body() {
     if (problem !== null) {
-      return <div className="p-3"><Notice tone="danger">{t("history.requestRejected", { code: problem.code })}</Notice></div>;
+      return <div className="p-3"><Notice tone="danger">{t("history.readFailed")}</Notice></div>;
     }
     if (changes === null) return <PanelState tone="loading" title={t("history.change.loading")} />;
     if (file === undefined) return <PanelState tone="empty" title={t("history.change.empty")} />;
@@ -107,7 +107,7 @@ export function PendingChangeDialog({
     >
       <header className="border-b border-line bg-toolbar px-4 py-3">
         <h2 id={headingId} className="truncate text-sm font-medium">
-          {t("history.change.heading", { operation: t(historyOperationLabelKey(transaction.operation)) })}
+          {t("history.change.heading", { operation: t(historyOperationLabelKey(transaction.operation, transaction.paths)) })}
         </h2>
         <p className="mt-1 text-xs text-ink-muted">
           {t("history.change.summary", {
@@ -127,7 +127,7 @@ export function PendingChangeDialog({
               onClick={() => setSelected(index)}
               className={`flex w-full flex-col items-start gap-1 rounded-md px-3 py-2 text-left ${index === selected ? "bg-select-fill" : "hover:bg-hover"}`}
             >
-              <span className="w-full truncate font-mono text-xs text-ink">{item.path}</span>
+              <span title={item.path} className="w-full truncate font-mono text-xs text-ink">{item.path}</span>
               <span className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
                 <Tag tone={item.committed ? "neutral" : "warn"}>{t(item.committed ? "history.change.written" : "history.change.notYet")}</Tag>
                 {fileNote(item)}

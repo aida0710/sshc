@@ -91,7 +91,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                   <input {...asciiTextEntry}
                     value={endpoint}
                     onChange={(event) => setEndpoint(event.target.value)}
-                    placeholder="https://<account>.r2.cloudflarestorage.com"
+                    placeholder="https://s3.example.com"
                     className={control}
                   />
                 </FieldRow>
@@ -243,8 +243,8 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
       onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
       className="border-t border-line pt-4"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] text-ink-muted marker:hidden hover:text-ink">
-        <DisclosureChevron className="size-3.5" />
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-ink marker:hidden">
+        <DisclosureChevron className="size-3.5 text-ink-muted" />
         {t("sync.manageSettings")}
       </summary>
       {body}

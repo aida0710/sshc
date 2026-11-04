@@ -147,7 +147,7 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
                           );
                         }}
                       />
-                      <span className="min-w-0 break-all font-mono text-xs text-ink">
+                      <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-xs text-ink">
                         {candidate.path}
                       </span>
                     </label>

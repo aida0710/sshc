@@ -40,10 +40,10 @@ export function SnippetRunSection({
     <PageSection heading={t("snippets.runHeading")} meta={t("snippets.targets")}>
       <div role="group" aria-label={t("snippets.targets")} className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] sm:grid-cols-3">
         {aliases.map((alias) => (
-          <label key={alias} className="flex min-w-0 items-center gap-2 break-all text-ink">
+          <label key={alias} className="flex min-w-0 items-start gap-2 text-ink [overflow-wrap:anywhere]">
             <input
               type="checkbox"
-              className="size-[15px] shrink-0 accent-accent"
+              className="mt-[3px] size-[15px] shrink-0 accent-accent"
               checked={targets.includes(alias)}
               onChange={(event) =>
                 onTargetsChange(event.target.checked ? [...targets, alias] : targets.filter((value) => value !== alias))

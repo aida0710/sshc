@@ -55,7 +55,7 @@ export function SFTPEntryPhoneList({ model, entries, busy, entryContext, thumbna
           <button
             type="button"
             {...entryButtonProps(entry)}
-            className="flex min-h-14 min-w-0 flex-1 touch-pan-y select-none items-center gap-2.5 px-2.5 py-1.5 text-left hover:bg-hover active:bg-select-fill"
+            className="flex min-h-14! min-w-0 flex-1 touch-pan-y select-none items-center gap-2.5 px-2.5 py-1.5 text-left hover:bg-hover active:bg-select-fill"
           >
             {thumbnailAlias === null
               ? <EntryIcon entry={entry} className="size-5 shrink-0" folderColour="text-ink-muted" />
