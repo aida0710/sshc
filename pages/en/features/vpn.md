@@ -13,33 +13,65 @@ This needs Docker 20.10 or later on the machine (the container is started with `
 
 ## What happens
 
-```text
-sshc engine
-   │ one docker exec per connection (standard input and output)
-   ▼
-relay inside the VPN container
-   │ TCP connection to the target
-   ▼
-tunnel ─ VPN ─ Docker's ordinary uplink ─ VPN server
+```mermaid
+flowchart TD
+  engine["sshc engine"]
+  relay["Relay in the VPN container"]
+  tunnel["Tunnel in the VPN container"]
+  engine -- "docker exec<br/>per connection" --> relay
+  relay --> tunnel
+  tunnel -- "VPN over Docker's<br/>ordinary uplink" --> server["VPN server"]
+  server --> host["Target"]
 ```
 
 The SSH handshake, authentication, host-key checks and ssh-agent all run in the engine on the host. The container is told where to open a TCP connection and nothing else: no SSH private key and no vault key reach it.
 
+```mermaid
+sequenceDiagram
+  participant E as sshc engine
+  participant C as VPN container
+  participant H as Target
+  E->>C: Target address and port
+  C->>H: TCP inside the tunnel
+  E->>H: SSH handshake and login<br/>(the container only relays)
+```
+
 For every connection the engine starts the container's relay with `docker exec` and uses its standard input and output as the connection. No socket is shared between the host and the container, so the design is meant to work the same on Linux and on Docker Desktop for macOS and Windows. So far it has been verified only on Linux.
 
-The container adds a route and a packet filter only for the targets connections actually use; it never pulls in the network behind the VPN. Traffic to a target is fail closed. The container rejects packets to the target that would leave through anything but the tunnel, so while the tunnel is down nothing reaches the target over Docker's ordinary uplink.
+The container adds a route and a packet filter only for the targets connections actually use; it never pulls in the network behind the VPN.
+
+Traffic to a target is fail closed. The container rejects packets to the target that would leave through anything but the tunnel, so while the tunnel is down nothing reaches the target over Docker's ordinary uplink.
 
 ## What "does not touch the host" covers
 
-The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The container gets one tunnel device (`/dev/net/tun` for WireGuard, OpenConnect and OpenVPN, `/dev/ppp` for L2TP/IPsec; none for IKEv2/IPsec, which uses the kernel's XFRM interface). Its capabilities depend on the backend. WireGuard and OpenVPN drop everything but `CAP_NET_ADMIN`, `CAP_NET_RAW` and `CAP_DAC_OVERRIDE`. L2TP/IPsec, OpenConnect and IKEv2/IPsec keep Docker's default capabilities and add `CAP_NET_ADMIN`, because the capabilities they need have not been verified yet.
+The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The device and capabilities the container gets depend on the backend.
 
-It is not unrelated to the host: it uses Docker's bridge and the kernel's tunnel support, and anyone who can drive Docker generally holds strong host privileges. What is isolated is the VPN's routes, DNS and connection state, and the application traffic sent into it.
+| Backend | Device | Capabilities |
+|---|---|---|
+| WireGuard | `/dev/net/tun` | Drops everything but `CAP_NET_ADMIN`, `CAP_NET_RAW` and `CAP_DAC_OVERRIDE` |
+| OpenVPN | `/dev/net/tun` | Drops everything but `CAP_NET_ADMIN`, `CAP_NET_RAW` and `CAP_DAC_OVERRIDE` |
+| OpenConnect | `/dev/net/tun` | Docker's defaults plus `CAP_NET_ADMIN` |
+| L2TP/IPsec | `/dev/ppp` | Docker's defaults plus `CAP_NET_ADMIN` |
+| IKEv2/IPsec | None (uses the kernel's XFRM interface) | Docker's defaults plus `CAP_NET_ADMIN` |
+
+L2TP/IPsec, OpenConnect and IKEv2/IPsec keep Docker's defaults because the capabilities they need have not been verified yet.
+
+It is not unrelated to the host:
+
+- It uses Docker's bridge and the kernel's tunnel support.
+- Anyone who can drive Docker generally holds strong host privileges.
+
+What is isolated is the VPN's routes, DNS and connection state, and the application traffic sent into it.
 
 ## Creating a profile
 
 Create one from the VPN screen or with `sshc vpn add <name>`.
 
-A name may contain spaces and non-ASCII letters, up to 48 characters. Leading or trailing spaces, `/`, `\` and control characters such as line breaks are not allowed. On the command line, quote a name that contains spaces, as in `sshc vpn up "Lab VPN"`.
+Names follow these rules:
+
+- Spaces and non-ASCII letters are allowed, up to 48 characters.
+- Leading or trailing spaces, `/`, `\` and control characters such as line breaks are not allowed.
+- On the command line, quote a name that contains spaces, as in `sshc vpn up "Lab VPN"`.
 
 | Field | Meaning |
 |---|---|
@@ -48,17 +80,45 @@ A name may contain spaces and non-ASCII letters, up to 48 characters. Leading or
 | VPN server | A hostname or address for L2TP/IPsec, OpenConnect and IKEv2/IPsec. WireGuard reads it from `Endpoint`, and OpenVPN from `remote`, in the configuration file |
 | Secrets | The whole configuration file for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect; the configuration file (.ovpn) and, when it asks for one, the VPN password for OpenVPN; the VPN password or the IPsec pre-shared key for IKEv2/IPsec |
 
-Secrets are encrypted and kept in the vault. Opening **Edit** on the VPN screen takes the stored secrets out of the vault and fills them into their fields; passwords and similar fields stay masked until **Show** is pressed. Nothing is taken out while the vault is locked. No other screen or API response, such as the list, a save or the logs, carries a secret.
+### Storing and showing secrets
 
-Creating and editing are separate operations. Creating a profile whose name is already taken is refused and changes nothing: to change its settings, use **Edit** on the VPN screen or `sshc vpn edit <name>`; to change only its name, rename it. If the vault still holds a secret under the same name, creating replaces it with the secret you entered instead of inheriting it.
+Secrets are encrypted and kept in the vault.
 
-When editing, the VPN screen opens with the stored secrets in their fields, and saving without changing them saves the same values. If they could not be taken out, for example because the vault is locked, the fields are empty, and a secret left empty keeps its stored value. `sshc vpn edit` never shows a stored secret; a secret left empty there keeps its stored value, so settings can be changed without entering the secrets again. Changing the type drops the old type's secrets and asks for the new type's. `sshc vpn edit` starts every prompt from the saved value, and `-` clears an optional setting. Settings and secrets are saved in one write; one is never changed without the other. A route that is already open picks up the change at the next connection: if the settings or the secrets changed, its container is rebuilt then. Rebuilding cuts the connections that went through the old container; as the user did not disconnect the route, the Terminal reconnects them on its own.
+- Opening **Edit** on the VPN screen takes the stored secrets out of the vault and fills them into their fields. Passwords and similar fields stay masked until **Show** is pressed.
+- Nothing is taken out while the vault is locked.
+- No other screen or API response, such as the list, a save or the logs, carries a secret.
+
+### Creating and editing
+
+Creating and editing are separate operations. Creating a profile whose name is already taken is refused and changes nothing.
+
+| To change | Use |
+|---|---|
+| Its settings | **Edit** on the VPN screen or `sshc vpn edit <name>` |
+| Only its name | Rename |
+
+If the vault still holds a secret under the same name, creating replaces it with the secret you entered instead of inheriting it.
+
+Secrets behave differently on the screen and on the command line when editing.
+
+| Operation | When it opens | A secret left empty |
+|---|---|---|
+| **Edit** on the VPN screen | Opens with the stored secrets in their fields. If they could not be taken out, for example because the vault is locked, the fields are empty | Keeps its stored value |
+| `sshc vpn edit` | Never shows a stored secret. Every prompt starts from the saved value, and `-` clears an optional setting | Keeps its stored value, so settings can be changed without entering the secrets again |
+
+Changing the type drops the old type's secrets and asks for the new type's. Settings and secrets are saved in one write; one is never changed without the other.
+
+A route that is already open picks up the change at the next connection: if the settings or the secrets changed, its container is rebuilt then. Rebuilding cuts the connections that went through the old container. As the user did not disconnect the route, the Terminal reconnects them on its own.
 
 A value that cannot be accepted is reported with the field and the reason (missing, wrongly written, over a limit and so on), both on the screen and by `sshc vpn add`.
 
-For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the defaults. The defaults include the combinations common on L2TP/IPsec devices: AES with SHA-256 or SHA-1, and for IKE the MODP 3072, 2048, and 1024-bit DH groups.
+### L2TP/IPsec
 
-For OpenConnect, choose the product the VPN server runs; leave Cisco AnyConnect if unsure.
+Set IKE and ESP proposals only when an older device rejects the defaults. The defaults include the combinations common on L2TP/IPsec devices: AES with SHA-256 or SHA-1, and for IKE the MODP 3072, 2048, and 1024-bit DH groups.
+
+### OpenConnect
+
+Choose the product the VPN server runs. Leave Cisco AnyConnect if unsure.
 
 | Product | Protocol |
 |---|---|
@@ -72,7 +132,9 @@ For OpenConnect, choose the product the VPN server runs; leave Cisco AnyConnect 
 
 Sign-in through a browser (SAML and other single sign-on) is not supported. Servers that accept a user name and password, optionally with a one-time password or approval on a phone, work.
 
- A device with a self-signed certificate needs its fingerprint, either `sha256:` (the certificate's own SHA-256, in hex) or `pin-sha256:` (the public key pin, in base64); without one the certificate is verified normally and the route is refused if it does not verify. OpenConnect routes and DNS handed out by the device are not installed: only the routes to the targets your connections use are.
+A device with a self-signed certificate needs its fingerprint, either `sha256:` (the certificate's own SHA-256, in hex) or `pin-sha256:` (the public key pin, in base64). Without one the certificate is verified normally and the route is refused if it does not verify.
+
+OpenConnect routes and DNS handed out by the device are not installed: only the routes to the targets your connections use are.
 
 ### The second factor (Duo Mobile and friends)
 
@@ -84,9 +146,34 @@ When the device asks one more question after the password, set the second factor
 | Wait for approval on the phone | Nothing, or the word you give | Duo Mobile approval |
 | Generate a code from a stored seed | A fresh six-digit code | A device where a TOTP seed can be enrolled |
 
-Duo devices come in two shapes. Some **push the notification as soon as the password is accepted** and hold the response until you approve; others **ask one more question** that takes a word such as `push`. For the first, leave the word blank. Only the second needs it.
+Duo devices come in two shapes.
 
-Either way the route is given two minutes, which is what noticing a notification, unlocking the phone and approving it takes. While it waits, the VPN screen says it is waiting for approval on the phone, and the `sshc vpn` list shows `starting: waiting for approval on the phone`. When the route is started by connecting to a host (the terminal, or `sshc ssh <alias>` on the command line), the connection also prints an `[sshc]` line saying so, whatever the connection log setting.
+- Some **push the notification as soon as the password is accepted** and hold the response until you approve.
+- Others **ask one more question** that takes a word such as `push`.
+
+For the first, leave the word blank. Only the second needs it.
+
+Either way the route is given two minutes, which is what noticing a notification, unlocking the phone and approving it takes.
+
+```mermaid
+sequenceDiagram
+  participant C as VPN container
+  participant V as VPN server
+  participant P as Phone
+  C->>V: User name and password
+  V->>P: Approval notification
+  Note over C: Waits up to 2 minutes
+  P->>V: Approve
+  V->>C: Connected
+```
+
+While it waits:
+
+| Where | What it shows |
+|---|---|
+| The VPN screen | Waiting for approval on the phone |
+| The `sshc vpn` list | `starting: waiting for approval on the phone` |
+| A route started by connecting to a host (the terminal, or `sshc ssh <alias>` on the command line) | An `[sshc]` line saying so, whatever the connection log setting |
 
 The TOTP seed is kept in the vault and the code is generated just before it is handed to the container. Neither the seed nor the code appears in `docker logs` or on screen.
 
@@ -94,9 +181,17 @@ A setup that requires a browser-based SAML login, such as Duo's Universal Prompt
 
 ### WireGuard configuration files
 
-WireGuard is set up by editing its configuration file (the wg-quick form, with `[Interface]` and `[Peer]`) directly. On the VPN screen, paste the file or load it with **Choose a file**; `sshc vpn add` asks for its path. Several `[Peer]` sections, `AllowedIPs`, `PresharedKey`, `PersistentKeepalive`, `MTU`, `Endpoint` and the rest can all be written.
+WireGuard is set up by editing its configuration file (the wg-quick form, with `[Interface]` and `[Peer]`) directly. Several `[Peer]` sections, `AllowedIPs`, `PresharedKey`, `PersistentKeepalive`, `MTU`, `Endpoint` and the rest can all be written.
 
-The file holds `PrivateKey` and `PresharedKey`, so the whole file, exactly as written, is encrypted and kept in the vault as a secret, the same as an OpenVPN configuration file. Only the `Endpoint` servers and `DNS` are also kept as settings that are not secret, because they are needed while the vault is locked: the servers are shown in the list, and `DNS` decides whether a connection whose `HostName` is a name can use the route. Opening **Edit** on the VPN screen shows the stored file as it is, keys included. `sshc vpn edit` asks for the path of a new file; a blank answer keeps the stored one.
+- On the VPN screen, paste the file or load it with **Choose a file**.
+- `sshc vpn add` asks for its path.
+
+The file holds `PrivateKey` and `PresharedKey`, so the whole file, exactly as written, is encrypted and kept in the vault as a secret, the same as an OpenVPN configuration file.
+
+Only the `Endpoint` servers and `DNS` are also kept as settings that are not secret, because they are needed while the vault is locked: the servers are shown in the list, and `DNS` decides whether a connection whose `HostName` is a name can use the route.
+
+- Opening **Edit** on the VPN screen shows the stored file as it is, keys included.
+- `sshc vpn edit` asks for the path of a new file. A blank answer keeps the stored one.
 
 This is how each item is used. sshc does not run wg-quick; WireGuard is given only what `wg setconf` reads.
 
@@ -114,7 +209,11 @@ This is how each item is used. sshc does not run wg-quick; WireGuard is given on
 
 An item that cannot be used, or one written in a wrong form, is reported on the screen and by `sshc vpn add` with its line and name.
 
-`AllowedIPs` is how WireGuard chooses the `[Peer]` a packet goes to. sshc installs no routes for it: as with the other types, only the targets your connections use get a route. A target outside the `AllowedIPs` of every `[Peer]` is refused with that reason, because WireGuard would not send its packets anywhere. Writing `AllowedIPs = 0.0.0.0/0` does not change the container's default route.
+`AllowedIPs` is how WireGuard chooses the `[Peer]` a packet goes to.
+
+- sshc installs no routes for it: as with the other types, only the targets your connections use get a route.
+- A target outside the `AllowedIPs` of every `[Peer]` is refused with that reason, because WireGuard would not send its packets anywhere.
+- Writing `AllowedIPs = 0.0.0.0/0` does not change the container's default route.
 
 Profiles created up to v0.40.0 with a server, a peer public key and a tunnel address can no longer be used. Create them again from a configuration file.
 
@@ -131,7 +230,9 @@ A configuration file can be used when it:
 - uses a `tun` tunnel (`dev tap` is not supported)
 - keeps every line within 254 bytes and the whole file within 64 KiB
 
-A username and password are optional. Enter them when the file has `auth-user-pass`; leave them blank when a certificate alone authenticates. The password reaches OpenVPN through a file in memory (tmpfs) inside the container, never through a command-line argument or an environment variable, and `--auth-nocache` keeps OpenVPN from holding on to it after use.
+A username and password are optional. Enter them when the file has `auth-user-pass`, and leave them blank when a certificate alone authenticates.
+
+The password reaches OpenVPN through a file in memory (tmpfs) inside the container, never through a command-line argument or an environment variable, and `--auth-nocache` keeps OpenVPN from holding on to it after use.
 
 #### Directives that are refused
 
@@ -145,9 +246,13 @@ For safety, a configuration file with any of the following directives cannot be 
 | Names a file | `ca`, `cert`, `key`, `tls-auth`, `tls-crypt`, `pkcs12`, `auth-user-pass` and the like with a file name, and `config`, `capath`, `tls-export-cert`, `replay-persist`, `genkey` | The file is not in the container. Embedding its contents, as in `<ca>`…`</ca>`, works |
 | For a VPN server | `mode`, `server`, `server-ipv6`, `server-bridge`, `tls-server` | sshc only connects as a client |
 
-A directive missing from the table is still refused unless sshc has checked it as a client setting (`remote`, `proto`, `cipher`, `verb` and the like). Directives added by newer OpenVPN releases cannot be used until they are checked. For these the screen names only the line, not the directive: the file holds secrets, so words sshc has not checked are not shown.
+A directive missing from the table is still refused unless sshc has checked it as a client setting (`remote`, `proto`, `cipher`, `verb` and the like). Directives added by newer OpenVPN releases cannot be used until they are checked.
 
-`setenv` may set only `CLIENT_CERT`, `FORWARD_COMPATIBLE` and `PUSH_PEER_INFO`, which OpenVPN and its servers read, and names starting with `UV_` or `IV_`. Other variables could change how the script sshc has OpenVPN run behaves. A directive behind `setenv opt` is checked as if it were written on its own. Both the accepted and the refused directives were checked against the OpenVPN 2.6 manual.
+For these the screen names only the line, not the directive: the file holds secrets, so words sshc has not checked are not shown.
+
+`setenv` may set only `CLIENT_CERT`, `FORWARD_COMPATIBLE` and `PUSH_PEER_INFO`, which OpenVPN and its servers read, and names starting with `UV_` or `IV_`. Other variables could change how the script sshc has OpenVPN run behaves. A directive behind `setenv opt` is checked as if it were written on its own.
+
+Both the accepted and the refused directives were checked against the OpenVPN 2.6 manual.
 
 #### What sshc decides
 
@@ -176,17 +281,32 @@ With a username and password, the server's certificate is verified before the pa
 - Leave it blank to verify against the public certificate authorities (those in Ubuntu's `ca-certificates`).
 - A server that cannot be verified is never connected to, and the password is never sent to it.
 
-The name in the certificate is checked against **Server ID (remote ID)**, which defaults to the VPN server field. When the VPN server is given as an address but the certificate carries a hostname, give that hostname as the server ID. A value that does not pin down one server is refused: one starting with `%` such as `%any`, one containing `*` such as `*.example.jp`, `0.0.0.0` or `::`, and address ranges such as `10.0.0.0/8`. Any of them would accept a certificate from any server and could hand the password exchange to the wrong one.
+The name in the certificate is checked against **Server ID (remote ID)**.
+
+- It defaults to the VPN server field.
+- When the VPN server is given as an address but the certificate carries a hostname, give that hostname as the server ID.
+
+A value that does not pin down one server is refused, because it would accept a certificate from any server and could hand the password exchange to the wrong one:
+
+- One starting with `%`, such as `%any`
+- One containing `*`, such as `*.example.jp`
+- `0.0.0.0` or `::`, and address ranges such as `10.0.0.0/8`
 
 With a pre-shared key, the server authenticates with the same key. The local ID is the ID the VPN server knows this machine by. No CA certificate is used.
 
 Set IKE and ESP proposals only when the VPN server does not accept the defaults. They are written as for L2TP/IPsec: the given proposals are offered first and the defaults after them, and a trailing `!` offers only the given ones.
 
-The virtual IP address the server hands out is taken, but the routes and DNS servers it hands out are not installed. The tunnel is bound to an IPsec XFRM interface, so even a server that asks for every destination (`0.0.0.0/0`) to go through the tunnel leaves the container's default route alone. As with the other types, only the routes to the targets your connections use are added. A destination the server does not allow is not reached through the tunnel either.
+The virtual IP address the server hands out is taken, but the routes and DNS servers it hands out are not installed.
+
+- The tunnel is bound to an IPsec XFRM interface, so even a server that asks for every destination (`0.0.0.0/0`) to go through the tunnel leaves the container's default route alone.
+- As with the other types, only the routes to the targets your connections use are added.
+- A destination the server does not allow is not reached through the tunnel either.
 
 ### Naming a target inside the VPN
 
-When a connection's `HostName` is a name, give the profile attached to it the DNS servers that can resolve it. The name is resolved inside the container, using those servers alone: not the host's `resolv.conf`, and not Docker's own DNS. That is what keeps a name that means something else on the host from sending the connection to the wrong machine. With no DNS servers in the profile, a named target is refused; Connections points this out when you pick the profile.
+When a connection's `HostName` is a name, give the profile attached to it the DNS servers that can resolve it. With no DNS servers in the profile, a named target is refused; Connections points this out when you pick the profile.
+
+The name is resolved inside the container, using those servers alone: not the host's `resolv.conf`, and not Docker's own DNS. That is what keeps a name that means something else on the host from sending the connection to the wrong machine.
 
 Queries to those servers leave only through the tunnel. The address they returned is written to the container's output (**Logs**, `sshc vpn logs`).
 
@@ -194,33 +314,106 @@ A name is resolved once, the first time a connection uses it after the route ope
 
 ## Attaching a profile to a connection
 
-As with a password, a profile is attached from the connection's side: pick **VPN profile** on the connection's *sshc settings* tab in Connections, or run `sshc vpn bind <alias> <profile>` (`sshc vpn unbind <alias>` detaches it). Both write the same setting. The VPN screen lists the connections that use each profile. The setting is not written to `~/.ssh/config`: it is an sshc setting, not a word OpenSSH reads.
+As with a password, a profile is attached from the connection's side, in either of two ways. Both write the same setting.
+
+- Pick **VPN profile** on the connection's *sshc settings* tab in Connections
+- Run `sshc vpn bind <alias> <profile>` (`sshc vpn unbind <alias>` detaches it)
+
+The VPN screen lists the connections that use each profile. The setting is not written to `~/.ssh/config`: it is an sshc setting, not a word OpenSSH reads.
 
 A connection with a profile takes the same route from the terminal, from SFTP and from `sshc ssh <alias>`, and reaches its own `HostName` and `Port`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
 
 Which connection takes which route is visible before and after connecting. The terminal and SFTP headers show **VPN: \<name\>**, and `sshc info <alias>` prints the same name on its `vpn` line.
 
-Attaching a profile to a connection, detaching it, or replacing it with another profile stops the saved password, one-time password and startup snippet assigned to that connection, because the same `HostName` can be a different machine on the network of another VPN. Save the Basic settings of the connection again in Connections for the password and one-time password ([Credentials and vault](/en/connections/credentials)), and assign the startup snippet again on the Snippets screen ([Quick Commands and Snippets](/en/terminal/commands)).
+### When you change the profile of a connection
 
-Removing a profile also removes its secrets and detaches it from every connection that used it, and stops its route if it is running. The saved passwords, one-time passwords and startup snippets assigned to those connections stop, and attaching a profile recreated under the same name does not bring them back until they are assigned again. This holds even when the profile was detached from the connections before it was removed. Removal needs an unlocked vault; while the vault is locked it is refused and nothing changes. Removing the settings but leaving the secrets behind would let a profile recreated under the same name pick up the old secrets.
+Attaching a profile to a connection, detaching it, or replacing it with another profile stops the saved password, one-time password and startup snippet assigned to that connection, because the same `HostName` can be a different machine on the network of another VPN.
 
-To change a name, do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`, which moves the settings, the secrets and the connections that use it together. The route does not change, so the saved passwords, one-time passwords and startup snippets assigned to those connections keep working without being assigned again. Renaming also needs an unlocked vault. The new name, whether it is taken and the vault are all checked before the route is stopped, so a refused rename leaves a route in use running.
+- Password and one-time password: save the Basic settings of the connection again in Connections ([Credentials and vault](/en/connections/credentials)).
+- Startup snippet: assign it again on the Snippets screen ([Quick Commands and Snippets](/en/terminal/commands)).
 
-Editing a profile with **Edit** on the VPN screen or `sshc vpn edit` does not stop the assignments either, even when it changes the server or the configuration file. To move connections to a VPN on another network, create a new profile instead of editing the existing one, and attach it to the connections. Attaching it stops the assignments, so you can check the destination before assigning them again.
+### Removing, renaming and editing a profile
+
+These affect the assignments differently.
+
+| Operation | Secrets | Connections | Assignments | Running route |
+|---|---|---|---|---|
+| Remove | Removed | Detached. The connections stay | Stop | Stopped |
+| Rename | Moved to the new name | Moved to the new name | Keep working | Stopped |
+| Edit | Saved as changed | Unchanged | Keep working | Picks up the change at the next connection |
+
+Removing:
+
+- Attaching a profile recreated under the same name does not bring the assignments back until they are assigned again. This holds even when the profile was detached from the connections before it was removed.
+- Removal needs an unlocked vault; while the vault is locked it is refused and nothing changes. Removing the settings but leaving the secrets behind would let a profile recreated under the same name pick up the old secrets.
+
+Renaming:
+
+- Do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`.
+- The route does not change, so nothing needs to be assigned again.
+- Renaming also needs an unlocked vault.
+- The new name, whether it is taken and the vault are all checked before the route is stopped, so a refused rename leaves a route in use running.
+
+Editing:
+
+- **Edit** on the VPN screen or `sshc vpn edit` does not stop the assignments, even when it changes the server or the configuration file.
+- To move connections to a VPN on another network, create a new profile instead of editing the existing one, and attach it to the connections. Attaching it stops the assignments, so you can check the destination before assigning them again.
 
 ## While a route comes up
 
-`sshc vpn up` and **Connect** on the VPN screen wait until the route is usable. On a machine that has not built the image yet, the first run takes a few minutes. The VPN screen shows how far it has got, in order: building the image, starting the container, waiting for the tunnel. `sshc vpn up` does not show this; it waits until the route is usable or has failed. Meanwhile, `sshc vpn` in another terminal shows the stage in its list (for example `starting: building the image`). When the route is started by connecting to a host (the terminal, or `sshc ssh <alias>` on the command line), the connection prints an `[sshc]` line while the image is being built, whatever the connection log setting.
+`sshc vpn up` and **Connect** on the VPN screen wait until the route is usable. On a machine that has not built the image yet, the first run takes a few minutes.
+
+```mermaid
+flowchart TD
+  image["Build the image"] --> start["Start the container"]
+  start --> wait["Wait for the tunnel"]
+  wait --> ready["The route is usable"]
+```
+
+How the progress shows depends on how the route was started.
+
+| Started by | Progress |
+|---|---|
+| **Connect** on the VPN screen | Shows the stages in order |
+| `sshc vpn up` | Not shown. It waits until the route is usable or has failed. `sshc vpn` in another terminal shows the stage in its list (for example `starting: building the image`) |
+| Connecting to a host (the terminal, or `sshc ssh <alias>` on the command line) | Prints an `[sshc]` line while the image is being built, whatever the connection log setting |
 
 ## How long a route lives
 
-A route opens when it is needed and closes when it is not. The network route and packet filter for a target are added the first time a connection uses it. Stopping the engine closes every route it opened. A route with no connection running through it for ten minutes is closed as well. Connections from Terminal, SFTP, `sshc ssh <alias>`, and `sshc vpn proxy` are all counted the same way, so a route in use is never closed. A route that was only brought up with `sshc vpn up` or the Connect button counts from the moment it came up. A route whose tunnel dropped ends with its container rather than leaving the relay behind.
+A route opens when it is needed and closes when it is not. The network route and packet filter for a target are added the first time a connection uses it.
+
+```mermaid
+flowchart TD
+  open["Open a connection"] --> running["The route is up"]
+  running -- "No connections<br/>for ten minutes" --> stopped["Closed"]
+  running -- "Disconnect,<br/>engine stops" --> stopped
+  running -- "Tunnel dropped" --> stopped
+  stopped -- "Open it again" --> open
+```
+
+- Connections from Terminal, SFTP, `sshc ssh <alias>`, and `sshc vpn proxy` are all counted the same way, so a route in use is never closed.
+- A route that was only brought up with `sshc vpn up` or the Connect button counts from the moment it came up.
+- A route whose tunnel dropped ends with its container rather than leaving the relay behind.
 
 If you interrupt a connection with `Ctrl-C` while it is waiting, or close the page, the container that was being prepared does not remain.
 
-Closing a route tells the VPN device first. OpenConnect sends a logout, L2TP/IPsec sends an L2TP disconnect and ends the IPsec session, and IKEv2/IPsec ends the IPsec session. OpenVPN tells the server when the configuration file has `explicit-exit-notify`. No session is left behind on the device, so its concurrent-connection slot is freed as well.
+Closing a route tells the VPN device first. No session is left behind on the device, so its concurrent-connection slot is freed as well.
 
-**Disconnect** on the VPN screen closes the route and the connections that use it (Terminal, SFTP, `sshc ssh <alias>`). When connections are using the route, the screen shows how many and asks before disconnecting. The VPN screen keeps the state of each route current while it is open, so a route started from another screen or the command line can be disconnected without reopening the screen. A route that is still being opened, while its image is built or while it waits for approval, can be stopped the same way with **Disconnect** or `sshc vpn down`. While one route is being opened, the other profiles can still be used. When the screen opens, the profiles are listed right away, and each route shows "checking" until its state has been read from Docker.
+| Backend | What it sends |
+|---|---|
+| OpenConnect | A logout |
+| L2TP/IPsec | An L2TP disconnect, and it ends the IPsec session |
+| IKEv2/IPsec | It ends the IPsec session |
+| OpenVPN | Tells the server when the configuration file has `explicit-exit-notify` |
+
+### **Disconnect** on the VPN screen
+
+**Disconnect** closes the route and the connections that use it (Terminal, SFTP, `sshc ssh <alias>`). When connections are using the route, the screen shows how many and asks before disconnecting.
+
+- The VPN screen keeps the state of each route current while it is open, so a route started from another screen or the command line can be disconnected without reopening the screen.
+- A route that is still being opened, while its image is built or while it waits for approval, can be stopped the same way with **Disconnect** or `sshc vpn down`.
+- While one route is being opened, the other profiles can still be used.
+- When the screen opens, the profiles are listed right away, and each route shows "checking" until its state has been read from Docker.
 
 Terminal does not reconnect the connections closed by **Disconnect** or `sshc vpn down` automatically. Reconnecting them automatically would start the route again right after it was disconnected. Press **Reconnect** in Terminal, or open the connection again, to start the route and connect.
 
@@ -228,9 +421,13 @@ Connecting again reopens the route. One that needs approval on the phone will as
 
 ## When a route will not come up
 
-While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface, its address inside the VPN and when it opened. If that much is there, the tunnel itself is up. A WireGuard route does not open until the peer has completed a handshake, so a wrong key or server shows a reason instead of an open route.
+While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface, its address inside the VPN and when it opened. If that much is there, the tunnel itself is up.
 
-When a route does not come up, the screen and `sshc vpn up` say why as far as it is known, for example that the WireGuard peer never completed a handshake or that PPP authentication failed. For OpenVPN they tell apart a server that refused the authentication (`AUTH_FAILED`), a failed TLS handshake, and a server that never answered. IKEv2/IPsec tells these apart:
+A WireGuard route does not open until the peer has completed a handshake, so a wrong key or server shows a reason instead of an open route.
+
+### When the VPN does not come up
+
+The screen and `sshc vpn up` say why as far as it is known, for example that the WireGuard peer never completed a handshake or that PPP authentication failed. For OpenVPN they tell apart a server that refused the authentication (`AUTH_FAILED`), a failed TLS handshake, and a server that never answered. IKEv2/IPsec tells these apart:
 
 | Message | What to check |
 |---|---|
@@ -240,7 +437,9 @@ When a route does not come up, the screen and `sshc vpn up` say why as far as it
 | The VPN server does not answer | The VPN server, and that UDP ports 500 and 4500 reach it |
 | The IPsec XFRM interface could not be created | Whether Docker's Linux kernel supports XFRM interfaces |
 
-When the VPN is up but the target cannot be reached, the terminal and `sshc ssh <alias>` say why:
+### When the VPN is up but the target cannot be reached
+
+The terminal and `sshc ssh <alias>` say why:
 
 | Message | What to check |
 |---|---|
@@ -251,7 +450,16 @@ When the VPN is up but the target cannot be reached, the terminal and `sshc ssh 
 
 When the failure will repeat until a setting is fixed (no VPN secret saved, Docker not running and so on), the terminal does not keep reconnecting.
 
-If it is not there, or the tunnel is up but the target is still unreachable, read the logs: **Logs** on the VPN screen, or `sshc vpn logs <name>`. They show the sshc engine's record first and the container's output after it. The engine's record lists how the engine prepared the route (which docker it used, the image build, every docker command it ran and the output of the ones that failed), so it also explains a failure that happened before the container started, such as an image that could not be built. A container that failed to come up is cleaned away, but the engine keeps its output, so it can still be read the same way. The stored secrets are replaced by `[REDACTED]`, so the output can be pasted as it is. You never need to run `docker logs` yourself.
+### Reading the logs
+
+If no reason is shown, or the tunnel is up but the target is still unreachable, read the logs: **Logs** on the VPN screen, or `sshc vpn logs <name>`. You never need to run `docker logs` yourself.
+
+They show these two in order:
+
+- The sshc engine's record: how the engine prepared the route (which docker it used, the image build, every docker command it ran and the output of the ones that failed). It also explains a failure that happened before the container started, such as an image that could not be built.
+- The container's output: a container that failed to come up is cleaned away, but the engine keeps its output, so it can still be read the same way.
+
+The stored secrets are replaced by `[REDACTED]`, so the output can be pasted as it is.
 
 ## Using the route from the host's `ssh`, `scp` and `git`
 

@@ -9,7 +9,18 @@ description: End-to-end encrypted (E2EE) snapshots on S3-compatible object stora
 
 Sync is end-to-end encrypted (E2EE). Encryption and decryption happen only on devices configured with the same sync key, and the sync key is never sent to the storage or to the sshc developers.
 
-sshc does not provide hosted sync storage or retain your sync data. You choose and configure S3-compatible object storage; sshc encrypts connection settings, Vault credentials, Snippets, and the SSH keys in scope on your device as one snapshot before storing it there. The storage provider does not receive plaintext, but the bucket name, S3 object names, object sizes, and modification times are not encrypted.
+```mermaid
+flowchart TD
+  source["Device A<br/>encrypts"] -- "Snapshot" --> bucket["S3-compatible storage"]
+  bucket -- "Snapshot" --> other["Device B<br/>decrypts"]
+```
+
+sshc does not provide hosted sync storage or retain your sync data. You choose and configure S3-compatible object storage.
+
+| Data | State in the storage |
+| --- | --- |
+| Connection settings, Vault credentials, Snippets, and the SSH keys in scope | Encrypted on your device as one snapshot before storing it. The storage provider does not receive plaintext |
+| The bucket name, S3 object names, object sizes, and modification times | Not encrypted |
 
 ## First device
 
