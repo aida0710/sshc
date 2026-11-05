@@ -1,5 +1,6 @@
 import { apiClient, failureCode } from "./client";
 import { postEmpty, postJSON, putJSON } from "./guards";
+import { readOptions, type ReadScope } from "./readScope";
 import { engineStreamPath, engineTerminalBase } from "./remoteEngines";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
@@ -80,12 +81,15 @@ function validateStreamTicket(value: unknown): TerminalStreamTicket {
 // forwarding, renaming and closing them. `base` is that engine's terminal API:
 // this machine's /api/v1/terminal, or a run-target engine's
 // /api/v1/engines/{alias}/terminal that this machine's engine forwards.
-export function createTerminalSessionsApi(base: string, streamPath: string): TerminalSessionsApi {
+//
+// reads, when given, ends the reads the screen makes on its own (the list and the shells). A change is never aborted:
+// by then the engine may be carrying it out, and only its answer says how it went.
+export function createTerminalSessionsApi(base: string, streamPath: string, reads?: ReadScope): TerminalSessionsApi {
   return {
     streamPath,
     async terminalSessions() {
       return validateTerminalSessionList(
-        await apiClient.read(`${base}/sessions`),
+        await apiClient.read(`${base}/sessions`, readOptions(reads)),
       );
     },
     async openTerminalSession(request) {
@@ -182,7 +186,7 @@ export function createTerminalSessionsApi(base: string, streamPath: string): Ter
       );
     },
     async shellProfiles() {
-      return validateShellProfiles(await apiClient.read(`${base}/shell-profiles`));
+      return validateShellProfiles(await apiClient.read(`${base}/shell-profiles`, readOptions(reads)));
     },
   };
 }
@@ -192,6 +196,6 @@ export const terminalSessionsApi = createTerminalSessionsApi("/api/v1/terminal",
 
 // runTargetTerminalSessionsApi is the terminal API of a run-target engine, as
 // this machine's engine forwards it.
-export function runTargetTerminalSessionsApi(alias: string): TerminalSessionsApi {
-  return createTerminalSessionsApi(engineTerminalBase(alias), engineStreamPath(alias));
+export function runTargetTerminalSessionsApi(alias: string, reads?: ReadScope): TerminalSessionsApi {
+  return createTerminalSessionsApi(engineTerminalBase(alias), engineStreamPath(alias), reads);
 }

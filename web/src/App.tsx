@@ -6,10 +6,6 @@ import { opensInThisPage } from "./ui/linkClick";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { runsInAndroidApp } from "./android/native";
 import { type HealthResponse } from "./api/client";
-import { runTargetTerminalSessionsApi, terminalSessionsApi } from "./api/terminalSessions";
-import { createTerminalWorkspacesApi, terminalWorkspacesApi } from "./api/terminalWorkspaces";
-import { createTerminalRestoreApi, terminalRestoreApi } from "./api/terminalRestore";
-import { engineTerminalBase } from "./api/remoteEngines";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
 import type { SessionState } from "./session/bootstrap";
 import { addressesByAlias } from "./connections/connectionAddress";
@@ -32,6 +28,8 @@ import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
 import { SessionAddressesContext } from "./terminal/sessionDestination";
+import { useRunTargetApis } from "./terminal/useRunTargetApis";
+import { useRunTargetLink } from "./terminal/useRunTargetLink";
 import { useRunTargets } from "./terminal/useRunTargets";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
@@ -157,27 +155,19 @@ export function App({
   }, [resolvedTheme, scheme]);
 
   const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version });
-  // The terminal API of the run target: this machine's own, or the one this
-  // machine's engine forwards for an engine on an SSH host. A new API is a new
-  // engine to the hooks below, which drop what they showed and read it anew;
-  // that is wanted once a run target's Vault is unlocked, so the API is built
-  // again for each unlock (vaultRevision).
-  const vaultRevision = runTargets.vaultUnlock.revision;
-  const runTargetApis = useMemo(() => {
-    const alias = runTargets.selected;
-    if (alias === null) return { sessions: terminalSessionsApi, workspaces: terminalWorkspacesApi, restore: terminalRestoreApi, vaultRevision };
-    return {
-      sessions: runTargetTerminalSessionsApi(alias),
-      workspaces: createTerminalWorkspacesApi(engineTerminalBase(alias)),
-      restore: createTerminalRestoreApi(engineTerminalBase(alias)),
-      vaultRevision,
-    };
-  }, [runTargets.selected, vaultRevision]);
+  const runTargetApis = useRunTargetApis(runTargets.selected, runTargets.vaultUnlock.revision);
   const sessionAddresses = useMemo(
     () => runTargets.selected === null ? addressesByAlias(declared.hosts) : new Map<string, string>(),
     [declared.hosts, runTargets.selected],
   );
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
+  const runTargetLink = useRunTargetLink({
+    selected: runTargets.selected,
+    api: runTargets.api,
+    enabled: state === "ready" && runTargets.engines.length > 0,
+    loaded: terminalSessions.loaded,
+    refusal: terminalSessions.remoteRefusal,
+  });
   const terminalWorkspaces = useTerminalWorkspaces({
     sessions: terminalSessions.sessions,
     translate: t,
@@ -498,6 +488,7 @@ export function App({
             terminalSessions={terminalSessions}
             terminalWorkspaces={terminalWorkspaces}
             runTargets={runTargets}
+            runTargetLink={runTargetLink}
             orderedSessions={orderedSessions}
             activeSessionId={activeSessionId}
             unreadBySession={unreadSessions}
@@ -555,6 +546,7 @@ export function App({
                       hostVPN={declared.hostVPN}
                       api={runTargetApis.sessions}
                       runTargets={runTargets}
+                      runTargetLink={runTargetLink}
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                       onOpenNavigation={navigationPinned ? undefined : () => setNavigationOpen(true)}
@@ -616,7 +608,7 @@ export function App({
                   <NotFoundSection pathname={route.pathname} onGoHome={(event) => followSectionLink(event, "Home")} />
                 )}
               </div>
-            ) : null}
+            ) : <RouteSkeleton />}
           </main>
           {inspector !== null && inspectorOpen ? (
             <InspectorPane label={inspector.label} underTopBar={mobileLayout && !terminalTopBar} onClose={() => setInspectorOpen(false)} paneRef={inspectorPanelRef}>

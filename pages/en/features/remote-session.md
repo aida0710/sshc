@@ -28,6 +28,27 @@ Each host's **…** offers **Engine information…**, **Open its full screen in 
 
 If the chosen host's vault is locked, the terminal area shows a field for that vault's password. This machine's engine passes it to the host's engine inside the SSH connection and does not save it here.
 
+## Connection status
+
+**Remote session** at the bottom of the sidebar shows how the connection is going, on every page.
+
+| Shown | Meaning |
+|---|---|
+| ● Remote session | Connected, and the list can be read |
+| Connecting | Waiting for the host. It appears once reading the list takes longer than 0.6 seconds |
+| Loading | Reading this machine's session list |
+| Can't connect (red) | The host could not be reached |
+| Locked, Can't be used (red) | The host's vault is locked, or the two versions of sshc do not work together |
+
+The list also marks each host **Connected** or **Not connected**. **Not connected** is not a failure: this machine just holds no SSH connection to it yet.
+
+While it waits, the terminal area shows the step and the seconds elapsed.
+
+- Connecting to the host: the SSH connection is being tried. If the host does not answer, this waits until the SSH connection times out (30 seconds by default).
+- Waiting for the sshc engine on the host: the SSH connection is up. If the engine does not answer, this gives up after about 25 seconds.
+
+**Switch back to localhost** works during the wait too. It stops the reads to the host, so this machine's screens do not wait for them.
+
 ## When the host cannot be reached
 
 While the session list cannot be read from the chosen host's engine, the middle of the terminal area says what happened and what you can do. It is not a dialog: the sidebar, **Remote session** and the other screens stay usable.

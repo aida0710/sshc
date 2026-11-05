@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { failureCode } from "../api/client";
+import { wasAborted } from "../api/readScope";
 import {
   terminalWorkspacesApi,
   type TerminalWorkspace,
@@ -68,6 +69,8 @@ export function useTerminalWorkspaces({
     try {
       await readList();
     } catch (error) {
+      // The screen left this engine, so there is nothing to say about it.
+      if (wasAborted(error)) return;
       // A run-target engine that cannot be reached is reported once, by the
       // session list beside this one.
       const code = failureCode(error);

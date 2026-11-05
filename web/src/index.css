@@ -588,7 +588,8 @@
   inset: auto auto auto 0;
   top: var(--app-viewport-top, 0px);
   height: var(--app-viewport-height, 100dvh);
-  z-index: 30;
+  /* Above what covers the terminal area while a run target does not answer (z-30), so that the navigation stays usable. */
+  z-index: 40;
   width: min(20rem, calc(100vw - 2rem));
   max-width: none;
   transform: translateX(-100%);
@@ -611,6 +612,7 @@
 }
 .sshc-app[data-mobile="true"] .sshc-navigation-backdrop {
   display: block;
+  z-index: 35;
 }
 .sshc-mobile-navigation {
   /* The bar floats 10px above the bottom edge, or above the system's gesture area when it has one. */
