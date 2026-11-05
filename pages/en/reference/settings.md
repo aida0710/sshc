@@ -141,7 +141,7 @@ Settings are stored under `~/.ssh/sshc` and are included in backups and Sync.
 
 - The global settings and the presets: the sshc metadata (`metadata.json`), together with connection-specific settings
 - Each machine's settings (name, preset in use, port): `~/.ssh/sshc/machines/<machine ID>.json`
-- Each machine's screen state (the run target of terminals, SFTP tabs and split, the Transfer Manager view, folded workspaces and whether hidden workspaces are shown, and whether transfer processing is stopped): `~/.ssh/sshc/machines/<machine ID>.state.json`
+- Each machine's screen state (the engine chosen for remote sessions, SFTP tabs and split, the Transfer Manager view, folded workspaces and whether hidden workspaces are shown, and whether transfer processing is stopped): `~/.ssh/sshc/machines/<machine ID>.state.json`
 
 Only `~/.ssh/sshc/machine-id`, which tells the machines apart, is not synced. The browser keeps a copy of the theme and the display language (so the first screen is drawn in them the next time sshc opens), the browser registration, and whether it has shown the result of an update, and nothing else.
 
