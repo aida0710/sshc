@@ -1,10 +1,13 @@
 import { useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
 import { useTranslate } from "../i18n/context";
+import { runTargetRefusalState, runTargetRefusalText } from "../terminal/runTargetProblem";
+import type { RunTargetLink } from "../terminal/useRunTargetLink";
 import type { RunTargetsState } from "../terminal/useRunTargets";
 import { Icon } from "../ui/icons";
 import { menuItemClass } from "../ui/menuStyle";
 import { Notice } from "../ui/surface";
+import { Spinner } from "../ui/Spinner";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { EngineInfoDialog } from "./EngineInfoDialog";
 import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
@@ -13,13 +16,16 @@ import { HostPickerDialog } from "./HostPickerDialog";
 // RunTargetSwitcher sits at the bottom of the sidebar and chooses whose
 // terminals the sidebar and the terminal show: this machine, or an engine on
 // an SSH host that this machine's engine forwards to. Settings and SFTP stay
-// this machine's whichever is chosen.
+// this machine's whichever is chosen. It stays in view on every page, so it also says how the connection to the chosen
+// one is going.
 export function RunTargetSwitcher({
   targets,
+  link,
   aliases,
   hosts,
 }: {
   targets: RunTargetsState;
+  link: RunTargetLink;
   aliases: string[];
   hosts: HostEntry[];
 }) {
@@ -35,25 +41,41 @@ export function RunTargetSwitcher({
   useDismissibleLayer({ open, containerRefs: [rootRef], onDismiss: () => setOpen(false), returnFocusRef: triggerRef });
 
   const current = targets.selected ?? t("runTarget.thisMachine");
+  const chosenState = linkStateWords();
   const choose = (alias: string | null) => {
     targets.select(alias);
     setOpen(false);
   };
+  // linkStateWords says what is happening to the chosen one; null when nothing needs saying.
+  function linkStateWords(): string | null {
+    switch (link.phase) {
+      case "ready": return null;
+      case "loading": return t("runTarget.stateLoading");
+      case "connecting":
+      case "awaitingEngine": return t("runTarget.stateConnecting");
+      case "refused": return runTargetRefusalState(t, link.refusal);
+    }
+  }
   const row = (alias: string | null) => {
     const name = alias ?? t("runTarget.thisMachine");
     const chosen = targets.selected === alias;
+    const connected = alias !== null && link.connectedEngines.has(alias);
+    const settledNote = alias === null ? t("runTarget.thisMachineNote") : connected ? t("runTarget.stateConnected") : t("runTarget.stateNotConnected");
+    const note = (chosen ? chosenState : null) ?? settledNote;
+    // The note already says it could not connect; this adds why, when that is known.
+    const refusalReason = chosen && link.refusal !== null ? runTargetRefusalText(t, link.refusal, name).reason : "";
     return (
       <li key={alias ?? ""} className={`flex flex-wrap items-center gap-1 rounded-md ${chosen ? "bg-select-fill" : "hover:bg-hover"}`}>
         <button
           type="button"
           aria-current={chosen ? "true" : undefined}
           onClick={() => choose(alias)}
-          className="flex min-h-10 min-w-0 grow items-center gap-2 px-2 text-left text-sm md:min-h-7"
+          className="flex min-h-10 min-w-0 grow basis-0 items-center gap-2 px-2 text-left text-sm md:min-h-7"
         >
-          <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-live" />
+          <LinkMark mark={chosen ? chosenMark(link) : alias === null || connected ? "live" : "idle"} />
           <span title={name} className={`min-w-0 grow truncate font-mono ${chosen ? "font-semibold text-accent" : "text-ink"}`}>{name}</span>
           {alias !== null && targets.unread.has(alias) ? <UnreadMark label={t("runTarget.unread")} /> : null}
-          {alias === null ? <span className="shrink-0 text-[11px] text-ink-faint">{t("runTarget.thisMachineNote")}</span> : null}
+          <span className={`shrink-0 text-[11px] ${chosen && link.phase === "refused" ? "text-danger" : "text-ink-faint"}`}>{note}</span>
         </button>
         {alias === null ? null : (
           <button
@@ -65,6 +87,9 @@ export function RunTargetSwitcher({
           >
             <Icon name="moreHorizontal" className="size-3.5" />
           </button>
+        )}
+        {refusalReason === "" ? null : (
+          <p className="basis-full break-words px-2 pb-1 text-[11px] leading-4 text-danger">{refusalReason}</p>
         )}
         {alias === null || actionsFor !== alias ? null : (
           <div className="basis-full pb-1 pl-5">
@@ -109,13 +134,13 @@ export function RunTargetSwitcher({
         ref={triggerRef}
         type="button"
         aria-expanded={open}
-        aria-label={t("runTarget.choose", { name: current })}
+        aria-label={chosenState === null ? t("runTarget.choose", { name: current }) : t("runTarget.chooseWhile", { name: current, state: chosenState })}
         onClick={() => setOpen((value) => !value)}
         className={`flex h-10 w-full items-center gap-2 rounded-lg bg-well px-2.5 ${open ? "ring-1 ring-accent" : ""}`}
       >
-        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-live" />
+        <LinkMark mark={chosenMark(link)} />
         <span className="flex min-w-0 grow flex-col text-left">
-          <span className="truncate text-[11px] leading-[15px] text-ink-muted">{t("runTarget.label")}</span>
+          <span className={`truncate text-[11px] leading-[15px] ${link.phase === "refused" ? "text-danger" : "text-ink-muted"}`}>{chosenState ?? t("runTarget.label")}</span>
           <span title={current} className="truncate font-mono text-[12.5px] font-semibold leading-4 text-ink">{current}</span>
         </span>
         {targets.unread.size > 0 ? <UnreadMark label={t("runTarget.unreadElsewhere")} /> : null}
@@ -152,6 +177,25 @@ export function RunTargetSwitcher({
       )}
     </div>
   );
+}
+
+type LinkMarkKind = "live" | "idle" | "waiting" | "failed";
+
+function chosenMark(link: RunTargetLink): LinkMarkKind {
+  switch (link.phase) {
+    case "ready": return "live";
+    case "refused": return "failed";
+    case "loading":
+    case "connecting":
+    case "awaitingEngine": return "waiting";
+  }
+}
+
+// LinkMark shows the state of a connection beside its name, which says it in words too.
+function LinkMark({ mark }: { mark: LinkMarkKind }) {
+  if (mark === "waiting") return <Spinner className="size-2.5 text-ink-muted" />;
+  const fill = { live: "bg-live", idle: "bg-ink-faint", failed: "bg-danger" }[mark];
+  return <span aria-hidden="true" data-link-mark={mark} className={`size-1.5 shrink-0 rounded-full ${fill}`} />;
 }
 
 // UnreadMark is the dot for a run target whose terminals sent a notification nobody has seen yet.

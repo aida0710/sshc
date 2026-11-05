@@ -14,6 +14,7 @@ import type { PaneEdge } from "../terminal/splitView/layout";
 import { maximumSplitGroups } from "../terminal/splitView/splitGroups";
 import { RunTargetConnectingPanel } from "../terminal/RunTargetConnectingPanel";
 import { RunTargetRefusalPanel } from "../terminal/RunTargetRefusalPanel";
+import type { RunTargetLink } from "../terminal/useRunTargetLink";
 import type { RunTargetsState } from "../terminal/useRunTargets";
 import { useKeepScreenAwake } from "../terminal/keepScreenAwake";
 import { useScreenWakeLock } from "../terminal/useScreenWakeLock";
@@ -34,6 +35,7 @@ export function TerminalScreen({
   hostVPN,
   api,
   runTargets,
+  runTargetLink,
   onOpenRemotePath,
   onOSC52Change,
   onOpenNavigation,
@@ -59,6 +61,7 @@ export function TerminalScreen({
   // runTargets says which engine that is; its selected alias is null for this
   // machine.
   runTargets: RunTargetsState;
+  runTargetLink: RunTargetLink;
   onOpenRemotePath: (
     alias: string,
     path: string,
@@ -71,6 +74,9 @@ export function TerminalScreen({
   // Only an engine on an SSH host refuses a list; this machine's own list
   // keeps failing quietly.
   const refusal = runTarget === null ? null : terminalSessions.remoteRefusal;
+  // Opening a session on this machine shows nothing here: it takes no connection, and a failure stays on the screen it
+  // was asked from. Reading its sessions is waited for like a run target's.
+  const waitingForEngine = refusal === null && (!terminalSessions.loaded || (runTarget !== null && terminalSessions.opening));
   const t = useTranslate();
   const session = terminalSessions.sessions.find((session) => session.id === activeSessionId) ?? null;
   const keepScreenAwake = useKeepScreenAwake();
@@ -160,10 +166,18 @@ export function TerminalScreen({
     {/* What the refusing engine listed before cannot be used, so it is kept out of reach. */}
     <div className="h-full" inert={refusal !== null}>
       <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} retainedTerminals={settings.retainedTerminals ?? defaultRetainedTerminals} renderTerminal={renderTerminal}
-        emptyState={<TerminalEmptyState runTarget={runTarget} onOpenLocalShell={onOpenLocalShell} onAddConnection={onAddConnection} onOpenSync={onOpenSync} />}
+        // Until the engine answers, it is not known to have no sessions.
+        emptyState={terminalSessions.loaded ? <TerminalEmptyState runTarget={runTarget} onOpenLocalShell={onOpenLocalShell} onAddConnection={onAddConnection} onOpenSync={onOpenSync} /> : null}
       />
     </div>
-    {runTarget !== null && refusal === null && terminalSessions.opening ? <RunTargetConnectingPanel alias={runTarget} /> : null}
+    {waitingForEngine ? (
+      <RunTargetConnectingPanel
+        key={runTarget ?? ""}
+        alias={runTarget}
+        awaitingEngine={runTarget !== null && runTargetLink.connectedEngines.has(runTarget)}
+        onUseThisMachine={() => runTargets.select(null)}
+      />
+    ) : null}
     {runTarget === null || refusal === null ? null : <RunTargetRefusalPanel
       alias={runTarget}
       refusal={refusal}

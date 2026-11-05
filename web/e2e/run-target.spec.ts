@@ -154,7 +154,7 @@ async function chooseLocalhost(page: Page) {
 
 async function chooseBastion(page: Page) {
   await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
-  await page.getByRole("list", { name: "Engines", exact: true }).getByRole("button", { name: "bastion", exact: true }).click();
+  await page.getByRole("list", { name: "Engines", exact: true }).getByRole("button", { name: /^bastion/ }).click();
 }
 
 // screenshotInJapanese saves the screen, wide and narrow, as a person reading Japanese
@@ -318,6 +318,8 @@ test("keeps the navigation reachable on a phone while the panel is shown", async
   await expect(openNavigation).toBeVisible();
   await openNavigation.click();
   await expect(page.getByRole("button", { name: /^Choose the remote session engine/ })).toBeVisible();
+  // The panel is drawn inside the page, under the open navigation: what is in the middle of the navigation can be pressed.
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "New session", exact: true }).click({ trial: true });
 });
 
 test("selects a newly added engine and shows it is incompatible in the terminal area", async ({ page, installation }) => {
@@ -359,6 +361,10 @@ test("says the host is being reached while a session opens, and why it could not
     }
     await openAnswered;
     await route.fulfill(refusalResponse("unreachable"));
+  });
+  // The SSH connection to the host is what is still missing.
+  await page.route("**/api/v1/engines", async (route) => {
+    await route.fulfill({ json: { engines: [{ alias: "bastion", connected: false }] } });
   });
   await openApplication(page, installation);
   // Screenshots are taken in Japanese, so the labels follow the language.
@@ -464,4 +470,39 @@ test("shows a session Home opened on this machine while terminals ran on a run t
   await expect(page.getByRole("button", { name: /^Choose the remote session engine \(now: localhost\)/ })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "From Home", exact: true }))
     .toHaveAttribute("aria-current", "true");
+});
+
+test("says a host is being reached while it does not answer, and going back to this machine does not wait for it", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion });
+  await openApplication(page, installation);
+  await openSection(page, "Home");
+  const hostAnswers = new Set<string>();
+  await page.route("**/api/v1/engines/bastion/terminal/**", () => {
+    // A host that does not answer: the request stays open until the browser gives it up.
+  });
+  await page.route("**/api/v1/engines", async (route) => {
+    await route.fulfill({ json: { engines: [{ alias: "bastion", connected: false }] } });
+  });
+  page.on("requestfailed", (request) => { hostAnswers.add(new URL(request.url()).pathname); });
+
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: "Choose the remote session engine (now: localhost)" }).click();
+  await navigation.getByRole("button", { name: /^bastion/ }).click();
+
+  // On any page: the switcher says it, where a page other than the terminal shows nothing of the connection.
+  const connecting = navigation.getByRole("button", { name: "Choose the remote session engine (now: bastion, Connecting)" });
+  await expect(connecting).toBeVisible();
+  await expect(navigation.locator("[data-session-rows-skeleton]")).toBeVisible();
+
+  await page.goto(`${new URL(page.url()).origin}/terminal`);
+  await expect(page.getByRole("heading", { name: "Connecting to bastion", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No session is open" })).toBeHidden();
+
+  // The browser's connections are freed as soon as this machine is chosen, so its requests do not queue behind them.
+  const answered = page.waitForResponse("**/api/v1/terminal/sessions");
+  await page.getByRole("button", { name: "Switch back to localhost" }).click();
+  await answered;
+  await expect(navigation.getByRole("button", { name: "Choose the remote session engine (now: localhost)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No session is open" })).toBeVisible();
+  await expect.poll(() => [...hostAnswers]).toContain(sessionsPath);
 });

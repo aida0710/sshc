@@ -51,7 +51,7 @@ function runTargets(selected: string | null, api = enginesApi()): RunTargetsStat
   };
 }
 
-function Screen({ api, targets }: { api: TerminalSessionsApi; targets: RunTargetsState }) {
+function Screen({ api, targets, connectedEngines = new Set() }: { api: TerminalSessionsApi; targets: RunTargetsState; connectedEngines?: ReadonlySet<string> }) {
   const t = useTranslate();
   const terminalSessions = useTerminalSessions(api, t);
   const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget: targets.selected });
@@ -66,6 +66,7 @@ function Screen({ api, targets }: { api: TerminalSessionsApi; targets: RunTarget
       hostVPN={new Map()}
       api={api}
       runTargets={targets}
+      runTargetLink={{ phase: "ready", refusal: null, connectedEngines }}
       onOpenRemotePath={vi.fn()}
       onOSC52Change={vi.fn(async () => undefined)}
     />
@@ -217,6 +218,7 @@ function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: Ru
   const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget: targets.selected });
   const { open } = terminalSessions;
   useEffect(() => { void open({ kind: "ssh", alias: "db" }); }, [open]);
+  const connectedEngines: ReadonlySet<string> = new Set();
   return (
     <TerminalScreen onOpenLocalShell={vi.fn()} onAddConnection={vi.fn()} onOpenSync={vi.fn()}
       visible
@@ -228,11 +230,38 @@ function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: Ru
       hostVPN={new Map()}
       api={api}
       runTargets={targets}
+      runTargetLink={{ phase: "ready", refusal: null, connectedEngines }}
       onOpenRemotePath={vi.fn()}
       onOSC52Change={vi.fn(async () => undefined)}
     />
   );
 }
+
+describe("TerminalScreen before the engine in use answers", () => {
+  const neverAnswers = () => sessionsApi(vi.fn(() => new Promise<never>(() => undefined)));
+
+  it("says a run target is being connected to, not that it has no sessions, and offers the way back", async () => {
+    const user = userEvent.setup();
+    const targets = runTargets("r100");
+    render(<Screen api={neverAnswers()} targets={targets} />);
+    expect(await screen.findByRole("heading", { name: "Connecting to r100" })).toBeInTheDocument();
+    expect(screen.getByText("0 s elapsed")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No session is open" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Switch back to localhost" }));
+    expect(targets.select).toHaveBeenCalledWith(null);
+  });
+
+  it("says its engine is awaited when the SSH connection is up", async () => {
+    render(<Screen api={neverAnswers()} targets={runTargets("r100")} connectedEngines={new Set(["r100"])} />);
+    expect(await screen.findByRole("heading", { name: "Waiting for the sshc engine on r100" })).toBeInTheDocument();
+  });
+
+  it("says this machine's sessions are being read, with no way back to offer", async () => {
+    render(<Screen api={neverAnswers()} targets={runTargets(null)} />);
+    expect(await screen.findByRole("heading", { name: "Loading this machine's sessions" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Switch back to localhost" })).not.toBeInTheDocument();
+  });
+});
 
 describe("TerminalScreen while a session opens on a run target", () => {
   it("says the host is being reached and then why it could not be", async () => {

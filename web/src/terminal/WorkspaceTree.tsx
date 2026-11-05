@@ -63,6 +63,8 @@ type WorkspaceTreeProps = {
   // runTarget is the SSH alias of the engine the shells open on, or null for
   // this machine.
   runTarget?: string | null;
+  // loading says the engine in use has not answered yet, so the tree does not show what it holds.
+  loading?: boolean;
   // sessionShortcut opens the picker for a new session, or asks before closing a session, once per press.
   sessionShortcut?: SessionShortcutRequest | null;
 };
@@ -94,6 +96,7 @@ export function WorkspaceTree({
   onReorder,
   localShellProfiles = [],
   runTarget = null,
+  loading = false,
   aliases = [],
   hosts = [],
   onOpenShell,
@@ -358,6 +361,7 @@ export function WorkspaceTree({
           );
         })}
       </ul>
+      {loading ? <SessionRowsSkeleton /> : null}
       <button
         ref={newSessionTrigger}
         type="button"
@@ -426,6 +430,18 @@ export function WorkspaceTree({
           }}
         />
       )}
+    </div>
+  );
+}
+
+// SessionRowsSkeleton stands where the sessions will be listed. What is being waited for is said once, by the run
+// target switcher under this list.
+function SessionRowsSkeleton() {
+  return (
+    <div aria-hidden="true" data-session-rows-skeleton className="flex flex-col gap-2.5 px-2 py-2">
+      <div className="sshc-skeleton h-3 w-4/5 rounded-md" />
+      <div className="sshc-skeleton h-3 w-3/5 rounded-md" />
+      <div className="sshc-skeleton h-3 w-2/3 rounded-md" />
     </div>
   );
 }
