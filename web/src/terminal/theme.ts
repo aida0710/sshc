@@ -19,6 +19,9 @@ export function terminalTheme(element: Element = document.documentElement, seeTh
     cursor: read(styles, "cursor"),
     cursorAccent: read(styles, "bg"),
     selectionBackground: read(styles, "selection"),
+    // xterm draws this border of the scrollbar's marks in white when no colour is given, a bright line down every
+    // dark terminal. The marks and the scrollbar stand out without it.
+    overviewRulerBorder: "#00000000",
     black: read(styles, "black"),
     red: read(styles, "red"),
     green: read(styles, "green"),
