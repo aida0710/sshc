@@ -264,6 +264,16 @@ describe("WorkspaceTree", () => {
     expect(props.onReorder).toHaveBeenCalledWith(["dev-shell", "main-shell", "other-shell"]);
   });
 
+  // The browser asks the element under the pointer at dragenter, and a drop right after crossing into it depends on the answer.
+  it("takes a dragged session as soon as the pointer enters a workspace or a session row", () => {
+    renderTree({ sessions: [session("main-shell", "default"), session("dev-shell", "w1")] });
+    const dataTransfer = dragData();
+    fireEvent.dragStart(sessionRow("main-shell"), { dataTransfer });
+
+    expect(fireEvent.dragEnter(screen.getByRole("button", { name: /^sshc dev/ }).parentElement!, { dataTransfer })).toBe(false);
+    expect(fireEvent.dragEnter(sessionRow("dev-shell"), { dataTransfer })).toBe(false);
+  });
+
   it("moves a session dropped on a session of another workspace before it", () => {
     const sessions = [session("main-shell", "default"), session("dev-a", "w1"), session("dev-b", "w1")];
     const props = renderTree({ sessions });
@@ -308,6 +318,7 @@ describe("WorkspaceTree", () => {
     const props = renderTree();
     const dataTransfer = dragData();
     fireEvent.dragStart(workspaceRow("sshc dev"), { dataTransfer });
+    expect(fireEvent.dragEnter(workspaceItem("Main"), { dataTransfer })).toBe(false);
     dragAt("dragOver", workspaceItem("Main"), 10, dataTransfer);
     dragAt("drop", workspaceItem("Main"), 10, dataTransfer);
     expect(props.workspaces.move).toHaveBeenLastCalledWith("w1", "default");

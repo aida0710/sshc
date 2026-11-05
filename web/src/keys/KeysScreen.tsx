@@ -118,8 +118,8 @@ export function KeysScreen({
     setFolder,
     chosen,
     setChosen,
-    dragging,
-    setDragging,
+    dragged,
+    setDragged,
     moveOutcome,
     setMoveOutcome,
     moveTarget,
@@ -180,7 +180,7 @@ export function KeysScreen({
       setChosen(next);
     },
     onBeginDrag: beginDrag,
-    onEndDrag: () => setDragging(false),
+    onEndDrag: () => setDragged(null),
     onReveal: (item) => {
       closeAllForms();
       setRowPanel({ kind: "reveal", item });
@@ -249,9 +249,9 @@ export function KeysScreen({
   }
 
   // 移せなかった鍵は、失敗の通知ではなく moveOutcome が1件ずつ示す。
-  async function moveChosen(target: MoveTarget) {
+  async function moveKeys(keyIds: ReadonlySet<string>, target: MoveTarget) {
     if (inventory === null) return;
-    const items = inventory.items.filter((item) => chosen.has(item.id));
+    const items = inventory.items.filter((item) => keyIds.has(item.id));
     if (items.length === 0) return;
     await runKeyOperation(async () => {
       const outcome = await moveInto(
@@ -268,8 +268,9 @@ export function KeysScreen({
   function beginDrag(event: DragEvent<HTMLSpanElement>, item: KeyItem) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", item.relativePath);
-    setDragging(true);
-    if (!chosen.has(item.id)) setChosen(new Set([item.id]));
+    // 選んでいない行をドラッグしても、選択は変えない。選ぶと一覧の上に ChosenKeysBar が出て行が動き、Chromium が
+    // ドラッグを取り消す。
+    setDragged(chosen.has(item.id) ? chosen : new Set([item.id]));
   }
 
   async function submitRelocation(item: KeyItem) {
@@ -402,7 +403,7 @@ export function KeysScreen({
           groups={groups}
           target={moveTarget}
           onTargetChange={setMoveTarget}
-          onMove={(target) => void moveChosen(target)}
+          onMove={(target) => void moveKeys(chosen, target)}
           onClear={() => setChosen(new Set())}
         />
       )}
@@ -441,12 +442,14 @@ export function KeysScreen({
             <FolderPane
               rows={rows}
               selected={folder}
-              dragging={dragging}
+              dragging={dragged !== null}
               onSelect={(next) => {
                 setFolder(next);
                 setMoveOutcome(null);
               }}
-              onDropInto={(target) => void moveChosen(target)}
+              onDropInto={(target) => {
+                if (dragged !== null) void moveKeys(dragged, target);
+              }}
             />
             <div className="@container/keytable min-w-0 grow">
               {folder.kind === "trash" ? (

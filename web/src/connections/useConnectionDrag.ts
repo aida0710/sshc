@@ -40,14 +40,16 @@ export function useConnectionDrag({ movesDisabled, groupNames, onDrop }: {
   }
 
   function dropHandlers(target: string) {
+    const acceptDrag = (event: DragEvent) => {
+      if (!accepts(target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "move";
+      setDropOver(target);
+    };
     return {
-      onDragOver: (event: DragEvent) => {
-        if (!accepts(target)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        event.dataTransfer.dropEffect = "move";
-        setDropOver(target);
-      },
+      onDragEnter: acceptDrag,
+      onDragOver: acceptDrag,
       onDragLeave: (event: DragEvent) => {
         // 落とし先の中のボタンへ移っただけのときも dragleave が来るので、外へ出たときだけ消す。
         if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
