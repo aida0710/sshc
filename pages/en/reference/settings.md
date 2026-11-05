@@ -50,15 +50,42 @@ Desktop uses a device-local stable port so bookmarks and the installed web app k
 
 Open **Menu → Keyboard shortcuts** to assign command search, terminal search, copy/paste, previous/next prompt, text size (larger, smaller, reset), quick commands, new session, close session, previous/next connection, previous/next pane of a split, splitting right or below, showing or hiding the navigation, Home and SFTP. Click a binding and press a chord with Ctrl, Alt or Win (⌘ on a Mac), or a function key. Escape cancels; Tab moves to the next control.
 
-Duplicate bindings are rejected. Use **Clear** to disable an action. Connection switching defaults to Alt+PageDown / Alt+PageUp. Text size defaults to Ctrl+= (also Ctrl+; on a JIS keyboard) for larger, Ctrl+- for smaller and Ctrl+0 to go back to the settings' size (Command on a Mac); like a pinch, it changes only that terminal and is not saved. New session, close session, the panes, splitting, quick commands and showing or hiding the navigation have no default keys: the ones other terminals use (Ctrl+Shift+T, Ctrl+Shift+W, Alt with the arrows) are taken first by the browser or by the program in the terminal. Closing a session asks first, as its × does. Moving to the previous/next prompt defaults to Ctrl+Shift+Up / Down (Command+Up / Down on a Mac): when the shell marks its prompts through OSC 133 (shell integration), it passes over long output to the prompt's line. On mobile, choose it from the terminal's **…** menu. Copy, paste, terminal search, the prompt keys, text size and quick commands apply inside the terminal. Paste retains its normal confirmation and editing flow.
+Duplicate bindings are rejected. Use **Clear** to disable an action.
 
-The **Key bindings** selector switches between named sets of bindings. The "…" beside it saves a copy, renames or deletes a set, or goes **Back to the default bindings**. Key bindings are synced and shared by every machine; each settings preset chooses the ones it uses. Editing the default bindings creates key bindings of your own. When an sshc update adds actions to assign, the key bindings you made keep working; the new actions come in without keys, to assign if you use them. Hiding the navigation on a PC leaves only a narrow column with **Show the navigation**; each browser remembers whether it is hidden. Deleting the selected key bindings restores the default bindings. Reload after a concurrent edit conflict. Browser or OS shortcuts may take priority. Native browser paste remains available.
+| Action | Default keys |
+|---|---|
+| Connection switching | Alt+PageDown / Alt+PageUp |
+| Text size (Command on a Mac) | Ctrl+= (also Ctrl+; on a JIS keyboard) for larger, Ctrl+- for smaller and Ctrl+0 to go back to the settings' size |
+| Moving to the previous/next prompt | Ctrl+Shift+Up / Down (Command+Up / Down on a Mac) |
+| New session, close session, the panes, splitting, quick commands and showing or hiding the navigation | None |
+
+Some actions have no default keys because the ones other terminals use (Ctrl+Shift+T, Ctrl+Shift+W, Alt with the arrows) are taken first by the browser or by the program in the terminal.
+
+- Text size, like a pinch, changes only that terminal and is not saved.
+- Closing a session asks first, as its × does.
+- When the shell marks its prompts through OSC 133 (shell integration), the prompt keys pass over long output to the prompt's line. On mobile, choose it from the terminal's **…** menu.
+- Copy, paste, terminal search, the prompt keys, text size and quick commands apply inside the terminal. Paste retains its normal confirmation and editing flow.
+
+The **Key bindings** selector switches between named sets of bindings. The "…" beside it saves a copy, renames or deletes a set, or goes **Back to the default bindings**.
+
+- Key bindings are synced and shared by every machine; each settings preset chooses the ones it uses.
+- Editing the default bindings creates key bindings of your own.
+- When an sshc update adds actions to assign, the key bindings you made keep working; the new actions come in without keys, to assign if you use them.
+- Deleting the selected key bindings restores the default bindings.
+- Reload after a concurrent edit conflict.
+
+Hiding the navigation on a PC leaves only a narrow column with **Show the navigation**; each browser remembers whether it is hidden. Browser or OS shortcuts may take priority. Native browser paste remains available.
 
 Paste defaults to Ctrl+V (⌘V on Mac); Ctrl+Shift+V also remains available.
 
 ## Key bar
 
-Open **Menu → Key bar** to arrange the key bar shown under the terminal on a phone. Tap a key under **Key order** to select it, then move it with **Earlier** and **Later**, put it behind 「…」 with **Behind 「…」**, bring it back with **Always shown**, or take it off with **Remove**. Tapping a key under **Keys to place** puts it after the selected key (at the end of the row always shown when none is selected). The keys on offer are the input switch (the keyboard icon), Ctrl, Alt, Esc, Tab, Enter; Backspace, Del, Ins, the arrows, Home, End, PgUp, PgDn; ^C, ^D, ^Z, ^L, ^R, ^A, ^E; F1 to F12; and symbols.
+Open **Menu → Key bar** to arrange the key bar shown under the terminal on a phone.
+
+- Tap a key under **Key order** to select it, then move it with **Earlier** and **Later**, put it behind 「…」 with **Behind 「…」**, bring it back with **Always shown**, or take it off with **Remove**.
+- Tapping a key under **Keys to place** puts it after the selected key (at the end of the row always shown when none is selected).
+
+The keys on offer are the input switch (the keyboard icon), Ctrl, Alt, Esc, Tab, Enter; Backspace, Del, Ins, the arrows, Home, End, PgUp, PgDn; ^C, ^D, ^Z, ^L, ^R, ^A, ^E; F1 to F12; and symbols.
 
 **Make a key** makes a key that sends a fixed text or command in one tap. Give the text to show on the key (up to 8 characters) and what it sends; **Press Enter after sending** runs the command at once. The text is sent as if typed, with a line break sent as Enter. Control characters other than tabs and line breaks cannot be sent. Select a key you made and use **Edit** to change it.
 
@@ -95,7 +122,17 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 
 ## Terminal
 
-**Settings → Terminal** holds the terminal settings of the preset being edited. It is split into the **Display** (color scheme, font, background), **Connection** (limits) and **Behaviour** (starting directory, local shell, clipboard and keyboard, touch input and its link underlines) tabs. On a phone every group is shown as its own section. Choices and checkboxes are saved as soon as they change; numbers and the starting directory are saved when focus leaves them or Enter is pressed. No settings page has a Save button: **Saved** shows under the field you changed for a moment. Reconnecting, the connection log and OSC 52 are under **General**.
+**Settings → Terminal** holds the terminal settings of the preset being edited. On a phone every group is shown as its own section.
+
+| Tab | Contents |
+|---|---|
+| **Display** | Color scheme, font, background |
+| **Connection** | Limits |
+| **Behaviour** | Starting directory, local shell, clipboard and keyboard, touch input and its link underlines |
+
+Reconnecting, the connection log and OSC 52 are under **General**.
+
+No settings page has a Save button: **Saved** shows under the field you changed for a moment. Choices and checkboxes are saved as soon as they change; numbers and the starting directory are saved when focus leaves them or Enter is pressed.
 
 - Maximum concurrent sessions from 1 to 200, with a default of 50
 - Engine replay buffer from 16 KiB to 4 MiB, with a default of 256 KiB
@@ -145,4 +182,14 @@ Settings are stored under `~/.ssh/sshc` and are included in backups and Sync.
 
 Only `~/.ssh/sshc/machine-id`, which tells the machines apart, is not synced. The browser keeps a copy of the theme and the display language (so the first screen is drawn in them the next time sshc opens), the browser registration, and whether it has shown the result of an update, and nothing else.
 
-The browser registration token is not stored in `~/.ssh` or sync snapshots; the engine keeps only its verification hash, the issue and last-use times, and the engine port. The token is replaced every time the browser re-enters after an engine restart and expires 30 days after its last use. A changed engine port or a presentation of a superseded token revokes the registration, and `sshc` (or `sshc open`) issues a fresh URL to register again. At most 16 browsers are registered; when the limit is reached, the registration unused for the longest is dropped first. The browser session itself ends after 12 hours without use or 7 days after it was issued, but a valid registration re-enters on the next load without asking. "Sign out of this browser" under Menu → Sign out removes both the session and the registration (while the vault is locked, the same button on the lock screen signs out without the master password); opening sshc again then needs the URL from `sshc` (or `sshc open`). Vault secrets and sync credentials are never written to plaintext settings.
+The browser registration token is not stored in `~/.ssh` or sync snapshots; the engine keeps only its verification hash, the issue and last-use times, and the engine port. Vault secrets and sync credentials are never written to plaintext settings.
+
+| What | Limit |
+|---|---|
+| Registration token | Replaced every time the browser re-enters after an engine restart, and expires 30 days after its last use |
+| Registered browsers | At most 16. When the limit is reached, the registration unused for the longest is dropped first |
+| Browser session | Ends after 12 hours without use or 7 days after it was issued, but a valid registration re-enters on the next load without asking |
+
+A changed engine port or a presentation of a superseded token revokes the registration, and `sshc` (or `sshc open`) issues a fresh URL to register again.
+
+"Sign out of this browser" under Menu → Sign out removes both the session and the registration (while the vault is locked, the same button on the lock screen signs out without the master password). Opening sshc again then needs the URL from `sshc` (or `sshc open`).

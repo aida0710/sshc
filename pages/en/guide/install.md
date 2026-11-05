@@ -87,7 +87,11 @@ sshc
 
 Stop the engine with `sshc stop`. To run it in the foreground, use `sshc engine`. Background output is appended to `~/.ssh/sshc/logs/engine.log` (`%USERPROFILE%\.ssh\sshc\logs\engine.log` on Windows). This log is excluded from encrypted sync.
 
-Desktop first uses `http://127.0.0.1:54447/`. If another user or application already owns that port, sshc selects an available port once and stores it as this device's stable URL. Check the current URL with `sshc status`. Run `sshc` to open a one-time URL and enrol that browser. Afterwards, the same browser profile can use a bookmark or an installed web app directly, including after an engine restart on the same port. If the saved port is unavailable and the URL changes, sshc revokes the previous browser registration. Run `sshc` once against the current engine to enrol it again. Use the same command to add another browser or profile.
+Desktop first uses `http://127.0.0.1:54447/`. If another user or application already owns that port, sshc selects an available port once and stores it as this device's stable URL. Check the current URL with `sshc status`.
+
+Run `sshc` to open a one-time URL and enrol that browser. Afterwards, the same browser profile can use a bookmark or an installed web app directly, including after an engine restart on the same port. Use the same command to add another browser or profile.
+
+If the saved port is unavailable and the URL changes, sshc revokes the previous browser registration. Run `sshc` once against the current engine to enrol it again.
 
 Chrome and Edge can install sshc from their **Install app** action. The web app does not start the engine; run `sshc` or keep the OS service running first.
 
@@ -174,15 +178,43 @@ Open **About sshc** under **Others** in the Menu, or select the version beside t
 
 The engine checks at startup and every six hours, retaining the result. The sidebar rereads that result hourly. Opening About sshc checks again right away unless an update is already running; when there is nothing newer, it says no newer version is available. Select **Check for updates** to check again, then **Update sshc** when available. Below the buttons, each step of a check or an update is listed with its time. If a check fails, the previously retrieved release information remains available.
 
-Verified Homebrew and `install.sh` installations on macOS and Linux, and `install.ps1` installations on Windows, show a notice and **Update in About sshc** under the version when a newer stable release is available. It opens About sshc, where **Update sshc** starts the update. Fold them with the mark beside the version; a folded notice stays closed until a newer stable release appears. Review the current version, target version, and installation method before confirming. The installation directory must be writable. Homebrew runs `brew upgrade` and checks the version actually installed. Its formula can advance after confirmation, so a newer version may be installed. The `install.sh` and `install.ps1` installers use the confirmed version. Manual installations, development builds, and Android show guidance for updating through their installation method.
+Verified Homebrew and `install.sh` installations on macOS and Linux, and `install.ps1` installations on Windows, show a notice and **Update in About sshc** under the version when a newer stable release is available. It opens About sshc, where **Update sshc** starts the update.
 
-The engine restarts after installation, ending connected sessions and transfers. Unlock a password-protected vault again after the restart. About sshc lists the progress; on other pages, a dialog shows it. Below the progress, About sshc shows the output of the installer (`brew upgrade`, `install.sh`, or `install.ps1`) and the steps of restarting the engine, adding lines while they run and continuing after the restart. After reloading the page, the output of the last update stays until the next update starts. The result appears in a dialog once per update. Duplicate updates are refused. If installation succeeds but restarting fails, follow the restart guidance and reload the page without reinstalling.
+Fold them with the mark beside the version; a folded notice stays closed until a newer stable release appears.
+
+Review the current version, target version, and installation method before confirming. The installation directory must be writable.
+
+| Installation | How it updates |
+|---|---|
+| Homebrew | Runs `brew upgrade` and checks the version actually installed. Its formula can advance after confirmation, so a newer version may be installed |
+| `install.sh` and `install.ps1` | Use the confirmed version |
+| Manual installations, development builds, and Android | Show guidance for updating through their installation method |
+
+The engine restarts after installation, ending connected sessions and transfers. Unlock a password-protected vault again after the restart.
+
+About sshc lists the progress; on other pages, a dialog shows it.
+
+- Below the progress, About sshc shows the output of the installer (`brew upgrade`, `install.sh`, or `install.ps1`) and the steps of restarting the engine, adding lines while they run and continuing after the restart.
+- After reloading the page, the output of the last update stays until the next update starts.
+- The result appears in a dialog once per update.
+- Duplicate updates are refused.
+
+If installation succeeds but restarting fails, follow the restart guidance and reload the page without reinstalling.
 
 ### Update from the CLI
 
 On Windows, the installer stops and restarts the engine as described above. The following applies to macOS and Linux.
 
-When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks a password-protected vault, so run `sshc vault unlock` again; a passwordless vault unlocks itself when the engine starts. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Running `install.sh` directly does not restart the service, so run `sshc service restart` afterwards if it is active. Use `sshc service install` for an inactive service or an outdated definition. Restart engines outside service management with `sshc engine --replace`.
+When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically.
+
+The restart locks a password-protected vault, so run `sshc vault unlock` again; a passwordless vault unlocks itself when the engine starts.
+
+| Situation | What to run |
+|---|---|
+| The update succeeds but only the restart fails | Follow the message and run `sshc service install` again |
+| `install.sh` was run directly (it does not restart the service), and the service is active | `sshc service restart` |
+| An inactive service or an outdated definition | `sshc service install` |
+| An engine outside service management | `sshc engine --replace` |
 
 ## Uninstall
 
@@ -219,4 +251,11 @@ launchctl bootout gui/$(id -u)/io.github.aida0710.sshc
 rm ~/Library/LaunchAgents/io.github.aida0710.sshc.plist
 ```
 
-sshc's data stays in `~/.ssh/sshc` (`%USERPROFILE%\.ssh\sshc` on Windows) after uninstalling. It holds the vault, sshc's per-connection settings, VPN profile settings, backups taken before SSH configuration changes, and deleted keys. Delete that directory only when you will not use sshc again and have confirmed you no longer need its contents; a deleted vault and its backups cannot be recovered. `~/.ssh/config`, its `Include` files, and your keys are shared with OpenSSH, so uninstalling sshc leaves them unchanged. Snapshots saved to S3-compatible storage by encrypted sync also remain; delete them on the storage side if you no longer need them.
+sshc's data stays in `~/.ssh/sshc` (`%USERPROFILE%\.ssh\sshc` on Windows) after uninstalling. It holds the vault, sshc's per-connection settings, VPN profile settings, backups taken before SSH configuration changes, and deleted keys.
+
+Delete that directory only when you will not use sshc again and have confirmed you no longer need its contents; a deleted vault and its backups cannot be recovered.
+
+These also remain:
+
+- `~/.ssh/config`, its `Include` files, and your keys: they are shared with OpenSSH, so uninstalling sshc leaves them unchanged.
+- Snapshots saved to S3-compatible storage by encrypted sync: delete them on the storage side if you no longer need them.
