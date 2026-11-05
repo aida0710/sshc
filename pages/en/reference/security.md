@@ -7,7 +7,13 @@ description: Local boundaries, vault encryption, VPN, host keys, sync, Telnet an
 
 ## Local application
 
-The engine serves its Web UI and API on a loopback address. UI URLs are issued on demand rather than logged at startup for long-term reuse. If the saved port is unavailable and the engine moves to another port, sshc revokes previous browser registrations and requires enrolment against the current engine. On Linux, other OS users on the same machine can read the one-time registration URL that `sshc` passes to the browser, so the engine accepts a registration only from a connection owned by the same OS user or root. It checks the same way when a registered browser signs in again after the engine restarts. On Windows, sshc uses the OpenSSH agent pipe (`\\.\pipe\openssh-ssh-agent`) only when it was created by LocalSystem, Administrators or the current user, so another user who creates a pipe with that name while the ssh-agent service is stopped receives neither keys added from the SSH Keys screen nor authentication requests. A process running as the same OS user is assumed to have access to that user's SSH files already.
+The engine serves its Web UI and API on a loopback address. UI URLs are issued on demand rather than logged at startup for long-term reuse. If the saved port is unavailable and the engine moves to another port, sshc revokes previous browser registrations and requires enrolment against the current engine.
+
+On Linux, other OS users on the same machine can read the one-time registration URL that `sshc` passes to the browser, so the engine accepts a registration only from a connection owned by the same OS user or root. It checks the same way when a registered browser signs in again after the engine restarts.
+
+On Windows, sshc uses the OpenSSH agent pipe (`\\.\pipe\openssh-ssh-agent`) only when it was created by LocalSystem, Administrators or the current user, so another user who creates a pipe with that name while the ssh-agent service is stopped receives neither keys added from the SSH Keys screen nor authentication requests.
+
+A process running as the same OS user is assumed to have access to that user's SSH files already.
 
 ## Remote sshc engines
 
@@ -26,7 +32,13 @@ The vault key encrypts:
 - VPN profile secrets (WireGuard and OpenVPN configuration files, which contain keys, VPN passwords, IPsec pre-shared keys, and the TOTP secret for OpenConnect's second factor)
 - snippets, sync settings and backups
 
-With password protection, that key is derived from the master password. At least four characters are required, with no character-class restrictions. Protection against copied local files depends on password strength. The sync record (`sshc/sync-state.json`) stores the last synchronized vault and snippet contents only as hashes keyed with the vault key, so it cannot be used to check guesses about those contents. After an update from an earlier release, sshc rewrites the record into this form the first time the vault is unlocked (at engine start for a vault without a password). Passwords are not accepted through command-line arguments or environment variables. Automatic locking defaults to 12 hours and can be configured in Settings.
+With password protection, that key is derived from the master password.
+
+- At least four characters are required, with no character-class restrictions. Protection against copied local files depends on password strength.
+- Passwords are not accepted through command-line arguments or environment variables.
+- Automatic locking defaults to 12 hours and can be configured in Settings.
+
+The sync record (`sshc/sync-state.json`) stores the last synchronized vault and snippet contents only as hashes keyed with the vault key, so it cannot be used to check guesses about those contents. After an update from an earlier release, sshc rewrites the record into this form the first time the vault is unlocked (at engine start for a vault without a password).
 
 Without a password, a random unlock secret is stored on the device and the vault opens automatically at startup. Idle locking does not apply. This does not protect against someone who can read both the device secret and ciphertext. The device secret is excluded from sync; remote data keeps using an independent encryption key.
 
