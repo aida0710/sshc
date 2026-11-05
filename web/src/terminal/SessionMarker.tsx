@@ -2,10 +2,11 @@ import type { TerminalSession } from "../api/terminalSessions";
 import type { ShownProgramStatus } from "./programStatus";
 import { sessionMarkerClass } from "./sessionStatus";
 
-// The connection dot takes the size of the program status marks, an 11px circle
-// centred on the 18px name line, so a row's name stays in place when a status
-// takes the dot's place and the two look alike in the list.
-const markerCircle = "mt-[3.5px] size-[11px] shrink-0 rounded-full";
+// The connection dot takes the size of the program status marks, an 11px circle,
+// so a row's name stays in place when a status takes the dot's place and the two
+// look alike in the list. The circle is centred on the name's letters, which sit
+// above the middle of the 18px name line: centred on the line it looks low.
+const markerCircle = "mt-0.5 size-[11px] shrink-0 rounded-full";
 
 // The mark that stands for each program status: a turning ring while it works,
 // and a filled circle with a sign once it waits on the person, failed or is done.
