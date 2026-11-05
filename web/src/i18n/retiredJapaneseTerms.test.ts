@@ -26,6 +26,7 @@ const retiredTerms = new Map<string, string>([
   ["ディレクトリ", "フォルダ"],
   ["経路", "ルート（手段の意味なら「別の手段」）"],
   ["リモートホスト", "接続先"],
+  ["実行先", "リモートセッション（マシンの意味なら「リモートのsshcエンジン」）"],
 ]);
 
 type Wording = { text: string; location: string };

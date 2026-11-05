@@ -21,9 +21,10 @@ SSHC_VISUAL_DIR="$visual_dir" SSHC_VISUAL_VERSION="$visual_version" npm run e2e 
   e2e/terminal-features.spec.ts \
   e2e/vpn-screen.spec.ts \
   e2e/split-view.spec.ts \
+  e2e/doc-feature-cards.spec.ts \
   --workers=1 \
   --output "$visual_dir/test-results" \
-  --grep 'shows the version beside the brand|separates classification, filtered results, and connection detail without losing management controls|adds Local, reverse and SOCKS forwarding from the advanced tab|gives one named secret to two hosts and writes neither name into the file|keeps a chunked SFTP upload visible while another section is open|shows push, preview, apply, persisted success, and a later failure as distinct results|groups sessions into workspaces and keeps a hidden one out of the tree|keeps terminal actions compact and exposes terminal settings|renders the documented non-interactive CLI example|lists saved one-time passwords with their current codes in both languages|lists each VPN profile with its protocol, route state, and connections in both languages|moves from the compact connection browser to detail at 360 pixels|keeps every section inside 360 pixels|limits split view to four panes and shows the Japanese desktop layout'
+  --grep 'shows the version beside the brand|separates classification, filtered results, and connection detail without losing management controls|adds Local, reverse and SOCKS forwarding from the advanced tab|gives one named secret to two hosts and writes neither name into the file|keeps a chunked SFTP upload visible while another section is open|shows push, preview, apply, persisted success, and a later failure as distinct results|groups sessions into workspaces and keeps a hidden one out of the tree|keeps terminal actions compact and exposes terminal settings|renders the documented non-interactive CLI example|lists saved one-time passwords with their current codes in both languages|lists each VPN profile with its protocol, route state, and connections in both languages|moves from the compact connection browser to detail at 360 pixels|keeps every section inside 360 pixels|limits split view to four panes and shows the Japanese desktop layout|shows what each program is doing in the session list|runs the terminals on the engine chosen in the remote session menu'
 
 install_image() {
   source_name=$1
@@ -52,7 +53,10 @@ install_image sync-exclusions-mobile-ja.png pages/public/images/sync-exclusions-
 install_image terminal-actions-desktop.png pages/public/images/terminal-actions.png
 # The top page and the social card show split view with four panes.
 install_image split-view-four-panes-ja.png pages/public/images/terminal-desktop.png
-install_image run-target-desktop.png pages/public/images/run-target-desktop.png
+install_image remote-session-desktop-en.png pages/public/images/remote-session-desktop-en.png
+install_image remote-session-desktop-ja.png pages/public/images/remote-session-desktop-ja.png
+install_image program-status-desktop-en.png pages/public/images/program-status-desktop-en.png
+install_image program-status-desktop-ja.png pages/public/images/program-status-desktop-ja.png
 install_image transfer-manager-en.png pages/public/images/transfer-manager-en.png
 install_image transfer-manager-ja.png pages/public/images/transfer-manager-ja.png
 install_image otp-desktop-en.png pages/public/images/otp-desktop-en.png

@@ -45,7 +45,7 @@ The server must allow remote forwarding, for example with `AllowTcpForwarding re
 - Connections whose reported origin is not loopback are rejected.
 - Whether the server honors the requested bind address is controlled by the server.
 
-The destination is resolved from the engine, which may be different from the device displaying the browser. For a session opened on a run target, it is resolved from the run target's engine.
+The destination is resolved from the engine, which may be different from the device displaying the browser. For a remote session, it is resolved from the remote sshc engine.
 
 Stopping closes the listener and active tunnels. Saved forwards reopen on the next SSH connection; temporary forwards need to be added again after reconnection. Destination-free remote SOCKS and automatic port allocation with port `0` are not supported.
 

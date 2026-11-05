@@ -148,12 +148,12 @@ async function stubLocalSessions(page: Page, sessions: ReturnType<typeof termina
 }
 
 async function chooseLocalhost(page: Page) {
-  await page.getByRole("button", { name: /^Choose where terminals run/ }).click();
+  await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
   await page.getByRole("list", { name: "Engines", exact: true }).getByRole("button", { name: /^localhost/ }).click();
 }
 
 async function chooseBastion(page: Page) {
-  await page.getByRole("button", { name: /^Choose where terminals run/ }).click();
+  await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
   await page.getByRole("list", { name: "Engines", exact: true }).getByRole("button", { name: "bastion", exact: true }).click();
 }
 
@@ -209,7 +209,7 @@ test("shows the update's output in Japanese while sshc on the host runs", async 
   await openSection(page, "Terminal");
   await page.setViewportSize({ width: 1280, height: 800 });
   await changeDisplayLanguage(page, "ja");
-  await page.getByRole("button", { name: /^ターミナルの実行先を選ぶ/ }).click();
+  await page.getByRole("button", { name: /^リモートセッションのsshcエンジンを選ぶ/ }).click();
   await page.getByRole("list", { name: "実行中のsshcエンジン", exact: true }).getByRole("button", { name: "bastion", exact: true }).click();
   const panel = page.getByRole("region", { name: "bastion のsshcとは組み合わせて使えません", exact: true });
   await panel.getByRole("button", { name: "bastion を更新", exact: true }).click();
@@ -245,7 +245,7 @@ test("shows an unreachable host in the terminal area and goes away on Reconnect 
   await openSection(page, "Terminal");
   await chooseBastion(page);
   const panel = page.getByRole("region", { name: "Could not connect to bastion", exact: true });
-  await expect(panel.getByText("The engine terminals run on cannot be reached. Reconnect, or switch back to localhost.", { exact: true })).toBeVisible();
+  await expect(panel.getByText("The remote sshc engine cannot be reached. Reconnect, or switch back to localhost.", { exact: true })).toBeVisible();
   await expect(panel.getByText("Tries again 2 s after each attempt ends", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("alert")).toHaveCount(0);
   await panel.getByRole("button", { name: "Details", exact: true }).click();
@@ -261,7 +261,7 @@ test("shows an unreachable host in the terminal area and goes away on Reconnect 
     panel.getByRole("button", { name: "Reconnect now", exact: true }).click(),
   ]);
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("button", { name: /^Choose where terminals run \(now: bastion\)/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Choose the remote session engine \(now: bastion\)/ })).toBeVisible();
 });
 
 test("sends a command to the sessions of the run target through the run target", async ({ page, installation }) => {
@@ -289,7 +289,7 @@ test("switches back to localhost from the terminal area", async ({ page, install
   const panel = page.getByRole("region", { name: "Could not connect to bastion", exact: true });
   await panel.getByRole("button", { name: "Switch back to localhost", exact: true }).click();
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("button", { name: /^Choose where terminals run \(now: localhost\)/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Choose the remote session engine \(now: localhost\)/ })).toBeVisible();
 });
 
 test("keeps the run-target switcher usable while the panel is shown", async ({ page, installation }) => {
@@ -299,10 +299,10 @@ test("keeps the run-target switcher usable while the panel is shown", async ({ p
   await chooseBastion(page);
   const panel = page.getByRole("region", { name: "The vault on bastion is locked", exact: true });
   await expect(panel).toBeVisible();
-  await page.getByRole("button", { name: /^Choose where terminals run/ }).click();
+  await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
   await page.getByRole("list", { name: "Engines", exact: true }).getByRole("button", { name: /^localhost/ }).click();
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("button", { name: /^Choose where terminals run \(now: localhost\)/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Choose the remote session engine \(now: localhost\)/ })).toBeVisible();
 });
 
 test("keeps the navigation reachable on a phone while the panel is shown", async ({ page, installation }) => {
@@ -317,14 +317,14 @@ test("keeps the navigation reachable on a phone while the panel is shown", async
   const openNavigation = page.getByRole("button", { name: "Navigation", exact: true });
   await expect(openNavigation).toBeVisible();
   await openNavigation.click();
-  await expect(page.getByRole("button", { name: /^Choose where terminals run/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Choose the remote session engine/ })).toBeVisible();
 });
 
 test("selects a newly added engine and shows it is incompatible in the terminal area", async ({ page, installation }) => {
   await stubRunTarget(page, { added: false });
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  await page.getByRole("button", { name: /^Choose where terminals run/ }).click();
+  await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
   await page.getByRole("button", { name: "Add an engine…", exact: true }).click();
   const picker = page.getByRole("dialog", { name: "Add the engine on an SSH host", exact: true });
   await picker.getByRole("button", { name: /^bastion/ }).click();
@@ -339,7 +339,7 @@ test("uses a compatible engine of another version without a panel", async ({ pag
   await chooseBastion(page);
   await expect(page.getByRole("list", { name: "Workspaces", exact: true }).getByRole("button", { name: /^Main/ }).first()).toBeVisible();
   await expect(page.getByRole("region", { name: incompatibleHeading, exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: /^Choose where terminals run/ }).click();
+  await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
   await page.getByRole("button", { name: "Actions for engine bastion", exact: true }).click();
   await page.getByRole("button", { name: "Engine information…", exact: true }).click();
   const information = page.getByRole("dialog", { name: "Engine on bastion", exact: true });
@@ -461,7 +461,7 @@ test("shows a session Home opened on this machine while terminals ran on a run t
 
   await openSection(page, "Home");
   await page.getByRole("button", { name: /^Connect to bastion\./ }).dblclick();
-  await expect(page.getByRole("button", { name: /^Choose where terminals run \(now: localhost\)/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Choose the remote session engine \(now: localhost\)/ })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "From Home", exact: true }))
     .toHaveAttribute("aria-current", "true");
 });
