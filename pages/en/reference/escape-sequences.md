@@ -16,7 +16,7 @@ These are the OSC (Operating System Command) sequences that sshc acts on when a 
 | 7 | Working directory (`file://host/path`) | sshc engine, browser | Used where a reopened session starts, for previews of relative paths and to open the folder in SFTP |
 | 8 | Hyperlink | browser | When the visible text is an address other than the destination, sshc shows a menu with the destination instead of opening it at once |
 | 9 | Notification (iTerm2 form) | sshc engine | Payloads that begin with digits and `;` (ConEmu commands) are not notifications |
-| 9;4 | Progress (ConEmu form) | sshc engine, browser | Drawn as a line along the pane heading and its session list entry |
+| 9;4 | Progress (ConEmu form) | sshc engine, browser | Drawn as a line along the pane heading and a ring on its session list row |
 | 9;9 | Working directory (ConEmu form) | browser | For PowerShell and cmd on Windows; used like OSC 7 |
 | 10, 11, 12, 110, 111, 112 | Set, query or reset the text, background and cursor colors | xterm.js | |
 | 52 | Write to the clipboard | browser | Off by default. A request to read (`?`) gets no answer |

@@ -11,6 +11,7 @@ import { sessionDragMimeType } from "./sessionDrag";
 import { SessionDestinationLine } from "./SessionDestinationLine";
 import { SessionMarker } from "./SessionMarker";
 import { sessionStatusText } from "./sessionStatus";
+import { programProgressText, rowProgramProgress } from "./programProgress";
 import { programStatusText, rowProgramStatus, type SeenProgramStatus } from "./programStatus";
 import { SessionRowMenu, type WorkspaceMoveTarget } from "./SessionRowMenu";
 import { terminalDisplayTitle } from "./terminalPresentation";
@@ -19,7 +20,6 @@ import { revealOnHoverAtPcSize } from "../ui/ActionMenu";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { useShiftKeyHeld } from "../ui/useShiftKeyHeld";
-import { TerminalProgressBar } from "./TerminalProgressBar";
 import { SessionCloseConfirmation } from "./SessionCloseConfirmation";
 import { isImeComposing } from "../ui/imeComposition";
 
@@ -186,14 +186,19 @@ export function SessionList({
             const splitGroup = splitGroupBySession?.get(session.id);
             const unread = unreadBySession.has(session.id);
             const programStatus = rowProgramStatus(session, seenProgramStatus);
+            const programProgress = rowProgramProgress(session);
             const status = programStatus === null ? sessionStatusText(t, session) : programStatusText(t, programStatus);
             const isSelected = session.id === selected;
             const statusId = `session-status-${session.id}`;
-            const marker = <SessionMarker session={session} unread={unread} programStatus={programStatus} />;
-            // The dot carries the status for the eye; screen readers get it as the row's description.
+            const marker = <SessionMarker session={session} unread={unread} programStatus={programStatus} programProgress={programProgress} />;
+            // The mark carries the status and the progress for the eye; screen readers get them as the row's description.
             const statusDescription = (
               <span id={statusId} className="sr-only">
-                {unread ? `${status} · ${t("terminal.unreadNotification")}` : status}
+                {[
+                  status,
+                  ...(programProgress === null ? [] : [programProgressText(t, programProgress)]),
+                  ...(unread ? [t("terminal.unreadNotification")] : []),
+                ].join(" · ")}
               </span>
             );
             const details = (
@@ -255,8 +260,6 @@ export function SessionList({
                     trigger.click();
                   }}
                 >
-
-                  {session.programProgress !== undefined ? <TerminalProgressBar progress={session.programProgress} /> : null}
                   {renaming === session.id ? (
                     <>
                       {marker}

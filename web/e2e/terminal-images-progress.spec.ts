@@ -99,23 +99,30 @@ test("answers the kitty graphics query Claude Code sends to detect image support
   await expect(screen).toContainText("reply:i=31;OK");
 });
 
-test("shows OSC 9;4 progress under the pane header and clears it", async ({ page, installation }) => {
+test("shows OSC 9;4 progress under the pane header and in the session's row together, and clears both", async ({ page, installation }) => {
   test.skip(process.platform === "win32", "printf escape sequences are POSIX shell syntax");
   await openApplication(page, installation);
   await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const row = page.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first();
+  // The row reads the list again as the header's bar changes: well within the two-second poll.
+  const withTheHeader = { timeout: 1_000 };
 
   await runInShell(page, "printf '\\033]9;4;1;40\\a'");
   const progress = screen.getByRole("progressbar", { name: "Program progress" });
   await expect(progress).toHaveAttribute("aria-valuenow", "40");
+  await expect(row.locator("[data-program-progress]")).toHaveAttribute("data-program-progress", "normal", withTheHeader);
+  await expect(row.getByRole("button").first()).toHaveAccessibleDescription(/· Program progress 40%$/u);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-progress.png` });
   }
   await runInShell(page, "printf '\\033]9;4;2\\a'");
   await expect(screen.getByRole("progressbar", { name: "Program progress (error)" })).toHaveAttribute("aria-valuenow", "40");
+  await expect(row.locator("[data-program-progress]")).toHaveAttribute("data-program-progress", "error", withTheHeader);
   await runInShell(page, "printf '\\033]9;4;0\\a'");
   await expect(screen.getByRole("progressbar")).toHaveCount(0);
+  await expect(row.locator("[data-program-progress]")).toHaveCount(0, withTheHeader);
 });
 
 test("shows a background session's program progress in Open sessions while another session is displayed", async ({ page, installation }) => {
@@ -154,19 +161,23 @@ test("shows a background session's program progress in Open sessions while anoth
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(1).getByRole("button").first()).toHaveAttribute("aria-current", "true");
   const background = rows.first();
+  const ring = background.locator("[data-program-progress]");
+  const described = background.getByRole("button").first();
   await report("1;40");
-  await expect(background.getByRole("progressbar", { name: "Program progress" })).toHaveAttribute("aria-valuenow", "40");
+  await expect(ring).toHaveAttribute("data-program-progress", "normal");
+  await expect(described).toHaveAccessibleDescription(/· Program progress 40%$/u);
   await expect(screen.getByRole("progressbar")).toHaveCount(0);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/session-list-progress.png` });
   }
 
   await report("2");
-  await expect(background.getByRole("progressbar", { name: "Program progress (error)" })).toHaveAttribute("aria-valuenow", "40");
+  await expect(described).toHaveAccessibleDescription(/· Program progress \(error\) 40%$/u);
   await report("3");
-  await expect(background.getByRole("progressbar", { name: "Program progress" })).not.toHaveAttribute("aria-valuenow");
+  await expect(ring).toHaveAttribute("data-program-progress", "indeterminate");
+  await expect(described).toHaveAccessibleDescription(/· Program progress$/u);
   await report("0");
-  await expect(background.getByRole("progressbar")).toHaveCount(0);
+  await expect(ring).toHaveCount(0);
 });
 
 test("counts an emoji as two cells so the rest of the line stays aligned", async ({ page, installation }) => {

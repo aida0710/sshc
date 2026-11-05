@@ -887,6 +887,9 @@ export const ja = {
   "terminal.programProgress": "プログラムの進み具合",
   "terminal.programProgressError": "プログラムの進み具合（エラー）",
   "terminal.programProgressPaused": "プログラムの進み具合（一時停止）",
+  "terminal.programProgressPercent": "プログラムの進み具合 {percent}%",
+  "terminal.programProgressErrorPercent": "プログラムの進み具合（エラー）{percent}%",
+  "terminal.programProgressPausedPercent": "プログラムの進み具合（一時停止）{percent}%",
   "terminal.browserNotificationsHeading": "Notifications",
   "terminal.browserNotificationsDefault":
     "このタブがバックグラウンドにあるとき、ターミナル内のプログラムからの通知（コーディングエージェントの入力待ちなど）やファイル転送の完了をsshcから通知できます。",

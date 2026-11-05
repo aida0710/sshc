@@ -5,6 +5,7 @@ import { ActionMenu } from "../../ui/ActionMenu";
 import { draggableCursor } from "../../ui/dragAndDropLook";
 import { SessionDestinationLine } from "../SessionDestinationLine";
 import { sessionDragMimeType } from "../sessionDrag";
+import { programProgressText, rowProgramProgress } from "../programProgress";
 import { rowProgramStatus, type SeenProgramStatus } from "../programStatus";
 import { SessionMarker } from "../SessionMarker";
 import type { UnreadSessions } from "../terminalNotifications";
@@ -86,6 +87,10 @@ function SplitGroupRow({ group, members, selected, unreadBySession, seenProgramS
           const title = terminalDisplayTitle(session);
           const active = session.id === activeSessionId;
           const programStatus = rowProgramStatus(session, seenProgramStatus);
+          const programProgress = rowProgramProgress(session);
+          const destinationId = `split-member-${session.id}`;
+          // The progress ring is drawn for the eye only; screen readers hear it after the destination line.
+          const progressId = `split-member-progress-${session.id}`;
           return (
             // A row drags like the session's row in the workspaces below: onto a pane's edge to put it there.
             <li key={session.id} draggable className={draggableCursor}
@@ -94,13 +99,14 @@ function SplitGroupRow({ group, members, selected, unreadBySession, seenProgramS
                 event.dataTransfer.effectAllowed = "move";
               }}>
               {/* The dot sits where the dots of the workspace rows below sit. */}
-              <button type="button" aria-label={t("splitView.groupSession", { name, title })} aria-describedby={`split-member-${session.id}`} aria-current={active ? "true" : undefined} onClick={() => onSelectSession(session.id)}
+              <button type="button" aria-label={t("splitView.groupSession", { name, title })} aria-describedby={programProgress === null ? destinationId : `${destinationId} ${progressId}`} aria-current={active ? "true" : undefined} onClick={() => onSelectSession(session.id)}
                 className={`flex min-h-10 w-full min-w-0 items-start gap-2.5 rounded-[7px] py-1 pl-4 pr-2 text-left hover:bg-hover md:min-h-0 md:py-[3px] ${draggableCursor} ${active ? "ring-1 ring-inset ring-accent/45" : ""}`}>
-                <SessionMarker session={session} unread={unreadBySession.has(session.id)} programStatus={programStatus} />
+                <SessionMarker session={session} unread={unreadBySession.has(session.id)} programStatus={programStatus} programProgress={programProgress} />
                 {/* As in the workspace rows, the name gets the whole line and the destination is under it. */}
                 <span className="min-w-0 flex-1">
                   <span title={title} className="block truncate text-[12.5px] leading-[18px] text-ink">{title}</span>
-                  <SessionDestinationLine session={session} programStatus={programStatus} id={`split-member-${session.id}`} />
+                  <SessionDestinationLine session={session} programStatus={programStatus} id={destinationId} />
+                  {programProgress === null ? null : <span id={progressId} className="sr-only">{programProgressText(t, programProgress)}</span>}
                 </span>
               </button>
             </li>
