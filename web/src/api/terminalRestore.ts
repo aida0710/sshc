@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { postEmpty } from "./guards";
+import { readOptions, type ReadScope } from "./readScope";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -18,12 +19,12 @@ export type TerminalRestoreApi = {
 
 // `base` is the engine's terminal API: this machine's /api/v1/terminal, or a
 // run-target engine's /api/v1/engines/{alias}/terminal that this machine's
-// engine forwards.
-export function createTerminalRestoreApi(base: string): TerminalRestoreApi {
+// engine forwards. `reads` ends the read of the offer, as for sessions.
+export function createTerminalRestoreApi(base: string, reads?: ReadScope): TerminalRestoreApi {
   const restorePath = `${base}/restore`;
   return {
     async offer() {
-      return validateOpenAPISchema<TerminalRestoreOffer>("TerminalRestoreOffer", await apiClient.read(restorePath));
+      return validateOpenAPISchema<TerminalRestoreOffer>("TerminalRestoreOffer", await apiClient.read(restorePath, readOptions(reads)));
     },
     async restore() {
       return validateOpenAPISchema<TerminalRestoreResult>("TerminalRestoreResult", await postEmpty<unknown>(restorePath));
