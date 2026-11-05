@@ -65,6 +65,18 @@ export function runTargetRefusalText(t: Translate, error: ApiError, alias: strin
   }
 }
 
+// runTargetRefusalState names the state of a run target that refused in a word or two, for the run target switcher.
+export function runTargetRefusalState(t: Translate, error: ApiError | null): string {
+  switch (error?.code) {
+    case "remote_engine_vault_locked":
+      return t("runTarget.stateLocked");
+    case "remote_engine_incompatible":
+      return t("runTarget.stateIncompatible");
+    default:
+      return t("runTarget.stateUnreachable");
+  }
+}
+
 // connectFailureKey names the known cause of a failed SSH connection to the
 // host; null when the engine gave none.
 function connectFailureKey(error: unknown): MessageKey | null {

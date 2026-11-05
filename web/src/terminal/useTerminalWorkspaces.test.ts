@@ -124,3 +124,14 @@ it("keeps the tree and says nothing when a scheduled read fails", async () => {
   expect(result.current.workspaces).toEqual([main, dev]);
   expect(result.current.problem).toBe("");
 });
+
+it("says nothing when the read it was waiting for ended because the screen left that engine", async () => {
+  const api: TerminalWorkspacesApi = {
+    list: vi.fn().mockRejectedValue(new DOMException("Aborted", "AbortError")),
+    create: vi.fn(), update: vi.fn(), remove: vi.fn(), move: vi.fn(),
+  };
+  const { result } = renderWorkspaces(api);
+  await waitFor(() => expect(api.list).toHaveBeenCalled());
+  await act(async () => { await Promise.resolve(); });
+  expect(result.current.problem).toBe("");
+});

@@ -1,5 +1,6 @@
 import type { components } from "./schema";
 import { clearSessionCSRF } from "../session/bootstrap";
+import { isForwardedToRunTarget, withinForwardedRequestLimit } from "./forwardedRequestLimit";
 import { validateAPIRequest, validateAPIResponse, validateOpenAPISchema } from "./validators.generated";
 import { isWorkspaceRefusal } from "./workspaceRefusals";
 
@@ -187,7 +188,8 @@ async function sessionFailureCode(response: Response): Promise<string> {
 async function requestWithSession(path: string, init: RequestInit, token: string): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set("X-SSHC-CSRF", token);
-  const response = await fetch(path, { ...init, credentials: "same-origin", headers });
+  const send = () => fetch(path, { ...init, credentials: "same-origin", headers });
+  const response = await (isForwardedToRunTarget(path) ? withinForwardedRequestLimit(init.signal, send) : send());
   const code = await sessionFailureCode(response);
   const sessionMissing = response.status === 401 && (code === "session_required" || code === "invalid_session");
   // The engine renews a token only after verifying it (POST /api/v1/session/renew

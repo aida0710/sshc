@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { patchJSON, postJSON, putJSON } from "./guards";
+import { readOptions, type ReadScope } from "./readScope";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -32,12 +33,13 @@ function validateWorkspace(value: unknown): TerminalWorkspace {
 
 // The terminal workspaces of one engine: the named groups the session list is
 // drawn in. Moving a session between them is a session operation
-// (moveTerminalSession). `base` is the engine's terminal API, as for sessions.
-export function createTerminalWorkspacesApi(base: string): TerminalWorkspacesApi {
+// (moveTerminalSession). `base` is the engine's terminal API and `reads` ends its
+// list reads, as for sessions.
+export function createTerminalWorkspacesApi(base: string, reads?: ReadScope): TerminalWorkspacesApi {
   const workspacePath = (id: string) => `${base}/workspaces/${encodeURIComponent(id)}`;
   return {
     async list() {
-      return validateList(await apiClient.read(`${base}/workspaces`));
+      return validateList(await apiClient.read(`${base}/workspaces`, readOptions(reads)));
     },
     async create(name) {
       return validateWorkspace(await postJSON<unknown>(`${base}/workspaces`, { name }));
