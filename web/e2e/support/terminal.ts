@@ -12,6 +12,8 @@ const KEYBOARD = `.xterm-helper-textarea${SHOWN}`;
 const SELECTION = `.xterm-selection${SHOWN} div`;
 const VIEWPORT = `.xterm-viewport${SHOWN}`;
 const SCROLLBAR_SLIDER = `.xterm-scrollable-element${SHOWN} > .xterm-scrollbar.xterm-vertical > .xterm-slider`;
+// The canvas beside the scrollbar that xterm draws the marks of commands and search matches on.
+const OVERVIEW_RULER = ".xterm-decoration-overview-ruler";
 // These fit tests use 13px fonts: allow the 16px padding and one rounded row.
 export const maxTerminalUnusedHeightPx = 40;
 export async function waitForTerminalLayout(page: Page): Promise<void> {
@@ -59,6 +61,9 @@ export function terminalKeyboard(container: Page | Locator): Locator {
 }
 export function terminalScrollbarSlider(page: Page): Locator {
   return page.locator(SCROLLBAR_SLIDER);
+}
+export function terminalOverviewRuler(page: Page): Locator {
+  return page.locator(OVERVIEW_RULER).first();
 }
 export function selectionMarks(page: Page): Locator {
   return page.locator(SELECTION);
