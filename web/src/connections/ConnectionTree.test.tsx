@@ -231,6 +231,8 @@ describe("the connection list and the list of groups", () => {
     const target = screen.getByRole("button", { name: "empty" });
     const dataTransfer = transfer(payload);
     fireEvent.dragStart(source, { dataTransfer });
+    // The browser asks at dragenter too, and a drop right after crossing into the group depends on the answer.
+    expect(fireEvent.dragEnter(target, { dataTransfer })).toBe(false);
     fireEvent.dragOver(target, { dataTransfer });
     fireEvent.drop(target, { dataTransfer });
     expect(onDrop).toHaveBeenCalledWith(payload, "empty");

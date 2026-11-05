@@ -1446,6 +1446,35 @@ describe("dragging a key onto a folder", () => {
     await waitFor(() => expect(relocate).toHaveBeenCalledWith("key-one", { group: "archive" }));
   });
 
+  // The browser asks at dragenter too, and a drop right after crossing into the folder depends on the answer.
+  it("takes a dragged key as soon as the pointer enters a folder", async () => {
+    render(<KeysScreen api={buildApi()} groups={["archive"]} />);
+
+    fireEvent.dragStart(await screen.findByRole("row", { name: /id_work/ }), {
+      dataTransfer: { setData: vi.fn(), effectAllowed: "" },
+    });
+
+    expect(fireEvent.dragEnter(screen.getByRole("button", { name: "archive, 0" }))).toBe(false);
+  });
+
+  it("does not choose a row that is dragged, so the chosen keys' bar does not move it while the browser starts the drag", async () => {
+    const relocate = vi.fn().mockResolvedValue({
+      relativePath: "keys/archive/id_work",
+      notes: [],
+      blockers: [],
+      transactionId: "tx",
+    });
+    render(<KeysScreen api={buildApi({ relocate })} groups={["archive"]} />);
+
+    const row = await screen.findByRole("row", { name: /id_work/ });
+    fireEvent.dragStart(row, { dataTransfer: { setData: vi.fn(), effectAllowed: "" } });
+
+    expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
+    fireEvent.dragEnd(row);
+    fireEvent.drop(screen.getByRole("button", { name: "archive, 0" }));
+    expect(relocate).not.toHaveBeenCalled();
+  });
+
   it("opening one form from a row closes the one that was open", async () => {
     const secrets = buildSecrets({
       passwordVault: vi.fn().mockResolvedValue(vaultStatus()),

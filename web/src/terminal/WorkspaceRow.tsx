@@ -70,6 +70,7 @@ export function WorkspaceRow({
   return (
     <div
       {...dragSourceProps}
+      onDragEnter={dragOver}
       onDragOver={dragOver}
       onDragLeave={dragLeave}
       onDrop={drop}

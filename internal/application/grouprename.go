@@ -109,7 +109,37 @@ func (s *Service) planGroupRename(graph *config.Graph, inventory *keys.Inventory
 		}
 		next = append(next, name)
 	}
-	return s.planGroupLayout(graph, inventory, "config.group_rename", renamed, next, false)
+	prepared, err := s.planGroupLayout(graph, inventory, "config.group_rename", renamed, next, false)
+	if err != nil {
+		return planned{}, err
+	}
+	directories, err := s.renamedGroupDirectories(renamed)
+	if err != nil {
+		return planned{}, err
+	}
+	prepared.directories = append(prepared.directories, directories...)
+	return prepared, nil
+}
+
+// renamedGroupDirectories は、名前を変えたグループのフォルダの、新しい場所を親から順に返す。
+// 移動元のフォルダは空になれば同じトランザクションで消える。接続先のファイルがあるグループは移動が置き場所を
+// 作るが、中身の無いグループは作られないので、ここで作らないとグループのフォルダが無い状態
+// （NoticeGroupDirectoryMissing）になる。親を先にするのは、巻き戻しが子から順に消せるようにするためである。
+func (s *Service) renamedGroupDirectories(renamed map[string]string) ([]string, error) {
+	names := make([]string, 0, len(renamed))
+	for _, name := range renamed {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	directories := make([]string, 0, len(names))
+	for _, name := range names {
+		directory, err := AbsolutePath(s.workspace.Root(), GroupDirectory(name))
+		if err != nil {
+			return nil, err
+		}
+		directories = append(directories, directory)
+	}
+	return directories, nil
 }
 
 func (s *Service) planGroupDelete(graph *config.Graph, inventory *keys.Inventory, name, destination string) (planned, error) {

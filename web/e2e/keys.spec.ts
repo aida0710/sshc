@@ -295,3 +295,32 @@ test("shows one folder at a time", async ({ page, installation }) => {
   await expect(page.getByRole("row", { name: /id_filed/ }).first()).toBeVisible();
   await expect(page.getByRole("row", { name: /id_kept/ })).toHaveCount(0);
 });
+
+// A row that is not chosen yet: choosing it inside dragstart put the chosen keys' bar above the table, which moved the
+// row from under the pointer, and the browser cancelled the drag. page.mouse then waits for a drag that never comes.
+test("moves a key by dragging its row onto a group's folder", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await createGroups(page, ["lab"]);
+  await openSection(page, "Keys");
+  await openKeyCreation(page);
+  await page.getByLabel("File name").fill("id_lab");
+  await page.getByRole("textbox", { name: "Passphrase" }).fill("end-to-end-passphrase");
+  expect(await clickAndAwait(page, "Create key", "/api/v1/keys")).toBe(201);
+  await page.getByRole("button", { name: "Close", exact: true }).first().click();
+
+  const row = await page.locator("tr[draggable=true]").first().boundingBox();
+  const folder = await page.getByRole("navigation", { name: "Key folders" }).getByRole("button", { name: "lab, 0" }).boundingBox();
+  if (row === null || folder === null) throw new Error("the row or the folder has no box on the screen");
+  await page.mouse.move(row.x + row.width * 0.3, row.y + row.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(row.x + row.width * 0.3 + 12, row.y + row.height / 2 + 12, { steps: 4 });
+  await expect(page.getByText("1 selected")).toHaveCount(0);
+  await page.mouse.move(folder.x + folder.width / 2, folder.y + folder.height / 2, { steps: 4 });
+  const [response] = await Promise.all([
+    page.waitForResponse((candidate) => candidate.url().includes("/api/v1/keys/") && candidate.request().method() === "POST"),
+    page.mouse.up(),
+  ]);
+  expect(response.status()).toBe(200);
+
+  await expect.poll(() => installation.read("keys/lab/id_lab.pub").then(() => true, () => false)).toBe(true);
+});
