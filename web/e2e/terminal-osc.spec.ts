@@ -235,8 +235,16 @@ test("shows what a program says it is doing in its session's row until the resul
   await openLocalShell(page);
   await expect(agent).toHaveAccessibleDescription("Done · Docs built", { timeout: 20_000 });
   await expect(agent.locator("[data-program-status]")).toHaveAttribute("data-program-status", "done");
+  const mark = agent.locator(":scope > span[aria-hidden]");
+  const name = agent.getByTitle("agent", { exact: true });
+  const doneMark = await mark.boundingBox();
+  const doneName = await name.boundingBox();
 
   await agent.click();
   await expect(agent).toHaveAccessibleDescription("connected");
   await expect(agent.locator("[data-program-status]")).toHaveCount(0);
+  // The connection dot is as large as the program's mark it comes back from, so the name stays where it was.
+  const dot = await mark.boundingBox();
+  expect({ width: dot?.width, height: dot?.height }).toEqual({ width: doneMark?.width, height: doneMark?.height });
+  expect((await name.boundingBox())?.x).toBe(doneName?.x);
 });
