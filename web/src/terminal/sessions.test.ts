@@ -787,3 +787,47 @@ describe("a session's stream reporting its exit", () => {
     expect(result.current.sessions[0]).toMatchObject({ state: "exited", exited: { code: -1, signal: "", connectionLost: true } });
   });
 });
+
+describe("a session's stream showing its program progress change", () => {
+  const running: TerminalSession = {
+    id: "a", kind: "shell", workspaceId: "default", title: "zsh", startedAt: "2026-11-06T09:00:00Z", state: "connected", problem: "",
+  };
+  const reporting: TerminalSession = { ...running, programProgress: { state: "normal", percent: 40 } };
+
+  it("reads the list again at once, so the row changes with the pane header rather than on the next poll", async () => {
+    const terminalSessions = vi.fn().mockResolvedValue({ sessions: [running], maxSessions: 50 });
+    const client = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(1));
+    terminalSessions.mockResolvedValue({ sessions: [reporting], maxSessions: 50 });
+
+    act(() => result.current.programProgressChanged());
+
+    // waitFor gives up after a second, before the two-second poll would have read it.
+    await waitFor(() => expect(result.current.sessions[0]?.programProgress).toEqual({ state: "normal", percent: 40 }));
+  });
+
+  it("reads one list at a time, and once more for the changes shown while a read was out", async () => {
+    const answers: Array<(listing: { sessions: TerminalSession[]; maxSessions: number }) => void> = [];
+    const terminalSessions = vi.fn()
+      .mockResolvedValueOnce({ sessions: [running], maxSessions: 50 })
+      .mockImplementation(() => new Promise((resolve) => answers.push(resolve)));
+    const client = api({ terminalSessions });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(1));
+
+    act(() => {
+      result.current.programProgressChanged();
+      result.current.programProgressChanged();
+      result.current.programProgressChanged();
+    });
+    expect(terminalSessions).toHaveBeenCalledTimes(2);
+
+    await act(async () => answers[0]!({ sessions: [running], maxSessions: 50 }));
+    await waitFor(() => expect(terminalSessions).toHaveBeenCalledTimes(3));
+    await act(async () => answers[1]!({ sessions: [reporting], maxSessions: 50 }));
+
+    expect(result.current.sessions[0]?.programProgress).toEqual({ state: "normal", percent: 40 });
+    expect(terminalSessions).toHaveBeenCalledTimes(3);
+  });
+});

@@ -49,35 +49,63 @@ describe("SessionList", () => {
     expect(props.onMoveToWorkspace).toHaveBeenCalledWith("a", "w1");
   });
 
-  it("shows program progress for an unselected session and keeps connection progress separate", () => {
+  it("draws a session's program progress as a ring filled that far in place of its dot, and says the percent to screen readers", () => {
     const background = { ...live, programProgress: { state: "normal" as const, percent: 40 } };
     renderList({ sessions: [background, shell], selected: shell.id });
 
-    const rows = screen.getAllByRole("listitem");
-    const progress = within(rows[0]!).getByRole("progressbar", { name: "Program progress" });
-    expect(progress).toHaveAttribute("aria-valuenow", "40");
-    expect(progress.firstElementChild).toHaveStyle({ width: "40%" });
-    expect(within(rows[1]!).queryByRole("progressbar")).toBeNull();
-    expect(screen.getByRole("button", { name: "bastion" })).toHaveAccessibleDescription("connected");
+    const ring = screen.getByRole("button", { name: "bastion" }).querySelector<HTMLElement>("[data-program-progress]");
+    expect(ring).toHaveAttribute("data-program-progress", "normal");
+    expect(ring).toHaveClass("text-accent");
+    expect(ring?.style.getPropertyValue("--sshc-progress")).toBe("40%");
+    expect(screen.getByRole("button", { name: "bastion" })).toHaveAccessibleDescription("connected · Program progress 40%");
+    expect(screen.getByRole("button", { name: "zsh" }).querySelector("[data-program-progress]")).toBeNull();
+    // The bar belongs to the pane header; a row is too low for a line under its name not to read as an underline.
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
   it.each([
-    ["error", "Program progress (error)", "bg-danger"],
-    ["paused", "Program progress (paused)", "bg-notice-ink"],
-  ] as const)("shows %s program progress with its accessible name and color", (state, name, color) => {
-    const background = { ...live, programProgress: { state, percent: 60 } };
-    renderList({ sessions: [background] });
+    ["error", "Program progress (error) 60%", "text-danger"],
+    ["paused", "Program progress (paused) 60%", "text-notice-ink"],
+  ] as const)("draws %s program progress in its color and names it", (state, description, color) => {
+    renderList({ sessions: [{ ...live, programProgress: { state, percent: 60 } }] });
 
-    const progress = screen.getByRole("progressbar", { name });
-    expect(progress).toHaveAttribute("aria-valuenow", "60");
-    expect(progress.firstElementChild).toHaveClass(color);
+    expect(screen.getByRole("button", { name: "bastion" }).querySelector("[data-program-progress]")).toHaveClass(color);
+    expect(screen.getByRole("button", { name: "bastion" })).toHaveAccessibleDescription(`connected · ${description}`);
   });
 
-  it("shows indeterminate progress without claiming a percentage", () => {
-    const background = { ...live, programProgress: { state: "indeterminate" as const } };
-    renderList({ sessions: [background] });
+  it("turns the ring for progress of unknown length without claiming a percentage", () => {
+    renderList({ sessions: [{ ...live, programProgress: { state: "indeterminate" as const } }] });
 
-    expect(screen.getByRole("progressbar", { name: "Program progress" })).not.toHaveAttribute("aria-valuenow");
+    const ring = screen.getByRole("button", { name: "bastion" }).querySelector("[data-program-progress]");
+    expect(ring).toHaveAttribute("data-program-progress", "indeterminate");
+    expect(ring).toHaveClass("animate-spin");
+    expect(screen.getByRole("button", { name: "bastion" })).toHaveAccessibleDescription("connected · Program progress");
+  });
+
+  it("keeps a program status that needs the person ahead of the progress ring, and the ring ahead of the working spinner", () => {
+    const progress = { state: "normal" as const, percent: 40 };
+    renderList({
+      sessions: [
+        { ...live, programProgress: progress, programStatus: { state: "blocked", kind: "permission", version: 2 } },
+        { ...shell, programProgress: progress, programStatus: { state: "working", version: 1 } },
+      ],
+    });
+
+    const asking = screen.getByRole("button", { name: "bastion" });
+    expect(asking.querySelector("[data-program-status]")).toHaveAttribute("data-program-status", "blocked");
+    expect(asking.querySelector("[data-program-progress]")).toBeNull();
+    expect(asking).toHaveAccessibleDescription("Needs permission · Program progress 40%");
+    const working = screen.getByRole("button", { name: "zsh" });
+    expect(working.querySelector("[data-program-progress]")).toHaveAttribute("data-program-progress", "normal");
+    expect(working.querySelector("[data-program-status]")).toBeNull();
+  });
+
+  it("shows the connection state instead of program progress while a session reconnects", () => {
+    renderList({ sessions: [{ ...live, state: "reconnecting", programProgress: { state: "normal" as const, percent: 40 } }] });
+
+    const row = screen.getByRole("button", { name: "bastion" });
+    expect(row.querySelector("[data-program-progress]")).toBeNull();
+    expect(row).not.toHaveAccessibleDescription(/Program progress/u);
   });
 
   it("says in a word that a session did not open and keeps the reason for the tooltip", () => {
@@ -103,13 +131,14 @@ describe("SessionList", () => {
     expect(screen.getByText(words, { selector: "[data-session-status-text]" })).toBeVisible();
   });
 
-  it("removes the bar when the engine clears program progress", () => {
+  it("puts the dot back when the engine clears program progress", () => {
     const background = { ...live, programProgress: { state: "normal" as const, percent: 0 } };
     const { rerender, ...props } = renderList({ sessions: [background] });
-    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByRole("button", { name: "bastion" }).querySelector("[data-program-progress]")).not.toBeNull();
 
     rerender(<SessionList {...props} sessions={[live]} />);
-    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.getByRole("button", { name: "bastion" }).querySelector("[data-program-progress]")).toBeNull();
+    expect(screen.getByRole("button", { name: "bastion" })).toHaveAccessibleDescription("connected");
   });
 
   it("keeps every session in one flat list, with the destination on a connected row and the state in words otherwise", () => {

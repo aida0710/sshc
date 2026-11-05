@@ -882,6 +882,9 @@ export const en = {
   "terminal.programProgress": "Program progress",
   "terminal.programProgressError": "Program progress (error)",
   "terminal.programProgressPaused": "Program progress (paused)",
+  "terminal.programProgressPercent": "Program progress {percent}%",
+  "terminal.programProgressErrorPercent": "Program progress (error) {percent}%",
+  "terminal.programProgressPausedPercent": "Program progress (paused) {percent}%",
   "terminal.browserNotificationsHeading": "Notifications",
   "terminal.browserNotificationsDefault":
     "Allow sshc to notify you when a program in a terminal asks for attention (for example a coding agent waiting for input) or a file transfer completes while this tab is in the background.",
