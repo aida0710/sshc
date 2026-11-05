@@ -93,9 +93,11 @@ Claude Code reports its own state over OSC 7501. Start it, and the session list 
 - Needs permission is followed by what it waits for, as in `Needs permission · approve Bash: npm test`.
 - Done is followed by the summary Claude Code sent, and clears once you view the session.
 
-Inside tmux, Claude Code sends no status because tmux does not answer its query. There, the sshc engine reads the question drawn on screen, and the session list shows and notifies only needs permission and has a question, not working or done. It reads the screens of Claude Code 2.1.318, so a later change to how Claude Code draws them may stop this from working.
+Inside tmux, only needs permission and has a question are shown. See [Inside tmux](#inside-tmux).
 
 ## Receiving Claude Code notifications
+
+Notifications for needs permission and has a question arrive with no setup (see [Program status](#program-status)). To also receive the desktop notifications Claude Code sends itself, set the following.
 
 By default Claude Code sends desktop notifications only when it detects Ghostty, Kitty, or iTerm2. sshc is not part of that detection, so set the channel explicitly in `~/.claude/settings.json`. `iterm2` sends OSC 9 and `kitty` sends OSC 99; sshc accepts both.
 
