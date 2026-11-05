@@ -112,6 +112,33 @@ func TestGroupRenameTakesTheDirectoriesItEmpties(t *testing.T) {
 	}
 }
 
+func TestGroupRenameKeepsTheFolderOfAGroupWithNoConnections(t *testing.T) {
+	service, workspace := newTestService(t)
+	declareGroup(t, service, "work", "lab", "lab/gpu")
+
+	if _, err := service.RenameGroup(keyInventory(t, workspace), "lab", "work/lab"); err != nil {
+		t.Fatalf("RenameGroup error = %v", err)
+	}
+
+	for _, name := range []string{"connections/work/lab", "connections/work/lab/gpu"} {
+		if info, err := os.Stat(filepath.Join(workspace.Root(), filepath.FromSlash(name))); err != nil || !info.IsDir() {
+			t.Errorf("%s is not a folder: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(workspace.Root(), "connections", "lab")); !os.IsNotExist(err) {
+		t.Errorf("connections/lab is still there: %v", err)
+	}
+	overview, err := service.Overview()
+	if err != nil {
+		t.Fatalf("Overview error = %v", err)
+	}
+	for _, name := range []string{"work/lab", "work/lab/gpu"} {
+		if hasNotice(overview.Notices, NoticeGroupDirectoryMissing, name) {
+			t.Errorf("it reports the folder of %s as missing: %#v", name, overview.Notices)
+		}
+	}
+}
+
 func TestGroupRenameLeavesADirectoryThatStillHoldsSomething(t *testing.T) {
 	service, workspace := groupRenameFixture(t)
 	stray := filepath.Join(workspace.Root(), "connections", "work", "scratch")

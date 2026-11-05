@@ -114,7 +114,8 @@ export function useGenerationForm() {
 export function useOrganiser() {
   const [folder, setFolder] = useState<Folder>({ kind: "all" });
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
-  const [dragging, setDragging] = useState(false);
+  // ドラッグしている鍵。ドラッグしていなければ null。
+  const [dragged, setDragged] = useState<ReadonlySet<string> | null>(null);
   const [moveOutcome, setMoveOutcome] = useState<MoveOutcome | null>(null);
   const [moveTarget, setMoveTarget] = useState("");
   const [listFilter, setListFilter] = useState<ListFilter>("keys");
@@ -123,7 +124,7 @@ export function useOrganiser() {
   return {
     folder, setFolder,
     chosen, setChosen,
-    dragging, setDragging,
+    dragged, setDragged,
     moveOutcome, setMoveOutcome,
     moveTarget, setMoveTarget,
     listFilter, setListFilter,

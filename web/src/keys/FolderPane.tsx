@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import { dropTargetLook } from "../ui/dragAndDropLook";
 import { control } from "../ui/form";
@@ -35,6 +35,11 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
   const t = useTranslate();
   const [over, setOver] = useState("");
 
+  function acceptDrag(event: DragEvent, key: string) {
+    event.preventDefault();
+    setOver(key);
+  }
+
   return (
     <nav aria-label={t("keys.foldersLabel")} className="w-full shrink-0 @3xl/keylist:w-[188px]">
       <label className="block @3xl/keylist:hidden">
@@ -69,14 +74,8 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
                   aria-label={t("keys.folderRow", { name: labelOf(row.folder, t), count: row.count })}
                   aria-current={current}
                   onClick={() => onSelect(row.folder)}
-                  onDragOver={
-                    target === null
-                      ? undefined
-                      : (event) => {
-                          event.preventDefault();
-                          setOver(key);
-                        }
-                  }
+                  onDragEnter={target === null ? undefined : (event) => acceptDrag(event, key)}
+                  onDragOver={target === null ? undefined : (event) => acceptDrag(event, key)}
                   onDragLeave={target === null ? undefined : () => setOver((current) => (current === key ? "" : current))}
                   onDrop={
                     target === null

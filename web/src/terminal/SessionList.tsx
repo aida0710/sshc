@@ -133,6 +133,16 @@ export function SessionList({
     onReorder(order);
   }
 
+  function acceptSessionDrag(event: DragEvent) {
+    if (event.dataTransfer.types.includes(sessionDragMimeType)) event.preventDefault();
+  }
+
+  function acceptSessionDragBefore(event: DragEvent, sessionId: string) {
+    if (!event.dataTransfer.types.includes(sessionDragMimeType)) return;
+    event.preventDefault();
+    setDropBefore(sessionId);
+  }
+
   function drop(targetId: string | null) {
     const held = heldSessionId;
     onHoldSession(null);
@@ -165,9 +175,8 @@ export function SessionList({
         <ul
           aria-label={t("terminal.sessionList")}
           className="flex flex-col gap-0.5"
-          onDragOver={(event: DragEvent) => {
-            if (event.dataTransfer.types.includes(sessionDragMimeType)) event.preventDefault();
-          }}
+          onDragEnter={acceptSessionDrag}
+          onDragOver={acceptSessionDrag}
           onDrop={(event: DragEvent) => {
             if (event.dataTransfer.types.includes(sessionDragMimeType)) drop(null);
           }}
@@ -218,11 +227,8 @@ export function SessionList({
                   onHoldSession(null);
                   setDropBefore(null);
                 }}
-                onDragOver={(event: DragEvent) => {
-                  if (!event.dataTransfer.types.includes(sessionDragMimeType)) return;
-                  event.preventDefault();
-                  setDropBefore(session.id);
-                }}
+                onDragEnter={(event: DragEvent) => acceptSessionDragBefore(event, session.id)}
+                onDragOver={(event: DragEvent) => acceptSessionDragBefore(event, session.id)}
                 onDrop={(event: DragEvent) => {
                   // A dragged workspace goes on to the workspace this row is in.
                   if (!event.dataTransfer.types.includes(sessionDragMimeType)) return;

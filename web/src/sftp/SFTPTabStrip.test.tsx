@@ -107,6 +107,8 @@ describe("SFTPTabStrip", () => {
       fireEvent(list, event);
     };
 
+    // The browser asks at dragenter too, and a drop right after crossing into a tab depends on the answer.
+    expect(fireEvent.dragEnter(list, { dataTransfer })).toBe(false);
     dragAt("dragOver", 300);
     expect(document.querySelectorAll("[data-sftp-tab-drop-marker]")).toHaveLength(1);
     dragAt("drop", 300);

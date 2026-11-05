@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { changeDisplayLanguage, expect, openApplication, test, type Installation } from "./support/environment";
@@ -276,6 +276,9 @@ test("moves a group with no connections, which has no heading in the list, insid
 
   expect(await installation.read("config")).toContain("Include connections/work/archive/*.conf\n");
   await expect(sheet.getByRole("button", { name: /^archive/ })).toBeVisible();
+  // The folder goes with the group, so the group is not reported as missing it.
+  expect((await stat(join(installation.home, ".ssh", "connections", "work", "archive"))).isDirectory()).toBe(true);
+  await expect(sheet.getByText(/^Folder checks/)).toHaveCount(0);
 });
 
 test("offers no drag of a group on a phone, and no list of groups", async ({ page, installation }) => {

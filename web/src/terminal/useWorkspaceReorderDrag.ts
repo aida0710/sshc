@@ -38,22 +38,26 @@ export function useWorkspaceReorderDrag(onMove: (workspaceId: string, place: Wor
     onDragEnd: release,
   });
 
-  const dropTargetProps = (targetId: string) => ({
-    onDragOver: (event: DragEvent) => {
+  const dropTargetProps = (targetId: string) => {
+    const acceptWorkspace = (event: DragEvent) => {
       if (!isWorkspaceDrag(event)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
       const side = sideOf(event);
       setDropPlace((current) => current?.targetId === targetId && current.side === side ? current : { targetId, side });
-    },
-    onDrop: (event: DragEvent) => {
-      const held = heldWorkspaceId;
-      if (held === null || !isWorkspaceDrag(event)) return;
-      event.preventDefault();
-      release();
-      if (held !== targetId) onMove(held, { targetId, side: sideOf(event) });
-    },
-  });
+    };
+    return {
+      onDragEnter: acceptWorkspace,
+      onDragOver: acceptWorkspace,
+      onDrop: (event: DragEvent) => {
+        const held = heldWorkspaceId;
+        if (held === null || !isWorkspaceDrag(event)) return;
+        event.preventDefault();
+        release();
+        if (held !== targetId) onMove(held, { targetId, side: sideOf(event) });
+      },
+    };
+  };
 
   return { heldWorkspaceId, dropPlace, dragSourceProps, dropTargetProps };
 }

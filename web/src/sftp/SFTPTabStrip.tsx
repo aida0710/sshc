@@ -164,6 +164,7 @@ export function SFTPTabStrip({
       <div
         ref={scroller}
         {...tabsScopeProps}
+        onDragEnter={dragOver}
         onDragOver={dragOver}
         onDragLeave={dragLeave}
         onDrop={drop}
