@@ -2,6 +2,11 @@ import type { TerminalSession } from "../api/terminalSessions";
 import type { ShownProgramStatus } from "./programStatus";
 import { sessionMarkerClass } from "./sessionStatus";
 
+// The connection dot takes the size of the program status marks, an 11px circle
+// centred on the 18px name line, so a row's name stays in place when a status
+// takes the dot's place and the two look alike in the list.
+const markerCircle = "mt-[3.5px] size-[11px] shrink-0 rounded-full";
+
 // The mark that stands for each program status: a turning ring while it works,
 // and a filled circle with a sign once it waits on the person, failed or is done.
 const programStatusMarks: Record<Exclude<ShownProgramStatus["state"], "working">, { fill: string; sign: string }> = {
@@ -20,17 +25,16 @@ export function SessionMarker({ session, unread, programStatus }: {
   programStatus: ShownProgramStatus | null;
 }) {
   if (programStatus === null) {
-    return <span aria-hidden="true" className={`mt-[5px] size-2 shrink-0 rounded-full ${sessionMarkerClass(session, unread)}`} />;
+    return <span aria-hidden="true" className={`${markerCircle} ${sessionMarkerClass(session, unread)}`} />;
   }
-  // 11px centred on the 18px name line.
   if (programStatus.state === "working") {
     return <span aria-hidden="true" data-program-status="working"
-      className="mt-[3.5px] size-[11px] shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent" />;
+      className={`${markerCircle} animate-spin border-2 border-accent/25 border-t-accent`} />;
   }
   const mark = programStatusMarks[programStatus.state];
   return (
     <span aria-hidden="true" data-program-status={programStatus.state}
-      className={`mt-[3.5px] flex size-[11px] shrink-0 items-center justify-center rounded-full text-[8px] font-bold leading-none text-canvas ${mark.fill}`}>
+      className={`${markerCircle} flex items-center justify-center text-[8px] font-bold leading-none text-canvas ${mark.fill}`}>
       {mark.sign}
     </span>
   );
