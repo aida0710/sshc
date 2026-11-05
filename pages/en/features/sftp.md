@@ -5,69 +5,292 @@ description: Remote file operations and a resumable SFTP Transfer Manager.
 
 # SFTP
 
+Browse, edit and compare remote files, and upload, download or copy them between hosts.
+
 ![The SFTP file browser](/images/sftp-desktop.png)
 
-Each tab shows its folder and host side by side, or on separate lines on narrow screens. To change a host, use the destination button at the right of the selected tab. Host changes are disabled while that tab has unsaved edits. `+` opens the connection picker and opens a new tab on the connection you choose; closing the picker without a choice adds no tab. A tab without a host also offers **Choose a connection** in its file list.
+## How data travels
 
-Opening the SFTP screen does not connect to a saved server. Choosing a host in the host picker connects right away. Restored tabs show their saved host and path without reconnecting in the background, and connect when you press **Connect**. Closing a tab connected to an SSH host asks for confirmation; hold Shift while closing to skip the disconnection confirmation. Unsaved edits always require confirmation before discarding, even with Shift held. The host picker searches aliases, groups, destination hosts and users, and switches between recently connected and SSH Config group views. A first connection opens the login user's home directory reported by the SFTP server and reuses the saved SSH configuration, host keys and credentials. While the tab waits for the connection it shows the current stage, such as "connecting to bastion · 1/1", as Terminal does. When **Connection log** under Settings → Terminal is set to anything other than **None**, the log at that depth appears where the file list will be. A connection that fails always ends its log with the reason, whatever the setting.
+The sshc engine is what connects to a server over SFTP. The browser and the CLI ask the engine over HTTP.
+
+```mermaid
+flowchart TD
+  browser["Browser / WebView"]
+  cli["sshc sftp"]
+  engine["sshc engine"]
+  engineFiles["Files on the<br/>engine's machine"]
+  host["Host"]
+  otherHost["Another host"]
+  browser -- HTTP --> engine
+  cli -- HTTP --> engine
+  engine --- engineFiles
+  engine -- SFTP --> host
+  engine -- SFTP --> otherHost
+```
+
+The kind of transfer decides the path the data takes and what happens when the browser closes.
+
+| Transfer | Path of the data | When the browser closes |
+| --- | --- | --- |
+| Upload | Browser → engine → host | Bytes stop |
+| File download | Host → engine's spool → browser | Bytes stop |
+| Folder ZIP download | Host → ZIP built by the engine → browser | Stops, and restarts from the beginning |
+| Transfer with the engine's files | Engine's machine ↔ host | Continues |
+| Remote-to-remote copy or move | Host → engine → another host | Continues |
+
+The CLI's `get` and `put` use the same HTTP API of the engine as the browser. [How each transfer works](/en/sftp/transfers#how-each-transfer-works) has the steps of each one.
+
+## Connecting
+
+- Opening the SFTP screen does not connect to a saved server.
+- Choosing a host in the host picker connects right away.
+- Restored tabs show their saved host and path without reconnecting in the background, and connect when you press **Connect**.
+- A first connection opens the login user's home directory reported by the SFTP server.
+- It reuses the saved SSH configuration, host keys and credentials, as Terminal does.
+
+The host picker searches aliases, groups, destination hosts and users, and switches between recently connected and SSH Config group views.
+
+While the tab waits for the connection it shows the current stage, such as "connecting to bastion · 1/1", as Terminal does.
+
+- When **Connection log** under Settings → Terminal is set to anything other than **None**, the log at that depth appears where the file list will be.
+- A connection that fails always ends its log with the reason, whatever the setting.
+
+### Reusing a connection
+
+Operations on the same host (listing, details, preview, editing, transfers and the `sshc sftp` CLI) reuse the SFTP connection the previous operation used. Moving between folders therefore does not repeat the SSH handshake or ask for a one-time code again.
+
+A connection that goes unused for 60 seconds is closed. As with an open Terminal, locking the vault leaves that recent connection alive for those seconds.
+
+### Switching hosts
 
 Switching hosts immediately clears the previous listing and open file. A delayed response from the previous host is discarded instead of being shown under the new selection.
 
-Operations on the same host (listing, details, preview, editing, transfers and the `sshc sftp` CLI) reuse the SFTP connection the previous operation used; a connection that goes unused for 60 seconds is closed. Moving between folders therefore does not repeat the SSH handshake or ask for a one-time code again. As with an open Terminal, locking the vault leaves that recent connection alive for those seconds.
+## Tabs and panes
+
+![The two-pane SFTP view with independent tabs on each side](/images/sftp-two-pane-en.png)
+
+### Tabs
+
+Each tab shows its folder and host side by side, or on separate lines on narrow screens.
+
+| Action | How |
+| --- | --- |
+| Open a new tab | `+` opens the connection picker. Closing it without a choice adds no tab |
+| Change the host | The destination button at the right of the selected tab. Disabled while that tab has unsaved edits |
+| Choose a host for an empty tab | **Choose a connection** in its file list |
+| Close a tab | A tab connected to an SSH host asks for confirmation. Hold Shift while closing to skip it |
+
+Unsaved edits always require confirmation before discarding, even with Shift held.
+
+Tabs share one width whatever the host name. They scroll horizontally when they exceed the pane width, and `+` stays at the right edge.
+
+### Two panes
+
+On desktop, drag a tab onto the file list to split the view into two panes. There are at most two panes, and the handle between them resizes the split. Both panes have their own tab strip and `+` action, with up to eight independent tabs per side.
+
+| Where you drop | Result |
+| --- | --- |
+| With one pane, the left or right half of the list | The tab moves into a new pane on that side and leaves a blank tab behind |
+| With two panes, the other pane | The tab moves there, and a pane whose last tab leaves closes |
+| Along its tab strip | Reorders the tab |
+| The other pane's tab strip | Puts the tab at that place |
+
+From the keyboard:
+
+| Key | Action |
+| --- | --- |
+| Select a tab, then `Shift`+`←` or `→` | The same moves as dragging onto the list |
+| `Ctrl`+`Shift`+`←` or `→` | Reorders tabs |
+
+The selected tab's **…** (also a right-click on any tab) offers:
+
+- Move left, Move right
+- Move to the other pane (Open in a new right pane while there is one pane)
+- Swap the left and right panes
+
+Reordering within a pane and swapping the panes keep the tabs connected.
+
+Each tab remembers its host and location on the device, as does the split.
+
+## The file list
+
+You can filter the current list by name, and sort it by name, type, size or modified time.
+
+- Sizes are shown in KiB, MiB or GiB. The details dialog also gives the exact byte count.
+- Permissions appear below the entry name.
+- The selected host and directory are reflected in navigation state, so a terminal remote-path action can open the same location.
+- Below the remote listing (on phones, under **Folder actions**), the available disk space for the authenticated user and total capacity are shown in a unit that fits their size, such as MiB, GiB or TiB. A server without capacity reporting support still provides a usable directory listing.
+
+### Moving between folders
+
+| Destination | Desktop | Phone |
+| --- | --- | --- |
+| Parent folder | The leading `..` row | The upward button in the toolbar |
+| Back, Forward | The navigation controls | Tap the path |
+| Home, Root | **Folder actions** (three dots) | Tap the path |
+
+Refresh and the sort order sit above the list. On desktop, **Folder actions** also offers Copy full path.
+
+The current path is a clickable breadcrumb. Use its edit control when you need to type a path directly.
+
+A path may start with `~` or `~/` (as may the destination of **Move to folder** on a remote host). After moving there, the pane shows the absolute path. The `~user` form is not supported.
+
+- On a remote host, it starts at the directory the SFTP server logs you into (usually the home directory).
+- On Local, it starts at the home directory of the user running the sshc engine.
+
+Double-click or press Enter to open a folder or view file details.
+
+### Selecting
+
+Select one row, or use the checkboxes to select multiple entries (on phones, long press a row; the checkboxes appear only while selecting), to reveal download, rename, and the three-dot action menu in the selection toolbar.
+
+| Action | Desktop key |
+| --- | --- |
+| Select a range | Shift-click |
+| Add to the selection | Ctrl/Cmd-click |
+| Select all displayed entries | Ctrl/Cmd+A |
+
+The action menu can invert the displayed selection or copy selected names or full paths. Rename remains available for a single selection. Permissions can also be changed for multiple selected files and folders.
+
+### Phones and narrow lists
+
+Narrow desktop panes prioritize the name, modification time, size and type columns. Permissions and owner/group IDs remain available in Details, and wide panes also show them as columns.
+
+On phones:
+
+- All file tabs share one horizontally scrollable strip, with only the selected tab's directory visible. Hosts, paths and selections stay in their tabs, and returning to desktop restores the two-pane layout.
+- Use **Compare** to choose any two configured tabs.
+- The filename sits above wrapping metadata: permissions, available owner and group IDs, size, and modified date.
+- Tab controls are at least 44px tall and file rows at least 56px tall.
+- Selection and search controls replace the navigation row while in use, leaving more room for the file list.
 
 ## File operations
-
-Engine-local regular UTF-8 files up to 2 MiB can be edited, and their text or raster images previewed in Details. Selected symlinks are refused. Saving checks both contents and file identity, refuses external changes or replacements, and protects paths used by transfers. It also retains the owner, group, access controls and extended attributes. Saving is refused if these cannot be read or retained, metadata exceeds 16 MiB, or the file carries privileged execution attributes.
-
-On Windows, saving retains the owner, group, DACL, integrity label, resource attributes, named streams, extended attributes, creation time and ordinary file attributes. Unsupported attributes such as encryption, compression and read-only state are refused. Ordinary audit SACLs are outside the preservation guarantee.
-
-Save with `Ctrl/Cmd+S`; the editor shows Saving and Saved. In directory comparisons, View text differences opens a read-only line comparison. An absent side is displayed as empty. Each text file is limited to 2 MiB and pinned to the listed revision; changed files must be compared again. Narrow screens use an inline diff.
 
 - Navigate, create, rename, chmod and delete remote entries
 - Select or drag and drop files and folders for upload
 - Download files or folders as ZIP archives
 - Edit UTF-8 text files up to 2 MiB with Monaco Editor
 
-On desktop, use the leading `..` row to move to the parent directory and the navigation controls to move back or forward through visited directories. On phones, the upward button in the toolbar opens the parent folder, and tapping the path shows Back, Forward, Home and Root under it; Refresh and the sort order sit above the list. On desktop, the three-dot **Folder actions** menu offers Home, Root and Copy full path. The current path is a clickable breadcrumb; use its edit control when you need to type a path directly. A path may start with `~` or `~/` (as may the destination of **Move to folder** on a remote host): on a remote host it starts at the directory the SFTP server logs you into (usually the home directory), and on Local at the home directory of the user running the sshc engine. After moving there, the pane shows the absolute path. The `~user` form is not supported. You can filter the current list by name.
+Creation and uploads are grouped in the `+` menu at the upper left.
 
-Select one row, or use the checkboxes to select multiple entries (on phones, long press a row; the checkboxes appear only while selecting), to reveal download, rename, and the three-dot action menu in the selection toolbar. Choose Delete from this menu. A confirmation modal shows the selected paths before deletion; cancelling leaves the files unchanged. The Delete key opens the same confirmation. On desktop, Shift-click selects a range, Ctrl/Cmd-click adds to the selection, and Ctrl/Cmd+A selects all displayed entries. The action menu can invert the displayed selection or copy selected names or full paths. Rename remains available for a single selection. Permissions can also be changed for multiple selected files and folders. Double-click or press Enter to open a folder or view file details. For UTF-8 text files, choose **Edit file** in the details dialog to open the editor. Closing the editor with unsaved changes asks before discarding them. Creation and uploads are grouped in the `+` menu at the upper left.
+### Deleting
 
-Local panes support folder creation, rename, and deletion on the machine running the sshc engine. Deletion bypasses the trash and recursively removes selected folders. Selecting a symlink removes only the link. Deletion and rename of the root, home directory, or folders containing them are refused. sshc temporary files and paths used by transfers are also protected. Deletion is refused if the selection changed after confirmation. Local rename is unavailable on Android.
+Choose Delete from the three-dot action menu. A confirmation modal shows the selected paths before deletion, and cancelling leaves the files unchanged. The Delete key opens the same confirmation.
 
-The editor supports these keys, among others:
+### Dragging between tabs
 
-- Save: `Ctrl/Cmd+S` (the editor shows Saving and Saved)
-- Find: `Ctrl/Cmd+F`
-- Replace: `Ctrl+H` (`Cmd+Option+F` on macOS)
-- Go to line: `Ctrl+G`
-- Toggle line comment: `Ctrl/Cmd+/`
-- Indent: `Tab`, and `Shift+Tab` to outdent
-- Toggle the mode in which `Tab` moves focus: `Ctrl+M` (`Ctrl+Shift+M` on macOS)
-- Suggestions: `Ctrl+Space`. They do not appear on their own while you type.
-- The editor's command palette: `F1`, also available from the right-click menu
+Drag files or folders from the visible tab on one side to the visible tab on the other.
 
-In the editor, `Tab` indents and focus stays in the editor. To move from the editor to **Save** or **Close** with the keyboard, switch to the mode in which `Tab` moves focus, then press `Tab`. Focus moves only within the editor's dialog. Toggling the mode again makes `Tab` indent again. The mode lasts until the editor is closed, and the next file you open starts with `Tab` indenting. The editor's command palette also toggles the mode with "Toggle Tab Key Moves Focus".
+| Drop target | Result |
+| --- | --- |
+| Another host | You choose copy or move |
+| Another directory of the same host | Moves, as it does in a desktop file manager |
+| The directory the rows came from | Nothing |
 
-The editor's command palette lists the other commands, such as folding and multiple cursors, with their keys. Pressing `Esc` closes Find or the editor's command palette and leaves the editor open. Find, the editor's command palette and the right-click menu are shown in English.
+Data streams directly between the two SFTP connections without a plaintext local spool file. A move within the same connection uses a server-side rename when possible.
+
+### Attributes of uploaded files
+
+- An uploaded file is given the modification time of its source (browser uploads, the CLI's `put`, host-to-host copies and transfers with the engine's disk).
+- A newly created file gets the server's default permissions (its umask).
+- A replaced file keeps its own permissions.
+
+### Files on the engine's machine
+
+Local panes work on the machine running the sshc engine. They support folder creation, rename, and deletion.
+
+- Deletion bypasses the trash and recursively removes selected folders. Selecting a symlink removes only the link.
+- Deletion and rename of the root, home directory, or folders containing them are refused.
+- sshc temporary files and paths used by transfers are also protected.
+- Deletion is refused if the selection changed after confirmation.
+- Local rename is unavailable on Android.
+
+### Opening a terminal from a folder
+
+Use the terminal button beside the path, or **Folder actions → Open Terminal here**, to start a terminal in the displayed folder.
+
+| Tab | What starts |
+| --- | --- |
+| Remote | An SSH session on its selected host |
+| Local | The default shell profile on the machine running the sshc engine |
+
+This also applies when you access the Web UI from another device: the shell runs on the engine machine.
+
+A local shell starts with that folder as its working directory. Spaces and quotes in local folder names are preserved, and the shell does not start if the folder is unavailable.
+
+In the other direction, a remote directory reported by OSC 7 can be opened in SFTP from the Terminal action menu.
+
+## Editing text
+
+Choose **Edit file** in the details dialog of a UTF-8 text file to open the editor. Closing the editor with unsaved changes asks before discarding them.
+
+### Editor keys
+
+| Action | Key |
+| --- | --- |
+| Save (the editor shows Saving and Saved) | `Ctrl/Cmd+S` |
+| Find | `Ctrl/Cmd+F` |
+| Replace | `Ctrl+H` (`Cmd+Option+F` on macOS) |
+| Go to line | `Ctrl+G` |
+| Toggle line comment | `Ctrl/Cmd+/` |
+| Indent | `Tab`, and `Shift+Tab` to outdent |
+| Toggle the mode in which `Tab` moves focus | `Ctrl+M` (`Ctrl+Shift+M` on macOS) |
+| Suggestions (they do not appear on their own while you type) | `Ctrl+Space` |
+| The editor's command palette (also in the right-click menu) | `F1` |
+
+The editor's command palette lists the other commands, such as folding and multiple cursors, with their keys. Pressing `Esc` closes Find or the command palette and leaves the editor open. Find, the command palette and the right-click menu are shown in English.
+
+### The Tab key and focus
+
+In the editor, `Tab` indents and focus stays in the editor. To move to **Save** or **Close** with the keyboard:
+
+1. Switch to the mode in which `Tab` moves focus (the command palette's "Toggle Tab Key Moves Focus" also toggles it).
+2. Press `Tab`. Focus moves only within the editor's dialog.
+3. Toggle the mode again to make `Tab` indent again.
+
+The mode lasts until the editor is closed, and the next file you open starts with `Tab` indenting.
+
+### When the remote file changed
 
 If the remote file changed after it was opened in the editor, the editor refuses the save and says so. You can then choose either action:
 
 - **Reload from remote** discards your unsaved changes and reads the current contents. It asks before discarding them.
 - **Overwrite** asks before discarding the changes made on the remote, then writes the editor's contents over the remote file. If the remote file changes again while you confirm, the editor does not overwrite it and says so.
 
-Sort by name, type, size or modified time. Sizes are shown in KiB, MiB or GiB; the details dialog also gives the exact byte count. Permissions appear below the entry name. The selected host and directory are reflected in navigation state, so a terminal remote-path action can open the same location.
+### Editing files on the engine's machine
 
-On desktop, drag a tab onto the file list to split the view into two panes. With one pane, dropping on the left or right half moves that tab into a new pane on that side and leaves a blank tab behind. With two panes, dropping on the other pane moves the tab there, and a pane whose last tab leaves closes. There are at most two panes, and the handle between them resizes the split. With the keyboard, select a tab and press `Shift`+`←` or `Shift`+`→` for the same moves. Drag a tab along its strip to reorder it, or onto the other pane's strip to put it at that place there. The selected tab's **…** (also a right-click on any tab) offers Move left, Move right, Move to the other pane (Open in a new right pane while there is one pane), and Swap the left and right panes; `Ctrl`+`Shift`+`←` or `→` reorders from the keyboard. Reordering within a pane and swapping the panes keep the tabs connected. Both panes have their own tab strip and `+` action, with up to eight independent tabs per side. Tabs share one width whatever the host name; they scroll horizontally when they exceed the pane width, and `+` stays at the right edge. Each tab remembers its host and location on the device, as does the split.
+Engine-local regular UTF-8 files up to 2 MiB can be edited, and their text or raster images previewed in Details. Selected symlinks are refused.
 
-Drag files or folders from the currently visible tab on one side to the visible tab on the other. Between two hosts you choose copy or move; a drop into another directory of the same host moves, as it does in a desktop file manager, and a drop back into the directory the rows came from does nothing. Data streams directly between the two SFTP connections without a plaintext local spool file. A move within the same connection uses a server-side rename when possible.
+Saving checks both contents and file identity, refuses external changes or replacements, and protects paths used by transfers.
 
-An uploaded file is given the modification time of its source (browser uploads, the CLI's `put`, host-to-host copies and transfers with the engine's disk). A newly created file gets the server's default permissions (its umask); a replaced file keeps its own.
+Saving also retains the owner, group, access controls and extended attributes. It is refused when:
+
+- These cannot be read or retained
+- Metadata exceeds 16 MiB
+- The file carries privileged execution attributes
+
+On Windows:
+
+| Attributes | Result |
+| --- | --- |
+| Owner, group, DACL, integrity label, resource attributes, named streams, extended attributes, creation time and ordinary file attributes | Retained |
+| Unsupported attributes such as encryption, compression and read-only state | Saving is refused |
+| Ordinary audit SACLs | Outside the preservation guarantee |
 
 ## Thumbnails and the grid
 
-Image rows in the list carry a small thumbnail. **List | Grid** above the list switches to a grid of larger pictures, and each tab remembers its choice. In the grid, a tap, a long press, a click, a right click and the keyboard do what they do in the list, and the arrow keys move to the neighbour on each side.
+Image rows in the list carry a small thumbnail. **List | Grid** above the list switches to a grid of larger pictures, and each tab remembers its choice.
 
-The sshc engine reads an image and shrinks it. It does so only for PNG, JPEG and GIF files in rows in view, and a row that scrolls out of view cancels its read. Files are read one at a time on the SFTP connection already in use, so no connection is added; if that connection has closed after going unused, one is opened (never for a host answered with a one-time code). A photo with a small picture in its Exif header costs its first 68 KiB or so, and any other image is read whole, up to 4 MiB. Thumbnails stay in memory only.
+In the grid, a tap, a long press, a click, a right click and the keyboard do what they do in the list, and the arrow keys move to the neighbour on each side.
+
+### How thumbnails are made
+
+The sshc engine reads an image and shrinks it.
+
+- It does so only for PNG, JPEG and GIF files in rows in view, and a row that scrolls out of view cancels its read.
+- Files are read one at a time on the SFTP connection already in use, so no connection is added. If that connection has closed after going unused, one is opened (never for a host answered with a one-time code).
+- A photo with a small picture in its Exif header costs its first 68 KiB or so, and any other image is read whole, up to 4 MiB.
+- Thumbnails stay in memory only.
 
 These keep the icon of their kind:
 
@@ -79,62 +302,134 @@ These keep the icon of their kind:
 
 In the phone app the sshc engine runs on the phone, so what it reads for thumbnails counts as mobile data. **Show thumbnails of images** in Settings > SFTP turns them off. It is a preset's setting, so it can be off on the phone alone.
 
-Symlinks are listed as `name → target`. A link to a directory opens as that directory; a link to a file is what details, preview, edit and download act on. Saving an edited file rewrites the file the link points to and leaves the link in place. A link whose target cannot be found is marked `(not found)` and cannot be opened. Copy, move, delete, compare and transfers with the engine's disk take the link itself and never follow it. A pane showing the engine's disk lists links the same way: a link opens even when its target is an absolute path, but the link itself cannot be transferred with the engine.
+## Symbolic links
 
-![The two-pane SFTP view with independent tabs on each side](/images/sftp-two-pane-en.png)
+Symlinks are listed as `name → target`, also in a pane showing the engine's disk. A link whose target cannot be found is marked `(not found)` and cannot be opened.
 
-**Compare** sits in the bar at the top of the screen. When both panes of a split view are connected, it recursively inspects the directories in the currently selected left and right tabs by metadata such as size, modification time, permissions, and type. Otherwise you first choose the two tabs to compare. It appears only while at least two tabs are connected (a local tab counts) and the selected tab is one of them. The preview distinguishes left-only, right-only, changed, and type-mismatched entries. For comparisons between remote tabs, select only the entries you want, then copy left to right or right to left. Comparison never deletes entries that exist only on the destination.
+| Action | What it acts on |
+| --- | --- |
+| Open a link to a directory | That directory |
+| Details, preview, edit and download of a link to a file | The file the link points to |
+| Save an edited file | Rewrites the file the link points to and leaves the link in place |
+| Copy, move, delete, compare and transfers with the engine's disk | The link itself, never followed |
 
-Local tabs can also be compared. Comparisons involving a local tab display differences without modifying files.
+On the engine's disk, a link opens even when its target is an absolute path, but the link itself cannot be transferred with the engine.
 
-![Comparison preview for two remote directories](/images/sftp-compare-en.png)
+### Creating and changing links
 
-Use the terminal button beside the path, or **Folder actions → Open Terminal here**, to start a terminal in the displayed folder. A remote tab opens an SSH session on its selected host. A local tab opens the default shell profile on the machine running the sshc engine, with that folder as its working directory. This also applies when you access the Web UI from another device: the shell runs on the engine machine. Spaces and quotes in local folder names are preserved. The shell does not start if the folder is unavailable. In the other direction, a remote directory reported by OSC 7 can be opened in SFTP from the Terminal action menu.
+The remote creation menu offers **Create symbolic link**. Enter a name and a target.
 
-Narrow desktop panes prioritize the name, modification time, size and type columns. Permissions and owner/group IDs remain available in Details, and wide panes also show them as columns. Phones show the filename above wrapping metadata: permissions, available owner and group IDs, size, and modified date. All file tabs share one horizontally scrollable strip, with only the selected tab's directory visible. Hosts, paths and selections stay in their tabs; returning to desktop restores the two-pane layout. Use **Compare** to choose any two configured tabs. Tab controls are at least 44px tall and file rows at least 56px tall. Selection and search controls replace the navigation row while in use, leaving more room for the file list.
+- The target may be relative or absolute, and may not exist yet.
+- Existing entries are never overwritten.
 
-The remote creation menu offers **Create symbolic link**. Enter a name and a relative or absolute target, including a target that does not yet exist. Existing entries are never overwritten. **Change link target** in the details dialog replaces only the link itself and leaves the target contents unchanged. Servers without safe link replacement support refuse this change.
+**Change link target** in the details dialog replaces only the link itself and leaves the target contents unchanged. Servers without safe link replacement support refuse this change.
 
-The listing and details show owner UID and group GID when supplied by the server. **Change owner and group** in the details dialog accepts numeric UID/GID values from 0 to 4294967295 for regular files and directories. Account names and recursive ownership changes are not supported. The server must support the no-follow `lsetstat@openssh.com` extension. Missing attributes, unsupported operations, and insufficient permissions are reported. Ownership changes through symbolic links are refused. If the entry changes during confirmation, refresh the listing and reopen the dialog.
+## Owner and group
 
-Below the remote listing (on phones, under **Folder actions**), the available disk space for the authenticated user and total capacity are shown in a unit that fits their size, such as MiB, GiB or TiB. A server without capacity reporting support still provides a usable directory listing.
+The listing and details show owner UID and group GID when supplied by the server. **Change owner and group** in the details dialog accepts numeric UID/GID values from 0 to 4294967295 for regular files and directories.
+
+- The server must support the no-follow `lsetstat@openssh.com` extension.
+- Account names, recursive changes and changes through symbolic links are not supported.
+- Missing attributes, unsupported operations, and insufficient permissions are reported.
+- If the entry changes during confirmation, refresh the listing and reopen the dialog.
 
 ## Change permissions for selected remote entries
 
-Select remote files and folders with their checkboxes, then choose **Change selected permissions** from the selection toolbar's three-dot menu. Enter separate octal modes for files and folders; the defaults are `644` and `755`. **Apply to folder contents recursively** also applies those modes to each matching type below selected folders.
+1. Select remote files and folders with their checkboxes.
+2. Choose **Change selected permissions** from the selection toolbar's three-dot menu.
+3. Enter separate octal modes for files and folders. The defaults are `644` and `755`.
+4. To apply them below selected folders too, choose **Apply to folder contents recursively**. Each type gets its own mode.
+5. Choose **Review changes** to validate the targets and open a confirmation modal.
+6. Check the selection count, the file and folder target counts including recursive contents, both modes and the recursive setting, then choose **Apply**.
 
-Choose **Review changes** to validate the targets and open a confirmation modal. It shows the selection count, the file and folder target counts including recursive contents, both modes, and the recursive setting. Choose **Apply** to proceed. Cancelling either modal changes no permissions. Single-entry changes and applying one mode recursively to a single folder remain available.
+Cancelling either modal changes no permissions. Single-entry changes and applying one mode recursively to a single folder remain available.
 
-Symbolic links are never followed or changed. A selection containing a link has no permissions action. Links found inside recursive folders are skipped and counted in the confirmation. Local panes do not offer chmod.
+### Limits and conditions
 
-The selection is limited to 200 entries. All selected trees share a 20,000-entry budget, with a depth limit of 32. Changes detected before execution refuse the entire selection. Connection or permission failures after execution starts can leave partial changes. The dialog reports the count of confirmed changes; partial changes are not rolled back automatically. Refresh the listing, inspect permissions, and select only the entries that still need changes.
+| Item | Limit or condition |
+| --- | --- |
+| Selection | Up to 200 entries |
+| Recursive walk | All selected trees share a 20,000-entry budget, with a depth limit of 32 |
+| Server | `lsetstat@openssh.com` version 1 for no-follow attribute changes. Unsupported servers refuse permission changes, including single-entry changes |
+| Symbolic links | Never followed or changed. A selection containing a link has no permissions action. Links found inside recursive folders are skipped and counted in the confirmation |
+| Local panes | Do not offer chmod |
 
-The server must support `lsetstat@openssh.com` version 1 for no-follow attribute changes. Unsupported servers refuse permission changes, including single-entry changes. SFTP cannot atomically compare an entry type and change its permissions, so concurrent changes made by other clients remain a best-effort boundary.
+### When something changes on the way
+
+- Changes detected before execution refuse the entire selection.
+- Connection or permission failures after execution starts can leave partial changes. The dialog reports the count of confirmed changes, and partial changes are not rolled back automatically. Refresh the listing, inspect permissions, and select only the entries that still need changes.
+- SFTP cannot atomically compare an entry type and change its permissions, so concurrent changes made by other clients remain a best-effort boundary.
 
 ## Search file names or contents
 
-In a remote pane, open the settings button beside the search field to choose **Name** or **Content**. Enter a query and press Enter to search below the current directory. Name search retains its case-insensitive behavior. Content search finds exact, case-sensitive text across files. Each match shows its path, line number and a short snippet; select a match to open that line in the editor. If the file changed after the search, search again.
+In a remote pane, open the settings button beside the search field to choose **Name** or **Content**. Enter a query and press Enter to search below the current directory.
 
-Content search reads regular UTF-8 files only. Files with missing type, size or modification-time attributes are also skipped. Links, binary files and files over 2 MiB are skipped. A search reads up to 64 MiB of file contents in total and stops at 200 matching lines, 20,000 entries or 32 directory levels. Results explain unreadable entries and other omissions. Use **Stop search** to cancel the request. Content search is not available for local tabs.
+| Search | How it matches |
+| --- | --- |
+| **Name** | Case-insensitive, on file names |
+| **Content** | Exact, case-sensitive text across files. Not available for local tabs |
+
+Each content match shows its path, line number and a short snippet. Select a match to open that line in the editor. If the file changed after the search, search again. Use **Stop search** to cancel the request.
+
+### What content search reads
+
+It reads regular UTF-8 files only. These are skipped, and results explain unreadable entries and other omissions:
+
+- Files with missing type, size or modification-time attributes
+- Links and binary files
+- Files over 2 MiB
+
+| Limit of one search | Value |
+| --- | --- |
+| File contents read in total | 64 MiB |
+| Matching lines | 200 |
+| Entries | 20,000 |
+| Directory levels | 32 |
+
+## Compare folders
+
+**Compare** sits in the bar at the top of the screen. It appears only while at least two tabs are connected (a local tab counts) and the selected tab is one of them.
+
+- When both panes of a split view are connected, it recursively inspects the directories in the currently selected left and right tabs.
+- Otherwise you first choose the two tabs to compare.
+
+It compares metadata such as size, modification time, permissions, and type, and distinguishes left-only, right-only, changed, and type-mismatched entries.
+
+| Tabs compared | What you can do |
+| --- | --- |
+| Two remote tabs | Select only the entries you want, then copy left to right or right to left. Comparison never deletes entries that exist only on the destination |
+| A local tab | See differences without modifying files |
+
+![Comparison preview for two remote directories](/images/sftp-compare-en.png)
+
+### Text differences
+
+View text differences opens a read-only line comparison.
+
+- An absent side is displayed as empty.
+- Each text file is limited to 2 MiB and pinned to the listed revision. Changed files must be compared again.
+- Narrow screens use an inline diff.
 
 ## Compare contents even when size and modification time match
 
 **Compare** defaults to **Metadata**. Choose **Content (SHA256)** to stream regular files from both sides and compare their SHA256 hashes. Different bytes are detected even when size and modification time match. File content comparison ignores modification time and permissions. Both local-to-remote and remote-to-remote comparisons are supported.
 
-Reading both sides uses network traffic and takes longer than metadata comparison. File-content reads are limited to 256 MiB in total, with the existing 20,000-entry traversal budget. Links are not followed. Over-budget and unsupported files are shown as **Not compared**; these entries prevent the result from confirming a whole-folder match. Closing the dialog or changing modes cancels the current reads.
+Reading both sides uses network traffic and takes longer than metadata comparison.
+
+| Item | Limit or behaviour |
+| --- | --- |
+| File-content reads | 256 MiB in total |
+| Traversal | 20,000 entries |
+| Links | Not followed |
+| Over-budget and unsupported files | Shown as **Not compared**. These entries prevent the result from confirming a whole-folder match |
+| Closing the dialog or changing modes | Cancels the current reads |
 
 Changes detected before or after reading end the comparison as a conflict. SFTP servers do not necessarily expose file identities, so a replacement preserving all observable metadata may be undetectable. The operation does not take a simultaneous snapshot of the whole directory.
 
 ## Transfer Manager
 
-The Transfer Manager is docked below the file list. Files and folders share one queue, with two concurrent transfers by default and a configurable limit from one to eight. Its compact state shows the active count, aggregate progress, and speed; expand it for per-file progress, speed, remaining time, and controls. Its action menu can pause, resume or cancel all transfers, and failed files in a batch can be retried independently.
+The Transfer Manager is docked below the file list, and files and folders share one queue. Its compact state shows the active count, aggregate progress, and speed.
 
-Regular file uploads and downloads support up to 512 GiB. By default a file travels over one SFTP connection. Raising the connection count under **Settings → SFTP** divides files of at least 100 MiB into 32 MiB ranges and transfers them over that many independent connections. A host that authenticates with a one-time code transfers over one connection whatever the setting. Upload ranges write to a remote temporary file; the engine records completed ranges, verifies the full contents, and atomically renames the file when complete. File downloads use HTTP Range to resume when the retained local prefix still matches the remote revision. Even with an empty queue, **Settings → SFTP** accepts any allowed split threshold, stream count from one to 128, and chunk size; one stream disables splitting. The engine needs temporary free space roughly equal to the downloaded file so it can preserve a safe resumable snapshot.
+Expand it for per-file progress, speed, remaining time, and controls. Its action menu can pause, resume or cancel all transfers, and failed files in a batch can be retried independently. The engine persists the queue, so queued, paused, and recoverable jobs are restored after an engine restart.
 
-The engine Transfer Manager owns the queue and persists it in `~/.ssh/sshc/transfers.json`. Queued, paused, and recoverable jobs are restored after an engine restart. Remote-to-remote transfers run entirely in the engine and continue even when the SFTP view or browser is closed.
-
-The browser or WebView still handles local file I/O for uploads and downloads. Those transfers continue when you navigate away from SFTP within the same application, but byte transfer stops when the browser or WebView closes. After a reload, an upload requires you to select the same local file again. A folder ZIP download restarts from byte zero rather than resuming.
-
-See [Transfer Manager](/en/sftp/transfers) for states, recovery, and cancellation.
-
-Transfer rows group the name, source → destination, size, speed, status, and actions. Paused, reconnecting, confirmation-needed, and failed jobs are counted separately from running transfers. Open a row's details for full paths, its saved exclusion rules, and failure information. **Transfer settings** opens **Settings → SFTP**, grouping speed and recovery, queue and finished transfers, split transfers, and exclusions.
+See [Transfer Manager](/en/sftp/transfers) for paths, states, recovery, and cancellation.
