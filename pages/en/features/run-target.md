@@ -62,4 +62,14 @@ While an action runs, the dialog shows what the host's `sshc` writes as it is wr
 
 ## How it works
 
-This machine's engine opens a single SSH connection to the host and forwards terminal operations and their input and output through it. Both machines listen on `127.0.0.1` only. It signs in to the host's engine the way that host's own `sshc` command does, without adding a browser registration there.
+This machine's engine opens a single SSH connection to the host and forwards terminal operations and their input and output through it.
+
+```mermaid
+flowchart TD
+  browser["This machine's browser"] <--> local["This machine's engine<br/>Connections, SFTP, Vault, settings"]
+  local <-- "One SSH connection" --> remote["The host's engine"]
+  remote <--> shell["Terminals"]
+```
+
+- Both machines listen on `127.0.0.1` only.
+- It signs in to the host's engine the way that host's own `sshc` command does, without adding a browser registration there.

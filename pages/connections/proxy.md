@@ -18,6 +18,20 @@ Host internal
   ProxyJump bastion
 ```
 
+最終接続先へのSSHは、踏み台へのSSH接続の中を通ります。ホスト鍵の確認と認証は、どちらもsshcエンジンが行います。
+
+```mermaid
+sequenceDiagram
+  participant E as sshcエンジン
+  participant B as bastion
+  participant I as internal
+  E->>B: SSH接続
+  Note over E,B: ホスト鍵の確認<br/>と認証 · 1/2
+  B->>I: internalへ転送
+  E->>I: 転送の中でSSH接続
+  Note over E,I: ホスト鍵の確認<br/>と認証 · 2/2
+```
+
 ## 認証
 
 踏み台と最終接続先は、別々の認証先です。使用する秘密鍵はそれぞれの接続設定へ指定し、鍵のパスフレーズとアカウントパスワードはVaultで各接続先へ割り当ててください。2FAなどの追加認証は、対話Terminalで入力できます。
@@ -28,6 +42,9 @@ Host internal
 
 `ProxyCommand`を設定した接続先では、sshcを実行しているローカルマシン上でコマンドを起動し、その標準入出力をSSH接続に使います。Unix系OSでは`/bin/sh`、Windowsでは`cmd.exe`を介して起動します。接続ログには、実行するコマンドが表示されます。
 
-同じ接続先に`ProxyJump`と`ProxyCommand`の両方が書かれている場合は、OpenSSHと同じく先に読み込んだ方だけを使い、後の行は無視します。無視した行は、接続先の［最終的な値］タブに表示されます。また、すでに別の踏み台へ接続した後のホップに`ProxyCommand`がある場合も実行されません。コマンドは踏み台ではなく、sshcを実行しているローカルマシン上で動くためです。
+次の場合は`ProxyCommand`を実行しません。
+
+- 同じ接続先に`ProxyJump`と`ProxyCommand`の両方が書かれている場合: OpenSSHと同じく先に読み込んだ方だけを使い、後の行は無視します。無視した行は、接続先の［最終的な値］タブに表示されます。
+- すでに別の踏み台へ接続した後のホップに`ProxyCommand`がある場合: コマンドは踏み台ではなく、sshcを実行しているローカルマシン上で動くためです。
 
 `ProxyCommand`はローカルコマンドを実行できる設定です。内容を確認し、信頼できるSSH設定だけを使用してください。
