@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, openApplication, openSection, openSettingsPage, test, openLocalShell } from "./support/environment";
-import { drawnRows, terminalKeyboard, terminalScreen, terminalScrollbarSlider } from "./support/terminal";
+import { drawnRows, terminalKeyboard, terminalOverviewRuler, terminalScreen, terminalScrollbarSlider } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
 
@@ -263,7 +263,7 @@ test("opens forwarding management only for an SSH terminal", async ({ page, inst
 test("draws no bright line beside the scrollbar", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openLocalShell(page);
-  const ruler = page.locator(".xterm-decoration-overview-ruler").first();
+  const ruler = terminalOverviewRuler(page);
   await expect(ruler).toHaveCount(1);
   // xterm draws the border down the left edge of this canvas, and the canvas is left alone everywhere else.
   const paintedPixels = () => ruler.evaluate((canvas: HTMLCanvasElement) => {
