@@ -259,3 +259,18 @@ test("opens forwarding management only for an SSH terminal", async ({ page, inst
     await page.screenshot({ path: join(visualDirectory, "port-forwarding-live-mobile.png"), fullPage: true });
   }
 });
+
+test("draws no bright line beside the scrollbar", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const ruler = page.locator(".xterm-decoration-overview-ruler").first();
+  await expect(ruler).toHaveCount(1);
+  // xterm draws the border down the left edge of this canvas, and the canvas is left alone everywhere else.
+  const paintedPixels = () => ruler.evaluate((canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext("2d");
+    if (context === null || canvas.width === 0 || canvas.height === 0) return -1;
+    const { data } = context.getImageData(0, 0, 1, canvas.height);
+    return data.filter((_, index) => index % 4 === 3 && data[index] !== 0).length;
+  });
+  await expect.poll(paintedPixels).toBe(0);
+});
