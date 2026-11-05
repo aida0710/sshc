@@ -1,4 +1,5 @@
 import { defineConfig } from "vitepress";
+import { renderMermaidFences } from "./mermaidFence";
 
 const repository = "https://github.com/aida0710/sshc";
 const base = process.env.SSHC_DOCS_BASE ?? "/sshc/";
@@ -94,6 +95,7 @@ export default defineConfig({
   base,
   cleanUrls: true,
   lastUpdated: true,
+  markdown: { config: renderMermaidFences },
   sitemap: { hostname: "https://aida0710.github.io/sshc/" },
   head: [
     ["meta", { name: "theme-color", content: "#111416" }],
