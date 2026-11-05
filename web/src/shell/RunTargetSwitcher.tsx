@@ -111,11 +111,13 @@ export function RunTargetSwitcher({
         aria-expanded={open}
         aria-label={t("runTarget.choose", { name: current })}
         onClick={() => setOpen((value) => !value)}
-        className={`flex h-10 w-full items-center gap-2 rounded-lg bg-well px-2.5 text-[12.5px] md:h-[34px] ${open ? "ring-1 ring-accent" : ""}`}
+        className={`flex h-10 w-full items-center gap-2 rounded-lg bg-well px-2.5 ${open ? "ring-1 ring-accent" : ""}`}
       >
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-live" />
-        <span className="shrink-0 text-ink-muted">{t("runTarget.label")}</span>
-        <span title={current} className="min-w-0 grow truncate text-left font-mono font-semibold text-ink">{current}</span>
+        <span className="flex min-w-0 grow flex-col text-left">
+          <span className="truncate text-[11px] leading-[15px] text-ink-muted">{t("runTarget.label")}</span>
+          <span title={current} className="truncate font-mono text-[12.5px] font-semibold leading-4 text-ink">{current}</span>
+        </span>
         {targets.unread.size > 0 ? <UnreadMark label={t("runTarget.unreadElsewhere")} /> : null}
         <Icon name="chevronRight" className={`size-3.5 shrink-0 text-ink-faint transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />
       </button>

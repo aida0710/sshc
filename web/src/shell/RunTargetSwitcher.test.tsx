@@ -103,7 +103,7 @@ describe("RunTargetSwitcher", () => {
   it("marks the switch and the engine whose terminals sent a notification nobody has seen", async () => {
     const user = userEvent.setup();
     render(<RunTargetSwitcher targets={targets({ unread: new Set(["r540"]) })} aliases={["r540"]} hosts={[]} />);
-    const trigger = screen.getByRole("button", { name: /^Choose where terminals run/ });
+    const trigger = screen.getByRole("button", { name: /^Choose the remote session engine/ });
     expect(within(trigger).getByText("Another engine has new notifications")).toBeInTheDocument();
     await user.click(trigger);
     const list = screen.getByRole("list", { name: "Engines" });
@@ -114,7 +114,7 @@ describe("RunTargetSwitcher", () => {
     const user = userEvent.setup();
     const state = targets();
     render(<RunTargetSwitcher targets={state} aliases={["r540"]} hosts={[]} />);
-    await user.click(screen.getByRole("button", { name: /^Choose where terminals run/ }));
+    await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     const list = screen.getByRole("list", { name: "Engines" });
     await user.click(within(list).getByRole("button", { name: /^r540/ }));
     expect(state.select).toHaveBeenCalledWith("r540");
@@ -124,7 +124,7 @@ describe("RunTargetSwitcher", () => {
     const user = userEvent.setup();
     const state = targets();
     render(<RunTargetSwitcher targets={state} aliases={["r540"]} hosts={[]} />);
-    await user.click(screen.getByRole("button", { name: /^Choose where terminals run/ }));
+    await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     expect(screen.getAllByRole("button", { name: /^Actions for engine/ })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Actions for engine r540" }));
     await user.click(screen.getByRole("button", { name: "Open its full screen in a new tab" }));
@@ -142,7 +142,7 @@ describe("RunTargetSwitcher", () => {
     const status = vi.fn(async () => ({ alias: "r540", version: "v0.51.0", vault: true, unlocked: false, passwordless: false, sessions: 3 }));
     const state = targets({ api: enginesApi({ control, actionLog, status }) });
     render(<SwitcherWithDialogs state={state} />);
-    await user.click(screen.getByRole("button", { name: /^Choose where terminals run/ }));
+    await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     await user.click(screen.getByRole("button", { name: "Actions for engine r540" }));
     await user.click(screen.getByRole("button", { name: "Engine information…" }));
 

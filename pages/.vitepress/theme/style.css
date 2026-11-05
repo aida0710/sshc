@@ -243,7 +243,8 @@ html:not(.dark) {
 
 .sshc-feature-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Six columns so that a wide card takes half the row and the others a third. */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 1px;
   margin-top: 28px;
   overflow: hidden;
@@ -253,9 +254,14 @@ html:not(.dark) {
 }
 
 .sshc-feature {
+  grid-column: span 2;
   min-height: 0;
   padding: 0;
   background: var(--vp-c-bg-soft);
+}
+
+.sshc-feature-wide {
+  grid-column: span 3;
 }
 
 .sshc-feature-image {
@@ -326,6 +332,7 @@ html:not(.dark) {
   .sshc-action { justify-content: center; }
   .sshc-home-section { margin-top: 72px; }
   .sshc-feature-grid { grid-template-columns: 1fr; }
+  .sshc-feature { grid-column: auto; }
   .sshc-feature-body { padding: 20px 22px 24px; }
   .sshc-feature h3 { margin-top: 18px; }
   .sshc-command { align-items: flex-start; flex-direction: column; padding: 20px; }

@@ -97,7 +97,7 @@ test("groups sessions into workspaces and keeps a hidden one out of the tree", a
   await expect(workspace).toContainText("1");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
-    // Capture the current workspace tree and run-target control before hiding the session.
+    // Capture the current workspace tree before hiding the session.
     const terminal = page.getByRole("region", { name: /^Terminal for / });
     await expect(terminal).toContainText(/[$#%>]/);
     // Keep the capture independent of the machine's user name and hostname.
@@ -107,10 +107,6 @@ test("groups sessions into workspaces and keeps a hidden one out of the tree", a
     await expect(drawnRows(page)).toHaveText("sshc@localhost:~$");
     await page.mouse.move(0, 0);
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-desktop.png`, animations: "disabled" });
-    await navigation.getByRole("button", { name: /^Choose where terminals run/ }).click();
-    await expect(navigation.getByRole("list", { name: "Engines" })).toBeVisible();
-    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/run-target-desktop.png`, animations: "disabled" });
-    await page.keyboard.press("Escape");
   }
 
   const session = tree.getByRole("button", { name: /^Actions for / });
