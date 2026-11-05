@@ -133,7 +133,7 @@ After the next start, once the Vault is unlocked, sshc asks whether to reopen th
 - **Don't reopen** deletes the record, and sshc does not ask again.
 - If the engine stops before you answer, it asks again on the next start.
 
-A run target (an sshc engine on an SSH host) works the same way: after it restarts, sshc asks the first time you use that run target with its Vault unlocked.
+A [remote session](./remote-session) works the same way: after the engine on the host restarts, sshc asks the first time you choose that engine with its Vault unlocked.
 
 ### What is not reopened
 
@@ -323,11 +323,11 @@ The file is read only when you click its path. The kind of session decides where
 flowchart TD
   press["Click a path"] --> kind{"Kind of session"}
   kind -- Local shell --> engine["The engine's machine"]
-  kind -- Shell on a run target --> target["That run target"]
+  kind -- Shell in a remote session --> target["That engine's machine"]
   kind -- SSH --> host["That host"]
 ```
 
-An SSH session opened on a run target is read from this machine with the same alias only when this machine has that alias and it takes it to the same destination (HostName, Port and User) as the run target does. Otherwise, so that no other machine's file is shown, clicking the path opens a menu with **Copy link** only.
+An SSH session opened in a remote session is read from this machine with the same alias only when this machine has that alias and it takes it to the same destination (HostName, Port and User) as the remote sshc engine does. Otherwise, so that no other machine's file is shown, clicking the path opens a menu with **Copy link** only.
 
 ### Which paths become links
 
@@ -352,7 +352,7 @@ These are not linked:
 - Ambiguous unquoted output, to avoid opening only part of a path
 - File URIs with a host, such as `file://host/…`
 - The `~user/` form
-- Windows paths in SSH sessions or shells on a run target
+- Windows paths in SSH sessions or shells in a remote session
 
 ### Relative paths and the home folder
 
@@ -361,7 +361,7 @@ A relative path can be clicked when its name ends in a common extension: images,
 | Session | Working folder | Home folder |
 | --- | --- | --- |
 | Local shell on Linux | The engine looks it up | The engine machine's home |
-| Shell on a run target | On Linux, the engine looks it up | The home returned by SFTP |
+| Shell in a remote session | On Linux, the engine looks it up | The home returned by SFTP |
 | Local shell on macOS or Windows | The folder the shell reported through OSC 7. It cannot open the path when the shell reports none | The engine machine's home |
 | SSH session | The folder the shell reported through OSC 7. It cannot open the path when the shell reports none | The home returned by SFTP |
 
@@ -372,7 +372,7 @@ If the home folder cannot be read, sshc explains why the path cannot be opened.
 While a preview is open, the left and right arrow keys, or **Previous** and **Next**, move to the other files the same terminal printed (paths ending in the extensions above).
 
 - While text is shown, the arrow keys inside the editor move its cursor.
-- In an SSH session opened on a run target, it works only when the file can be read as above.
+- In an SSH session opened in a remote session, it works only when the file can be read as above.
 
 ## Images and character widths
 

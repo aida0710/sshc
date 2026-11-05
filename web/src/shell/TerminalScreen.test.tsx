@@ -96,7 +96,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 describe("TerminalScreen while the run target refuses its session list", () => {
   it.each([
     ["remote_engine_unreachable", undefined, "Could not connect to r100",
-      "The engine terminals run on cannot be reached. Reconnect, or switch back to localhost."],
+      "The remote sshc engine cannot be reached. Reconnect, or switch back to localhost."],
     ["remote_engine_not_running", undefined, "Could not connect to r100",
       "The sshc engine is not running on r100. Start it there with sshc service install or sshc open."],
     ["remote_engine_connect_failed", "host_key_unknown", "Could not connect to r100 over SSH",

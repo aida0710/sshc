@@ -5,7 +5,7 @@ description: Keep multiple splits of up to four panes and switch between them in
 
 # Split view
 
-Arrange SSH and local shell sessions in up to four panes. You can choose sessions from any workspace on the selected run target.
+Arrange SSH and local shell sessions in up to four panes. You can choose sessions from any workspace on the selected sshc engine.
 
 ## Arrange sessions
 
@@ -45,6 +45,6 @@ The selected pane has a colored border. Choose **…** → **Dissolve** on a spl
 
 Mobile widths show one pane at a time. If you narrow the window during split view, switch panes using the session names at the top. The sidebar still lets you switch between splits. Widening the window restores the split.
 
-Splits and arrangements are not saved to the server or browser storage. Reloading the browser tab or changing the run target clears split view.
+Splits and arrangements are not saved to the server or browser storage. Reloading the browser tab or switching the remote session's engine clears split view.
 
 See [Workspaces](./workspace) for grouping sessions in the sidebar.

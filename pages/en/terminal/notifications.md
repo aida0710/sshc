@@ -12,7 +12,7 @@ The sshc terminal understands the standard escape sequences that programs alread
 | Rename the pane | OSC 0, OSC 1, OSC 2 | zsh/bash prompt setup, vim, tmux, Claude Code, Codex |
 | Raise a notification | OSC 9 (iTerm2 style), OSC 99 (kitty style), OSC 777 (rxvt/tmux style) | Claude Code, Codex, notify commands such as `cmux notify` |
 | Show progress | OSC 9;4 (ConEmu style) | `cargo`, `winget`, and other commands that report progress to Windows Terminal or Ghostty |
-| Say what a program is doing | OSC 7501 (Program Status Protocol) | Programs that support it, or a shell function |
+| Say what a program is doing | OSC 7501 (Program Status Protocol) | Claude Code, other programs that support it, or a shell function |
 
 ## Pane titles
 
@@ -78,7 +78,7 @@ When a program reports its state (working, waiting for you, done, failed) with [
 - Done and failed clear once you view the session. As with unread notifications, this browser decides whether you have seen it.
 - Idle shows no mark. A session that is connecting, reconnecting or has ended shows its connection state instead.
 - In a browser, when a program starts waiting for input while the tab is in the background or the window does not have the focus, sshc shows a browser notification and plays the selected sound. Clicking it opens that session, and sshc takes it back once the program stops waiting. A wait that began while you were on another session is announced once, when you leave sshc. sshc asks for permission once with a notice, the first time a program reports its status; you can also allow it later under Settings → Notifications.
-- The Android app raises an Android notification when a program starts waiting for you while sshc is closed. Tapping it opens the session, and it goes away when the program stops waiting. The sound and the pop-up follow the "Programs waiting for you" notification channel in Android's settings. The app asks for the notification permission once, under Notices, the first time it receives a program status. For sessions on a run target, the notification comes only for the run target selected, and while the app's screen keeps running in the background.
+- The Android app raises an Android notification when a program starts waiting for you while sshc is closed. Tapping it opens the session, and it goes away when the program stops waiting. The sound and the pop-up follow the "Programs waiting for you" notification channel in Android's settings. The app asks for the notification permission once, under Notices, the first time it receives a program status. For remote sessions, the notification comes only for the sshc engine selected, and while the app's screen keeps running in the background.
 
 To try it, run this inside a pane, then open another session and wait:
 
@@ -86,7 +86,18 @@ To try it, run this inside a pane, then open another session and wait:
 printf '\e]7501;state=working\e\\'; sleep 5; printf '\e]7501;state=done:msg=%s\e\\' "$(printf 'Docs built' | base64)"
 ```
 
+## Claude Code status
+
+Claude Code reports its own state over OSC 7501. Start it, and the session list shows when it is working, needs permission, has a question or is done, with no settings or hooks.
+
+- Needs permission is followed by what it waits for, as in `Needs permission · approve Bash: npm test`.
+- Done is followed by the summary Claude Code sent, and clears once you view the session.
+
+Inside tmux, only needs permission and has a question are shown. See [Inside tmux](#inside-tmux).
+
 ## Receiving Claude Code notifications
+
+Notifications for needs permission and has a question arrive with no setup (see [Program status](#program-status)). To also receive the desktop notifications Claude Code sends itself, set the following.
 
 By default Claude Code sends desktop notifications only when it detects Ghostty, Kitty, or iTerm2. sshc is not part of that detection, so set the channel explicitly in `~/.claude/settings.json`. `iterm2` sends OSC 9 and `kitty` sends OSC 99; sshc accepts both.
 
