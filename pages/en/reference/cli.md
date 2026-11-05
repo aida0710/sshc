@@ -72,7 +72,15 @@ Background output is appended to `~/.ssh/sshc/logs/engine.log` (`%USERPROFILE%\.
 
 Interactive secrets such as the Vault master password display one `*` per typed character instead of the value. Backspace and `Ctrl+U` update the mask, and the plaintext is never written to Terminal scrollback.
 
-`sshc service` manages a systemd user service on Linux, a launchd user agent on macOS, or a logon task on Windows. `install` registers a stable Homebrew, `install.sh`, or Windows `install.ps1` path, `restart` restarts an active service whose definition matches this installation, and `disable` removes only a definition created by sshc. `install`, `restart`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
+`sshc service` manages a systemd user service on Linux, a launchd user agent on macOS, or a logon task on Windows.
+
+| Subcommand | What it does |
+|---|---|
+| `install` | Registers a stable Homebrew, `install.sh`, or Windows `install.ps1` path |
+| `restart` | Restarts an active service whose definition matches this installation |
+| `disable` | Removes only a definition created by sshc |
+
+`install`, `restart`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
 
 `sshc service restart` refuses inactive, absent, unmanaged, outdated, or other-executable services with exit code 1. Restarting ends existing sessions and transfers. Success requires a verified engine handoff and status response. Linux and macOS also check the service PID; Windows checks that the handoff PID runs the registered executable. See [Installation](/en/guide/install) for recovery steps.
 
@@ -103,7 +111,11 @@ sshc ssh <alias> --non-interactive -- <command...>
 sshc info <alias> --json
 ```
 
-The Homebrew formula installs completions for bash, zsh, and fish. For other installation methods, add the matching command below to your shell startup file. Completion covers subcommands, options, enumerated values, and connection aliases for `sshc ssh`, `sshc info`, `sshc terminal create ssh`, `sshc sftp`, and `sshc vpn bind`/`unbind`. Alias candidates are read from the current `~/.ssh/config` and reachable `Include` files whenever you press Tab. An alias containing characters sshc refuses to launch or evaluate (shell metacharacters, whitespace, a leading `-`) is left out of both `sshc ssh --list` and completion, and the reason is reported on stderr.
+The Homebrew formula installs completions for bash, zsh, and fish. For other installation methods, add the matching command below to your shell startup file.
+
+- Completion covers subcommands, options, enumerated values, and connection aliases for `sshc ssh`, `sshc info`, `sshc terminal create ssh`, `sshc sftp`, and `sshc vpn bind`/`unbind`.
+- Alias candidates are read from the current `~/.ssh/config` and reachable `Include` files whenever you press Tab.
+- An alias containing characters sshc refuses to launch or evaluate (shell metacharacters, whitespace, a leading `-`) is left out of both `sshc ssh --list` and completion, and the reason is reported on stderr.
 
 Command parsing, per-command help, and bash, zsh, and fish completion are built from the same command definition. Names and choices offered by completion therefore match `sshc help` from the installed version.
 
@@ -177,7 +189,22 @@ sshc vpn bind <alias> <name> [--json]
 sshc vpn unbind <alias> [--json]
 ```
 
-`sshc vpn add` creates a new profile. If the name is already taken it changes nothing and suggests editing it with `sshc vpn edit`, or renaming it with `sshc vpn rename`. It asks for the settings in an interactive terminal, including the DNS servers that resolve targets written as names. For WireGuard it asks for the path of the configuration file (`[Interface]` and `[Peer]`); the DNS servers come from its `DNS`, and the file holds keys, so the whole file is stored in the vault as a secret. In `sshc vpn edit` a blank path keeps the stored file. It also asks, for OpenConnect, how to answer a device that asks one more question after the password (`none`, `approve` or `totp`). For OpenVPN it asks for the path of the configuration file (.ovpn) and an optional username; the file is checked as it is read, and a directive that cannot be used is named with its line before anything is saved. For IKEv2/IPsec it also asks how to authenticate (`eap-mschapv2` or `psk`) and where the CA certificate that verifies the server is kept (blank trusts the public certificate authorities). The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault, and so are OpenVPN and WireGuard configuration files, as secrets. `sshc vpn edit` never shows a stored secret; one left blank keeps its stored value.
+`sshc vpn add` creates a new profile. If the name is already taken it changes nothing and suggests editing it with `sshc vpn edit`, or renaming it with `sshc vpn rename`.
+
+It asks for the settings in an interactive terminal, including the DNS servers that resolve targets written as names. By type:
+
+| Type | What it asks for |
+|---|---|
+| WireGuard | The path of the configuration file (`[Interface]` and `[Peer]`). The DNS servers come from its `DNS`. In `sshc vpn edit` a blank path keeps the stored file |
+| OpenConnect | How to answer a device that asks one more question after the password (`none`, `approve` or `totp`) |
+| OpenVPN | The path of the configuration file (.ovpn) and an optional username. The file is checked as it is read, and a directive that cannot be used is named with its line before anything is saved |
+| IKEv2/IPsec | How to authenticate (`eap-mschapv2` or `psk`) and where the CA certificate that verifies the server is kept (blank trusts the public certificate authorities) |
+
+How secrets are handled:
+
+- The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault.
+- OpenVPN and WireGuard configuration files hold keys, so the whole file is stored in the vault as a secret.
+- `sshc vpn edit` never shows a stored secret; one left blank keeps its stored value.
 
 `sshc vpn edit` changes a saved profile. Every prompt starts from the saved value; a blank secret keeps the saved one, and `-` clears an optional setting. New secrets are asked for only when the type changes.
 
@@ -222,9 +249,23 @@ sshc sftp put bastion ./disk.img /backup/disk.img --split-size 100 --split-jobs 
 
 `sshc sftp settings` displays the split threshold, connections per file, and chunk size shared by Web and CLI. Add `--split-size` (16–1024 MiB), `--split-jobs` (1–128), or `--chunk-size` (8–4096 MiB) to persist only the supplied defaults. `--json` returns the saved values for automation.
 
-`-j` or `--jobs` sets the number of files transferred concurrently from 1 to 8; the default is 1. Split options on `get` or `put` override the saved defaults for that invocation. `--split-jobs 1` disables splitting. Initial defaults are 100 MiB, one connection (no splitting), and 32 MiB chunks. To transfer in parallel, give `--split-jobs` for that run or change the saved default with `sshc sftp settings --split-jobs` or the Transfer Manager. A host that authenticates with a one-time code transfers over one connection whatever the setting. `--split-jobs` accepts up to 128, while the actual connection count is limited by the number of unfinished chunks. Concurrent split transfers multiply the total connection count, so choose a value that fits both the server and the device. Regular file uploads and downloads support up to 512 GiB.
+`-j` or `--jobs` sets the number of files transferred concurrently from 1 to 8; the default is 1. Regular file uploads and downloads support up to 512 GiB.
 
-`put` and `get` give a transferred file the modification time of its source. Symlinks are transferred as what they point to, as WinSCP and scp do, and a link to a directory brings that directory's contents. A link whose target is missing, or an entry that is neither a file nor a directory, is reported on standard error as `skip` and counted in the result's `skipped` without stopping the rest. A directory sent with `--recursive` creates the remote directories it needs; a single-file `put` stops with `remote_directory_missing` when the destination directory does not exist. A newly created file gets the server's default permissions (its umask); a replaced file keeps its own.
+Split options on `get` or `put` override the saved defaults for that invocation. Initial defaults are 100 MiB, one connection (no splitting), and 32 MiB chunks.
+
+- `--split-jobs 1` disables splitting.
+- To transfer in parallel, give `--split-jobs` for that run or change the saved default with `sshc sftp settings --split-jobs` or the Transfer Manager.
+- `--split-jobs` accepts up to 128, while the actual connection count is limited by the number of unfinished chunks.
+- A host that authenticates with a one-time code transfers over one connection whatever the setting.
+- Concurrent split transfers multiply the total connection count, so choose a value that fits both the server and the device.
+
+`put` and `get` behave like this:
+
+- A transferred file is given the modification time of its source.
+- Symlinks are transferred as what they point to, as WinSCP and scp do, and a link to a directory brings that directory's contents.
+- A link whose target is missing, or an entry that is neither a file nor a directory, is reported on standard error as `skip` and counted in the result's `skipped` without stopping the rest.
+- A directory sent with `--recursive` creates the remote directories it needs; a single-file `put` stops with `remote_directory_missing` when the destination directory does not exist.
+- A newly created file gets the server's default permissions (its umask); a replaced file keeps its own.
 
 Recursive downloads default to a safety budget of 64 levels below the selected root, 10,000 files and directories in total, and 1,024 MiB of file data. If a limit is reached, sshc stops before transferring anything. For an intentionally larger tree, raise the per-run limit with `--max-depth` (up to 256), `--max-entries` (up to 1,000,000), or `--max-total-size` (MiB, up to 8 TiB). These options apply only to `get --recursive`.
 
