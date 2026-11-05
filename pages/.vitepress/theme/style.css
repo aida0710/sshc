@@ -330,3 +330,34 @@ html:not(.dark) {
   .sshc-feature h3 { margin-top: 18px; }
   .sshc-command { align-items: flex-start; flex-direction: column; padding: 20px; }
 }
+
+.mermaid-diagram {
+  margin: 20px 0;
+  overflow-x: auto;
+}
+
+.mermaid-diagram svg {
+  display: block;
+  margin-inline: auto;
+}
+
+/* Mermaidは本文の外で文字の大きさを測るので、.vp-doc pの余白と行の高さが効くと文字が切れる。 */
+.mermaid-diagram foreignObject p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* 図を描いたあとにURLの#の見出しへ合わせ直すとき、上部のナビの下に隠さない。
+   134pxはVitePressがページ内リンクの移動に使う既定の余白と同じ。 */
+.vp-doc :is(h1, h2, h3, h4) {
+  scroll-margin-top: 134px;
+}
+
+/* スマホの幅では、表の列が細くなって1列に数文字しか入らなくなるのを防ぐ。 */
+@media (max-width: 640px) {
+  .vp-doc :is(th, td) {
+    padding: 6px 8px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+}
