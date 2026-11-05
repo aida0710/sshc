@@ -16,9 +16,14 @@ describe("TerminalProgressBar", () => {
     expect(bar.firstElementChild).toHaveStyle({ width: "40%" });
   });
 
-  it("エラーは名前で分かるようにする", () => {
+  it("全体の長さを薄い地の線で見せる", () => {
+    shown({ state: "normal", percent: 40 });
+    expect(screen.getByRole("progressbar")).toHaveClass("bg-accent/20");
+  });
+
+  it("エラーは名前で分かるようにし、地の線も赤くする", () => {
     shown({ state: "error", percent: 80 });
-    expect(screen.getByRole("progressbar", { name: "Program progress (error)" })).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Program progress (error)" })).toHaveClass("bg-danger/20");
   });
 
   it("終わりの分からない進み具合は値を持たない", () => {

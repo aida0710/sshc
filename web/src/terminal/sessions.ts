@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePolling } from "../ui/usePolling";
 import { useRequestGeneration, type IsCurrentRequest } from "../ui/useRequestGeneration";
 import { ApiError, failureCode } from "../api/client";
@@ -54,6 +54,9 @@ export type TerminalSessionsState = {
   // markExited records how a session ended as soon as its stream says so,
   // before the next list shows it.
   markExited: (id: string, exit: ExitReport) => void;
+  // programProgressChanged reads the list again as soon as a session's stream shows its OSC 9;4 progress changed, so
+  // the ring in its row changes with the bar under its pane header instead of on the next poll.
+  programProgressChanged: () => void;
   moveToWorkspace: (id: string, workspaceId: string) => Promise<boolean>;
 };
 
@@ -365,10 +368,32 @@ export function useTerminalSessions(
     void refresh();
   }, [beginMutation, refresh]);
 
+  // The engine reads the output before it sends it on (internal/terminal/session.go pump), so a list read after the
+  // stream showed the change has it. One read at a time: each read drops the answer of the one before it, so a program
+  // that reports many times a second would otherwise leave no read to answer. A change seen while a read is out is
+  // read once more after it.
+  const programProgressRead = useRef({ reading: false, changedSince: false });
+  const programProgressChanged = useCallback(() => {
+    const read = programProgressRead.current;
+    if (read.reading) {
+      read.changedSince = true;
+      return;
+    }
+    read.reading = true;
+    void (async () => {
+      do {
+        read.changedSince = false;
+        await refresh();
+      } while (read.changedSince);
+      read.reading = false;
+    })();
+  }, [refresh]);
+
   return {
     sessions: loaded ? sessions : noSessions,
     maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
-    rename, unpinTitle, open, reconnect, stopReconnect, answerHostKey, answerPasswordSave, close, closeAll, refresh, markExited, moveToWorkspace,
+    rename, unpinTitle, open, reconnect, stopReconnect, answerHostKey, answerPasswordSave, close, closeAll, refresh, markExited,
+    programProgressChanged, moveToWorkspace,
   };
 }
 

@@ -263,6 +263,17 @@
   background-size: 240% 100%;
 }
 
+/* The ring at the start of a session's row for its program's OSC 9;4 progress (SessionMarker). The arc in the text
+   color is the share done, over a faint ring for the whole. The mask leaves a 2px ring, as wide as the turning one. */
+.sshc-progress-ring {
+  background: conic-gradient(
+    currentColor var(--sshc-progress),
+    color-mix(in srgb, currentColor 25%, transparent) 0
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+}
+
 @keyframes sshc-progress-indeterminate {
   from {
     transform: translateX(-100%);

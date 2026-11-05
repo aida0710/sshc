@@ -47,6 +47,17 @@ describe("SplitGroupList", () => {
     expect(rows[2]).toHaveTextContent("reconnecting 2/5");
   });
 
+  it("draws a member's program progress as a ring, and says it after where the member connects", () => {
+    const reporting = [{ ...sessions[0]!, programProgress: { state: "normal" as const, percent: 40 } }, ...sessions.slice(1)];
+    render(<SplitGroupList groups={[group]} sessions={reporting} selected={1} unreadBySession={new Set()}
+      onSelect={vi.fn()} onSelectSession={vi.fn()} onDissolve={vi.fn()} />);
+
+    const row = screen.getByRole("button", { name: "sshc の改修 in Split 1" });
+    expect(row.querySelector("[data-program-progress]")).toHaveAttribute("data-program-progress", "normal");
+    expect(row).toHaveAccessibleDescription("localhost Program progress 40%");
+    expect(screen.getByRole("button", { name: "ログ確認 in Split 1" })).toHaveAccessibleDescription("localhost");
+  });
+
   it("shows only the number of sessions next to the group's name", () => {
     renderList();
 
