@@ -1,4 +1,6 @@
+import type { CSSProperties } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
+import type { ProgramProgress } from "./programProgress";
 import type { ShownProgramStatus } from "./programStatus";
 import { sessionMarkerClass } from "./sessionStatus";
 
@@ -8,35 +10,50 @@ import { sessionMarkerClass } from "./sessionStatus";
 // above the middle of the 18px name line: centred on the line it looks low.
 const markerCircle = "mt-0.5 size-[11px] shrink-0 rounded-full";
 
-// The mark that stands for each program status: a turning ring while it works,
-// and a filled circle with a sign once it waits on the person, failed or is done.
+// The mark that stands for each program status that needs the person: a filled
+// circle with a sign once it waits on them, failed or is done.
 const programStatusMarks: Record<Exclude<ShownProgramStatus["state"], "working">, { fill: string; sign: string }> = {
   blocked: { fill: "bg-notice-ink shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-notice-ink)_22%,transparent)]", sign: "!" },
   error: { fill: "bg-danger", sign: "×" },
   done: { fill: "bg-live", sign: "✓" },
 };
 
-// SessionMarker is the mark at the start of a session's row. The program's
-// status, when the row shows one, takes the place of the dot that says whether
-// the session is connected. The row's status text says the same for screen
-// readers, so the mark is hidden from them.
-export function SessionMarker({ session, unread, programStatus }: {
+// The progress ring takes the colors of the bar under the pane header (TerminalProgressBar).
+const progressRingColors: Record<Exclude<ProgramProgress["state"], "indeterminate">, string> = {
+  normal: "text-accent",
+  error: "text-danger",
+  paused: "text-notice-ink",
+};
+
+// SessionMarker is the mark at the start of a session's row. What the program
+// in it says takes the place of the dot that says whether the session is
+// connected: first a program status that needs the person (OSC 7501), then how
+// far the program has got (OSC 9;4) as a ring filled that far, then a turning
+// ring while it works without saying how far. The row's status text says the
+// same for screen readers, so the mark is hidden from them.
+export function SessionMarker({ session, unread, programStatus, programProgress }: {
   session: TerminalSession;
   unread: boolean;
   programStatus: ShownProgramStatus | null;
+  programProgress: ProgramProgress | null;
 }) {
-  if (programStatus === null) {
-    return <span aria-hidden="true" className={`${markerCircle} ${sessionMarkerClass(session, unread)}`} />;
+  if (programStatus !== null && programStatus.state !== "working") {
+    const mark = programStatusMarks[programStatus.state];
+    return (
+      <span aria-hidden="true" data-program-status={programStatus.state}
+        className={`${markerCircle} flex items-center justify-center text-[8px] font-bold leading-none text-canvas ${mark.fill}`}>
+        {mark.sign}
+      </span>
+    );
   }
-  if (programStatus.state === "working") {
-    return <span aria-hidden="true" data-program-status="working"
-      className={`${markerCircle} animate-spin border-2 border-accent/25 border-t-accent`} />;
+  if (programProgress !== null && programProgress.state !== "indeterminate") {
+    return <span aria-hidden="true" data-program-progress={programProgress.state}
+      className={`${markerCircle} sshc-progress-ring ${progressRingColors[programProgress.state]}`}
+      style={{ "--sshc-progress": `${programProgress.percent}%` } as CSSProperties} />;
   }
-  const mark = programStatusMarks[programStatus.state];
-  return (
-    <span aria-hidden="true" data-program-status={programStatus.state}
-      className={`${markerCircle} flex items-center justify-center text-[8px] font-bold leading-none text-canvas ${mark.fill}`}>
-      {mark.sign}
-    </span>
-  );
+  if (programStatus !== null || programProgress !== null) {
+    const source = programStatus === null ? { "data-program-progress": "indeterminate" } : { "data-program-status": "working" };
+    return <span aria-hidden="true" {...source} className={`${markerCircle} animate-spin border-2 border-accent/25 border-t-accent`} />;
+  }
+  return <span aria-hidden="true" className={`${markerCircle} ${sessionMarkerClass(session, unread)}`} />;
 }

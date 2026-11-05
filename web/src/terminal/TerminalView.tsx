@@ -47,7 +47,7 @@ import { openTerminalURL, TerminalLinkPopover, type TerminalLinkSelection } from
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
-import { noTerminalProgress, type TerminalProgress } from "./osc9Progress";
+import { useProgramProgress } from "./useProgramProgress";
 import { TerminalProgressBar } from "./TerminalProgressBar";
 import type { LigatureDrawing } from "./ligatures";
 import { createTerminalView } from "./createTerminalView";
@@ -117,6 +117,8 @@ type TerminalViewProps = {
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   // onExit hands over how the program ended, as the stream reported it.
   onExit?: (exit: ExitReport) => void;
+  // onProgramProgressChanged says the OSC 9;4 progress under the header changed, as the stream reported it.
+  onProgramProgressChanged?: () => void;
   onReconnect?: () => Promise<boolean>;
   onStopReconnect?: () => Promise<boolean>;
   // onCloseSession closes this session; an ended session's card offers it.
@@ -194,6 +196,7 @@ export function TerminalView({
   splitRefusal,
   api = terminalSessionsApi,
   onExit,
+  onProgramProgressChanged,
   onReconnect,
   onStopReconnect,
   onCloseSession,
@@ -359,7 +362,11 @@ export function TerminalView({
   ligaturesRef.current = ligatures;
   const ligatureDrawing = useRef<LigatureDrawing | null>(null);
   const [currentDirectory, setCurrentDirectory] = useState("");
-  const [programProgress, setProgramProgress] = useState<TerminalProgress>(noTerminalProgress);
+  const {
+    progress: programProgress,
+    apply: applyProgramProgress,
+    clear: clearProgramProgress,
+  } = useProgramProgress(() => onProgramProgressChanged?.());
 
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
   const [quickCommandSelection, setQuickCommandSelection] = useState("");
@@ -402,9 +409,9 @@ export function TerminalView({
   useEffect(() => {
     setOsc52Enabled(initialOsc52Enabled);
     setCurrentDirectory("");
-    setProgramProgress(noTerminalProgress);
+    clearProgramProgress();
     setPendingPaste(null);
-  }, [initialOsc52Enabled, session.id, session.state]);
+  }, [clearProgramProgress, initialOsc52Enabled, session.id, session.state]);
 
   useEffect(() => {
     if (terminalNotice === "") return;
@@ -492,7 +499,7 @@ export function TerminalView({
       notice: setTerminalNotice,
       problem: setProblem,
       setDirectory: setCurrentDirectory,
-      setProgress: setProgramProgress,
+      setProgress: applyProgramProgress,
     });
     const { kittyClipboard, prompt, prompts } = sequences;
     commandDisplay.current = attachCommandDisplay(view, sequences.commandBlocks, {

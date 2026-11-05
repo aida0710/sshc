@@ -59,10 +59,17 @@ sleep 31; false
 
 ## Progress
 
-When a program reports progress with `ESC ] 9 ; 4 ; state ; percent BEL`, sshc draws a thin line along the bottom edge of the pane header and its entry in the session list. The list keeps showing progress while you view another session.
+When a program reports progress with `ESC ] 9 ; 4 ; state ; percent BEL`, sshc shows it in two places. The list keeps showing progress while you view another session.
 
-- State 1 is normal, 2 is an error (red), 3 is work of unknown length (a line moving back and forth), 4 is paused (yellow), and 0 clears it. Error and paused keep the previous percent when it is omitted.
-- The line also clears when the shell reports through OSC 133 that the command finished, and when the session switches to a new shell.
+| Where | What you see |
+|---|---|
+| Pane header | A line along the bottom edge, over a faint track for the whole length |
+| Session list row | A ring filled up to the percent, in place of the dot at the start of the row |
+
+- State 1 is normal, 2 is an error (red), 3 is work of unknown length, 4 is paused (yellow), and 0 clears it. Error and paused keep the previous percent when it is omitted.
+- Work of unknown length shows as a line moving back and forth in the header, and as a turning ring in the list.
+- In the list, while the program status (OSC 7501) is waiting, done or failed, its mark shows in place of the ring. A session that is connecting, reconnecting or has ended shows its connection state.
+- Progress also clears when the shell reports through OSC 133 that the command finished, and when the session switches to a new shell.
 
 To try it, run this inside a pane:
 

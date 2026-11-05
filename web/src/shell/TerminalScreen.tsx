@@ -150,6 +150,7 @@ export function TerminalScreen({
           rightClickPaste={settings.rightClickPaste ?? true}
           webgl={settings.webgl ?? true}
           onExit={(exit) => terminalSessions.markExited(session.id, exit)}
+          onProgramProgressChanged={terminalSessions.programProgressChanged}
           onReconnect={() => terminalSessions.reconnect(session.id)}
           onStopReconnect={() => terminalSessions.stopReconnect(session.id)}
           onCloseSession={() => void terminalSessions.close(session.id)}
