@@ -159,7 +159,8 @@ for (const locale of ["ja", "en"] as const) {
     const navigation = page.getByRole("navigation", { name: "Primary" });
     const switcher = navigation.getByRole("button", { name: /^Choose the remote session engine/ });
     await switcher.click();
-    await navigation.getByRole("list", { name: "Engines" }).getByRole("button", { name: remoteEngine, exact: true }).click();
+    // A row is named by the engine and then its state (Connected).
+    await navigation.getByRole("list", { name: "Engines" }).getByRole("button", { name: new RegExp(`^${remoteEngine}`) }).click();
     await expect(switcher).toContainText(remoteEngine);
 
     await navigation.getByRole("button", { name: "New session", exact: true }).click();

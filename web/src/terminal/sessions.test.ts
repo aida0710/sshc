@@ -172,6 +172,57 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("terminal.openFailed");
   });
 
+  it.each(["remote_engine_unreachable", "terminal_start_failed"])(
+    "says nothing under the next engine when the previous one refuses an open with %s after the switch",
+    async (code) => {
+      let refuseOpen = (_error: ApiError) => {};
+      const bastion = api({ openTerminalSession: vi.fn(() => new Promise<never>((_resolve, reject) => { refuseOpen = reject; })) });
+      const here = api();
+      const { result, rerender } = renderHook(({ client }) => useTerminalSessions(client, translate), { initialProps: { client: bastion } });
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      let opening: Promise<unknown> = Promise.resolve();
+      act(() => { opening = result.current.open({ kind: "shell" }); });
+
+      rerender({ client: here });
+      await waitFor(() => expect(result.current.loaded).toBe(true));
+      await act(async () => {
+        refuseOpen(new ApiError(code, 502, null));
+        await opening;
+      });
+      expect(result.current.problem).toBe("");
+      expect(result.current.remoteRefusal).toBeNull();
+    },
+  );
+
+  it("says a run target could not be reached for an open only until its list answers", async () => {
+    const unreachable = new ApiError("remote_engine_unreachable", 502, null);
+    const client = api({ openTerminalSession: vi.fn().mockRejectedValue(unreachable) });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      expect(await result.current.open({ kind: "shell" })).toBeNull();
+    });
+    expect(result.current.remoteRefusal).toBe(unreachable);
+    expect(result.current.problem).toBe("");
+
+    await act(async () => { await result.current.refresh(); });
+    expect(result.current.remoteRefusal).toBeNull();
+    expect(result.current.problem).toBe("");
+  });
+
+  it("leaves a run target that could not be reached for a reconnect to the list read next", async () => {
+    const client = api({ reconnectTerminalSession: vi.fn().mockRejectedValue(new ApiError("remote_engine_unreachable", 502, null)) });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      expect(await result.current.reconnect("a")).toBe(false);
+    });
+    expect(result.current.problem).toBe("");
+    expect(result.current.remoteRefusal).toBeNull();
+  });
+
   it("answers a host key question, and says nothing when the question was already answered in the terminal", async () => {
     const answerTerminalHostKey = vi
       .fn()

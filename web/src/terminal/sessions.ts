@@ -71,7 +71,13 @@ export function useTerminalSessions(
   const [restoreOffer, setRestoreOffer] = useState<string | undefined>(undefined);
   const [pendingOperations, setPendingOperations] = useState(0);
   const [pendingOpens, setPendingOpens] = useState(0);
-  const [problem, setProblem] = useState("");
+  // The problem of an operation belongs to the engine it was asked of. Choosing another engine hands this state to that
+  // one, so an open still waiting on the previous engine that fails after the switch is not reported under the next.
+  const [operationProblem, setOperationProblem] = useState({ api, text: "" });
+  const problem = operationProblem.api === api ? operationProblem.text : "";
+  const setProblem = useCallback((text: string) => {
+    setOperationProblem((current) => current.api === api ? { api, text } : current);
+  }, [api]);
   const [listFailure, setListFailure] = useState<{ api: TerminalSessionsApi; error: ApiError; at: Date } | null>(null);
   // The terminal area must never attribute the previous engine's refusal
   // to the newly selected one, even before the reset effect has run.
@@ -132,7 +138,7 @@ export function useTerminalSessions(
       // A run-target engine that cannot be reached would otherwise look like
       // one with no sessions. This machine's own list keeps failing quietly:
       // the next poll reads it again.
-      if (isCurrent() && error instanceof ApiError && error.code.startsWith("remote_engine_")) {
+      if (isCurrent() && isRunTargetRefusal(error)) {
         setListFailure({ api, error, at: new Date() });
       }
     } finally {
@@ -163,10 +169,12 @@ export function useTerminalSessions(
 
   // Connection problems carry a fixed code the catalogue can translate; the
   // list is refreshed as well because the session state changed underneath.
+  // A run-target engine that could not be reached is not one of them: the list
+  // read next says whether it still cannot be, and stops saying so once it answers.
   const reportConnectionFailure = useCallback(async (error: unknown) => {
-    setProblem(translate(terminalProblemKey(failureCode(error))));
+    if (!isRunTargetRefusal(error)) setProblem(translate(terminalProblemKey(failureCode(error))));
     await refresh();
-  }, [refresh, translate]);
+  }, [refresh, setProblem, translate]);
 
   // A different api is another engine: what the last one listed is not shown
   // while the new list is read.
@@ -176,7 +184,7 @@ export function useTerminalSessions(
     setSessions([]);
     setMaxSessions(0);
     setRestoreOffer(undefined);
-    setProblem("");
+    setOperationProblem({ api, text: "" });
     setListFailure(null);
     // An open still waiting belongs to the previous engine; the new one is not
     // being connected to.
@@ -233,27 +241,25 @@ export function useTerminalSessions(
         void refresh();
         return opened.session;
       } catch (error) {
-        setProblem(translate(terminalProblemKey(failureCode(error))));
         // A run target that could not be reached is shown where the session
-        // would have appeared, as when its list cannot be read, rather than
-        // only as a line in the sidebar.
-        if (error instanceof ApiError && error.code.startsWith("remote_engine_")) {
-          setListFailure({ api, error, at: new Date() });
-        }
+        // would have appeared, as when its list cannot be read, rather than as
+        // a line in the sidebar: that line would stay after the engine answers.
+        if (isRunTargetRefusal(error)) setListFailure({ api, error, at: new Date() });
+        else setProblem(translate(terminalProblemKey(failureCode(error))));
         return null;
       } finally {
         setPendingOpens((current) => Math.max(0, current - 1));
         finishOperation();
       }
     },
-    [api, beginMutation, beginOperation, finishOperation, refresh, translate],
+    [api, beginMutation, beginOperation, finishOperation, refresh, setProblem, translate],
   );
 
   const close = useCallback(
     async (id: string) => {
       await applyMutation(() => api.closeTerminalSession(id), () => setProblem(translate("terminal.closeFailed")));
     },
-    [api, applyMutation, translate],
+    [api, applyMutation, setProblem, translate],
   );
 
   const reconnect = useCallback(
@@ -261,7 +267,7 @@ export function useTerminalSessions(
       setProblem("");
       return applyMutation(() => api.reconnectTerminalSession(id), reportConnectionFailure);
     },
-    [api, applyMutation, reportConnectionFailure],
+    [api, applyMutation, reportConnectionFailure, setProblem],
   );
 
   const stopReconnect = useCallback(
@@ -269,7 +275,7 @@ export function useTerminalSessions(
       setProblem("");
       return applyMutation(() => api.stopTerminalReconnect(id), reportConnectionFailure);
     },
-    [api, applyMutation, reportConnectionFailure],
+    [api, applyMutation, reportConnectionFailure, setProblem],
   );
 
   const answerHostKey = useCallback(
@@ -284,7 +290,7 @@ export function useTerminalSessions(
         await reportConnectionFailure(error);
       });
     },
-    [api, applyMutation, refresh, reportConnectionFailure],
+    [api, applyMutation, refresh, reportConnectionFailure, setProblem],
   );
 
   const answerPasswordSave = useCallback(
@@ -326,24 +332,24 @@ export function useTerminalSessions(
     } finally {
       finishOperation();
     }
-  }, [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, sessions, translate]);
+  }, [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, sessions, setProblem, translate]);
 
   const rename = useCallback(
     (id: string, title: string): Promise<boolean> =>
       applyMutation(() => api.setTerminalSessionTitle(id, title), () => setProblem(translate("terminal.renameFailed"))),
-    [api, applyMutation, translate],
+    [api, applyMutation, setProblem, translate],
   );
 
   const unpinTitle = useCallback(
     (id: string): Promise<boolean> =>
       applyMutation(() => api.setTerminalSessionTitle(id, null), () => setProblem(translate("terminal.renameFailed"))),
-    [api, applyMutation, translate],
+    [api, applyMutation, setProblem, translate],
   );
 
   const moveToWorkspace = useCallback(
     (id: string, workspaceId: string): Promise<boolean> =>
       applyMutation(() => api.moveTerminalSession(id, workspaceId), () => setProblem(translate("workspace.moveFailed"))),
-    [api, applyMutation, translate],
+    [api, applyMutation, setProblem, translate],
   );
 
   const markExited = useCallback((id: string, exit: ExitReport) => {
@@ -364,6 +370,12 @@ export function useTerminalSessions(
     maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
     rename, unpinTitle, open, reconnect, stopReconnect, answerHostKey, answerPasswordSave, close, closeAll, refresh, markExited, moveToWorkspace,
   };
+}
+
+// isRunTargetRefusal is true for a run-target engine that could not be reached or refused, as the remote_engine_
+// codes say. That is the engine's state rather than one operation's outcome: remoteRefusal says it, until a list answers.
+function isRunTargetRefusal(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.code.startsWith("remote_engine_");
 }
 
 export function terminalProblemKey(code: string): MessageKey {

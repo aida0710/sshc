@@ -392,6 +392,63 @@ test("says the host is being reached while a session opens, and why it could not
   await expect(connecting).toBeHidden();
 });
 
+// isOpenOnBastion picks the answer to opening a session on bastion.
+function isOpenOnBastion(response: { url: () => string; request: () => { method: () => string } }) {
+  return new URL(response.url()).pathname === sessionsPath && response.request().method() === "POST";
+}
+
+test("says nothing under this machine when an open on the run target fails after switching back", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion });
+  let answerOpen = () => {};
+  const openAnswered = new Promise<void>((resolve) => { answerOpen = resolve; });
+  await page.route(`**${sessionsPath}`, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    await openAnswered;
+    await route.fulfill(refusalResponse("unreachable"));
+  });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: "New session", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Local shell, bastion/ }).click();
+  await chooseLocalhost(page);
+  await expect(navigation.getByRole("button", { name: "Choose the remote session engine (now: localhost)" })).toBeVisible();
+
+  // The open was asked of bastion, and its refusal arrives once this machine is shown.
+  const refused = page.waitForResponse(isOpenOnBastion);
+  answerOpen();
+  await refused;
+  await page.waitForResponse("**/api/v1/terminal/sessions");
+  await expect(navigation.getByRole("alert")).toHaveCount(0);
+});
+
+test("stops saying a run target cannot be reached once its list answers again", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion });
+  // The open does not reach bastion, and the next list does.
+  await page.route(`**${sessionsPath}`, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill(refusalResponse("unreachable"));
+  });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: "New session", exact: true }).click();
+  const refused = page.waitForResponse(isOpenOnBastion);
+  await page.getByRole("dialog").getByRole("button", { name: /^Local shell, bastion/ }).click();
+  await refused;
+
+  await page.waitForResponse((response) => new URL(response.url()).pathname === sessionsPath && response.request().method() === "GET");
+  await expect(page.getByRole("region", { name: "Could not connect to bastion", exact: true })).toHaveCount(0);
+  await expect(navigation.getByRole("button", { name: "Choose the remote session engine (now: bastion)" })).toBeVisible();
+  await expect(navigation.getByRole("alert")).toHaveCount(0);
+});
+
 test("asks to reopen the sessions of a run target that restarted between two lists", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: localVersion });
   // bastion's sshc restarts so quickly that this machine's engine reaches the
