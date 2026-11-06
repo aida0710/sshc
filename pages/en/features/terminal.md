@@ -463,7 +463,7 @@ Install-Module PSReadLine -Scope CurrentUser -Force -SkipPublisherCheck
 
 | What shells and programs send | Where it appears |
 | --- | --- |
-| Titles through OSC 0/1/2 | The pane header and the session list name. While a command runs for a second or longer in a local shell, its name goes in front (engines on Linux only) |
+| Titles through OSC 0/1/2 | The pane header and the session list name. While a command runs for a second or longer in a local shell, its name goes in front (engines on Linux and macOS only) |
 | Notifications through OSC 9/99/777 | Unread marks, and browser notifications with a sound while the sshc tab is in the background |
 | Progress through OSC 9;4 | A line along the bottom edge of the pane header, and a ring at the start of its session list row, even while you are viewing another session |
 

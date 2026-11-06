@@ -1423,7 +1423,7 @@ export const en = {
   "terminal.commandScrollbarMarksLabel": "Mark commands on the scrollbar",
   "terminal.commandScrollbarMarksHint": "Shows where commands are in the history, coloured by how they ended.",
   "terminal.runningCommandTitleLabel": "Show the running command in the pane title",
-  "terminal.runningCommandTitleHint": "While a command runs for a second or longer in a local shell, its name goes in front of the pane title (sleep · aida@r100: ~). Works with sshc engines on Linux only.",
+  "terminal.runningCommandTitleHint": "While a command runs for a second or longer in a local shell, its name goes in front of the pane title (sleep · aida@r100: ~). Works with sshc engines on Linux and macOS only.",
   "terminal.commandRunning": "Running",
   "terminal.commandFailed": "Exit code {code}",
   "terminal.commandSucceeded": "Succeeded",

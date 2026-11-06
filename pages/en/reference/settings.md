@@ -145,7 +145,7 @@ No settings page has a Save button: **Saved** shows under the field you changed 
 - Whether to use font ligatures (off by default)
 - Whether to show the VT320 status line a program shows (on by default; when off, what is written to it stays off the screen as well)
 - With shell integration (OSC 133): command marks, the command kept above its output, and command marks on the scrollbar (all on by default)
-- Whether to put the name of the command running in a local shell in front of the pane title (on by default; sshc engines on Linux only; see [Titles and notifications](/en/terminal/notifications#the-running-command))
+- Whether to put the name of the command running in a local shell in front of the pane title (on by default; sshc engines on Linux and macOS only; see [Titles and notifications](/en/terminal/notifications#the-running-command))
 
 The engine replay buffer retains bytes in memory so it can replay output when a browser reconnects. Browser scrollback is the separate number of display lines retained by xterm. Neither setting writes terminal output to disk. When output keeps coming faster than the browser can draw it and the browser falls further behind than the replay buffer holds, the part no longer in the buffer is skipped and the terminal says so.
 

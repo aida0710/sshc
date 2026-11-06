@@ -41,7 +41,7 @@ When a command runs for a second or longer in a local shell, sshc puts its name 
 | You pinned the pane name | The pinned name |
 
 - A command that ends within a second (such as `ls`) is never named, so the pane title does not flicker.
-- Only local shells of an sshc engine running on Linux can be named. Engines on macOS or Windows do not add the command name.
+- Only local shells of an sshc engine running on Linux or macOS can be named. Engines on other systems, such as Windows, do not add the command name.
 - Names are limited to 15 characters; longer ones are cut.
 - Turn off **Show the running command in the pane title** under the **Behaviour** tab of **Settings → Terminal** to leave the name out.
 

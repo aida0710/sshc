@@ -1423,7 +1423,7 @@ export const ja = {
   "terminal.commandScrollbarMarksLabel": "スクロールバーにコマンドの印を出す",
   "terminal.commandScrollbarMarksHint": "履歴のどこにコマンドがあるかを、結果の色で出します。",
   "terminal.runningCommandTitleLabel": "ペイン名に実行中のコマンドを出す",
-  "terminal.runningCommandTitleHint": "ローカルシェルでコマンドが1秒以上動いているあいだ、その名前をペイン名の前に付けます（sleep · aida@r100: ~）。Linuxで動くsshcエンジンだけで使えます。",
+  "terminal.runningCommandTitleHint": "ローカルシェルでコマンドが1秒以上動いているあいだ、その名前をペイン名の前に付けます（sleep · aida@r100: ~）。LinuxとmacOSで動くsshcエンジンだけで使えます。",
   "terminal.commandRunning": "実行中",
   "terminal.commandFailed": "終了コード {code}",
   "terminal.commandSucceeded": "成功",

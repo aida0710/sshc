@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package terminal
 
 import (
@@ -31,4 +33,15 @@ func (p *unixProcess) foregroundGroup() (int, error) {
 		return 0, errNoForegroundGroup
 	}
 	return group, nil
+}
+
+// foregroundCommandGroup は、シェルが前面で動かしているコマンドのプロセスグループを返す。
+// シェルは自分のプロセスグループの先頭である（Setsid）。前面がシェルのグループなら、
+// シェルはプロンプトで入力を待っているか、組み込みのコマンドを動かしているので false を返す。
+func (p *unixProcess) foregroundCommandGroup() (int, bool) {
+	group, err := p.foregroundGroup()
+	if err != nil || p.child.Process == nil || group == p.child.Process.Pid {
+		return 0, false
+	}
+	return group, true
 }
