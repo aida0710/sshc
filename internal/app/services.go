@@ -344,12 +344,13 @@ func buildTerminals(configService *application.Service, dependencies Dependencie
 		starter = terminal.NewStarter()
 	}
 	terminals := &terminal.Registry{
-		Start:          starter,
-		Limits:         configService.TerminalLimits,
-		ReconnectLimit: configService.TerminalReconnects,
-		Network:        dependencies.Network,
-		Random:         dependencies.Random,
-		ProgramBlocked: dependencies.ProgramBlocked,
+		Start:               starter,
+		Limits:              configService.TerminalLimits,
+		ReconnectLimit:      configService.TerminalReconnects,
+		RunningCommandTitle: configService.TerminalRunningCommandTitle,
+		Network:             dependencies.Network,
+		Random:              dependencies.Random,
+		ProgramBlocked:      dependencies.ProgramBlocked,
 	}
 
 	return terminals

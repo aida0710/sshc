@@ -2,7 +2,6 @@ import type { PaneEdge } from "./splitView/layout";
 import type { SplitGroup } from "./splitView/splitGroups";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
-import type { LocalShellProfile } from "../api/settings";
 import type { TerminalSession } from "../api/terminalSessions";
 import { defaultWorkspaceId, type TerminalWorkspace } from "../api/terminalWorkspaces";
 import { useTranslate } from "../i18n/context";
@@ -14,7 +13,7 @@ import { keepMachineState, keepMachineStateJSON, parseMachineStateJSON } from ".
 import { interfaceState, useSettings } from "../settings/settingsStore";
 import { Icon } from "../ui/icons";
 import { Notice } from "../ui/surface";
-import { localShellChoices } from "./localShellChoices";
+import { localShellChoice } from "./localShellChoice";
 import { commandTargetsForWorkspace } from "./commands/workspaceCommandTargets";
 import { terminalCommandApiFor } from "./commands/commandApi";
 import { WorkspaceCommandCenter } from "./commands/WorkspaceCommandCenter";
@@ -51,12 +50,11 @@ type WorkspaceTreeProps = {
   onRemoveSessionFromSplit?: (id: string) => void;
   onDuplicate: (id: string) => void;
   onReorder: (order: string[]) => void;
-  localShellProfiles?: LocalShellProfile[];
   // aliases/hosts feed the same picker SFTP uses, so a new session starts
   // from one dialog whether it is a local shell or an SSH host.
   aliases?: string[];
   hosts?: HostEntry[];
-  onOpenShell: (profileId: string | undefined, workspaceId: string) => void;
+  onOpenShell: (workspaceId: string) => void;
   onConnect?: (alias: string, workspaceId: string) => void;
   // directDestination is what the new session's search does with a user@host[:port] typed into it.
   directDestination?: DirectDestinationActions | undefined;
@@ -94,7 +92,6 @@ export function WorkspaceTree({
   onRemoveSessionFromSplit,
   onDuplicate,
   onReorder,
-  localShellProfiles = [],
   runTarget = null,
   loading = false,
   aliases = [],
@@ -194,7 +191,7 @@ export function WorkspaceTree({
     void terminalSessions.moveToWorkspace(sessionId, workspaceId);
   }
 
-  const localChoices = useMemo(() => localShellChoices(t, localShellProfiles, runTarget), [localShellProfiles, runTarget, t]);
+  const localChoices = useMemo(() => [localShellChoice(t, runTarget)], [runTarget, t]);
 
   function toggleShowHidden() {
     keepMachineState("showHiddenTerminalWorkspaces", showHidden ? "" : "true");
@@ -385,9 +382,9 @@ export function WorkspaceTree({
           setPickerWorkspace(null);
           onConnect?.(alias, pickerWorkspace ?? defaultWorkspaceId);
         }}
-        onChooseLocal={(id) => {
+        onChooseLocal={() => {
           setPickerWorkspace(null);
-          onOpenShell(id === "default" ? undefined : id, pickerWorkspace ?? defaultWorkspaceId);
+          onOpenShell(pickerWorkspace ?? defaultWorkspaceId);
         }}
         onClose={() => setPickerWorkspace(null)}
       />

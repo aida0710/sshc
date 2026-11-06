@@ -13,6 +13,13 @@ const runningCommandTitleDelay = time.Second
 // runningCommandTitleSeparator は、コマンドの名前とシェルが送ったタイトルのあいだに置く。
 const runningCommandTitleSeparator = " · "
 
+// showsRunningCommand は、設定がペイン名にコマンドの名前を出すことを許しているかである。
+// 許していないときも、タイトルを送ったのがどのプログラムかは覚えておく（acceptTitle）。
+// 設定を戻したときに、すぐ正しい名前を出すためである。
+func (s *Session) showsRunningCommand() bool {
+	return s.runningCommandTitle == nil || s.runningCommandTitle()
+}
+
 // foregroundProgram は、シェルが前面で動かしているプログラムを Process に聞く。
 func (s *Session) foregroundProgram() (ForegroundProgram, bool) {
 	s.mutex.Lock()

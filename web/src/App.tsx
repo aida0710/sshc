@@ -177,17 +177,14 @@ export function App({
   });
   const terminalWorkspace = useTerminalWorkspaceController({
     runTarget: runTargets.selected,
-    shells: runTargetApis.sessions,
     terminalSessions,
     workspaces: terminalWorkspaces.workspaces,
-    enabled: state === "ready",
     section,
     navigate,
     closeNavigation,
   });
   const {
     splitView,
-    localShellProfiles,
     activeSessionId,
     terminalScreenMounted,
     orderedSessions,
@@ -514,8 +511,7 @@ export function App({
             }}
             onDuplicateSession={(id) => void duplicateSession(id)}
             onReorderSessions={setSessionOrder}
-            localShellProfiles={localShellProfiles}
-            onOpenShell={(profileId, workspaceId) => void openLocalShell(profileId, undefined, workspaceId)}
+            onOpenShell={(workspaceId) => void openLocalShell(undefined, undefined, workspaceId)}
             aliases={declared.knownAliases}
             hosts={declared.hosts}
             onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
@@ -635,7 +631,6 @@ export function App({
             sessions={terminalSessions.sessions}
             aliases={declared.knownAliases}
             hosts={declared.hosts}
-            localShellProfiles={localShellProfiles}
             runTarget={runTargets.selected}
             directDestination={directDestination}
             onOpen={(request, place) => void openSessionInSplit(request, place)}

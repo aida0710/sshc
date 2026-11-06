@@ -22,7 +22,6 @@ import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import type { MessageKey } from "../i18n/messages";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import type { TerminalSessionsState } from "../terminal/sessions";
-import type { LocalShellProfile } from "../api/settings";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { HostEntry } from "../api/config";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
@@ -65,7 +64,6 @@ export function AppNavigation({
   onSplitSession,
   onDuplicateSession,
   onReorderSessions,
-  localShellProfiles = [],
   onOpenShell,
   aliases = [],
   hosts = [],
@@ -102,8 +100,7 @@ export function AppNavigation({
   onSplitSession?: (id: string, edge: PaneEdge) => void;
   onDuplicateSession: (id: string) => void;
   onReorderSessions: (order: string[]) => void;
-  localShellProfiles?: LocalShellProfile[];
-  onOpenShell: (profileId: string | undefined, workspaceId: string) => void;
+  onOpenShell: (workspaceId: string) => void;
   aliases?: string[];
   hosts?: HostEntry[];
   onConnect?: (alias: string, workspaceId: string) => void;
@@ -222,7 +219,6 @@ export function AppNavigation({
           onRemoveSessionFromSplit={splitView.removeFromSplit}
           onDuplicate={onDuplicateSession}
           onReorder={onReorderSessions}
-          localShellProfiles={localShellProfiles}
           onOpenShell={onOpenShell}
           aliases={aliases}
           hosts={hosts}
