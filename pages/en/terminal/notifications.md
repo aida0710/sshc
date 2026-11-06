@@ -31,7 +31,7 @@ printf '\e]0;hello\a'
 
 ### The running command
 
-When a command runs for a second or longer in a local shell, sshc puts its name in front of the pane title. While `sleep 31` runs, the pane is called "sleep · aida@r540: ~", and it goes back when the command ends. No shell setup is needed: the sshc engine asks the operating system for the name of the process the shell runs in the terminal.
+When a command runs for a second or longer in a local shell, sshc puts its name in front of the pane title. While `sleep 31` runs, the pane is called `sleep · aida@r540: ~`, and it goes back when the command ends. No shell setup is needed: the sshc engine asks the operating system for the name of the process the shell runs in the terminal.
 
 | Case | Pane title |
 |---|---|
