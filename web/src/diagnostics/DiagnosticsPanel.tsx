@@ -228,7 +228,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
           <ol className="flex flex-col gap-2">
             {effective.route.map((stage) => (
               <li key={`${stage.order}-${stage.hop}`} className="flex items-start gap-3" style={{ marginInlineStart: `${stage.depth}rem` }}>
-                <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-[10px] text-ink-muted">{stage.order + 1}</span>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-[10px] text-ink-muted">{stage.order + 1}</span>
                 <div className="min-w-0 [overflow-wrap:anywhere]"><span className="font-medium text-ink">{stage.hop}</span>
                 {stage.complex ? (
                   <span className="ml-2 text-notice-ink">{t("diag.hopComplex")}</span>
