@@ -29,6 +29,38 @@ To try it, run this inside a pane:
 printf '\e]0;hello\a'
 ```
 
+### The running command
+
+When a command runs for a second or longer in a local shell, sshc puts its name in front of the pane title. While `sleep 31` runs, the pane is called `sleep · aida@r100: ~`, and it goes back when the command ends. No shell setup is needed: the sshc engine asks the operating system for the name of the process the shell runs in the terminal.
+
+| Case | Pane title |
+|---|---|
+| The shell sends a title (as bash does by default on Debian and Ubuntu) | `sleep · aida@r100: ~` |
+| The shell sends no title | `sleep` |
+| The running program sent a title itself (Claude Code, vim) | That program's title |
+| You pinned the pane name | The pinned name |
+
+- A command that ends within a second (such as `ls`) is never named, so the pane title does not flicker.
+- Only local shells of an sshc engine running on Linux can be named. Engines on macOS or Windows do not add the command name.
+- Names are limited to 15 characters; longer ones are cut.
+
+In an SSH session sshc cannot name the command, because SSH does not tell what runs on the remote machine. Set up the remote shell to send a title before each command, and the pane title takes the same form.
+
+For zsh, add this to `~/.zshrc` on the remote machine:
+
+```zsh
+preexec() { local words=(${(z)1}); print -rn -- $'\e]2;'"${words[1]} · ${(%):-%n@%m: %~}"$'\a' }
+precmd() { print -rn -- $'\e]2;'"${(%):-%n@%m: %~}"$'\a' }
+```
+
+For bash 4.4 or later, add this to `~/.bashrc` on the remote machine. Back at the prompt, the title is the one the default Debian and Ubuntu `~/.bashrc` sends.
+
+```bash
+PS0='\e]2;$(fc -ln -0 | sed -E "s/^[[:space:]]+//; s/ .*//") · \u@\h: \w\a'
+```
+
+When bash keeps commands that start with a space out of the history (`HISTCONTROL=ignorespace` or `ignoreboth`; Debian and Ubuntu default to `ignoreboth`), such a command shows the name of the command before it while it runs.
+
 ## Notifications
 
 When a program asks for a notification through OSC 9, OSC 99, or OSC 777, sshc marks that pane as unread.

@@ -48,13 +48,22 @@ func (s *Session) UnpinTitle() {
 
 // acceptTitle records an OSC 0/1/2 title. An empty title means the program
 // cleared it, so the pane falls back to its connection name.
+//
+// It also records which program sent the title. A title the running program
+// sent itself is shown as it is; one the shell sent at its prompt gets the
+// running command's name in front (running_command_title.go).
 func (s *Session) acceptTitle(generation uint64, title string) {
+	program, running := s.foregroundProgram()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if generation != s.generation || s.exited != nil {
 		return
 	}
 	s.terminalTitle = title
+	s.terminalTitleGroup = 0
+	if running {
+		s.terminalTitleGroup = program.Group
+	}
 	if directory, ok := workingDirectoryFromTitle(title); ok {
 		s.noteWorkingDirectoryLocked(directory)
 	}
