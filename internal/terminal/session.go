@@ -48,6 +48,9 @@ type Session struct {
 	// terminalTitle arrived, or 0 when the shell itself, or a program the engine
 	// cannot see, sent it. See running_command_title.go.
 	terminalTitleGroup int
+	// runningCommandTitle says whether the settings let the pane title name the
+	// running command; nil means they do. See running_command_title.go.
+	runningCommandTitle func() bool
 	// workingDirectory is the last directory the shell reported. See
 	// working_directory.go.
 	workingDirectory string
@@ -241,7 +244,10 @@ func (s *Session) Live() bool { return s.Exit() == nil }
 // View は一覧に出すための写しである。
 func (s *Session) View() View {
 	directory := s.WorkingDirectory()
-	program, running := s.foregroundProgram()
+	program, running := ForegroundProgram{}, false
+	if s.showsRunningCommand() {
+		program, running = s.foregroundProgram()
+	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	title := s.displayTitleLocked(program, running)

@@ -145,6 +145,7 @@ No settings page has a Save button: **Saved** shows under the field you changed 
 - Whether to use font ligatures (off by default)
 - Whether to show the VT320 status line a program shows (on by default; when off, what is written to it stays off the screen as well)
 - With shell integration (OSC 133): command marks, the command kept above its output, and command marks on the scrollbar (all on by default)
+- Whether to put the name of the command running in a local shell in front of the pane title (on by default; sshc engines on Linux only; see [Titles and notifications](/en/terminal/notifications#the-running-command))
 
 The engine replay buffer retains bytes in memory so it can replay output when a browser reconnects. Browser scrollback is the separate number of display lines retained by xterm. Neither setting writes terminal output to disk. When output keeps coming faster than the browser can draw it and the browser falls further behind than the replay buffer holds, the part no longer in the buffer is skipped and the terminal says so.
 
@@ -168,7 +169,7 @@ When an image is renamed, its extension follows the detected format and preset a
 
 ## Local shell and notifications
 
-Choose a default shell profile and start directory under the **Behaviour** tab of **Settings → Terminal**; both are preset settings. Detected choices include PowerShell variants on Windows and available zsh, fish, bash, and similar shells on Unix systems. **Open Terminal here** from a local SFTP folder uses that default profile with the displayed folder as its start directory. A local shell opened through the usual **New session** action uses the start directory configured here.
+Choose a default shell profile and start directory under the **Behaviour** tab of **Settings → Terminal**; both are preset settings. Detected choices include PowerShell variants on Windows and available zsh, fish, bash, and similar shells on Unix systems. **Open Terminal here** from a local SFTP folder uses that default profile with the displayed folder as its start directory. **New session** lists one local shell: it opens the shell chosen here, in the start directory configured here, or the system login shell when no shell is chosen.
 
 Browser notification permission is requested only after an explicit click. Configure, in the preset being edited, the sound and volume used when a terminal program sends a notification through OSC 9/99/777, and test delivery. See [Titles and notifications](/en/terminal/notifications) for details.
 

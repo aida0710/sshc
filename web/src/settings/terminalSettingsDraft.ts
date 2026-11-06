@@ -38,13 +38,14 @@ export type TerminalDraft = {
   commandMarks: boolean;
   stickyCommand: boolean;
   commandScrollbarMarks: boolean;
+  runningCommandTitle: boolean;
 };
 
 export const initialTerminalDraft: TerminalDraft = {
   startDirectory: "", localShellProfile: "", maxSessions: "", scrollback: "", browserScrollbackLines: "", retainedTerminals: "", fontSize: "",
   palette: "", font: "", background: "", tint: undefined,
   copyOnSelect: true, rightClickPaste: true, webgl: true, jisYenBackslash: false, composerEnterSends: false, ligatures: false, statusLine: true,
-  commandMarks: true, stickyCommand: true, commandScrollbarMarks: true,
+  commandMarks: true, stickyCommand: true, commandScrollbarMarks: true, runningCommandTitle: true,
 };
 
 export function draftOf(settings: PresetTerminalSettings): TerminalDraft {
@@ -72,6 +73,7 @@ export function draftOf(settings: PresetTerminalSettings): TerminalDraft {
     commandMarks: settings.commandMarks ?? true,
     stickyCommand: settings.stickyCommand ?? true,
     commandScrollbarMarks: settings.commandScrollbarMarks ?? true,
+    runningCommandTitle: settings.runningCommandTitle ?? true,
   };
 }
 
@@ -132,6 +134,7 @@ export function settingsOf(draft: TerminalDraft): PresetTerminalSettings {
     ...(draft.commandMarks ? {} : { commandMarks: false }),
     ...(draft.stickyCommand ? {} : { stickyCommand: false }),
     ...(draft.commandScrollbarMarks ? {} : { commandScrollbarMarks: false }),
+    ...(draft.runningCommandTitle ? {} : { runningCommandTitle: false }),
     ...(draft.localShellProfile === "" ? {} : { localShellProfile: draft.localShellProfile }),
     ...appearanceOf({ palette: draft.palette, font: draft.font, background: draft.background, tint: draft.tint }),
   };

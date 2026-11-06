@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { LocalShellProfileList } from "../api/settings";
-import type { OpenTerminalSessionRequest, TerminalSessionsApi } from "../api/terminalSessions";
+import type { OpenTerminalSessionRequest } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
 import { sshSessionTarget } from "../connections/directDestination";
 import type { Section } from "../routing/sectionRoute";
@@ -10,14 +9,10 @@ import type { TerminalSessionsState } from "./sessions";
 import { topSessionId } from "./workspaceGrouping";
 
 type TerminalWorkspaceControllerOptions = {
-  // shells is the terminal API of the engine in use: its shells are the ones
-  // a new session can open, on this machine or on the run target.
-  shells: Pick<TerminalSessionsApi, "shellProfiles">;
   terminalSessions: TerminalSessionsState;
   // workspaces are the run target's, in the sidebar's order, to know which
   // session is at the top of it.
   workspaces: readonly TerminalWorkspace[];
-  enabled: boolean;
   runTarget?: string | null;
   section: Section | null;
   navigate: (section: Section) => void;
@@ -25,16 +20,13 @@ type TerminalWorkspaceControllerOptions = {
 };
 
 export function useTerminalWorkspaceController({
-  shells,
   terminalSessions,
   workspaces,
-  enabled,
   runTarget = null,
   section,
   navigate,
   closeNavigation,
 }: TerminalWorkspaceControllerOptions) {
-  const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfileList["profiles"]>([]);
   const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget, maxSessions: terminalSessions.maxSessions });
   const { selectSession: setActiveSessionId, dispatch: dispatchSplit } = splitView;
   const { activeSessionId } = splitView.state;
@@ -44,23 +36,6 @@ export function useTerminalWorkspaceController({
   // again when the person comes back to it. A run target's selection starts
   // empty in useSplitView, so what is recorded here is always that target's.
   const lastSessionByRunTarget = useRef(new Map<string | null, string>());
-
-  useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    // The shells of the previous engine are not offered while the next one's
-    // are read.
-    setLocalShellProfiles([]);
-    void shells
-      .shellProfiles()
-      .then((answer) => {
-        if (active) setLocalShellProfiles(answer.profiles);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [shells, enabled, section]);
 
   const orderedSessions = useMemo(() => {
     const rank = new Map(sessionOrder.map((id, index) => [id, index]));
@@ -192,7 +167,6 @@ export function useTerminalWorkspaceController({
 
   return {
     splitView,
-    localShellProfiles,
     activeSessionId,
     terminalScreenMounted,
     orderedSessions,
