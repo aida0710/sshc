@@ -8,6 +8,8 @@ const maxLogicalLineCells = 65536;
 // to 32 rows so aligned output cannot turn a hover into a scrollback scan.
 const maxHardWrappedRows = 32;
 const pathContinuationCharacter = /^[\p{L}\p{N}\p{M}_./\\~%\-]/u;
+// Characters of the middle of a URL that the words of a sentence rarely hold.
+const urlMiddleCharacter = /[/?#&=%+~]/u;
 
 type PositionedLink = { match: TerminalLinkMatch; range: IBufferRange };
 
@@ -38,9 +40,19 @@ function crossesPathBoundary(match: TerminalLinkMatch, boundary: number): boolea
   return !previewableNamePattern.test(prefix) && !/["'`\s]$/u.test(prefix);
 }
 
+// urlContinuesAcross says whether a URL a program broke at the edge of the terminal goes on after the break.
+// A URL that only happens to end at the edge must not take the next word: the part after the break has to look
+// like the middle of a URL, or fill its row and go on past the next break.
+function urlContinuesAcross(match: TerminalLinkMatch, boundary: number, nextBoundary: number | undefined): boolean {
+  if (match.kind !== "url" || match.start >= boundary || match.end <= boundary) return false;
+  if (nextBoundary !== undefined && match.end > nextBoundary) return true;
+  return urlMiddleCharacter.test(match.text.slice(boundary - match.start, (nextBoundary ?? match.end) - match.start));
+}
+
 function linksAcrossBoundaries(text: string, boundaries: number[], allowWindowsPaths: boolean): TerminalLinkMatch[] {
   const matches = findTerminalLinks(text, allowWindowsPaths);
   const rejected = boundaries.find((boundary) => !matches.some((match) => {
+    if (urlContinuesAcross(match, boundary, boundaries.find((offset) => offset > boundary))) return true;
     if (!crossesPathBoundary(match, boundary)) return false;
     const prefix = text.slice(match.start, boundaries.find((offset) => offset > match.start) ?? boundary);
     // A slash before the break distinguishes paths from the last word of
