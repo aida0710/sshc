@@ -6,9 +6,11 @@ import { sessionMarkerClass } from "./sessionStatus";
 
 // The connection dot takes the size of the program status marks, an 11px circle,
 // so a row's name stays in place when a status takes the dot's place and the two
-// look alike in the list. The circle is centred on the name's letters, which sit
-// above the middle of the 18px name line: centred on the line it looks low.
-const markerCircle = "mt-0.5 size-[11px] shrink-0 rounded-full";
+// look alike in the list. The circle is centred on the 18px name line. Where the
+// letters sit in that line depends on the platform's font: measured, the circle is
+// within 1px of their middle on Android and Windows, and only Linux at twice the
+// pixel density draws the letters a pixel higher.
+const markerCircle = "mt-[3.5px] size-[11px] shrink-0 rounded-full";
 
 // The mark that stands for each program status that needs the person: a filled
 // circle with a sign once it waits on them, failed or is done.
