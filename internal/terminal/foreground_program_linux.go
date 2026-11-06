@@ -14,10 +14,8 @@ const userHZ = 100
 // ForegroundProgram は、シェルが前面で動かしているプログラムを /proc から読む。
 // 名前はカーネルが覚えている実行ファイルの名前（comm、15 バイトまで）である。
 func (p *unixProcess) ForegroundProgram() (ForegroundProgram, bool) {
-	group, err := p.foregroundGroup()
-	// シェルは自分のプロセスグループの先頭である（Setsid）。前面がシェルのグループなら、
-	// シェルはプロンプトで入力を待っているか、組み込みのコマンドを動かしている。
-	if err != nil || p.child.Process == nil || group == p.child.Process.Pid {
+	group, ok := p.foregroundCommandGroup()
+	if !ok {
 		return ForegroundProgram{}, false
 	}
 	// プロセスグループの番号は、その先頭のプロセスの番号でもある。先頭が先に
