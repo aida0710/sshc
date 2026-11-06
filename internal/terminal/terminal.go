@@ -75,8 +75,8 @@ type DirectoryReporter interface {
 }
 
 // ForegroundReporter は、シェルが端末の前面で動かしているプログラムを答える Process
-// である。答えられるのは Linux の擬似端末だけで、SSH の接続先で何が動いているかは
-// 分からない。
+// である。答えられるのは Linux と macOS の擬似端末だけで、SSH の接続先で何が動いて
+// いるかは分からない。
 type ForegroundReporter interface {
 	// ForegroundProgram は、前面のプログラムを返す。シェル自身が前面にいるときと、
 	// 分からないときは false を返す。
