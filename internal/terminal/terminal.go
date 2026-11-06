@@ -74,6 +74,24 @@ type DirectoryReporter interface {
 	ForegroundDirectory() (string, error)
 }
 
+// ForegroundReporter は、シェルが端末の前面で動かしているプログラムを答える Process
+// である。答えられるのは Linux の擬似端末だけで、SSH の接続先で何が動いているかは
+// 分からない。
+type ForegroundReporter interface {
+	// ForegroundProgram は、前面のプログラムを返す。シェル自身が前面にいるときと、
+	// 分からないときは false を返す。
+	ForegroundProgram() (ForegroundProgram, bool)
+}
+
+// ForegroundProgram は、シェルが前面で動かしているプログラムである。Group はその
+// プロセスグループの番号で、タイトルをそのプログラムが送ったかを見分けるのに使う。
+// Running は、そのプログラムが動き始めてからの長さである。
+type ForegroundProgram struct {
+	Group   int
+	Name    string
+	Running time.Duration
+}
+
 // Readier reports when an asynchronously opened Process has completed the
 // connection work which makes it usable. A Process without this capability is
 // ready when Open returns; SSH sessions implement it because authentication
