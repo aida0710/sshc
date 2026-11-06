@@ -149,6 +149,7 @@ func TestTerminalChoicesRoundTripThroughThePreset(t *testing.T) {
 		CommandMarks:           &off,
 		StickyCommand:          &off,
 		CommandScrollbarMarks:  &off,
+		RunningCommandTitle:    &off,
 		LocalShellProfile:      "fish",
 		Appearance:             &TerminalAppearance{Palette: "dracula"},
 	}
@@ -161,6 +162,16 @@ func TestTerminalChoicesRoundTripThroughThePreset(t *testing.T) {
 	}
 	if got := service.TerminalLocalShellProfile(); got != "fish" {
 		t.Fatalf("local shell profile = %q, want fish", got)
+	}
+	if service.TerminalRunningCommandTitle() {
+		t.Fatal("the running command stays in the title after the preset turned it off")
+	}
+}
+
+func TestRunningCommandIsInTheTitleUntilThePresetSaysOtherwise(t *testing.T) {
+	service, _ := newTerminalService(t)
+	if !service.TerminalRunningCommandTitle() {
+		t.Fatal("a preset that says nothing keeps the running command out of the title")
 	}
 }
 

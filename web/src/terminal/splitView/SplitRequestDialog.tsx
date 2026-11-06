@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
 import type { HostEntry } from "../../api/config";
-import type { LocalShellProfile } from "../../api/settings";
 import type { OpenTerminalSessionRequest, TerminalSession } from "../../api/terminalSessions";
 import { sshSessionTarget } from "../../connections/directDestination";
 import { useTranslate } from "../../i18n/context";
 import { HostPickerDialog, type LocalChoice } from "../../shell/HostPickerDialog";
 import type { DirectDestinationActions } from "../../shell/useDirectDestinationActions";
 import { duplicateSessionRequest } from "../duplicateSessionRequest";
-import { localShellChoices, shellRequest } from "../localShellChoices";
+import { localShellChoice, shellRequest } from "../localShellChoice";
 import { terminalDisplayTitle } from "../terminalPresentation";
 import { SplitSessionPicker } from "./SplitSessionPicker";
 import type { SplitRequest, SplitViewController } from "./useSplitView";
 
-// A profile's id comes from the engine, so the duplicate's id is one no profile has.
+// The duplicate is the choice listed before the local shell (localShellChoice.ts); its id only has to differ.
 const duplicateChoiceId = "duplicate:session";
 
 type SplitRequestDialogProps = {
@@ -20,7 +19,6 @@ type SplitRequestDialogProps = {
   sessions: TerminalSession[];
   aliases: string[];
   hosts: HostEntry[];
-  localShellProfiles: LocalShellProfile[];
   // runTarget is the SSH alias of the engine the shells open on, or null for this machine.
   runTarget: string | null;
   // directDestination names what a user@host[:port] typed into the search would be saved as.
@@ -38,7 +36,7 @@ export function SplitRequestDialog(props: SplitRequestDialogProps) {
   return request === null ? null : <SplitRequestChoice {...props} request={request} />;
 }
 
-function SplitRequestChoice({ splitView, sessions, aliases, hosts, localShellProfiles, runTarget, directDestination, onOpen, onSplit, request }: SplitRequestDialogProps & { request: SplitRequest }) {
+function SplitRequestChoice({ splitView, sessions, aliases, hosts, runTarget, directDestination, onOpen, onSplit, request }: SplitRequestDialogProps & { request: SplitRequest }) {
   const t = useTranslate();
   const [choosingNew, setChoosingNew] = useState(false);
   const { targetSessionId } = request;
@@ -82,11 +80,11 @@ function SplitRequestChoice({ splitView, sessions, aliases, hosts, localShellPro
       heading={t(request.edge === "right" ? "splitView.newSessionRight" : "splitView.newSessionBelow")}
       aliases={aliases}
       hosts={hosts}
-      local={[duplicate, ...localShellChoices(t, localShellProfiles, runTarget)]}
+      local={[duplicate, localShellChoice(t, runTarget)]}
       // Connecting to a typed destination is offered; saving it first is not, which would open the session outside the split.
       direct={{ aliasFor: directDestination.aliasFor, connect: (destination) => open({ kind: "ssh", ...sshSessionTarget(destination.text), workspaceId: target.workspaceId }) }}
       onChoose={(alias) => open({ kind: "ssh", ...sshSessionTarget(alias), workspaceId: target.workspaceId })}
-      onChooseLocal={(id) => open(id === duplicateChoiceId ? duplicateSessionRequest(target) : shellRequest(id, target.workspaceId))}
+      onChooseLocal={(id) => open(id === duplicateChoiceId ? duplicateSessionRequest(target) : shellRequest(target.workspaceId))}
       onClose={cancel}
     />
   );
