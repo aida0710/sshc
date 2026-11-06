@@ -16,7 +16,11 @@ export type LayoutDefectKind =
   // A check box or radio button whose name is not right beside it on the same line.
   | "detached-checkbox"
   // Less than the 44px a finger needs, on a screen laid out as a phone.
-  | "small-target";
+  | "small-target"
+  // An icon or a dot beside a line of text, higher or lower than the middle of the line.
+  | "off-centre-mark"
+  // Rows of one list built alike whose leading marks differ in size, or whose text starts at different places.
+  | "uneven-rows";
 
 export type LayoutDefect = {
   kind: LayoutDefectKind;
@@ -218,6 +222,118 @@ function listLayoutDefects({ ignored }: ListingOptions): LayoutDefect[] {
     const sameLine = Math.abs((firstLine.top + firstLine.bottom) / 2 - (mark.top + mark.bottom) / 2) <= Math.max(firstLine.height, mark.height) / 2;
     if (!sameLine || gap > nameGapPx) {
       note("detached-checkbox", box, `its name "${(firstText.textContent ?? "").trim().slice(0, 30)}" is ${Math.round(gap)}px across and ${sameLine ? "on the same line" : "on another line"}`);
+    }
+  }
+
+  // ---- Marks beside text: level with their line, and alike down a list ----
+
+  // A mark is a small picture that stands beside a line of text: an icon, a status dot. It is hidden from screen
+  // readers more often than not, so it is not judged by isShown.
+  const smallestMarkPx = 4;
+  const largestMarkPx = 24;
+  // How far a mark's middle may be from the middle of its line of text. A mark is measured against the line rather than
+  // the letters, because where the letters sit in their line is the platform font's: within 1px of the line's middle on
+  // Android and Windows, and a pixel higher on Linux at twice the pixel density. What this finds is a mark put off its
+  // line by the page itself, such as a margin on a circle as tall as the line.
+  const markCentreTolerancePx = 1;
+  // How far the rows of one list may differ. Boxes have fractional sizes.
+  const rowTolerancePx = 0.5;
+
+  const isMark = (element: Element) => {
+    if (!isJudged(element) || (element.parentElement?.closest("svg") ?? null) !== null) return false;
+    const box = element.getBoundingClientRect();
+    if (box.width < smallestMarkPx || box.height < smallestMarkPx || box.width > largestMarkPx || box.height > largestMarkPx) return false;
+    if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+    if (element.tagName === "svg" || element.tagName === "IMG") return true;
+    // A box drawn as a mark: a dot, a ring, or a circle holding one sign.
+    if (element.children.length > 0 || (element.textContent ?? "").trim().length > 1) return false;
+    const style = getComputedStyle(element);
+    return style.backgroundColor !== "rgba(0, 0, 0, 0)" || style.backgroundImage !== "none" || parseFloat(style.borderTopWidth) > 0;
+  };
+
+  const firstTextIn = (element: Element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      const holder = node.parentElement;
+      if ((node.textContent ?? "").trim() === "" || holder === null) continue;
+      const box = holder.getBoundingClientRect();
+      if (box.width < 2 || box.height < 2 || !holder.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+      return node as Text;
+    }
+    return null;
+  };
+
+  // The text a mark stands for: the first text after it in the row it is laid out in.
+  const textBesideMark = (mark: Element) => {
+    const row = mark.parentElement;
+    if (row === null) return null;
+    const style = getComputedStyle(row);
+    if (!/flex|grid/.test(style.display) || style.flexDirection.startsWith("column")) return null;
+    for (let sibling = mark.nextElementSibling; sibling !== null; sibling = sibling.nextElementSibling) {
+      const text = firstTextIn(sibling);
+      if (text !== null) return text;
+    }
+    return null;
+  };
+
+  // The box of a text's first line. The leading is shared out evenly above and below it, so its middle is the middle of
+  // the line.
+  const firstLineOf = (text: Text) => {
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    return range.getClientRects()[0] ?? null;
+  };
+
+  type MarkedRow = { mark: Element; box: DOMRect; textLeft: number; shape: string };
+  const markedRowsByList = new Map<Element, MarkedRow[]>();
+
+  for (const mark of document.querySelectorAll("body *")) {
+    if (!isMark(mark)) continue;
+    const text = textBesideMark(mark);
+    if (text === null) continue;
+    const line = firstLineOf(text);
+    if (line === null) continue;
+    const box = mark.getBoundingClientRect();
+    const markMiddle = (box.top + box.bottom) / 2;
+    const lineMiddle = (line.top + line.bottom) / 2;
+    // A mark that stands beside the whole of a text of more lines than one is not lined up with its first line.
+    if (markMiddle < line.top || markMiddle > line.bottom) continue;
+    const offset = markMiddle - lineMiddle;
+    if (Math.abs(offset) > markCentreTolerancePx) {
+      // Marks are mostly nameless pictures, so each is told apart by the text it stands beside.
+      const besideText = (text.textContent ?? "").trim().slice(0, 30);
+      defects.push({ kind: "off-centre-mark", name: `${nameOf(mark)} beside "${besideText}"`, where: whereOf(mark), detail: `its middle is ${Math.abs(offset).toFixed(1)}px ${offset > 0 ? "below" : "above"} the middle of its line` });
+    }
+
+    const list = mark.closest("ul,ol,[role='list']");
+    const row = mark.closest("li,[role='listitem']");
+    if (list === null || row === null || row.closest("ul,ol,[role='list']") !== list) continue;
+    const rows = markedRowsByList.get(list) ?? [];
+    // Only the first mark of a row leads it.
+    if (rows.some((marked) => row.contains(marked.mark))) continue;
+    // Rows are compared with the rows built the same way: the same path from the row down to its mark.
+    const path: string[] = [];
+    for (let at: Element | null = mark; at !== null && at !== row; at = at.parentElement) path.unshift(at.tagName);
+    rows.push({ mark, box, textLeft: line.left, shape: path.join(">") });
+    markedRowsByList.set(list, rows);
+  }
+
+  for (const [list, rows] of markedRowsByList) {
+    const byShape = new Map<string, MarkedRow[]>();
+    for (const row of rows) byShape.set(row.shape, [...(byShape.get(row.shape) ?? []), row]);
+    for (const alike of byShape.values()) {
+      if (alike.length < 2) continue;
+      const first = alike[0]!;
+      const differences: string[] = [];
+      const otherSize = alike.find((row) => Math.abs(row.box.width - first.box.width) > rowTolerancePx || Math.abs(row.box.height - first.box.height) > rowTolerancePx);
+      if (otherSize !== undefined) {
+        differences.push(`leading marks of ${first.box.width.toFixed(1)}x${first.box.height.toFixed(1)}px and ${otherSize.box.width.toFixed(1)}x${otherSize.box.height.toFixed(1)}px`);
+      }
+      const otherStart = alike.find((row) => Math.abs(row.textLeft - first.textLeft) > rowTolerancePx);
+      if (otherStart !== undefined) {
+        differences.push(`text starting ${Math.abs(otherStart.textLeft - first.textLeft).toFixed(1)}px apart after the marks`);
+      }
+      if (differences.length > 0) note("uneven-rows", list, differences.join("; "));
     }
   }
 
