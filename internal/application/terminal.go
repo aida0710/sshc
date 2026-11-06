@@ -71,6 +71,13 @@ func (s *Service) TerminalLocalShellProfile() string {
 	return s.terminalPresetSettings().LocalShellProfile
 }
 
+// TerminalRunningCommandTitle は、ローカルシェルで動いているコマンドの名前をペイン名に
+// 出すかを返す。書かれていなければ出す。
+func (s *Service) TerminalRunningCommandTitle() bool {
+	show := s.terminalPresetSettings().RunningCommandTitle
+	return show == nil || *show
+}
+
 // checkStartDirectoryChange は、プリセットの開始ディレクトリを変えるとき、このマシンに入れる
 // ディレクトリかを確かめる。変えないときは確かめない。開始ディレクトリは別の OS のマシンや後から
 // 消したディレクトリを指していることがあり、ほかの項目の保存まで止めないためである。

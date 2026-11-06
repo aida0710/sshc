@@ -481,15 +481,16 @@ test("asks to reopen the sessions of a run target that restarted between two lis
   await expect(question.getByText(/open on bastion before its sshc stopped/)).toBeVisible();
 });
 
-test("offers the run target's own shells for a new session", async ({ page, installation }) => {
+test("offers one local shell, the run target's, for a new session", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: localVersion });
   await openApplication(page, installation);
   await chooseBastion(page);
   const navigation = page.getByRole("navigation", { name: "Primary" });
   await navigation.getByRole("button", { name: "New session", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("button", { name: /^Local shell · fish on bastion, \/usr\/bin\/fish/ })).toBeVisible();
   await expect(dialog.getByRole("button", { name: /^Local shell, bastion/ })).toBeVisible();
+  // Which shell it is comes from Settings > Terminal on bastion; the other shells bastion has are not listed.
+  await expect(dialog.getByRole("button", { name: /^Local shell ·/ })).toHaveCount(0);
 });
 
 test("shows again the session that was open on each run target when switching back to it", async ({ page, installation }) => {

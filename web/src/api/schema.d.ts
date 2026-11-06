@@ -4672,6 +4672,7 @@ export interface components {
             commandMarks?: boolean;
             stickyCommand?: boolean;
             commandScrollbarMarks?: boolean;
+            runningCommandTitle?: boolean;
             localShellProfile?: string;
             startDirectory?: string;
             appearance?: components["schemas"]["TerminalAppearance"];

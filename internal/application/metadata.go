@@ -178,6 +178,8 @@ type EmbeddedTerminal struct {
 	CommandMarks          *bool `json:"commandMarks,omitempty"`
 	StickyCommand         *bool `json:"stickyCommand,omitempty"`
 	CommandScrollbarMarks *bool `json:"commandScrollbarMarks,omitempty"`
+	// RunningCommandTitleは、ローカルシェルで動いているコマンドの名前をペイン名の前に出すか。nilなら出す。
+	RunningCommandTitle *bool `json:"runningCommandTitle,omitempty"`
 	// LocalShellProfileは検出済みprofileの安定IDであり、command文字列ではない。
 	LocalShellProfile string `json:"localShellProfile,omitempty"`
 	// StartDirectory は、ローカルシェルが始まる場所である。

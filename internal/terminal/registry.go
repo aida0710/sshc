@@ -69,6 +69,9 @@ type Registry struct {
 	ReconnectDelay func(attempt int) time.Duration
 	// ReconnectLimit は、自動再接続を何回まで試みてよいかを返す。nil なら既定。
 	ReconnectLimit func() int
+	// RunningCommandTitle は、ローカルシェルで動いているコマンドの名前をペイン名に出すかを
+	// 返す（running_command_title.go）。nil なら出す。
+	RunningCommandTitle func() bool
 	// ProgramBlocked hears when a session's program starts or stops waiting for
 	// the person (blocked_program.go); nil when nobody listens. It runs under the
 	// session's mutex, so it must return at once and not call the session.
@@ -246,12 +249,13 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		delay: func(attempt int) time.Duration {
 			return r.reconnectDelay(attempt, id)
 		},
-		reconnectLimit: r.reconnectLimit,
-		now:            r.now,
-		programBlocked: r.ProgramBlocked,
-		network:        r.Network,
-		networkRetry:   r.NetworkRetryInterval,
-		tmuxSession:    tmuxSession,
+		reconnectLimit:      r.reconnectLimit,
+		runningCommandTitle: r.RunningCommandTitle,
+		now:                 r.now,
+		programBlocked:      r.ProgramBlocked,
+		network:             r.Network,
+		networkRetry:        r.NetworkRetryInterval,
+		tmuxSession:         tmuxSession,
 	}
 	if session.networkRetry == 0 {
 		session.networkRetry = networkRetryInterval

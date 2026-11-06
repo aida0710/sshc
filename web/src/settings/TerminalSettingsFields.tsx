@@ -191,7 +191,7 @@ export function TerminalStartFields({ draft, edit, type, profiles }: GroupProps 
           onChange={(event) => type({ startDirectory: event.target.value })}
         />
       </FieldRow>
-      <FieldRow label={t("terminal.localShellProfileLabel")}>
+      <FieldRow label={t("terminal.localShellProfileLabel")} hint={t("terminal.localShellProfileHint")}>
         <select
           className={control}
           value={draft.localShellProfile}
@@ -208,7 +208,7 @@ export function TerminalStartFields({ draft, edit, type, profiles }: GroupProps 
   );
 }
 
-type Switch = "copyOnSelect" | "rightClickPaste" | "jisYenBackslash" | "composerEnterSends" | "webgl" | "ligatures" | "statusLine" | "commandMarks" | "stickyCommand" | "commandScrollbarMarks";
+type Switch = "copyOnSelect" | "rightClickPaste" | "jisYenBackslash" | "composerEnterSends" | "webgl" | "ligatures" | "statusLine" | "commandMarks" | "stickyCommand" | "commandScrollbarMarks" | "runningCommandTitle";
 
 // In reading order: two to a row on a computer.
 const switches: { key: Switch; label: MessageKey; hint: MessageKey }[] = [
@@ -222,6 +222,7 @@ const switches: { key: Switch; label: MessageKey; hint: MessageKey }[] = [
   { key: "commandMarks", label: "terminal.commandMarksLabel", hint: "terminal.commandMarksHint" },
   { key: "stickyCommand", label: "terminal.stickyCommandLabel", hint: "terminal.stickyCommandHint" },
   { key: "commandScrollbarMarks", label: "terminal.commandScrollbarMarksLabel", hint: "terminal.commandScrollbarMarksHint" },
+  { key: "runningCommandTitle", label: "terminal.runningCommandTitleLabel", hint: "terminal.runningCommandTitleHint" },
 ];
 
 // The clipboard, keyboard and drawing switches, in two columns with a line between rows. The first row of

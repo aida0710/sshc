@@ -182,7 +182,7 @@ describe("WorkspaceTree", () => {
     const props = renderTree({ aliases: ["bastion"] });
     await user.click(screen.getByRole("button", { name: "Open a session in sshc dev" }));
     await user.click(within(screen.getByRole("dialog", { name: "New session" })).getByRole("button", { name: /Local shell, localhost/ }));
-    expect(props.onOpenShell).toHaveBeenCalledWith(undefined, "w1");
+    expect(props.onOpenShell).toHaveBeenCalledWith("w1");
 
     await user.click(screen.getByRole("button", { name: "Open a session in Main" }));
     await user.click(within(screen.getByRole("dialog", { name: "New session" })).getByRole("button", { name: /bastion/ }));
@@ -194,7 +194,7 @@ describe("WorkspaceTree", () => {
     const props = renderTree({ selected: "dev-shell" });
     await user.click(screen.getByRole("button", { name: "New session" }));
     await user.click(within(screen.getByRole("dialog", { name: "New session" })).getByRole("button", { name: /Local shell, localhost/ }));
-    expect(props.onOpenShell).toHaveBeenCalledWith(undefined, "w1");
+    expect(props.onOpenShell).toHaveBeenCalledWith("w1");
   });
 
   it("stops offering a new session once the live limit is reached, not counting exited ones", () => {

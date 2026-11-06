@@ -126,3 +126,19 @@ func TestPinnedTitleHidesTheRunningCommand(t *testing.T) {
 		t.Fatalf("pinned title while make runs = %q", got)
 	}
 }
+
+func TestSettingCanKeepTheRunningCommandOutOfTheTitle(t *testing.T) {
+	shell := newLocalShellForTitle()
+	show := false
+	shell.session.runningCommandTitle = func() bool { return show }
+	shell.session.acceptTitle(1, "aida@r540: ~")
+	shell.process.runs(4242, "sleep")
+	shell.wait(runningCommandTitleDelay)
+	if got := shell.title(); got != "aida@r540: ~" {
+		t.Fatalf("title with the setting off = %q, want the shell's title alone", got)
+	}
+	show = true
+	if got := shell.title(); got != "sleep · aida@r540: ~" {
+		t.Fatalf("title once the setting is on again = %q", got)
+	}
+}
