@@ -182,6 +182,7 @@ export function App({
     section,
     navigate,
     closeNavigation,
+    vaultRevision: runTargets.vaultUnlock.revision,
   });
   const {
     splitView,
