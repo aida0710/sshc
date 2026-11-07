@@ -2,7 +2,7 @@ import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { exitText } from "./exitText";
 import { terminalProblemKey } from "./sessions";
-import { exitedAbnormally } from "./sessionStatus";
+import { exitedAbnormally, reconnectAwaitsInput } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
 import { hostKeyQuestionOf, statusBannerRows, type StatusBannerRow } from "./statusBannerRows";
 import { useReconnectCountdown } from "./useReconnectCountdown";
@@ -35,10 +35,11 @@ function StreamLinkMessage({ link }: { link: Exclude<StreamLink, { phase: "live"
 
 // ReconnectMessage says which attempt the engine is on and whether it is waiting for the next one (with the seconds
 // left) or connecting now.
-function ReconnectMessage({ reconnect }: { reconnect: TerminalSession["reconnect"] }) {
+function ReconnectMessage({ reconnect, awaitingInput }: { reconnect: TerminalSession["reconnect"]; awaitingInput: boolean }) {
   const t = useTranslate();
   const { attempt, limit, seconds } = useReconnectCountdown(reconnect);
   if (reconnect?.waitingForNetwork === true) return t("terminal.waitingForNetworkDetail");
+  if (awaitingInput) return t("terminal.reconnectingAwaitingInputDetail", { attempt, limit });
   if (seconds === null) return t("terminal.reconnectingNow", { attempt, limit });
   // 秒読みは毎秒変わるので読み上げず、試行の回数が変わったときだけ読み上げる。
   return (
@@ -101,7 +102,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
       {!rows.has("reconnecting") ? null : (
         <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
           <p className="min-w-0 grow">
-            <ReconnectMessage reconnect={session.reconnect} />
+            <ReconnectMessage reconnect={session.reconnect} awaitingInput={reconnectAwaitsInput(session)} />
           </p>
           {recovery?.stopReconnecting === undefined ? null : (
             <Button small disabled={recovery.stopBusy} onClick={recovery.stopReconnecting} className={bannerButton}>

@@ -10,7 +10,7 @@ import { exitText } from "./exitText";
 import type { NotificationPermissionNotice } from "./useNotificationPermissionNotice";
 import { PasswordSaveCard } from "./PasswordSaveCard";
 import { terminalProblemKey } from "./sessions";
-import { reconnectsOnEnter } from "./sessionStatus";
+import { reconnectAwaitsInput, reconnectsOnEnter } from "./sessionStatus";
 import type { TerminalNotice } from "./terminalNotice";
 import { useReconnectCountdown } from "./useReconnectCountdown";
 import type { SessionRecovery } from "./useSessionRecovery";
@@ -75,6 +75,7 @@ function ReconnectingCard({ session, title, recovery, frame }: {
       title={t("terminal.noticeConnectionLost", { title })}
       body={waitingForNetwork
         ? t("terminal.noticeNetworkBack")
+        : reconnectAwaitsInput(session) ? t("terminal.noticeAwaitingInput")
         : seconds === null ? t("terminal.noticeTryingNow") : t("terminal.noticeNextTry", { seconds: String(seconds) })}
       {...frame}
     >
