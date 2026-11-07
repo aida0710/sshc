@@ -491,20 +491,24 @@ func workflowPath() string {
 
 func validateNativeWorkflow(document workflowDocument) []string {
 	var problems []string
-	goJob, ok := document.Jobs["go"]
-	if !ok {
-		problems = append(problems, "jobs.go is missing")
+	if checks, ok := document.Jobs["go-checks"]; !ok {
+		problems = append(problems, "jobs.go-checks is missing")
 	} else {
-		problems = append(problems, validateNativeMatrix("jobs.go", goJob)...)
-		problems = append(problems, validateGoSteps(goJob)...)
-		problems = append(problems, validatePinnedSetup(goJob, "actions/checkout")...)
-		problems = append(problems, validatePinnedSetup(goJob, "actions/setup-go")...)
-		problems = append(problems, validateGoBuildCache(goJob)...)
-		problems = append(problems, validateSetupOrder("jobs.go", goJob, "actions/setup-go")...)
+		problems = append(problems, validateNativeMatrix("jobs.go-checks", checks)...)
+		problems = append(problems, validateGoCheckSteps(checks)...)
+		problems = append(problems, validateNativeSetup("jobs.go-checks", checks, "checks")...)
 	}
+	if tests, ok := document.Jobs["go-test"]; !ok {
+		problems = append(problems, "jobs.go-test is missing")
+	} else {
+		problems = append(problems, validateTestPartsMatrix(tests)...)
+		problems = append(problems, validateGoTestSteps(tests)...)
+		problems = append(problems, validateNativeSetup("jobs.go-test", tests, "test${{ matrix.part }}")...)
+	}
+	problems = append(problems, validateNativeAggregate(document.Jobs["go"])...)
 
 	if _, ok := document.Jobs["macos"]; ok {
-		problems = append(problems, "the old jobs.macos duplicate must be folded into jobs.go")
+		problems = append(problems, "the old jobs.macos duplicate must be folded into jobs.go-checks and jobs.go-test")
 	}
 	for _, id := range []string{"web", "web-checks", "generated", "integration", "security", "android", "deadcode"} {
 		job, ok := document.Jobs[id]
@@ -519,24 +523,36 @@ func validateNativeWorkflow(document workflowDocument) []string {
 	return problems
 }
 
-// validateNativeTestsGate は、画面だけの PR で Windows と macOS の Go のテストを飛ばす仕組みを
+// validateNativeSetup は、Go の手順を流す job（jobs.go-checks と jobs.go-test）に共通の準備を
+// 確かめる。role は、その job のビルドのキャッシュの鍵に入る名前である。
+func validateNativeSetup(id string, job workflowJob, role string) []string {
+	var problems []string
+	problems = append(problems, validateNativeTestsGate(id, job)...)
+	problems = append(problems, validatePinnedSetup(job, "actions/checkout")...)
+	problems = append(problems, validatePinnedSetup(job, "actions/setup-go")...)
+	problems = append(problems, validateGoBuildCache(id, job, role)...)
+	problems = append(problems, validateSetupOrder(id, job, "actions/setup-go")...)
+	return problems
+}
+
+// validateNativeTestsGate は、画面だけの PR で Windows と macOS の Go の手順を飛ばす仕組みを
 // 確かめる。必須の検査（Go native (Windows) など）は、job ごと消すと PR が「待ち」のまま
 // マージできなくなる。そこで job は残し、jobs.changes の答えで手順だけを飛ばす。Linux はいつも流す。
-func validateNativeTestsGate(job workflowJob) []string {
+func validateNativeTestsGate(id string, job workflowJob) []string {
 	var problems []string
 	// jobs.ui は、Go のテストが読む組み立てた画面を渡す（embedded_ui_workflow_test.go）。
 	if !slices.Equal(job.Needs, []string{"changes", "ui"}) {
-		problems = append(problems, "jobs.go must need jobs.changes to know whether the native Go tests run, and jobs.ui for the built web UI")
+		problems = append(problems, id+" must need jobs.changes to know whether the native Go steps run, and jobs.ui for the built web UI")
 	}
 	if job.If != "${{ !cancelled() }}" {
-		problems = append(problems, "jobs.go must run even when jobs.changes fails, with if: ${{ !cancelled() }}")
+		problems = append(problems, id+" must run even when jobs.changes fails, with if: ${{ !cancelled() }}")
 	}
 	if job.Env["NATIVE_TESTS"] != nativeTestsExpression {
-		problems = append(problems, fmt.Sprintf("jobs.go env.NATIVE_TESTS = %q, want %q", job.Env["NATIVE_TESTS"], nativeTestsExpression))
+		problems = append(problems, fmt.Sprintf("%s env.NATIVE_TESTS = %q, want %q", id, job.Env["NATIVE_TESTS"], nativeTestsExpression))
 	}
 	for _, step := range job.Steps {
 		if step.If == "" {
-			problems = append(problems, fmt.Sprintf("jobs.go step %q must say whether it runs for a web-only change", stepLabel(step)))
+			problems = append(problems, fmt.Sprintf("%s step %q must say whether it runs for a web-only change", id, stepLabel(step)))
 		}
 	}
 	return problems
@@ -549,6 +565,16 @@ func stepLabel(step workflowStep) string {
 	return step.Uses
 }
 
+// nativeOSes は、Go の手順を流すランナーと、その表示名である。
+var nativeOSes = map[string]string{
+	"ubuntu-24.04": "Linux",
+	"macos-15":     "macOS",
+	"windows-2025": "Windows",
+}
+
+// nativeNames は、表示名を必須の検査の並びの順に並べたものである。
+var nativeNames = []string{"Linux", "macOS", "Windows"}
+
 func validateNativeMatrix(id string, job workflowJob) []string {
 	var problems []string
 	if job.RunsOn != "${{ matrix.os }}" {
@@ -560,41 +586,76 @@ func validateNativeMatrix(id string, job workflowJob) []string {
 	if job.Strategy.FailFast == nil || *job.Strategy.FailFast {
 		problems = append(problems, id+" must explicitly set fail-fast: false")
 	}
+	return append(problems, validateNativeIncludes(id, job.Strategy.Matrix.Include)...)
+}
 
-	want := map[string]string{
-		"ubuntu-24.04": "Linux",
-		"macos-15":     "macOS",
-		"windows-2025": "Windows",
-	}
-	got := make(map[string]string, len(job.Strategy.Matrix.Include))
-	for _, entry := range job.Strategy.Matrix.Include {
+// validateNativeIncludes は、matrix の include が3つの OS をそれぞれ1回ずつ、決まった表示名で
+// 挙げていることを確かめる。
+func validateNativeIncludes(id string, include []workflowMatrixEntry) []string {
+	var problems []string
+	got := make(map[string]string, len(include))
+	for _, entry := range include {
 		if _, duplicate := got[entry.OS]; duplicate {
 			problems = append(problems, id+" has duplicate matrix OS "+entry.OS)
 		}
 		got[entry.OS] = entry.Name
 	}
-	if len(got) != len(want) {
-		problems = append(problems, fmt.Sprintf("%s matrix OS count = %d, want %d", id, len(got), len(want)))
+	if len(got) != len(nativeOSes) {
+		problems = append(problems, fmt.Sprintf("%s matrix OS count = %d, want %d", id, len(got), len(nativeOSes)))
 	}
-	for osName, displayName := range want {
+	for osName, displayName := range nativeOSes {
 		if got[osName] != displayName {
 			problems = append(problems, fmt.Sprintf("%s matrix entry %s name = %q, want %q", id, osName, got[osName], displayName))
 		}
 	}
 	for osName := range got {
-		if _, ok := want[osName]; !ok {
+		if _, ok := nativeOSes[osName]; !ok {
 			problems = append(problems, id+" has unsupported matrix OS "+osName)
 		}
 	}
 	return problems
 }
 
-// nativeTestsGate は、jobs.go の各手順の条件の終わりに付く「Go に関わる変更があるときだけ」で
+// validateTestPartsMatrix は、jobs.go-test が3つの OS のそれぞれで、テストを 1 から parts までの
+// 全部の部分に分けて流すことを確かめる。部分が1つでも抜けると、その package のテストが流れない。
+func validateTestPartsMatrix(job workflowJob) []string {
+	const id = "jobs.go-test"
+	var problems []string
+	if job.RunsOn != "${{ matrix.os }}" {
+		problems = append(problems, id+" runs-on must be ${{ matrix.os }}")
+	}
+	if job.Strategy == nil {
+		return append(problems, id+" strategy is missing")
+	}
+	if job.Strategy.FailFast == nil || *job.Strategy.FailFast {
+		problems = append(problems, id+" must explicitly set fail-fast: false")
+	}
+	matrix := job.Strategy.Matrix
+	if !slices.Equal(matrix.Name, nativeNames) {
+		problems = append(problems, fmt.Sprintf("%s matrix name = %v, want %v", id, matrix.Name, nativeNames))
+	}
+	if len(matrix.Parts) != 1 || matrix.Parts[0] < 2 {
+		return append(problems, fmt.Sprintf("%s matrix parts = %v, want one number of at least 2", id, matrix.Parts))
+	}
+	var want []int
+	for part := 1; part <= matrix.Parts[0]; part++ {
+		want = append(want, part)
+	}
+	if !slices.Equal(matrix.Part, want) {
+		problems = append(problems, fmt.Sprintf("%s matrix part = %v, want every part %v", id, matrix.Part, want))
+	}
+	if job.Env["PART"] != "${{ matrix.part }}" || job.Env["PARTS"] != "${{ matrix.parts }}" {
+		problems = append(problems, id+" must hand matrix.part and matrix.parts to its steps as env.PART and env.PARTS")
+	}
+	return append(problems, validateNativeIncludes(id, matrix.Include)...)
+}
+
+// nativeTestsGate は、Go の各手順の条件の終わりに付く「Go に関わる変更があるときだけ」で
 // ある。NATIVE_TESTS は、Linux ではいつも、Windows と macOS では jobs.changes が要ると決めたときに
 // true になる。
 const nativeTestsGate = " && env.NATIVE_TESTS == 'true'"
 
-// nativeTestsExpression は、jobs.go の env.NATIVE_TESTS に書く式である。
+// nativeTestsExpression は、Go の手順を流す job の env.NATIVE_TESTS に書く式である。
 // jobs.changes が失敗して答えが空のときも流れるよう、'true' ではなく 'false' と比べる。
 const nativeTestsExpression = "${{ matrix.name == 'Linux' || needs.changes.outputs.native != 'false' }}"
 
@@ -603,10 +664,10 @@ func gated(condition string) string {
 	return strings.TrimSuffix(condition, " }}") + nativeTestsGate + " }}"
 }
 
-func validateGoSteps(job workflowJob) []string {
+func validateGoCheckSteps(job workflowJob) []string {
+	const id = "jobs.go-checks"
 	var problems []string
-	problems = append(problems, validateSeparatedRunShells("jobs.go", job)...)
-	problems = append(problems, validateNativeTestsGate(job)...)
+	problems = append(problems, validateSeparatedRunShells(id, job)...)
 	for _, required := range []runContract{
 		{run: "scripts/ci/check-gofmt.sh", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
 		{run: "./scripts/ci/check-gofmt.ps1", condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
@@ -614,24 +675,69 @@ func validateGoSteps(job workflowJob) []string {
 		{run: "go vet ./...", condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
 		{run: "go build ./...", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
 		{run: "go build ./...", condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
-		// テストは OS ごとに 1 回、race を付けて流す。PR でも main への push でも同じ。
-		{run: "go test -count=1 -race -tags sshc_test_kdf ./...", condition: gated("${{ runner.os != 'Windows' }}"), shell: "bash"},
-		{run: windowsFastTempScript, condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"},
 	} {
 		if !hasRunContract(job, required) {
-			problems = append(problems, fmt.Sprintf("jobs.go lacks run=%q if=%q shell=%q", required.run, required.condition, required.shell))
+			problems = append(problems, fmt.Sprintf("%s lacks run=%q if=%q shell=%q", id, required.run, required.condition, required.shell))
 		}
+	}
+	return problems
+}
+
+// splitPackages は、jobs.go-test の手順が、自分の部分の package を internal/testsplit に聞く
+// 呼び出しである。
+const (
+	splitPackagesUnix    = `packages=$(go run ./internal/testsplit/cmd/testsplit -part "$PART" -of "$PARTS")`
+	splitPackagesWindows = `$packages = @(go run ./internal/testsplit/cmd/testsplit -part $env:PART -of $env:PARTS)`
+)
+
+func validateGoTestSteps(job workflowJob) []string {
+	const id = "jobs.go-test"
+	var problems []string
+	problems = append(problems, validateSeparatedRunShells(id, job)...)
+	// テストは race を付けて流す。PR でも main への push でも同じ。
+	unix, found := namedStep(job, "go test -race (Unix)")
+	if !found || unix.If != gated("${{ runner.os != 'Windows' }}") || unix.Shell != "bash" ||
+		!strings.Contains(unix.Run, splitPackagesUnix) || !strings.Contains(unix.Run, "go test -count=1 -race -tags sshc_test_kdf $packages") {
+		problems = append(problems, id+" must run its part of the packages with go test -count=1 -race -tags sshc_test_kdf on Unix")
 	}
 
 	const windowsTest = "go test -race (Windows)"
 	problems = append(problems, validateWindowsLoggedTest(job, windowsLoggedTest{
 		name:         windowsTest,
 		condition:    gated("${{ runner.os == 'Windows' }}"),
-		command:      "& go test -v -count=1 -race -tags sshc_test_kdf ./... 2>&1 | Tee-Object -FilePath",
+		command:      "& go test -v -count=1 -race -tags sshc_test_kdf @packages 2>&1 | Tee-Object -FilePath",
 		exitVariable: "$raceExit",
 	})...)
-	if !runsBefore(job, windowsFastTempScript, windowsTest) {
-		problems = append(problems, fmt.Sprintf("jobs.go must run %s before the step %q, or the Windows tests write to the slow system drive", windowsFastTempScript, windowsTest))
+	if windows, found := namedStep(job, windowsTest); found && !strings.Contains(windows.Run, splitPackagesWindows) {
+		problems = append(problems, fmt.Sprintf("step %q must ask internal/testsplit for its part of the packages", windowsTest))
+	}
+	if !hasRunContract(job, runContract{run: windowsFastTempScript, condition: gated("${{ runner.os == 'Windows' }}"), shell: "pwsh"}) ||
+		!runsBefore(job, windowsFastTempScript, windowsTest) {
+		problems = append(problems, fmt.Sprintf("%s must run %s before the step %q, or the Windows tests write to the slow system drive", id, windowsFastTempScript, windowsTest))
+	}
+	return problems
+}
+
+// validateNativeAggregate は、必須の検査の名前「Go native (Linux)」などを持つ jobs.go が、
+// Go の job がどれも成功したときだけ成功することを確かめる。ブランチの保護がこの名前で待つ。
+func validateNativeAggregate(job workflowJob) []string {
+	var problems []string
+	if job.Name != "Go native (${{ matrix.name }})" {
+		problems = append(problems, fmt.Sprintf("jobs.go name = %q, want the required check names Go native (${{ matrix.name }})", job.Name))
+	}
+	if job.Strategy == nil || !slices.Equal(job.Strategy.Matrix.Name, nativeNames) {
+		problems = append(problems, fmt.Sprintf("jobs.go must report one required check for each of %v", nativeNames))
+	}
+	if !slices.Equal(job.Needs, []string{"go-checks", "go-test"}) {
+		problems = append(problems, fmt.Sprintf("jobs.go needs = %v, want [go-checks go-test]", job.Needs))
+	}
+	if job.If != "${{ !cancelled() }}" {
+		problems = append(problems, "jobs.go must run with if: ${{ !cancelled() }}, so that a failed Go job fails it instead of skipping it")
+	}
+	step, found := namedStep(job, "Require every Go job to succeed")
+	if !found || step.Env["RESULTS"] != "${{ join(needs.*.result, ' ') }}" ||
+		!strings.Contains(step.Run, `if [ "$result" != success ]; then`) || !strings.Contains(step.Run, "exit 1") {
+		problems = append(problems, "jobs.go must fail unless every needed Go job succeeded")
 	}
 	return problems
 }
@@ -670,7 +776,7 @@ type windowsLoggedTest struct {
 func validateWindowsLoggedTest(job workflowJob, want windowsLoggedTest) []string {
 	step, ok := namedStep(job, want.name)
 	if !ok {
-		return []string{"jobs.go lacks the step " + want.name}
+		return []string{"jobs.go-test lacks the step " + want.name}
 	}
 	var problems []string
 	if step.If != want.condition || step.Shell != "pwsh" {
@@ -715,21 +821,22 @@ func validatePinnedSetup(job workflowJob, action string) []string {
 	return problems
 }
 
-// validateGoBuildCache は、jobs.go のビルドのキャッシュを確かめる。setup-go のキャッシュは
+// validateGoBuildCache は、Go の手順を流す job のビルドのキャッシュを確かめる。setup-go のキャッシュは
 // go.sum だけで鍵を作るので、依存が変わらない限り作り直されず、そのあとに変わったパッケージを
-// 毎回コンパイルし直す。main のコミットごとに保存し、PR と push は最新のものから始める。
-func validateGoBuildCache(job workflowJob) []string {
-	const key = "go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-${{ github.sha }}"
+// 毎回コンパイルし直す。main のコミットごとに保存し、PR と push は最新のものから始める。job が
+// コンパイルするものは違う（テストは race 付き）ので、鍵には job の役割（role）を入れる。
+func validateGoBuildCache(id string, job workflowJob, role string) []string {
+	key := "go-${{ matrix.name }}-" + role + "-${{ hashFiles('go.sum') }}-${{ github.sha }}"
 	var problems []string
 	restore, found := namedStep(job, "Restore the Go build cache")
 	if !found || !strings.HasPrefix(restore.Uses, "actions/cache/restore@") || fmt.Sprint(restore.With["key"]) != key ||
-		!strings.Contains(fmt.Sprint(restore.With["restore-keys"]), "go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-\n") {
-		problems = append(problems, "jobs.go must restore the newest Go build cache of its OS with the key "+key)
+		!strings.Contains(fmt.Sprint(restore.With["restore-keys"]), "go-${{ matrix.name }}-"+role+"-${{ hashFiles('go.sum') }}-\n") {
+		problems = append(problems, id+" must restore the newest Go build cache of its OS and role with the key "+key)
 	}
 	save, found := namedStep(job, "Save the Go build cache")
 	if !found || !strings.HasPrefix(save.Uses, "actions/cache/save@") || fmt.Sprint(save.With["key"]) != key ||
 		save.If != gated("${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}") {
-		problems = append(problems, "jobs.go must save the Go build cache only from pushes to main, with the key "+key)
+		problems = append(problems, id+" must save the Go build cache only from pushes to main, with the key "+key)
 	}
 	return problems
 }
@@ -850,7 +957,7 @@ func runCommandOutput(t *testing.T, directory, name string, args ...string) []by
 }
 
 // jobs.changes は、PR の merge commit と 1 つ目の親（base）との差分を native-tests-needed.sh に
-// 渡し、Windows と macOS の Go のテストが要るかを jobs.go へ渡す。
+// 渡し、Windows と macOS の Go のテストが要るかを jobs.go-checks と jobs.go-test へ渡す。
 func TestCIWorkflowDecidesTheNativeGoTestsFromThePullRequestDiff(t *testing.T) {
 	document := readWorkflowDocument(t)
 	job, ok := document.Jobs["changes"]

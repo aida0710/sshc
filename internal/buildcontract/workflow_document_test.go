@@ -39,6 +39,11 @@ type workflowMatrix struct {
 	Include []workflowMatrixEntry `yaml:"include"`
 	// Shard は、画面の単体テストを分けて流す番号の並びである（jobs.web-unit）。
 	Shard []int `yaml:"shard"`
+	// Name・Part・Parts は、OS ごとに Go のテストを分けて流す並びである（jobs.go-test と、
+	// 必須の検査の名前を持つ jobs.go）。
+	Name  []string `yaml:"name"`
+	Part  []int    `yaml:"part"`
+	Parts []int    `yaml:"parts"`
 }
 
 type workflowMatrixEntry struct {
