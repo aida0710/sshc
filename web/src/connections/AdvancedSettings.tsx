@@ -16,6 +16,7 @@ import { HostBlockText } from "./HostBlockText";
 import { useDraftSave } from "./useDraftSave";
 import { useReportDirty } from "./useReportDirty";
 import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
+import { unsavedJumpHops } from "./jumpHops";
 
 type AdvancedSettingsProps = {
   detail: HostDetail;
@@ -27,6 +28,8 @@ type AdvancedSettingsProps = {
   disabled: boolean;
   onDirtyChange: (dirty: boolean) => void;
   onDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
+  // savedAliases are the saved connections, for the note on a jump host that names none of them.
+  savedAliases: readonly string[];
 };
 
 function fieldKey(field: FormField): string {
@@ -53,8 +56,14 @@ export function AdvancedSettings({
   disabled,
   onDirtyChange,
   onDiscardReady,
+  savedAliases,
 }: AdvancedSettingsProps) {
   const t = useTranslate();
+  // A jump host left behind by a rename or a deletion elsewhere is taken for a host name: say so under the field.
+  const jumpWarning = (value: string) => {
+    const unsaved = unsavedJumpHops(value, savedAliases);
+    return unsaved.length === 0 ? undefined : t("advanced.jumpUnsaved", { names: unsaved.join(", ") });
+  };
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [removed, setRemoved] = useState<number[]>([]);
   const [additions, setAdditions] = useState<FieldEdit[]>([]);
@@ -204,7 +213,8 @@ export function AdvancedSettings({
 
       <EditorSection title={t("advanced.jumpHeading")}>
         {jumpFields.map((field) => (
-          <FieldRow key={fieldKey(field)} density="editor" interactiveChildren label={field.keyword.toLowerCase() === "proxyjump" ? t("advanced.jumpVia") : field.keyword}>
+          <FieldRow key={fieldKey(field)} density="editor" interactiveChildren label={field.keyword.toLowerCase() === "proxyjump" ? t("advanced.jumpVia") : field.keyword}
+            warning={field.keyword.toLowerCase() === "proxyjump" && !removed.includes(field.line) ? jumpWarning(draftFor(field)) : undefined}>
             <span className="flex items-center gap-2">
               <input {...literalTextEntry}
                 aria-label={field.keyword}
@@ -218,7 +228,7 @@ export function AdvancedSettings({
           </FieldRow>
         ))}
         {offerProxyJump ? (
-          <FieldRow density="editor" label={t("advanced.jumpVia")}>
+          <FieldRow density="editor" label={t("advanced.jumpVia")} warning={jumpWarning(newJump)}>
             <input {...asciiTextEntry} value={newJump} disabled={fieldsDisabled} placeholder={t("advanced.jumpNone")} onChange={(event) => setNewJump(event.target.value)} className={`${control} font-mono`} />
           </FieldRow>
         ) : null}

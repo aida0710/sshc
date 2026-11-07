@@ -33,6 +33,10 @@ func (s *Service) Overview() (Overview, error) {
 		hosts[index].HostName = resolution.Values.First("hostname")
 		hosts[index].User = resolution.Values.First("user")
 		hosts[index].Port = resolution.Values.First("port")
+		// 画面は、削除する接続先を踏み台にしている接続先と、踏み台の名前が接続先に無いことを、これで知る。
+		if jump := resolution.Values.First("proxyjump"); !strings.EqualFold(jump, "none") {
+			hosts[index].ProxyJump = jump
+		}
 	}
 
 	stored, _, err := s.metadata.Load()
