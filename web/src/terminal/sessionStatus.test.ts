@@ -60,6 +60,14 @@ describe("sessionStateText", () => {
     expect(sessionStateText(t, stopped)).toBe("connection lost");
   });
 
+  it("says a reconnect waits for a typed answer, but leaves a host key question to its own notice", () => {
+    const reconnect = { attempt: 4, limit: 5, retryAt: "2026-10-30T00:01:00Z", problem: "" };
+    const typing: TerminalSession = { ...base, state: "reconnecting", reconnect, awaitingPrompt: true };
+    expect(sessionStateText(t, typing)).toBe("reconnecting 4/5 · waiting for input");
+    const hostKey: TerminalSession = { ...typing, hostKeyQuestion: { alias: "bastion", hostName: "bastion.example", keyType: "ssh-ed25519", fingerprint: "SHA256:x" } };
+    expect(sessionStateText(t, hostKey)).toBe("reconnecting 4/5");
+  });
+
   it("does not give the engine's unknown exit status as a status", () => {
     expect(sessionStateText(t, { ...base, state: "exited", exited: { code: -1, signal: "", at: "" } })).toBe("exited");
   });
