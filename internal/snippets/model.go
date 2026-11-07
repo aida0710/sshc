@@ -7,7 +7,9 @@ import (
 )
 
 const (
-	SchemaVersion         = 2
+	// SchemaVersion 3 は手順のスニペット（Snippet.Steps）を足した版である。版 2 の文書は手順が無い
+	// だけなので、そのまま読む（oldestReadableSchemaVersion）。
+	SchemaVersion         = 3
 	PathRelative          = "sshc/snippets.json"
 	MaxSnippets           = 256
 	MaxVariables          = 32
@@ -27,6 +29,9 @@ const (
 // 文書は丸ごと復号して読むので、割り当てに保存する入力で際限なく大きくしない。
 // 値は、同期で文書を受け取る今までの sshc が受け付ける 64 に据え置く。
 const MaxStartupBindings = 64
+
+// oldestReadableSchemaVersion は、読める文書のいちばん古い版である。
+const oldestReadableSchemaVersion = 2
 
 var (
 	ErrInvalidSnippet     = errors.New("snippet is invalid")
@@ -77,11 +82,16 @@ type Variable struct {
 	Description string       `json:"description,omitempty"`
 }
 
+// Snippet is a command, or, when Steps is not empty, steps that wait for the shell before they type (steps.go). A
+// snippet of steps has no Command.
 type Snippet struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Command     string     `json:"command"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Command     string `json:"command"`
+	Steps       []Step `json:"steps,omitempty"`
+	// WaitSeconds is how long each step waits for its text; 0 is DefaultWaitSeconds. Only a snippet of steps has one.
+	WaitSeconds int        `json:"waitSeconds,omitempty"`
 	Variables   []Variable `json:"variables"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
@@ -93,6 +103,8 @@ type Draft struct {
 	Name        string
 	Description string
 	Command     string
+	Steps       []Step
+	WaitSeconds int
 	Variables   []Variable
 }
 

@@ -128,7 +128,9 @@ func TestReturningToARunningTmuxSessionTypesNothingIntoIt(t *testing.T) {
 	registry, _ := newFastRegistry()
 	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "web", Title: "web", Open: spy.open,
-		Startup: func() terminal.Startup { return terminal.Startup{Commands: []string{"cd ~/src"}} },
+		Startup: func() terminal.Startup {
+			return terminal.Startup{Steps: []terminal.StartupStep{{Send: "cd ~/src", Enter: true}}}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -593,11 +593,12 @@ func (s *Session) announceConnected(process Process, successMessage string) {
 // reattachedTmuxMessage は、再接続で動いていた tmux のセッションに戻ったときに書く行である。
 const reattachedTmuxMessage = "\r\n[sshc] 再接続しました。\r\n"
 
-// sendStartup は、Spec.Startup の知らせとコマンドを、使える状態になった Process へ送る。
+// sendStartup は、Spec.Startup の知らせと手順を、使える状態になった Process へ送る。
 //
 // 世代ごとに呼ぶので、再接続した新しいシェルにも同じものが届く。SSH の Process では
-// Ready を待ってから送るので、コマンドは認証の問いへ答えとして流れず、知らせも
-// 認証の問いに紛れない。
+// Ready を待ってから送るので、手順は認証の問いへ答えとして流れず、知らせも
+// 認証の問いに紛れない。待つ文字列のある手順を含むときは、待つあいだ呼び手を止めない
+// よう、別の goroutine で送る（runStartupSteps）。
 func (s *Session) sendStartup(process Process) {
 	if s.startup == nil {
 		return
@@ -606,9 +607,16 @@ func (s *Session) sendStartup(process Process) {
 	if announcer, ok := process.(Announcer); ok && startup.Notice != "" {
 		announcer.Announce(startup.Notice)
 	}
-	for _, command := range startup.Commands {
-		_, _ = process.Write([]byte(command + "\r"))
+	if !startupStepsWait(startup.Steps) {
+		for _, step := range startup.Steps {
+			_, _ = process.Write(step.payload())
+		}
+		return
 	}
+	s.mutex.Lock()
+	generation := s.generation
+	s.mutex.Unlock()
+	go s.runStartupSteps(process, generation, startup)
 }
 
 // startPump は、セッションを動かし始める。回線の知らせは、呼び出し側へ戻る前に受け取り始める。

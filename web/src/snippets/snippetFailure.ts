@@ -10,6 +10,7 @@ const snippetFailureMessages: CodeMessages = {
   snippet_jobs_full: "snippets.jobsFull",
   snippet_job_finished: "snippets.jobFinished",
   invalid_snippet: "snippets.invalid",
+  snippet_steps_startup_only: "snippets.stepsStartupOnly",
 };
 
 export function describeSnippetFailure(t: Translate, error: unknown): string {
