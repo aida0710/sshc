@@ -86,6 +86,9 @@ var allowedToStartPrograms = []string{
 	// artifact verifier の sh/pwsh だけを allowlist 済み argv で起動し、caller input を
 	// shell command line として組み立てない。
 	"internal/nativebuild/nativebuild.go",
+	// CI の Go のテストを分ける道具も、配布される sshc runtime ではない。固定の argv の
+	// go list ./... だけを起動して package の並びを読む。
+	"internal/testsplit/cmd/testsplit/main.go",
 	// VPN 経路は、このマシンにすでにある docker に任せる。engine は docker socket を
 	// 自分で叩かず、ログインシェルの PATH で探した docker だけを固定の argv で起動
 	// する。argv へ入る利用者由来の値はプロファイル名と接続先だけで、プロファイル名は
