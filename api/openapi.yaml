@@ -7286,6 +7286,11 @@ components:
         verbosity: { type: integer, minimum: 0, maximum: 3 }
         # すべてのターミナルで、リモートのプログラムが OSC 52 でクリップボードへ書き込むのを許す。
         osc52: { type: boolean }
+        # セッションのログ（ターミナルに出たものを文字で書き続けるファイル）を保存する。
+        sessionLog: { type: boolean }
+        # ログを保存しない接続名を gitignore の形で書く（1行に1つのパターン、! で保存に戻す、あとの行が勝つ）。
+        # ローカルシェルは @local。空なら全部保存する。
+        sessionLogRules: { type: string, maxLength: 8192 }
     GlobalFileTransferSettings:
       type: object
       additionalProperties: false
@@ -7345,6 +7350,8 @@ components:
         # 前回使ったポート、既定のポート（デスクトップは54447、Androidは54448）の順に試し、
         # 使用中なら空いているポートを1つ選んで次回のために保存する。次の起動から効く。
         port: { type: integer, minimum: 1024, maximum: 65535 }
+        # セッションのログを置くフォルダ（絶対パスか ~/ で始まる）。省略時は facts の sessionLogDirectory。
+        sessionLogDirectory: { type: string, maxLength: 4096 }
     # そのマシンのエンジンが最後に起動したときの記録。
     MachineFacts:
       type: object
@@ -7353,6 +7360,8 @@ components:
         os: { type: string }
         version: { type: string }
         startedAt: { type: string, format: date-time }
+        # 設定にフォルダが無いときにセッションのログを置く場所。ログを保存できないマシン（Android）では省く。
+        sessionLogDirectory: { type: string }
     Machine:
       type: object
       additionalProperties: false

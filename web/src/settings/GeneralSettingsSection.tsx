@@ -9,6 +9,7 @@ import { formatDuration } from "../ui/format";
 import { PageSection } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { Notice } from "../ui/surface";
+import { SessionLogSettings } from "./SessionLogSettings";
 import { SettingsSection } from "./SettingsSection";
 import { updateGlobalSettings, useSettings, type GlobalSettings } from "./settingsStore";
 
@@ -124,6 +125,7 @@ export function GeneralSettingsSection({ showHeading }: { showHeading: boolean }
             </FieldRow>
           </div>
         </PageSection>
+        <SessionLogSettings terminal={terminal} save={save} />
         <PageSection heading={t("settings.generalTransfersHeading")}>
           <div>
             <FieldRow label={t("sftp.manager.autoClear")}>

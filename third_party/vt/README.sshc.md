@@ -14,6 +14,9 @@ or that upstream makes slow (a line feed that moves rows instead of cells, ASCII
 printed without a new string for each character), and it keeps the cursors and the
 margins on the screen where upstream lets output move them off and panics.
 `sshc_snapshot_test.go` checks that the handlers that are only faster draw what
-upstream draws. `sshc_shown_screen.go` reads the screen shown as text. Keep the
+upstream draws. `sshc_shown_screen.go` reads the screen shown as text.
+`sshc_leaving_lines.go` has `NewLeavingLinesEmulator`, which keeps the lines
+leaving the main screen (scrolled off its top, or erased) for the session log.
+Keep the
 other files equal to upstream v0.1.0 when updating them, and check these files
 against the new internals.

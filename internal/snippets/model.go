@@ -217,6 +217,8 @@ type PreparedCommand struct {
 	// ActionEvidence binds the server-side one-time action to the actual
 	// expanded command. Evidence is the public digest of the redacted display.
 	ActionEvidence string
+	// Secrets are the values of the secret variables in Command, which a shell echoes back as it is typed.
+	Secrets []string
 }
 
 type TargetPreview struct {
