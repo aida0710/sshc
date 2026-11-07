@@ -516,7 +516,8 @@ jobs:
               echo "$prefix: no cache saved for $SHA; keeping the previous ones"
               continue
             fi
-            grep -v -- "-$SHA\$" <<<"$keys" | while read -r id key; do
+            # 古いものが無いとき grep -v は 1 で終わる。pipefail で job を落とさないよう、空の一覧として扱う。
+            { grep -v -- "-$SHA\$" <<<"$keys" || true; } | while read -r id key; do
               [ -n "$id" ] || continue
               echo "deleting $key"
               gh cache delete --repo "$GITHUB_REPOSITORY" "$id"
