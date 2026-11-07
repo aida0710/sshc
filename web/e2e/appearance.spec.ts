@@ -1,3 +1,4 @@
+import { codeField } from "./support/codeField";
 import { chooseConnectionAction } from "./support/connections";
 import { expect, test } from "./support/environment";
 import { chooseTheme, openApplication, openSection, sessionStatus, themeChoiceLabels } from "./support/environment";
@@ -166,9 +167,8 @@ for (const appearance of everyTheme) {
 
     await openSection(page, "Config");
     // The editor is the one framed area in the Config workspace, so its edge has to show in every theme.
-    const editor = page.getByLabel(/File text/);
+    const editor = codeField(page, /File text/);
     await expect(editor).toHaveCSS("border-top-width", "1px");
-    await expect(editor).toHaveCSS("border-radius", "10px");
     if (process.env.SSHC_VISUAL_DIR !== undefined) {
       await page.screenshot({
         path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-config-explorer-${appearance}.png`,

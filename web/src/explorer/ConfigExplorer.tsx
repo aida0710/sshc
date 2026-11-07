@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toProblem } from "../api/guards";
 import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
@@ -31,6 +31,8 @@ import { sectionPath } from "../routing/sectionRoute";
 import { ConfigFileList } from "./ConfigFileList";
 import { sshDirectoryPath } from "./sshDirectoryPath";
 import { ConfigDiagnostics } from "./ConfigDiagnostics";
+import { CodeField } from "../editor/CodeField";
+import { diagnosticMarkersOf } from "./diagnosticMarkers";
 import { ConfigFileHead } from "./ConfigFileHead";
 import { ConfigPathForm, type ConfigPathTask } from "./ConfigPathForm";
 
@@ -55,12 +57,6 @@ function staysInConfig(next: BrowserLocation): boolean {
   return next.pathname === sectionPath("Config");
 }
 
-function lineRange(contents: string, line: number): { start: number; end: number } {
-  const lines = contents.split("\n");
-  const index = Math.min(Math.max(line, 1), lines.length) - 1;
-  const start = lines.slice(0, index).reduce((total, text) => total + text.length + 1, 0);
-  return { start, end: start + (lines[index]?.length ?? 0) };
-}
 
 export function ConfigExplorer({ target = null, onTargetHandled = () => undefined, onNavigationBlockerChange, onNavigateLocation }: ConfigExplorerProps) {
   const t = useTranslate();
@@ -82,7 +78,12 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
   const busy = pending.running !== null;
   const busyWith = (operation: ConfigOperation) => pending.running === operation;
   const showToast = useToast();
-  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const diagnosticMarkers = useMemo(
+    () => (overview === null || file === null ? [] : diagnosticMarkersOf(t, overview.diagnostics, file.file.path)),
+    [file, overview, t],
+  );
+  // selectedLine is the line handed over to show in the editor; its request tells one handover from the next.
+  const [selectedLine, setSelectedLine] = useState<{ line: number; request: number } | null>(null);
   // The handed line is kept here once the handoff is cleared, until the file
   // it names has opened and the line is selected.
   const [pendingJump, setPendingJump] = useState<FileTarget | null>(null);
@@ -123,12 +124,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
 
   useEffect(() => {
     if (pendingJump === null || file === null || file.file.path !== pendingJump.path) return;
-    const editor = editorRef.current;
-    if (editor === null) return;
     setPendingJump(null);
-    const range = lineRange(file.contents, pendingJump.line);
-    editor.focus();
-    editor.setSelectionRange(range.start, range.end);
+    setSelectedLine((previous) => ({ line: pendingJump.line, request: (previous?.request ?? 0) + 1 }));
     setJump(t("explorer.opened", { path: pendingJump.path, line: pendingJump.line }));
   }, [file, pendingJump, t]);
 
@@ -435,16 +432,18 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
               <EmptyState icon="config" title={t("explorer.emptyHeading")} detail={t("explorer.selectFile")} />
             ) : (
               <>
-                <label htmlFor="file-raw" className="sr-only">{t("explorer.fileText", { path: file.file.path ?? file.file.absolute })}</label>
-                <textarea
-                  id="file-raw"
-                  ref={editorRef}
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  spellCheck={false}
-                  disabled={!file.editable}
-                  className="min-h-80 w-full flex-1 resize-none rounded-[10px] border border-line bg-well px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.75] text-ink focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/20 disabled:text-ink-faint md:min-h-64"
-                />
+                <div className="min-h-80 flex-1 md:min-h-64">
+                  <CodeField
+                    label={t("explorer.fileText", { path: file.file.path ?? file.file.absolute })}
+                    language="ssh-config"
+                    fill
+                    value={draft}
+                    onChange={setDraft}
+                    disabled={!file.editable}
+                    markers={diagnosticMarkers}
+                    selectedLine={selectedLine}
+                  />
+                </div>
                 <p className="mt-2.5 shrink-0 text-xs text-ink-faint">{t("explorer.formatKept")}</p>
               </>
             )}

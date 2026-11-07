@@ -1,8 +1,8 @@
 import { useRef, useState, type ReactNode } from "react";
+import { CodeField } from "../editor/CodeField";
 import { useTranslate } from "../i18n/context";
 import type { DescribableControlProps } from "../ui/describeControl";
 import { Icon } from "../ui/icons";
-import { control } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { Button } from "../ui/surface";
 
@@ -11,8 +11,10 @@ import { Button } from "../ui/surface";
 // summary として、ボタンの横に並べる。
 
 // configRows は、設定ファイルの欄の高さ（行数）である。WireGuard の例（[Interface] と [Peer]）が
-// 収まる程度にする。
+// 収まる程度にする。configMaxRows まで中身に合わせて伸び、その先はスクロールする（OpenVPN の
+// 証明書を埋め込んだファイルは数百行ある）。
 const configRows = 9;
+const configMaxRows = 24;
 
 export function ConfigFileField({
   label,
@@ -93,18 +95,15 @@ function ConfigFileInput({
   const chooser = useRef<HTMLInputElement>(null);
   return (
     <span className="flex min-w-0 flex-col gap-2">
-      {/* 文字の大きさは、control の大きさより後に効くよう sm: で付ける（狭い画面は index.css が16pxにする）。 */}
-      <textarea
-        aria-label={label}
+      <CodeField
+        label={label}
         aria-describedby={describedBy}
         aria-invalid={invalid}
-        className={`${control} font-mono leading-5 sm:text-[12.5px]`}
-        rows={configRows}
-        spellCheck={false}
-        autoComplete="off"
+        minLines={configRows}
+        maxLines={configMaxRows}
         value={value}
         {...(placeholder === undefined ? {} : { placeholder })}
-        onChange={(event) => onEdit(event.target.value)}
+        onChange={onEdit}
       />
       <span className="flex flex-wrap items-center gap-3">
         <input

@@ -1,3 +1,4 @@
+import { codeField, replaceCodeFieldLine } from "./support/codeField";
 import { chooseConnectionAction } from "./support/connections";
 import { clickAndAwait, expect, masterPassword, openSection, openSettingsPage, test, openApplication } from "./support/environment";
 import { metadataSchemaVersion } from "./support/settings";
@@ -519,9 +520,8 @@ test("edits the same host through Raw and keeps every other byte", async ({
   await openBastion(page, installation.url);
   await chooseConnectionAction(page, "Edit as text");
 
-  const editor = page.getByLabel(/Block text/);
-  const original = await editor.inputValue();
-  await editor.fill(original.replace("Port 2222", "Port 2255\n\tCompression yes"));
+  const editor = codeField(page, /Block text/);
+  await replaceCodeFieldLine(editor, "Port 2222", "Port 2255\n\tCompression yes");
   expect(await clickAndAwait(page, "Save block", "/api/v1/config/save")).toBe(200);
 
   const after = await installation.read("config");

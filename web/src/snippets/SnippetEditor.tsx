@@ -8,7 +8,7 @@ import { editsSteps, newStep, stepsCanBeSaved } from "./snippetKind";
 import { snippetVariableTypeLabelKey } from "./snippetLabels";
 import { SnippetStepsEditor } from "./SnippetStepsEditor";
 import { SnippetVariableValue } from "./SnippetVariableValue";
-import { literalTextEntry } from "../ui/softKeyboard";
+import { CodeField } from "../editor/CodeField";
 
 const variableTypes = ["string", "integer", "boolean", "secret"] as const;
 
@@ -131,12 +131,14 @@ export function SnippetEditor({
             </FieldRow>
           </>
         ) : (
-          <FieldRow label={t("snippets.command")} hint={t("snippets.variableHint")}>
-            <textarea {...literalTextEntry}
-              rows={3}
+          <FieldRow label={t("snippets.command")} hint={t("snippets.variableHint")} interactiveChildren>
+            <CodeField
+              label={t("snippets.command")}
+              language="shell"
               value={draft.command}
-              onChange={(event) => onDraftChange({ ...draft, command: event.target.value })}
-              className={`${control} resize-y font-mono text-[12.5px]`}
+              minLines={3}
+              maxLines={12}
+              onChange={(command) => onDraftChange({ ...draft, command })}
             />
           </FieldRow>
         )}

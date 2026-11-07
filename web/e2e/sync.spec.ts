@@ -1,3 +1,4 @@
+import { pageAlert } from "./support/codeField";
 import {
   changeDisplayLanguage,
   expect,
@@ -516,8 +517,8 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await page.getByText("Manage sync settings").click();
   refusePush = true;
   await page.getByRole("button", { name: "Push this machine's settings" }).click();
-  await expect(page.getByRole("alert")).toContainText("update was cancelled");
-  await expect(page.getByRole("alert")).toContainText(
+  await expect(pageAlert(page)).toContainText("update was cancelled");
+  await expect(pageAlert(page)).toContainText(
     "cancelled before retrying",
   );
   await expect(
