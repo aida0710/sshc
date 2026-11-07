@@ -431,10 +431,10 @@ In a local shell on Windows, mode 2027 and the VT320 status line have no effect:
 
 | Choose | What opens |
 | --- | --- |
-| **Local shell** at the top (one row per detected shell profile) | A local shell |
+| **Local shell** at the top | The shell chosen in **Default local shell** under **Settings** → **Terminal**, or the system login shell when none is chosen |
 | Search, recent connections and groups | An SSH host |
 | Type `user@host[:port]` in the search, then **Connect** | Connects without saving |
-| Type `user@host[:port]` in the search, then **Save as a connection and connect** | Writes a Host block and connects |
+| Type `user@host[:port]` in the search, then **Save as a connection and connect** | Writes a Host block and connects (not offered in a [remote session](./remote-session#which-engine-a-session-opens-on)) |
 
 A session opened without saving has no connection name, so SFTP, startup Snippets and saving a forward to the connection are not available for it.
 
