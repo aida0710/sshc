@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 // creates its Trusted Types policies through MonacoEnvironment while the
 // imports below are evaluated, so the environment must be installed first.
 import * as monaco from "monaco-editor/editor/editor.api.js";
-import { TabFocus } from "monaco-editor/editor/browser/config/tabFocus.js";
 // Find and Replace and the other editor features. They must be registered
 // before the first model or editor is created (monacoEditorFeatures.ts).
 import "./monacoEditorFeatures";
@@ -23,6 +22,8 @@ import { useTheme } from "../theme/context";
 import { editorCursorBlinking, reducedMotionQuery } from "../ui/reducedMotion";
 import { useMediaQuery } from "../ui/useMediaQuery";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
+import { noUnrequestedEditOptions, startWithTabIndenting } from "./monacoEditing";
+import { useModelFollowsValue } from "./useModelFollowsValue";
 
 type MonacoEditorProps = {
   path: string;
@@ -46,37 +47,6 @@ function languageFor(path: string): string {
   if (name.endsWith(".html") || name.endsWith(".htm")) return "html";
   if (name.endsWith(".css")) return "css";
   return "plaintext";
-}
-
-// Holds back the editor features (monacoEditorFeatures.ts) that would change
-// the remote file without the user asking for it:
-// - Suggestions show only on Ctrl+Space, not while typing. A suggestion shown
-//   while typing takes the Enter or Tab meant for a new line or an indent, and
-//   replaces the typed word with another word of the file.
-// - A file with unusual line terminators, such as Line Separator (U+2028), is
-//   opened as it is. Monaco would otherwise ask in a browser dialog to remove
-//   them. The dialog names the file by Monaco's model number and points at a
-//   setting sshc does not have, and removing them changes the file.
-const noUnrequestedEditOptions = {
-  quickSuggestions: false,
-  suggestOnTriggerCharacters: false,
-  unusualLineTerminators: "off",
-} satisfies monaco.editor.IStandaloneEditorConstructionOptions;
-
-// Monaco's command for the mode in which Tab moves focus instead of
-// indenting: Ctrl+M (Ctrl+Shift+M on macOS), or "Toggle Tab Key Moves Focus"
-// in the editor's command palette.
-const toggleTabMovesFocusCommand = "editor.action.toggleTabFocusMode";
-
-// Monaco keeps the mode in which Tab moves focus for the whole page
-// (monacoTabFocus.d.ts), and the editor shows nothing while the mode is on.
-// Each editor starts with Tab indenting, so that the mode switched on in one
-// file does not keep Tab from indenting in the files opened after it. The mode
-// is switched off with Monaco's own command, which also announces to a screen
-// reader that Tab now inserts the tab character.
-function startWithTabIndenting(view: monaco.editor.IStandaloneCodeEditor): void {
-  if (!TabFocus.getTabFocusMode()) return;
-  view.trigger("sshc", toggleTabMovesFocusCommand, null);
 }
 
 export function MonacoEditor({ path, value, onChange, readOnly = false, initialLine = 1, onSave }: MonacoEditorProps) {
@@ -132,23 +102,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
-  // Writes a `value` the parent set itself, such as the contents read again
-  // from the remote, into the model. A `value` the editor reported is skipped
-  // even when it differs from the model: it is an older report rendered after
-  // the user typed more, and writing it would undo that typing and move the
-  // cursor to the start of the file.
-  useEffect(() => {
-    const model = editor.current?.getModel();
-    if (model === null || model === undefined) return;
-    const report = pendingReports.current.indexOf(value);
-    if (report !== -1) {
-      pendingReports.current.splice(0, report + 1);
-      return;
-    }
-    if (model.getValue() !== value) model.setValue(value);
-    // Also drops the report of the setValue above: the parent set that value.
-    pendingReports.current = [];
-  }, [value]);
+  useModelFollowsValue(editor, value, pendingReports);
 
   useEffect(() => {
     editor.current?.updateOptions({

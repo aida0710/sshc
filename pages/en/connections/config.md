@@ -9,6 +9,13 @@ sshc treats `~/.ssh/config` as the source of truth. It follows `Include` files a
 
 ## Config Editor
 
+The file box, and the box of **Edit as text** for a connection, are the same editor as SFTP's (Monaco):
+
+- Directives, values and comments are coloured.
+- `Ctrl+Space` at the start of a line offers directive names.
+- Lines with a problem found when the configuration was read, such as a directive OpenSSH does not know, are marked; hovering the mark shows what the problem is.
+- `Tab` indents. To move the focus out of the editor with `Tab`, switch what it does with `Ctrl+M` (`Ctrl+Shift+M` on macOS).
+
 The editor shows loaded files and their Include relationships. UTF-8 text is written to a temporary file before replacement. Outside sshc-managed group markers, comments, blank lines, directive order, and unrelated blocks are preserved whenever possible. Do not edit the region between the line starting with `# >>> sshc groups` and `# <<< sshc groups` directly: its contents are replaced on the next save.
 
 ### Files and directories

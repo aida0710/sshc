@@ -3,6 +3,7 @@ import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { failureCode } from "../api/client";
 import type { SyncApi, SyncExclusions } from "../api/sync";
+import { CodeField } from "../editor/CodeField";
 import { useLanguage } from "../i18n/context";
 import { control, hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
@@ -165,13 +166,12 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
                 {t("sync.exclusions.advanced")}
               </DisclosureSummary>
               <div className="border-t border-hairline p-3">
-                <textarea
+                <CodeField
+                  label={t("sync.exclusions.rules")}
                   value={document}
-                  onChange={(event) => setDocument(event.target.value)}
-                  rows={12}
-                  spellCheck={false}
-                  className={`${control} min-h-52 resize-y font-mono text-xs`}
-                  aria-label={t("sync.exclusions.rules")}
+                  onChange={setDocument}
+                  minLines={12}
+                  maxLines={30}
                 />
                 <p className={`mt-2 ${hintText}`}>
                   {t("sync.exclusions.syntax")}

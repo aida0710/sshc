@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { TransferExclusionSettings } from "./TransferExclusionSettings";
@@ -6,6 +6,8 @@ import { TransferExclusionSettings } from "./TransferExclusionSettings";
 it("saves the rules when the box is left only if every one is valid, and keeps the draft until they arrive", async () => {
   const onCommit = vi.fn();
   const { rerender } = render(<TransferExclusionSettings patterns={[]} onCommit={onCommit} />);
+  // The field is a plain text area until its editor has loaded; this test holds on to the loaded one.
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
   const input = screen.getByRole("textbox", { name: "Exclusion patterns (one per line)" });
   await userEvent.type(input, ".git\n*.log\n../secret");
   await userEvent.tab();

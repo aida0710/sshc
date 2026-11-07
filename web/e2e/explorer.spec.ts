@@ -1,3 +1,4 @@
+import { appendCodeFieldText, codeField, codeFieldLines, pageAlert } from "./support/codeField";
 import { clickAndAwait, expect, openSection, test, openApplication } from "./support/environment";
 
 test("shows the Include hierarchy and edits an included file", async ({ page, installation }) => {
@@ -9,10 +10,10 @@ test("shows the Include hierarchy and edits an included file", async ({ page, in
   await expect(page.getByRole("button", { name: "conf.d/10-home.conf" })).toBeVisible();
 
   await page.getByRole("button", { name: "conf.d/10-home.conf" }).click();
-  const editor = page.getByLabel(/File text/);
-  await expect(editor).toHaveValue(/UnknownFutureDirective some "quoted value" 3/);
+  const editor = codeField(page, /File text/);
+  await expect(codeFieldLines(editor)).toContainText('UnknownFutureDirective some "quoted value" 3');
 
-  await editor.fill((await editor.inputValue()) + "Host printer\n\tHostName 198.51.100.30\n");
+  await appendCodeFieldText(editor, "Host printer\n\tHostName 198.51.100.30\n");
   expect(await clickAndAwait(page, "Save file", "/api/v1/config/save")).toBe(200);
 
   const after = await installation.read("conf.d/10-home.conf");
@@ -144,5 +145,5 @@ test("makes a directory and removes it", async ({ page, installation }) => {
   await chooseAction("Delete directory");
   await path.fill("conf.d/eu");
   expect(await clickAndAwait(page, "Delete", "/api/v1/config/save")).toBe(404);
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(pageAlert(page)).toBeVisible();
 });

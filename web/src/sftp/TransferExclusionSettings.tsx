@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
+import { CodeField } from "../editor/CodeField";
 import { useTranslate } from "../i18n/context";
 import type { DescribableControlProps } from "../ui/describeControl";
 import { FieldRow } from "../ui/FieldRow";
-import { control } from "../ui/form";
 import type { TransferSettings } from "./api";
 import { maximumExclusionPatterns, maximumExclusionPatternBytes, validTransferExclusionPatterns } from "./transferExclusions";
 
@@ -49,15 +49,14 @@ function PatternsEditor({ text, onTextChange, onLeave, ...description }: {
 } & DescribableControlProps) {
   const t = useTranslate();
   return (
-    <textarea
-      aria-label={t("sftp.manager.exclusionsPatterns")}
+    <CodeField
+      label={t("sftp.manager.exclusionsPatterns")}
       {...description}
       value={text}
-      rows={3}
-      maxLength={maximumExclusionPatterns * (maximumExclusionPatternBytes + 1)}
-      onChange={(event) => onTextChange(event.target.value)}
+      minLines={4}
+      maxLines={12}
+      onChange={(next) => onTextChange(next.slice(0, maximumExclusionPatterns * (maximumExclusionPatternBytes + 1)))}
       onBlur={onLeave}
-      className={`${control} min-h-[92px] resize-y font-mono`}
     />
   );
 }
