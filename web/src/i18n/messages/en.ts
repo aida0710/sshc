@@ -2959,6 +2959,7 @@ export const en = {
   "groupDialog.deleteEmpty": "This group has no connections.",
   "groupDialog.deleteMoveTo": "Move its {count} connections to",
   "groupDialog.delete": "Delete group",
+  "groupDialog.nameRequired": "Enter a name.",
   "groupDialog.invalidCharacters": "Use only letters, digits, dots (.), hyphens (-), and underscores (_).",
   "groupDialog.noSlash": "A name cannot contain “/”. To create a group inside another one, choose New group inside from that group’s … menu.",
   "groupDialog.tooDeep": "Groups can be nested at most {count} levels deep.",

@@ -27,6 +27,13 @@ describe("GroupDialogs", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("A name cannot contain “/”.");
   });
 
+  it("asks for a name rather than naming the allowed characters when the name is empty", async () => {
+    const { onCreate } = open({ kind: "create", parent: "" });
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter a name.");
+  });
+
   it("refuses a group nested deeper than six levels", async () => {
     const { onCreate } = open({ kind: "create", parent: "a/b/c/d/e/f" });
     await userEvent.type(screen.getByLabelText("Name"), "g");
