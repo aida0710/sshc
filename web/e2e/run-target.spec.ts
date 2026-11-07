@@ -17,8 +17,12 @@ const updateOutput = [
 
 // refusal is what the stubbed engine on bastion answers until it is fixed:
 // an incompatible version, which updating fixes, a locked Vault, which its
-// password unlocks, or a host that cannot be reached until the test says it can.
-async function stubRunTarget(page: Page, { added = true, refusal = "version", compatibleVersion, sessions = [] }: { added?: boolean; refusal?: "version" | "unreachable" | "locked"; compatibleVersion?: string; sessions?: unknown[] } = {}) {
+// password unlocks, or an engine that cannot be reached, or whose host SSH
+// cannot connect to, until the test says it can. An engine fixed from the start (compatibleVersion)
+// refuses from when the test says it does.
+type Refusal = "version" | "unreachable" | "connectFailed" | "locked";
+
+async function stubRunTarget(page: Page, { added = true, refusal = "version", compatibleVersion, sessions = [] }: { added?: boolean; refusal?: Refusal; compatibleVersion?: string; sessions?: unknown[] } = {}) {
   let fixed = compatibleVersion !== undefined;
   const actions: unknown[] = [];
   const commandPreviews: unknown[] = [];
@@ -102,7 +106,7 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       throw new Error(`Unexpected remote engine request: ${path}`);
     }
   });
-  return { actions, commandPreviews, fix: () => { fixed = true; }, finishUpdate };
+  return { actions, commandPreviews, fix: () => { fixed = true; }, refuse: () => { fixed = false; }, finishUpdate };
 }
 
 // actionLog is the log of the update on bastion from the cursor at from.
@@ -115,7 +119,7 @@ function actionLog({ done, from, output }: { done: boolean; from: number; output
   };
 }
 
-function refusalResponse(refusal: "version" | "unreachable" | "locked") {
+function refusalResponse(refusal: Refusal) {
   switch (refusal) {
     case "version":
       return { status: 409, contentType: "application/problem+json", json: { code: "remote_engine_incompatible", message: "request rejected", detail: remoteVersion } };
@@ -123,6 +127,8 @@ function refusalResponse(refusal: "version" | "unreachable" | "locked") {
       return { status: 423, contentType: "application/problem+json", json: { code: "remote_engine_vault_locked", message: "request rejected" } };
     case "unreachable":
       return { status: 502, contentType: "application/problem+json", json: { code: "remote_engine_unreachable", message: "request rejected" } };
+    case "connectFailed":
+      return { status: 502, contentType: "application/problem+json", json: { code: "remote_engine_connect_failed", message: "request rejected", reason: "connection_failed" } };
   }
 }
 
@@ -320,6 +326,29 @@ test("keeps the navigation reachable on a phone while the panel is shown", async
   await expect(page.getByRole("button", { name: /^Choose the remote session engine/ })).toBeVisible();
   // The panel is drawn inside the page, under the open navigation: what is in the middle of the navigation can be pressed.
   await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "New session", exact: true }).click({ trial: true });
+});
+
+test("hides the terminal behind the panel on a phone when the run target stops answering", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const session = {
+    id: "bastion-web", kind: "ssh", workspaceId: "default", alias: "web", title: "web",
+    startedAt: "2026-10-28T01:00:00Z", state: "connected", problem: "", forwards: [],
+  };
+  const remote = await stubRunTarget(page, { refusal: "connectFailed", compatibleVersion: localVersion, sessions: [session] });
+  await openApplication(page, installation);
+  await page.locator("[data-app-header]").getByRole("button", { name: "Navigation", exact: true }).click();
+  await chooseBastion(page);
+  await page.getByRole("list", { name: "Workspaces", exact: true }).getByRole("button", { name: /^web/ }).first().click();
+  const composer = page.getByPlaceholder("Type text to send", { exact: true });
+  await expect(composer).toBeVisible();
+
+  remote.refuse();
+  await expect(page.getByRole("region", { name: "Could not connect to bastion over SSH", exact: true })).toBeVisible();
+  // The panel ends above the floating bottom bar, which keeps its margins: what the terminal has at its bottom (the
+  // composer, the key bar) must not show around the bar.
+  await expect(composer).toBeHidden();
+  await page.getByRole("navigation", { name: "Quick navigation", exact: true }).getByRole("link", { name: "Connections", exact: true }).click();
+  await expect(page).toHaveURL(/\/connections$/);
 });
 
 test("selects a newly added engine and shows it is incompatible in the terminal area", async ({ page, installation }) => {
