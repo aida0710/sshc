@@ -21,6 +21,12 @@ export function sessionStateText(t: Translate, session: TerminalSession): string
   switch (session.state) {
     case "reconnecting":
       if (session.reconnect?.waitingForNetwork === true) return t("terminal.waitingForNetwork");
+      if (reconnectAwaitsInput(session)) {
+        return t("terminal.reconnectingAwaitingInput", {
+          attempt: String(session.reconnect?.attempt ?? 1),
+          limit: String(session.reconnect?.limit ?? 1),
+        });
+      }
       return t("terminal.reconnectingAttempt", {
         attempt: String(session.reconnect?.attempt ?? 1),
         limit: String(session.reconnect?.limit ?? 1),
@@ -122,4 +128,10 @@ export function sessionStatusTone(session: TerminalSession): string {
 
 function waitsForConnection(session: TerminalSession): boolean {
   return session.state === "reconnecting" || session.state === "connecting";
+}
+
+// reconnectAwaitsInput は、再接続の途中で、ターミナルに打つ答え（パスワード、パスフレーズ、認証コード）を待っているかで
+// ある。言わないと「接続を試しています」のまま待ち続ける。ホスト鍵の問いには、それ用の帯と枠がある。
+export function reconnectAwaitsInput(session: TerminalSession): boolean {
+  return session.state === "reconnecting" && session.awaitingPrompt === true && session.hostKeyQuestion === undefined;
 }
