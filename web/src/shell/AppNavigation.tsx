@@ -60,6 +60,7 @@ export function AppNavigation({
   onShowSession,
   splitView,
   onShowSplitGroup,
+  onShowTerminal,
   canSplitSession,
   onSplitSession,
   onDuplicateSession,
@@ -96,6 +97,8 @@ export function AppNavigation({
   onShowSession: (id: string) => void;
   splitView: SplitViewController;
   onShowSplitGroup: (number: number) => void;
+  // onShowTerminal shows the terminal area, for the remote session switcher to point at a refusal shown there.
+  onShowTerminal: () => void;
   canSplitSession?: (id: string) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
   onDuplicateSession: (id: string) => void;
@@ -231,7 +234,7 @@ export function AppNavigation({
       </div>
 
       <div className="shrink-0">
-        <RunTargetSwitcher targets={runTargets} link={runTargetLink} aliases={aliases} hosts={hosts} />
+        <RunTargetSwitcher targets={runTargets} link={runTargetLink} aliases={aliases} hosts={hosts} onShowTerminal={onShowTerminal} />
       </div>
 
       <NavigationResizeHandle width={desktopWidth} onWidthChange={onDesktopWidthChange} />
