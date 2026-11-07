@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"time"
 
 	"sshc/internal/platform"
 	"sshc/internal/terminal"
@@ -29,11 +30,14 @@ type Connector func(ctx context.Context, alias string, size terminal.Size) (term
 
 // StartupSnippet は、接続のたびに起動スニペットについて決めたことである。
 //
-// Command があれば、認証とリモートシェルの起動が済んでから送る。Notice があれば、
+// Steps があれば、認証とリモートシェルの起動が済んでから順に送る。Notice があれば、
 // 同じ時点でターミナルの接続ログへ 1 行書く。どちらも空なら何もしない。
 type StartupSnippet struct {
-	// Command は、変数（シークレットを含む）を展開したコマンドである。
-	Command string
+	// Steps は、変数（シークレットを含む）を展開した手順である。コマンドのスニペットは、
+	// そのコマンドと Enter を送る手順 1 つになる。
+	Steps []terminal.StartupStep
+	// Wait は、待つ文字列のある手順が、それが出るまで待つ長さである。
+	Wait time.Duration
 	// Notice は、送らなかったことを利用者に知らせる 1 行である。割り当て直すなど、
 	// 利用者の操作で直せる理由のときだけ入れる。
 	Notice string
@@ -210,19 +214,17 @@ func (o Opener) sshSpec(request Request) (terminal.Spec, error) {
 		// 起動時のコマンドと送らなかったことの知らせは、terminal.Session が Ready の
 		// 後に世代ごとに送る。再接続のたびに解決し直すので、割り当ての変更と停止がすぐ効く。
 		Startup: func() terminal.Startup {
-			commands := make([]string, 0, 2)
+			steps := make([]terminal.StartupStep, 0, 2)
 			if command, ok := terminal.ChangeRemoteDirectoryCommand(initialDirectory); initialDirectory != "" && ok {
-				commands = append(commands, command)
+				steps = append(steps, terminal.StartupStep{Send: command, Enter: true})
 			}
 			// 起動スニペットは接続名に割り当てるものである。
 			var startup StartupSnippet
 			if o.Startup != nil && !direct {
 				startup = o.Startup(target)
 			}
-			if startup.Command != "" {
-				commands = append(commands, startup.Command)
-			}
-			return terminal.Startup{Notice: startup.Notice, Commands: commands}
+			steps = append(steps, startup.Steps...)
+			return terminal.Startup{Notice: startup.Notice, Steps: steps, Wait: startup.Wait}
 		},
 		ReconnectError:      o.ReconnectError,
 		ReconnectStopNotice: o.ReconnectStopNotice,

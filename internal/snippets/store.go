@@ -121,7 +121,7 @@ func decodeDocument(contents []byte) (Library, error) {
 	if stored.SchemaVersion > SchemaVersion {
 		return Library{}, ErrUnsupportedVersion
 	}
-	if stored.SchemaVersion != SchemaVersion {
+	if stored.SchemaVersion < oldestReadableSchemaVersion {
 		return Library{}, ErrInvalidDocument
 	}
 	library := Library{Snippets: stored.Snippets, Startup: stored.Startup}
@@ -303,11 +303,11 @@ func validateSnippet(snippet Snippet) error {
 		snippet.CreatedAt.IsZero() || snippet.UpdatedAt.IsZero() || snippet.UpdatedAt.Before(snippet.CreatedAt) || len(snippet.Variables) > MaxVariables {
 		return ErrInvalidSnippet
 	}
-	_, err := expand(snippet.Command, snippet.Variables, defaultsForValidation(snippet.Variables))
+	_, err := prepareStartup(snippet, defaultsForValidation(snippet.Variables))
 	if errors.Is(err, ErrMissingVariable) {
 		// Required inputs are expected at execution time. Validate the template and
 		// definitions again with harmless type-correct placeholders.
-		_, err = expand(snippet.Command, snippet.Variables, validationInputs(snippet.Variables))
+		_, err = prepareStartup(snippet, validationInputs(snippet.Variables))
 	}
 	return err
 }
@@ -316,7 +316,8 @@ func validateDraft(draft Draft) error {
 	moment := timeForValidation
 	return validateSnippet(Snippet{
 		ID: strings.Repeat("0", 32), Name: draft.Name, Description: draft.Description,
-		Command: draft.Command, Variables: draft.Variables, CreatedAt: moment, UpdatedAt: moment,
+		Command: draft.Command, Steps: draft.Steps, WaitSeconds: draft.WaitSeconds, Variables: draft.Variables,
+		CreatedAt: moment, UpdatedAt: moment,
 	})
 }
 
@@ -348,7 +349,7 @@ func validationInputs(variables []Variable) map[string]string {
 }
 
 func validateStartup(snippet Snippet, inputs map[string]string) error {
-	_, err := expand(snippet.Command, snippet.Variables, inputs)
+	_, err := prepareStartup(snippet, inputs)
 	return err
 }
 
@@ -371,6 +372,7 @@ func cloneLibrary(library Library) Library {
 
 func cloneSnippet(snippet Snippet) Snippet {
 	cloned := snippet
+	cloned.Steps = append([]Step(nil), snippet.Steps...)
 	cloned.Variables = cloneVariables(snippet.Variables)
 	return cloned
 }

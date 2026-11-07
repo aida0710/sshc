@@ -21,6 +21,8 @@ type snippetDraft struct {
 	Name        string              `json:"name"`
 	Description string              `json:"description"`
 	Command     string              `json:"command"`
+	Steps       []snippets.Step     `json:"steps,omitempty"`
+	WaitSeconds int                 `json:"waitSeconds,omitempty"`
 	Variables   []snippets.Variable `json:"variables"`
 }
 
@@ -68,6 +70,8 @@ func snippetProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "snippet_limit")
 	case errors.Is(err, snippets.ErrTooManyStartupBindings):
 		return problem(c, http.StatusConflict, "startup_snippet_limit")
+	case errors.Is(err, snippets.ErrStepsOnlyAtStartup):
+		return problem(c, http.StatusConflict, "snippet_steps_startup_only")
 	case errors.Is(err, snippets.ErrInvalidSnippet), errors.Is(err, snippets.ErrInvalidVariable), errors.Is(err, snippets.ErrUnknownVariable),
 		errors.Is(err, snippets.ErrMissingVariable), errors.Is(err, snippets.ErrMalformedTemplate), errors.Is(err, snippets.ErrInvalidTarget),
 		errors.Is(err, snippets.ErrDuplicateTarget):
@@ -78,7 +82,10 @@ func snippetProblem(c *echo.Context, err error) error {
 }
 
 func toSnippetDraft(request snippetDraft) snippets.Draft {
-	return snippets.Draft{Name: request.Name, Description: request.Description, Command: request.Command, Variables: request.Variables}
+	return snippets.Draft{
+		Name: request.Name, Description: request.Description, Command: request.Command,
+		Steps: request.Steps, WaitSeconds: request.WaitSeconds, Variables: request.Variables,
+	}
 }
 
 func (h SnippetHandlers) library() (snippetLibrary, error) {

@@ -92,7 +92,7 @@ func TestAnSSHSessionChangesToTheRequestedDirectoryAndThenRunsTheStartupSnippet(
 			if alias != "production" {
 				t.Fatalf("startup alias = %q", alias)
 			}
-			return StartupSnippet{Command: "tmux attach"}
+			return StartupSnippet{Steps: []terminal.StartupStep{{Send: "tmux attach", Enter: true}}}
 		},
 	}
 	cases := map[string][]string{
@@ -109,7 +109,7 @@ func TestAnSSHSessionChangesToTheRequestedDirectoryAndThenRunsTheStartupSnippet(
 			t.Fatal(err)
 		}
 		got := spec.Startup()
-		if !slices.Equal(got.Commands, want) || got.Notice != "" {
+		if !slices.Equal(typedTexts(got.Steps), want) || got.Notice != "" {
 			t.Fatalf("startup for %q = %#v, want the commands %q", directory, got, want)
 		}
 	}
@@ -126,7 +126,7 @@ func TestAHeldBackStartupSnippetIsHandedOverAsANoticeWithoutACommand(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := spec.Startup(); got.Notice != "held back" || len(got.Commands) != 0 {
+	if got := spec.Startup(); got.Notice != "held back" || len(got.Steps) != 0 {
 		t.Fatalf("startup = %#v, want only the notice", got)
 	}
 }
@@ -188,7 +188,7 @@ func TestADirectDestinationOpensWithoutASnippetOrAnEntryInTheRecents(t *testing.
 	if spec.Alias != "deploy@10.0.0.5:2222" || spec.Title != "deploy@10.0.0.5:2222" {
 		t.Fatalf("spec = %+v", spec)
 	}
-	if got := spec.Startup(); got.Notice != "" || len(got.Commands) != 0 {
+	if got := spec.Startup(); got.Notice != "" || len(got.Steps) != 0 {
 		t.Fatalf("startup = %#v", got)
 	}
 	if _, err := spec.Open(context.Background(), terminal.Size{}); err != nil {
@@ -233,4 +233,16 @@ func TestReopeningKeepsAWorkspaceThatStillExists(t *testing.T) {
 	if err != nil || spec.Workspace != "ops" {
 		t.Fatalf("reopened = %q, %v; want the saved workspace", spec.Workspace, err)
 	}
+}
+
+// typedTexts is what the steps type, each followed by Enter.
+func typedTexts(steps []terminal.StartupStep) []string {
+	texts := make([]string, len(steps))
+	for index, step := range steps {
+		if !step.Enter || step.Wait != "" {
+			return nil
+		}
+		texts[index] = step.Send
+	}
+	return texts
 }
