@@ -93,12 +93,16 @@ func validateBuiltUIReceiver(id string, job workflowJob, builder string, goSteps
 func TestCIBuildsTheWebUIOnceForTheJobsThatEmbedIt(t *testing.T) {
 	workflow := readWorkflowDocument(t)
 	problems := validateBuiltUIBuilder("jobs.ui", workflow.Jobs["ui"])
-	problems = append(problems, validateBuiltUIReceiver("jobs.go", workflow.Jobs["go"], "ui", "go test", "go build")...)
+	problems = append(problems, validateBuiltUIReceiver("jobs.go-checks", workflow.Jobs["go-checks"], "ui", "go build")...)
+	problems = append(problems, validateBuiltUIReceiver("jobs.go-test", workflow.Jobs["go-test"], "ui", "go test")...)
 	problems = append(problems, validateBuiltUIReceiver("jobs.android", workflow.Jobs["android"], "ui", "make android-bind")...)
 	// 画面と文書だけの PR では、Windows と macOS は画面を受け取る手順も飛ばす。
 	const onlyForNativeTests = "${{ env.NATIVE_TESTS == 'true' }}"
-	if download := builtUIDownload(workflow.Jobs["go"]); download >= 0 && workflow.Jobs["go"].Steps[download].If != onlyForNativeTests {
-		problems = append(problems, fmt.Sprintf("jobs.go downloads the web UI with if %q, want %q", workflow.Jobs["go"].Steps[download].If, onlyForNativeTests))
+	for _, id := range []string{"go-checks", "go-test"} {
+		job := workflow.Jobs[id]
+		if download := builtUIDownload(job); download >= 0 && job.Steps[download].If != onlyForNativeTests {
+			problems = append(problems, fmt.Sprintf("jobs.%s downloads the web UI with if %q, want %q", id, job.Steps[download].If, onlyForNativeTests))
+		}
 	}
 	for _, problem := range problems {
 		t.Error(problem)
