@@ -1,3 +1,4 @@
+import { codeField, replaceCodeFieldText } from "./support/codeField";
 import type { Page } from "@playwright/test";
 import { chooseTheme, expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 import { drawnRowFont, drawnRows, terminalKeyboard } from "./support/terminal";
@@ -23,7 +24,7 @@ test("searches hosts, config files and settings from the keyboard", async ({ pag
   // With no snippet yet, the empty list offers the same button as the page header; use the header's.
   await page.getByRole("main").locator("header").getByRole("button", { name: "Add snippet", exact: true }).click();
   await page.getByLabel("Name", { exact: true }).fill("Update packages");
-  await page.getByLabel("Command", { exact: true }).fill("sudo apt update");
+  await replaceCodeFieldText(codeField(page, "Command"), "sudo apt update");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Snippet saved.", { exact: true })).toBeVisible();
 

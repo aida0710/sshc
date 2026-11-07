@@ -1,3 +1,4 @@
+import { codeField } from "./support/codeField";
 import { chooseConnectionAction } from "./support/connections";
 import { expect, openApplication, openSection, openSettingsPage, test } from "./support/environment";
 
@@ -77,7 +78,7 @@ test("restores a selected connection and editor tab from its URL", async ({
     "aria-selected",
     "true",
   );
-  await expect(page.getByLabel(/Block text/)).toBeVisible();
+  await expect(codeField(page, /Block text/)).toBeVisible();
 
   await page.goBack();
   await expect(page.getByRole("region", { name: "Other settings" })).toBeVisible();
@@ -159,7 +160,7 @@ test("opens every canonical connection panel URL without starting an operation",
     if (item.advanced !== undefined) target.searchParams.set("advanced", item.advanced);
     await page.goto(target.toString());
     await expect(page.getByRole("tab", { name: item.area })).toHaveAttribute("aria-selected", "true");
-    if (item.text === true) await expect(page.getByLabel(/Block text/)).toBeVisible();
+    if (item.text === true) await expect(codeField(page, /Block text/)).toBeVisible();
   }
 
   expect(started).toEqual([]);

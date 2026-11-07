@@ -12,3 +12,9 @@ export function loadMonacoDiffEditor(): Promise<typeof import("./MonacoDiffEdito
   installMonacoEnvironment();
   return import("./MonacoDiffEditor");
 }
+
+// loadMonacoCodeField loads the Monaco form field (CodeField.tsx).
+export function loadMonacoCodeField(): Promise<typeof import("./MonacoCodeField")> {
+  installMonacoEnvironment();
+  return import("./MonacoCodeField");
+}

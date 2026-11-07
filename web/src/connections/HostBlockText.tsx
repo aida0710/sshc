@@ -1,3 +1,4 @@
+import { CodeField } from "../editor/CodeField";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Notice } from "../ui/surface";
@@ -30,15 +31,15 @@ export function HostBlockText({ raw, dirty, onChange, onBack, blockedByFields, d
         </button>
       </div>
       {blockedByFields ? <Notice>{t("conn.advancedFieldsBlockRaw")}</Notice> : null}
-      <label htmlFor="block-raw" className="text-xs text-ink-muted">{t("host.blockText")}</label>
-      <textarea
-        id="block-raw"
+      <p aria-hidden="true" className="text-xs text-ink-muted">{t("host.blockText")}</p>
+      <CodeField
+        label={t("host.blockText")}
+        language="ssh-config"
         value={raw}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        rows={16}
-        spellCheck={false}
-        className="min-h-80 rounded-lg border border-control-line bg-tree p-4 font-mono text-xs leading-5 text-ink focus:border-accent focus:outline-none"
+        onChange={onChange}
+        minLines={12}
+        maxLines={40}
       />
       {dirty ? (
         <DraftSaveBar saveLabel={t("host.saveBlock")} saving={saving} saveDisabled={disabled} discardDisabled={saving} onDiscard={onDiscard} onSave={onSave} />

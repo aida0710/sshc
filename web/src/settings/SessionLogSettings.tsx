@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { CodeField } from "../editor/CodeField";
 import { useTranslate } from "../i18n/context";
 import { FieldRow } from "../ui/FieldRow";
-import { CheckboxField, control } from "../ui/form";
+import { CheckboxField } from "../ui/form";
 import { PageSection } from "../ui/page";
 import type { GlobalSettings } from "./settingsStore";
 import { sessionLogRulesValid } from "./sessionLogRules";
@@ -50,12 +51,13 @@ function SessionLogRulesField({ rules, save }: {
       warning={valid ? undefined : t("settings.sessionLogRulesInvalid")}
       interactiveChildren
     >
-      <textarea
-        aria-label={t("settings.sessionLogRulesLabel")}
+      <CodeField
+        label={t("settings.sessionLogRulesLabel")}
         value={text}
-        rows={3}
+        minLines={4}
+        maxLines={12}
         placeholder={"prod-*\n!prod-web\n@local"}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={setDraft}
         onBlur={() => {
           if (!valid || text === rules) return;
           save((settings) => {
@@ -63,7 +65,6 @@ function SessionLogRulesField({ rules, save }: {
             return { ...settings, terminal: text.trim() === "" ? rest : { ...rest, sessionLogRules: text } };
           });
         }}
-        className={`${control} min-h-[92px] resize-y font-mono`}
       />
     </FieldRow>
   );
