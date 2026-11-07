@@ -52,6 +52,10 @@ func remoteEngineRefusal(alias string, refusal engineProblem) string {
 			return fmt.Sprintf("%s is not in known_hosts; connect once with sshc ssh %s to decide about its host key", alias, alias)
 		case "prompt_unavailable":
 			return fmt.Sprintf("connecting to %s needs a passphrase, password or one-time code that is not saved; save it in Connections, or unlock the vault with sshc vault unlock", alias)
+		case "host_key_changed":
+			return fmt.Sprintf("the host key of %s does not match the one in known_hosts; find out why it changed before you connect, and fix known_hosts in Known Hosts", alias)
+		case "host_key_revoked":
+			return fmt.Sprintf("the host key of %s is marked revoked in known_hosts; sshc does not connect to it", alias)
 		}
 		return fmt.Sprintf("could not connect to %s; run sshc ssh %s to see why", alias, alias)
 	case "remote_engine_not_installed":

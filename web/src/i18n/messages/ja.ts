@@ -625,6 +625,8 @@ export const ja = {
   "runTarget.runningOn": "{alias}で実行中",
   "runTarget.notRunning": "{alias}でsshcエンジンが動いていません。{alias}でsshc service installかsshc openを実行してください。",
   "runTarget.hostKeyUnknown": "{alias}のホスト鍵を確認していません。先にターミナルで{alias}へ一度接続してください。",
+  "runTarget.hostKeyChanged": "{alias}のホスト鍵が変わりました。Known Hostsを確認してから接続し直してください。",
+  "runTarget.hostKeyRevoked": "{alias}のホスト鍵は失効済みとして登録されているため、接続できません。",
   "runTarget.promptUnavailable": "{alias}への接続に、保存していないパスフレーズかパスワードが要ります。Connectionsで保存してください。",
   "runTarget.connectFailed": "{alias}へ接続できませんでした。",
   "runTarget.unproven": "{alias}のsshcエンジンを確かめられませんでした。",

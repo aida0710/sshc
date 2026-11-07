@@ -102,6 +102,10 @@ describe("TerminalScreen while the run target refuses its session list", () => {
       "The sshc engine is not running on r540. Start it there with sshc service install or sshc open."],
     ["remote_engine_connect_failed", "host_key_unknown", "Could not connect to r540 over SSH",
       "The host key of r540 has not been confirmed. Connect to r540 once from a terminal first."],
+    ["remote_engine_connect_failed", "host_key_changed", "Could not connect to r540 over SSH",
+      "The host key of r540 changed. Review Known Hosts before connecting again."],
+    ["remote_engine_connect_failed", "host_key_revoked", "Could not connect to r540 over SSH",
+      "The host key of r540 is marked as revoked, so sshc does not connect to it."],
     ["remote_engine_connect_failed", undefined, "Could not connect to r540 over SSH", null],
   ] as const)("shows %s (%s) with its heading, reason and actions", async (code, reason, heading, text) => {
     const { panel } = await renderRefused(refusal(code, reason));
