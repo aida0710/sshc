@@ -13,6 +13,8 @@ export function groupSegmentProblem(
   t: Translate,
   { parent, value, current, taken }: { parent: string; value: string; current: string | null; taken: ReadonlySet<string> },
 ): string {
+  // An empty name is not a name with wrong characters: saying which characters may be used would not tell what is wrong.
+  if (value === "") return t("groupDialog.nameRequired");
   if (value.includes("/")) return t("groupDialog.noSlash");
   if (!isValidGroupName(value)) return t("groupDialog.invalidCharacters");
   const full = joinGroup(parent, value);
