@@ -56,13 +56,15 @@ func TestTheDefaultFolderIsWhereTheSystemKeepsLogsOutsideSSH(t *testing.T) {
 			t.Errorf("DefaultDirectory(%s) = %q, %v; want %q", goos, got, err, want)
 		}
 	}
+	// XDG_STATE_HOME counts only when it is absolute, which on this system is a path of its own form.
+	stateHome := t.TempDir()
 	state := func(name string) string {
 		if name == "XDG_STATE_HOME" {
-			return "/var/state"
+			return stateHome
 		}
 		return ""
 	}
-	if got, _ := DefaultDirectory("linux", "/home/aida", state); got != filepath.FromSlash("/var/state/sshc/session-logs") {
+	if got, _ := DefaultDirectory("linux", "/home/aida", state); got != filepath.Join(stateHome, "sshc", "session-logs") {
 		t.Errorf("with XDG_STATE_HOME, DefaultDirectory = %q", got)
 	}
 	if _, err := Directory("", "android", "/data/user/0/app", none); err != ErrUnsupported {
