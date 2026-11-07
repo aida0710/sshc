@@ -164,8 +164,11 @@ export function TerminalScreen({
     );
   }
   return <div className="relative h-full">
-    {/* What the refusing engine listed before cannot be used, so it is kept out of reach. */}
-    <div className="h-full" inert={refusal !== null}>
+    {/* What the refusing engine listed before cannot be used, so it is kept out of reach, and out of sight: the panel
+        ends above a phone's floating bottom bar so the bar stays usable, and the terminal's key bar and composer
+        would show around the bar. Hidden, not removed, the terminals keep their size and output for when the engine
+        answers again. */}
+    <div className={refusal === null ? "h-full" : "invisible h-full"} inert={refusal !== null}>
       <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} retainedTerminals={settings.retainedTerminals ?? defaultRetainedTerminals} renderTerminal={renderTerminal}
         // Until the engine answers, it is not known to have no sessions.
         emptyState={terminalSessions.loaded ? <TerminalEmptyState runTarget={runTarget} onOpenLocalShell={onOpenLocalShell} onAddConnection={onAddConnection} onOpenSync={onOpenSync} /> : null}
