@@ -34,7 +34,7 @@ function linesHeight(lines: number): number {
 }
 
 // MonacoCodeField is CodeField once Monaco has loaded. An SSH config is edited as a file is: line numbers, and Tab
-// indents (ssh_config is written indented). Plain lines are a form field: Tab moves to the next field.
+// indents (ssh_config is written indented). The other fields are form fields: Tab moves to the next field.
 export function MonacoCodeField({
   label, value, onChange, onBlur, language = "plaintext", disabled = false, placeholder, minLines = 3, maxLines = 12,
   fill = false, markers = [], selectedLine = null, typingBeforeLoad, ...description
@@ -62,11 +62,17 @@ export function MonacoCodeField({
       readOnly: disabled,
       placeholder,
       automaticLayout: true,
+      // The field is often a few lines tall in a framed box; its pop-ups (a problem's hover, the keywords offered)
+      // are drawn over the page so they are not cut off at the box's edge.
+      fixedOverflowWidgets: true,
       minimap: { enabled: false },
       fontFamily: editorFontFamily,
       fontSize,
       lineHeight,
       lineNumbers: sshConfig ? "on" : "off",
+      // A config file keeps its lines as they are, the way the line numbers count them. The other fields wrap a long
+      // line (a command, a key in a VPN's file) rather than hide its end beyond the field's edge.
+      wordWrap: sshConfig ? "off" : "on",
       lineNumbersMinChars: 3,
       glyphMargin: false,
       folding: false,
