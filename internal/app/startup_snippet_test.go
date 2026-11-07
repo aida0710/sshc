@@ -44,9 +44,9 @@ func TestAStartupSnippetIsBoundToTheDestinationTheEngineConnectsTo(t *testing.T)
 		t.Fatal(err)
 	}
 
-	prepared, err := services.snippets.PrepareStartupCommand("web")
-	if err != nil || prepared.Command != "cd /srv/app" {
-		t.Fatalf("PrepareStartupCommand = %#v, %v; want the assigned command", prepared, err)
+	prepared, err := services.snippets.PrepareStartup("web")
+	if err != nil || prepared.Steps[0].Send != "cd /srv/app" {
+		t.Fatalf("PrepareStartup = %#v, %v; want the assigned command", prepared, err)
 	}
 
 	for name, changed := range map[string]string{
@@ -57,13 +57,13 @@ func TestAStartupSnippetIsBoundToTheDestinationTheEngineConnectsTo(t *testing.T)
 	} {
 		t.Run(name, func(t *testing.T) {
 			writeSSHConfig(t, services, changed)
-			if _, err := services.snippets.PrepareStartupCommand("web"); !errors.Is(err, snippets.ErrStartupDestinationChanged) {
-				t.Fatalf("after changing %s, PrepareStartupCommand = %v, want ErrStartupDestinationChanged", name, err)
+			if _, err := services.snippets.PrepareStartup("web"); !errors.Is(err, snippets.ErrStartupDestinationChanged) {
+				t.Fatalf("after changing %s, PrepareStartup = %v, want ErrStartupDestinationChanged", name, err)
 			}
 
 			writeSSHConfig(t, services, startupConfig)
-			if _, err := services.snippets.PrepareStartupCommand("web"); err != nil {
-				t.Fatalf("back on the assigned destination, PrepareStartupCommand = %v", err)
+			if _, err := services.snippets.PrepareStartup("web"); err != nil {
+				t.Fatalf("back on the assigned destination, PrepareStartup = %v", err)
 			}
 		})
 	}
@@ -90,8 +90,8 @@ func TestALockedVaultReportsTheStartupSnippetLibraryAsLocked(t *testing.T) {
 
 	services.vault.Lock()
 
-	if _, err := services.snippets.PrepareStartupCommand("web"); !errors.Is(err, secret.ErrLocked) {
-		t.Fatalf("PrepareStartupCommand while locked = %v, want secret.ErrLocked", err)
+	if _, err := services.snippets.PrepareStartup("web"); !errors.Is(err, secret.ErrLocked) {
+		t.Fatalf("PrepareStartup while locked = %v, want secret.ErrLocked", err)
 	}
 }
 
@@ -130,8 +130,8 @@ func TestRenamingAHostInTheEngineCarriesItsStartupSnippet(t *testing.T) {
 	if len(assignments) != 1 || assignments[0] != want[0] {
 		t.Fatalf("startup assignments after rename = %#v, want %#v", assignments, want)
 	}
-	prepared, err := services.snippets.PrepareStartupCommand("site")
-	if err != nil || prepared.Command != "cd /srv/app" {
-		t.Fatalf("PrepareStartupCommand(site) = %#v, %v; want the command assigned to web", prepared, err)
+	prepared, err := services.snippets.PrepareStartup("site")
+	if err != nil || prepared.Steps[0].Send != "cd /srv/app" {
+		t.Fatalf("PrepareStartup(site) = %#v, %v; want the command assigned to web", prepared, err)
 	}
 }

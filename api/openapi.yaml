@@ -8224,6 +8224,18 @@ components:
         required: { type: boolean }
         default: { type: string }
         description: { type: string }
+    SnippetStep:
+      type: object
+      additionalProperties: false
+      description: One step of a snippet of steps. It waits for wait in the shell's output when wait is given, then types send, with Enter after it when enter is true.
+      required: [send, enter]
+      properties:
+        wait: { type: string, maxLength: 256 }
+        send: { type: string, maxLength: 4095 }
+        enter: { type: boolean }
+        optional:
+          type: boolean
+          description: A step whose text does not come in time is passed over instead of stopping the steps.
     SnippetDraft:
       type: object
       additionalProperties: false
@@ -8231,7 +8243,16 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 96 }
         description: { type: string, maxLength: 2048 }
-        command: { type: string, minLength: 1, maxLength: 65536 }
+        command:
+          type: string
+          maxLength: 65536
+          description: The command, or empty for a snippet of steps.
+        steps: { type: array, maxItems: 32, items: { $ref: "#/components/schemas/SnippetStep" } }
+        waitSeconds:
+          type: integer
+          minimum: 0
+          maximum: 300
+          description: How long each step waits for its text; 0 is the default of 10 seconds.
         variables: { type: array, maxItems: 32, items: { $ref: "#/components/schemas/SnippetVariable" } }
     Snippet:
       type: object
@@ -8240,7 +8261,12 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 96 }
         description: { type: string, maxLength: 2048 }
-        command: { type: string, minLength: 1, maxLength: 65536 }
+        command:
+          type: string
+          maxLength: 65536
+          description: The command, or empty for a snippet of steps.
+        steps: { type: array, maxItems: 32, items: { $ref: "#/components/schemas/SnippetStep" } }
+        waitSeconds: { type: integer, minimum: 0, maximum: 300 }
         variables: { type: array, maxItems: 32, items: { $ref: "#/components/schemas/SnippetVariable" } }
         id: { type: string }
         createdAt: { type: string, format: date-time }

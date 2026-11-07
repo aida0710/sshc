@@ -46,7 +46,7 @@ func newStartupRemovalHarness(t *testing.T, contents string, startupAliases ...s
 
 func (h startupRemovalHarness) hasStartup(t *testing.T, alias string) bool {
 	t.Helper()
-	_, err := h.library.PrepareStartupCommand(alias)
+	_, err := h.library.PrepareStartup(alias)
 	if errors.Is(err, snippets.ErrNoStartup) {
 		return false
 	}

@@ -22,6 +22,7 @@ import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmat
 import { usePolling } from "../ui/usePolling";
 import { describeSnippetFailure } from "./snippetFailure";
 import { variablesFor } from "./snippetVariables";
+import { hasSteps, templateText } from "./snippetKind";
 import { SnippetList, type SnippetLibraryState } from "./SnippetList";
 import { SnippetEditor } from "./SnippetEditor";
 import { SnippetRunSection } from "./SnippetRunSection";
@@ -64,6 +65,8 @@ function draftOf(snippet: Snippet | null): SnippetDraft {
         name: snippet.name,
         description: snippet.description ?? "",
         command: snippet.command,
+        ...(hasSteps(snippet) ? { steps: snippet.steps ?? [] } : {}),
+        ...(snippet.waitSeconds === undefined ? {} : { waitSeconds: snippet.waitSeconds }),
         variables: snippet.variables,
       };
 }
@@ -112,7 +115,7 @@ export function SnippetsPanel({
   const staleStartupAliases = startupAssignments
     .filter((assignment) => assignment.stale)
     .map((assignment) => assignment.alias);
-  const draftVariables = variablesFor(draft.command, draft.variables);
+  const draftVariables = variablesFor(templateText(draft), draft.variables);
   const draftChanged = JSON.stringify(draft) !== JSON.stringify(draftOf(current));
   const draftDiscard = useDraftDiscardConfirmation({
     dirty: draftChanged,
@@ -173,7 +176,7 @@ export function SnippetsPanel({
   // changeDraft は、編集欄の入力を変える。変えた時点で、前の保存の成功はもう今の入力を指さない。
   // コマンドが変われば、確認した展開結果ももう今のコマンドではない。
   function changeDraft(next: SnippetDraft) {
-    if (next.command !== draft.command) setPreview(null);
+    if (templateText(next) !== templateText(draft)) setPreview(null);
     setDraft(next);
     touch();
   }
@@ -343,7 +346,8 @@ export function SnippetsPanel({
                 />
                 {current === null ? null : (
                   <>
-                    <SnippetRunSection
+                    {/* 手順は接続した直後のシェルの出力を待つものなので、複数の接続先での実行には出さない。 */}
+                    {hasSteps(current) ? null : <SnippetRunSection
                       aliases={aliases}
                       targets={targets}
                       preview={preview}
@@ -359,7 +363,7 @@ export function SnippetsPanel({
                       onPreview={() => void makePreview()}
                       onRun={() => void run()}
                       onCancel={(jobId) => void cancelJob(jobId)}
-                    />
+                    />}
                     <SnippetStartupSection
                       aliases={aliases}
                       alias={startupAlias}
