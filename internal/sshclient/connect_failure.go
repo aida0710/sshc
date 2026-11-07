@@ -103,7 +103,7 @@ func connectionCut(err error) bool {
 var failureSentence = map[ConnectFailure]string{
 	ConnectFailureRefused:         "接続を拒否されました。SSHサーバーが動いているか、ポート番号が合っているかを確認してください。",
 	ConnectFailureTimedOut:        "接続先から応答がありません。接続先の電源とネットワーク、ファイアウォールを確認してください。",
-	ConnectFailureHostNotFound:    "接続先の名前からIPアドレスを引けません。HostNameを確認してください。",
+	ConnectFailureHostNotFound:    "接続先の名前を名前解決できません。HostNameを確認してください。",
 	ConnectFailureNoNetwork:       "ネットワークに接続できません。回線を確認してください。",
 	ConnectFailureHostUnreachable: "接続先まで届きません。ネットワークと接続先の電源を確認してください。",
 	ConnectFailureClosed:          "接続先が接続を切りました。接続先のSSHサーバーの状態を確認してください。",
