@@ -92,8 +92,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  go:
-    name: Go native (${{ matrix.name }})
+  go-checks:
+    name: Go checks (${{ matrix.name }})
     needs: [changes, ui]
     # jobs.changes が失敗しても、この job は走らせる。依存先の失敗で飛ばされた必須の検査は
     # 成功に見えるので、テストを流さないまま PR がマージできてしまう。jobs.ui が失敗したときは、
@@ -145,9 +145,10 @@ jobs:
           path: |
             ${{ matrix.goBuildCache }}
             ~/go/pkg/mod
-          key: go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: go-${{ matrix.name }}-checks-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-
+            go-${{ matrix.name }}-checks-${{ hashFiles('go.sum') }}-
+            go-${{ matrix.name }}-checks-
             go-${{ matrix.name }}-
       # CSP の trusted-types の検査と、バイナリが埋め込んだ画面を配るかの検査は、組み立てた画面を読む。
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -156,16 +157,16 @@ jobs:
           name: web-ui
           path: internal/ui/dist/app
 
-      # テストより前に、TEMP を作業用のディスクへ移す。理由は scripts/ci/windows-fast-temp.ps1。
+      # TEMP を作業用のディスクへ移す。前の版からの更新のテストも TEMP に書く。理由は scripts/ci/windows-fast-temp.ps1。
       - name: Move TEMP off the system drive (Windows)
         if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: pwsh
         run: ./scripts/ci/windows-fast-temp.ps1
 
-      - name: Skip the Go tests for a web-only change
+      - name: Skip the Go checks for a web-only change
         if: ${{ env.NATIVE_TESTS != 'true' }}
         shell: bash
-        run: echo "Only web or docs changed; the Linux job runs the Go tests."
+        run: echo "Only web or docs changed; the Linux jobs run the Go checks and tests."
 
       # Windows に Unix shell fragment を解釈させない。formatter も OS ごとの
       # script を使い、違反時は対象 path だけを報告する。
@@ -234,26 +235,6 @@ jobs:
         if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         shell: pwsh
         run: go build ./...
-
-      # テストは OS ごとに 1 回、race detector を付けて流す。race の下でだけ外れるテストは
-      # 無いので、race を付けない実行は同じテストの繰り返しになる。PR でも main への push でも
-      # 同じものを流す。タグ sshc_test_kdf は、鍵の導出の強さを確かめないテストで Argon2id の
-      # コストを下げる（internal/envelope/derivation_cost_sshc_test_kdf.go）。
-      - name: go test -race (Unix)
-        if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
-        shell: bash
-        run: go test -count=1 -race -tags sshc_test_kdf ./...
-
-      # windows/amd64 は Go の race detector の対応先なので、例外を設けず、
-      # go test の終了コードをそのまま返す。
-      - name: go test -race (Windows)
-        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
-        shell: pwsh
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $false
-          & go test -v -count=1 -race -tags sshc_test_kdf ./... 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-race-windows.log"
-          $raceExit = $LASTEXITCODE
-          exit $raceExit
 
       # 前のリリースが書いたデータで、今のビルドが起動し、Vault を開け、設定が残っているかを
       # 確かめる（cmd/sshc/upgrade_test.go）。前のリリースの成果物は checksums.txt と照らしてから使う。
@@ -337,7 +318,141 @@ jobs:
           path: |
             ${{ matrix.goBuildCache }}
             ~/go/pkg/mod
-          key: go-${{ matrix.name }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: go-${{ matrix.name }}-checks-${{ hashFiles('go.sum') }}-${{ github.sha }}
+
+  # Go のテストは race の下で重い（OpenSSH の鍵の暗号化だけで1回1秒を超える）。OS ごとに
+  # 2 つの job に分けて並べる。どの package をどちらで流すかは、scripts/ci/go-test-seconds.json に
+  # 記録した package ごとの時間から internal/testsplit が決める。記録の無い package もどちらかに入る。
+  # テストが増えて遅くなったら、matrix の part と parts を増やす。
+  go-test:
+    name: Go tests (${{ matrix.name }} ${{ matrix.part }}/${{ matrix.parts }})
+    needs: [changes, ui]
+    # jobs.changes が失敗しても、この job は走らせる（jobs.go-checks と同じ理由）。
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      NATIVE_TESTS: ${{ matrix.name == 'Linux' || needs.changes.outputs.native != 'false' }}
+      PART: ${{ matrix.part }}
+      PARTS: ${{ matrix.parts }}
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [Linux, macOS, Windows]
+        # 分ける数を変えるときは、part を 1 から parts までにする。
+        part: [1, 2]
+        parts: [2]
+        # goBuildCache は、その OS での go env GOCACHE の既定の場所である。
+        include:
+          - name: Linux
+            os: ubuntu-24.04
+            goBuildCache: ~/.cache/go-build
+          - name: macOS
+            os: macos-15
+            goBuildCache: ~/Library/Caches/go-build
+          - name: Windows
+            os: windows-2025
+            goBuildCache: ~/AppData/Local/go-build
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        if: ${{ env.NATIVE_TESTS == 'true' }}
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        if: ${{ env.NATIVE_TESTS == 'true' }}
+        with:
+          # バージョンは go.mod から来る。ツールチェーンを変えられる場所を
+          # 一か所に限るためである。
+          go-version-file: go.mod
+          # setup-go のキャッシュは go.sum だけで鍵を作るので、依存が変わらない限り作り直されず、
+          # そのあとに変わったパッケージを毎回コンパイルし直していた（2026-10-27 に、Windows と
+          # macOS のキャッシュは 10 月 22 日のままだった）。下の手順で、main のコミットごとに
+          # 作り直すキャッシュを使う。
+          cache: false
+      # PR と main への push は、main が最後に保存したビルドのキャッシュから始める。
+      - name: Restore the Go build cache
+        if: ${{ env.NATIVE_TESTS == 'true' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ matrix.goBuildCache }}
+            ~/go/pkg/mod
+          key: go-${{ matrix.name }}-test${{ matrix.part }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ matrix.name }}-test${{ matrix.part }}-${{ hashFiles('go.sum') }}-
+            go-${{ matrix.name }}-test${{ matrix.part }}-
+            go-${{ matrix.name }}-
+      # CSP の trusted-types の検査と、バイナリが埋め込んだ画面を配るかの検査は、組み立てた画面を読む。
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        if: ${{ env.NATIVE_TESTS == 'true' }}
+        with:
+          name: web-ui
+          path: internal/ui/dist/app
+
+      # テストより前に、TEMP を作業用のディスクへ移す。理由は scripts/ci/windows-fast-temp.ps1。
+      - name: Move TEMP off the system drive (Windows)
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
+        shell: pwsh
+        run: ./scripts/ci/windows-fast-temp.ps1
+
+      - name: Skip the Go tests for a web-only change
+        if: ${{ env.NATIVE_TESTS != 'true' }}
+        shell: bash
+        run: echo "Only web or docs changed; the Linux jobs run the Go tests."
+
+      # テストは race detector を付けて1回流す。race の下でだけ外れるテストは無いので、race を
+      # 付けない実行は同じテストの繰り返しになる。PR でも main への push でも
+      # 同じものを流す。タグ sshc_test_kdf は、鍵の導出の強さを確かめないテストで Argon2id の
+      # コストを下げる（internal/envelope/derivation_cost_sshc_test_kdf.go）。
+      - name: go test -race (Unix)
+        if: ${{ runner.os != 'Windows' && env.NATIVE_TESTS == 'true' }}
+        shell: bash
+        run: |
+          packages=$(go run ./internal/testsplit/cmd/testsplit -part "$PART" -of "$PARTS")
+          go test -count=1 -race -tags sshc_test_kdf $packages
+
+      # windows/amd64 は Go の race detector の対応先なので、例外を設けず、
+      # go test の終了コードをそのまま返す。
+      - name: go test -race (Windows)
+        if: ${{ runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $packages = @(go run ./internal/testsplit/cmd/testsplit -part $env:PART -of $env:PARTS)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & go test -v -count=1 -race -tags sshc_test_kdf @packages 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/go-test-race-windows.log"
+          $raceExit = $LASTEXITCODE
+          exit $raceExit
+
+      # 保存する前に、この実行で使わなかったビルドの出力を消す。Go はキャッシュの項目を使うと、
+      # 最後に触ってから1時間を過ぎていれば更新時刻を今にする。そのため、この実行で使った項目は
+      # どれも、更新時刻が「1時間 + job の長さ」より新しい。2時間より古い項目は使っていないので
+      # 消してよい。消さないと、キャッシュはコミットごとに増え続ける（Linux で40分に296MBから421MB）。
+      - name: Drop build outputs this run did not use (Unix)
+        if: ${{ runner.os != 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.NATIVE_TESTS == 'true' }}
+        shell: bash
+        env:
+          GO_BUILD_CACHE: ${{ matrix.goBuildCache }}
+        # matrix.goBuildCache は ~ で始まる。引用の中の ~ は展開されないので置き換える。
+        run: find "${GO_BUILD_CACHE/#\~/$HOME}" -type f -mmin +120 -delete
+      - name: Drop build outputs this run did not use (Windows)
+        if: ${{ runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.NATIVE_TESTS == 'true' }}
+        shell: pwsh
+        env:
+          GO_BUILD_CACHE: ${{ matrix.goBuildCache }}
+        run: |
+          $unused = (Get-Date).AddMinutes(-120)
+          $directory = $env:GO_BUILD_CACHE -replace '^~', $HOME
+          Get-ChildItem -LiteralPath $directory -Recurse -File | Where-Object { $_.LastWriteTime -lt $unused } | Remove-Item -Force
+
+      # main への push だけが、テストを通ったビルドのキャッシュを保存する。PR は保存しない
+      # （PR のキャッシュはほかの PR から使えず、容量だけを使う）。
+      - name: Save the Go build cache
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && env.NATIVE_TESTS == 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ matrix.goBuildCache }}
+            ~/go/pkg/mod
+          key: go-${{ matrix.name }}-test${{ matrix.part }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
       # Console出力が切り詰められても、ConPTY停止時の直前のtest名と出力を
       # 完全な形で取得できるよう、失敗したWindows runだけlogを保存する。
@@ -345,19 +460,44 @@ jobs:
         if: ${{ failure() && runner.os == 'Windows' && env.NATIVE_TESTS == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: go-test-logs-windows
+          name: go-test-logs-windows-${{ matrix.part }}
           path: ${{ runner.temp }}/go-test-*-windows.log
           if-no-files-found: warn
           retention-days: 7
 
-  # main への push で jobs.go が保存したビルドのキャッシュが置き換えた、同じ OS の古いキャッシュを
+  # 必須の検査「Go native (Linux)」などは、jobs.go-checks と jobs.go-test がどれも成功したとき
+  # だけ成功する。ブランチの保護がこの名前で待つので名前を残す。needs は job ごとの結果しか
+  # 渡さないので、どの OS の失敗でも3つとも失敗になる（どこで落ちたかは元の job を見る）。
+  go:
+    name: Go native (${{ matrix.name }})
+    needs: [go-checks, go-test]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [Linux, macOS, Windows]
+    steps:
+      - name: Require every Go job to succeed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != success ]; then
+              echo "a Go job ended with $result (all: $RESULTS)" >&2
+              exit 1
+            fi
+          done
+
+  # main への push で jobs.go-checks と jobs.go-test が保存したビルドのキャッシュが置き換えた、同じ OS・同じ job の古いキャッシュを
   # 消す。次の実行が復元するのはいつも一番新しいものなので、古いものは容量を使うだけである。
   # 残すと、リポジトリの上限（10GB）に達し、npm や Gradle のキャッシュが押し出される
   # （2026-10-27 に9.998GBだった）。この commit のキャッシュを保存しなかった OS（Go に関わらない
   # 変更で Windows と macOS のテストを飛ばしたとき）は、前のものを残す。
   go-cache-cleanup:
     name: Go build cache cleanup
-    needs: go
+    needs: [go-checks, go-test]
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -370,10 +510,10 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          for os in Linux macOS Windows; do
-            keys=$(gh cache list --repo "$GITHUB_REPOSITORY" --key "go-$os-" --limit 100 --json id,key --jq '.[] | "\(.id) \(.key)"')
+          for prefix in go-{Linux,macOS,Windows}-{checks,test1,test2}-; do
+            keys=$(gh cache list --repo "$GITHUB_REPOSITORY" --key "$prefix" --limit 100 --json id,key --jq '.[] | "\(.id) \(.key)"')
             if ! grep -q -- "-$SHA\$" <<<"$keys"; then
-              echo "go-$os: no cache saved for $SHA; keeping the previous ones"
+              echo "$prefix: no cache saved for $SHA; keeping the previous ones"
               continue
             fi
             grep -v -- "-$SHA\$" <<<"$keys" | while read -r id key; do
