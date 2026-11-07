@@ -114,6 +114,15 @@ describe("TerminalNoticeCard", () => {
     });
   });
 
+  it("says the reconnect waits for a password or code typed in the terminal", () => {
+    renderCard({
+      ...session, state: "reconnecting", awaitingPrompt: true,
+      reconnect: { attempt: 4, limit: 5, retryAt: "", problem: "" },
+    }, recovery());
+    const card = screen.getByRole("region", { name: "The connection to web-01 was lost" });
+    expect(card).toHaveTextContent("Waiting for you to type a password or code in the terminal.");
+  });
+
   it("says it waits for the network without counting down an attempt", () => {
     renderCard({
       ...session, state: "reconnecting",
