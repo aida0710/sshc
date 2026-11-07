@@ -82,6 +82,8 @@ export function runTargetRefusalState(t: Translate, error: ApiError | null): str
 function connectFailureKey(error: unknown): MessageKey | null {
   const reason = error instanceof ApiError ? error.problem?.reason : undefined;
   if (reason === "host_key_unknown") return "runTarget.hostKeyUnknown";
+  if (reason === "host_key_changed") return "runTarget.hostKeyChanged";
+  if (reason === "host_key_revoked") return "runTarget.hostKeyRevoked";
   if (reason === "prompt_unavailable") return "runTarget.promptUnavailable";
   return null;
 }

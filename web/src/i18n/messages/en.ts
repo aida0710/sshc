@@ -620,6 +620,8 @@ export const en = {
   "runTarget.runningOn": "on {alias}",
   "runTarget.notRunning": "The sshc engine is not running on {alias}. Start it there with sshc service install or sshc open.",
   "runTarget.hostKeyUnknown": "The host key of {alias} has not been confirmed. Connect to {alias} once from a terminal first.",
+  "runTarget.hostKeyChanged": "The host key of {alias} changed. Review Known Hosts before connecting again.",
+  "runTarget.hostKeyRevoked": "The host key of {alias} is marked as revoked, so sshc does not connect to it.",
   "runTarget.promptUnavailable": "Connecting to {alias} needs a passphrase or password that is not saved. Save it in Connections.",
   "runTarget.connectFailed": "Could not connect to {alias}.",
   "runTarget.unproven": "The engine on {alias} could not be verified.",
