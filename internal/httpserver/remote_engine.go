@@ -26,13 +26,14 @@ type remoteEngineRequest struct {
 }
 
 // remoteEngineConnectFailure は、接続先への SSH の接続ができなかった理由の語である。
-// CLI が理由ごとの直し方を添える。
+// CLI と画面が理由ごとの直し方を添える。ホスト鍵の理由（知らない鍵、変わった鍵、失効させた鍵）は、
+// ターミナルと SFTP と同じ語にする（hostKeyProblem）。
 func remoteEngineConnectFailure(err error) string {
-	switch {
-	case errors.Is(err, sshclient.ErrHostKeyUnknown):
-		return "host_key_unknown"
-	case errors.Is(err, sshclient.ErrPromptUnavailable):
+	if errors.Is(err, sshclient.ErrPromptUnavailable) {
 		return "prompt_unavailable"
+	}
+	if reason, ok := hostKeyProblem(err); ok {
+		return reason
 	}
 	return "connection_failed"
 }
