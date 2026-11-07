@@ -1013,6 +1013,7 @@ export const en = {
   "terminal.limitReached":
     "The limit of {max} open sessions has been reached. Close one to open another.",
   "terminal.limitRefused": "No more sessions can be opened. Close one first.",
+  "terminal.openFailedFor": "Could not open {names}. {reason}",
   "terminal.unresolvable": "The settings for this connection could not be resolved. Open the Resolved values tab in Connections to see why.",
   "terminal.localWorkingDirectoryUnavailable": "The local shell cannot start in this folder. Check that the folder exists and you can access it.",
   "terminal.remoteWorkingDirectoryUnsupported":
@@ -2948,11 +2949,14 @@ export const en = {
   "tree.deleteEllipsis": "Delete…",
   "tree.connectionActions": "Actions for {alias}",
   "tree.connect": "Connect",
+  "tree.connectAll": "Connect all",
+  "tree.connectAllOverLimit": "Sessions that can still be opened: {count}.",
   "tree.duplicate": "Duplicate",
   "tree.moveToGroup": "Move to group…",
   "tree.select": "Select",
   "tree.selectDone": "Done",
   "tree.selectedCount": "{count} selected",
+  "tree.selectedCountShort": "{count}",
   "tree.clearSelection": "Clear selection",
   "tree.groupButton": "Group: {name}",
   "groupDialog.createHeading": "New group",

@@ -7,7 +7,8 @@ import { useToast } from "../ui/useToast";
 import { identityKey } from "./connectionBrowser";
 import { duplicateAliasOf } from "./duplicateAlias";
 import { groupAfterRename } from "./connectionMoves";
-import { buildGroupTree, decorateHosts, type GroupNode } from "./connectionTreeIndex";
+import { belongsToGroup, buildGroupTree, decorateHosts, type DecoratedHost, type GroupNode } from "./connectionTreeIndex";
+import { listedGroups, listSections, sortedForList, type SortOrder } from "./connectionListOrder";
 import { ordersAfterMove, type MoveDirection } from "./groupOrder";
 import type { HostSelection, Scope } from "./ConnectionTree";
 import type { GroupDialogState } from "./GroupDialogs";
@@ -25,6 +26,10 @@ type ConnectionListActionsOptions = {
   // connectionDraft が true なら、開いている接続先の下書きも対象にする（接続先を閉じるため）。
   confirmBeforeLeaving: (proceed: () => void, options: { connectionDraft: boolean }) => void;
   onOpenSSHSession: (alias: string) => Promise<void>;
+  // onOpenSSHSessions は、選んだ接続先やグループの接続先を、渡した順にまとめて開く。
+  onOpenSSHSessions: (aliases: readonly string[]) => Promise<void>;
+  // sessionsLeft は、あといくつセッションを開けるか。エンジンが上限を言うまでは null。
+  sessionsLeft: number | null;
   // 一括の移動と削除は、保存できたかを返す。保存できたときだけ選択を解く。
   moveConnections: (hosts: readonly HostIdentity[], group: string) => Promise<boolean>;
   deleteConnections: (hosts: readonly HostIdentity[]) => Promise<boolean>;
@@ -54,6 +59,8 @@ export function useConnectionListActions({
   clearTarget,
   confirmBeforeLeaving,
   onOpenSSHSession,
+  onOpenSSHSessions,
+  sessionsLeft,
   moveConnections,
   deleteConnections,
   duplicateConnection,
@@ -71,9 +78,17 @@ export function useConnectionListActions({
   const [moving, setMoving] = useState<HostEntry[] | null>(null);
   const [deleting, setDeleting] = useState<HostEntry[] | null>(null);
   const [renamingConnection, setRenamingConnection] = useState<HostEntry | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>("name");
 
   const groupListings = useMemo(() => (overview === null ? [] : listGroups(overview)), [overview]);
-  const groupTree = useMemo(() => (overview === null ? [] : buildGroupTree(overview, decorateHosts(overview))), [overview]);
+  const decorated = useMemo(() => (overview === null ? [] : decorateHosts(overview)), [overview]);
+  const groupTree = useMemo(() => (overview === null ? [] : buildGroupTree(overview, decorated)), [decorated, overview]);
+  // listOrder は、すべての接続先を一覧に出したときの上からの順。まとめて開くときは、この順で開く。
+  const listOrder = useMemo(
+    () => listSections({ items: sortedForList(decorated, sortOrder), groups: listedGroups(groupTree), scope: { kind: "all" } })
+      .flatMap((section) => section.items),
+    [decorated, groupTree, sortOrder],
+  );
   const hostsByKey = useMemo(
     () => new Map((overview?.hosts ?? []).filter((host) => host.identity.alias !== "").map((host) => [identityKey(host.identity), host])),
     [overview],
@@ -121,6 +136,19 @@ export function useConnectionListActions({
     }, { connectionDraft: true });
   }
 
+  // connectAllProblem は、count 件をまとめて開けない理由。開けるなら undefined。
+  function connectAllProblem(count: number): string | undefined {
+    return sessionsLeft !== null && count > sessionsLeft ? t("tree.connectAllOverLimit", { count: sessionsLeft }) : undefined;
+  }
+
+  // connectAll は、wanted に当たる接続先を一覧の順に開く。同じ名前の接続先は1つだけ開く。開くとターミナルへ移るので、
+  // 保存していない下書きがあれば、先に捨ててよいかを確かめる。
+  function connectAll(wanted: (item: DecoratedHost) => boolean) {
+    const aliases = [...new Set(listOrder.filter(wanted).map((item) => item.host.identity.alias))];
+    if (aliases.length === 0 || connectAllProblem(aliases.length) !== undefined) return;
+    confirmBeforeLeaving(() => void onOpenSSHSessions(aliases), { connectionDraft: true });
+  }
+
   // groupActionItems は、グループの「…」に並べる操作。グループの編集欄の中の「…」には［編集］を出さない。
   function groupActionItems(name: string, { inEditor = false }: { inEditor?: boolean } = {}): ActionMenuItem[] {
     const memberCount = groupListings.find((group) => group.name === name)?.count ?? 0;
@@ -133,7 +161,15 @@ export function useConnectionListActions({
     const hidden = overview?.metadata.groups?.find((group) => group.name === name)?.hidden === true;
     // 直下に接続先があるグループを隠すと、その接続先も一覧から見えなくなるので、隠せるのは入れ物のグループだけ。
     const directMembers = overview?.hosts.filter((host) => host.identity.alias !== "" && (host.group ?? "") === name).length ?? 0;
+    const members = new Set(decorated.filter((item) => belongsToGroup(item, name)).map((item) => item.host.identity.alias)).size;
+    const connectProblem = connectAllProblem(members);
     return [
+      {
+        label: t("tree.connectAll"),
+        onSelect: () => connectAll((item) => belongsToGroup(item, name)),
+        disabled: members === 0 || connectProblem !== undefined,
+        title: connectProblem,
+      },
       { label: t("tree.newSubgroup"), onSelect: () => setGroupDialog({ kind: "create", parent: name }) },
       { label: t("tree.rename"), onSelect: () => setGroupDialog({ kind: "rename", name }), disabled: movesDisabled },
       ...edit,
@@ -184,6 +220,10 @@ export function useConnectionListActions({
     setChecked,
     checkedHosts,
     clearChecked,
+    sortOrder,
+    setSortOrder,
+    connectChecked: () => connectAll((item) => checked.keys.has(item.key)),
+    connectCheckedProblem: connectAllProblem(new Set(checkedHosts.map((host) => host.identity.alias)).size),
     selectionMode,
     setSelectionMode,
     editingGroup,
