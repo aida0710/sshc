@@ -55,6 +55,8 @@ func TestEachReasonARemoteEngineCannotBeOpenedHasItsOwnCode(t *testing.T) {
 	}{
 		{&remoteengine.ConnectError{Err: fmt.Errorf("hop: %w", sshclient.ErrHostKeyUnknown)}, "remote_engine_connect_failed", "host_key_unknown"},
 		{&remoteengine.ConnectError{Err: sshclient.ErrPromptUnavailable}, "remote_engine_connect_failed", "prompt_unavailable"},
+		{&remoteengine.ConnectError{Err: fmt.Errorf("hop: %w", sshclient.ErrHostKeyChanged)}, "remote_engine_connect_failed", "host_key_changed"},
+		{&remoteengine.ConnectError{Err: sshclient.ErrHostKeyRevoked}, "remote_engine_connect_failed", "host_key_revoked"},
 		{&remoteengine.ConnectError{Err: errors.New("connection refused")}, "remote_engine_connect_failed", "connection_failed"},
 		{remoteengine.ErrNotInstalled, "remote_engine_not_installed", nil},
 		{remoteengine.ErrNoEntrance, "remote_engine_no_entrance", nil},
