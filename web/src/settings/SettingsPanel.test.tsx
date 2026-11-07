@@ -535,6 +535,56 @@ describe("SettingsPanel", () => {
     await waitFor(() => expect(server.document().global.language).toBeUndefined());
   });
 
+  it("keeps session logs for every connection but those the rules leave out, and saves only rules the engine takes", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPanel api={buildApi()} page="General" />);
+    const region = screen.getByRole("region", { name: "General" });
+    expect(within(region).queryByRole("textbox", { name: "Connections not logged" })).not.toBeInTheDocument();
+
+    await user.click(within(region).getByRole("checkbox", { name: "Save a log of each session to a file" }));
+    await waitFor(() => expect(server.document().global.terminal).toEqual({ sessionLog: true }));
+    const rules = await within(region).findByRole("textbox", { name: "Connections not logged" });
+    await user.type(rules, "[[prod");
+    await user.tab();
+    expect(within(region).getByText("A line is not a pattern.")).toBeInTheDocument();
+    expect(server.document().global.terminal).toEqual({ sessionLog: true });
+
+    await user.clear(rules);
+    await user.type(rules, "prod-*{Enter}!prod-web");
+    await user.tab();
+    await waitFor(() => expect(server.document().global.terminal).toEqual({ sessionLog: true, sessionLogRules: "prod-*\n!prod-web" }));
+  });
+
+  it("changes where a machine keeps its session logs, and offers nothing on a machine that keeps none", async () => {
+    const user = userEvent.setup();
+    const phone = "1111111111111111111111111111111b";
+    withSettings({
+      machines: [
+        { id: testMachineId, settings: { name: "desk" }, facts: { os: "linux", sessionLogDirectory: "/home/aida/.local/state/sshc/session-logs" } },
+        { id: phone, settings: { name: "phone" }, facts: { os: "android" } },
+      ],
+    });
+    render(<SettingsPanel api={buildApi()} page="Machines" />);
+    const region = screen.getByRole("region", { name: "Machines" });
+
+    await user.click(within(region).getByRole("button", { name: "Actions for phone" }));
+    expect(screen.getByRole("menuitem", { name: "Change where logs are kept…" })).toBeDisabled();
+    await user.keyboard("{Escape}");
+
+    await user.click(within(region).getByRole("button", { name: "Actions for desk" }));
+    await user.click(screen.getByRole("menuitem", { name: "Change where logs are kept…" }));
+    const dialog = screen.getByRole("dialog", { name: "Where session logs are kept" });
+    expect(dialog).toHaveTextContent("/home/aida/.local/state/sshc/session-logs");
+    const folder = within(dialog).getByRole("textbox", { name: "Folder" });
+    await user.type(folder, "logs");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(within(dialog).getByText("Enter an absolute path or one that starts with ~/.")).toBeInTheDocument();
+    await user.clear(folder);
+    await user.type(folder, "~/session-logs");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(server.document().machines[0]?.settings).toEqual({ name: "desk", sessionLogDirectory: "~/session-logs" }));
+  });
+
   it("lists this machine first and changes the preset and port of any machine", async () => {
     const user = userEvent.setup();
     const laptop = "1111111111111111111111111111111a";

@@ -250,7 +250,7 @@ func (s *Service) Preview(request PreviewRequest) (Preview, error) {
 // session's cwd and shell state. Resolving the alias here would recreate the
 // detached-command behaviour this path is meant to avoid.
 func (s *Service) PrepareTerminalCommand(request CommandRequest) (PreparedCommand, error) {
-	source, expanded, _, err := s.planSource(PreviewRequest{
+	source, expanded, secrets, err := s.planSource(PreviewRequest{
 		SnippetID: request.SnippetID,
 		Command:   request.Command,
 		Inputs:    request.Inputs,
@@ -258,7 +258,9 @@ func (s *Service) PrepareTerminalCommand(request CommandRequest) (PreparedComman
 	if err != nil {
 		return PreparedCommand{}, err
 	}
-	return prepareTerminalCommand(source, expanded)
+	prepared, err := prepareTerminalCommand(source, expanded)
+	prepared.Secrets = secrets
+	return prepared, err
 }
 
 func prepareTerminalCommand(source planSource, expanded expansion) (PreparedCommand, error) {

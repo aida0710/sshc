@@ -237,6 +237,8 @@ func (h TerminalHandlers) DispatchCommand(c *echo.Context) error {
 			TargetId: planned.request.TargetId, SessionId: planned.target.ID,
 			Alias: planned.target.Alias, Title: planned.target.Title, Status: terminalCommandDelivered,
 		}
+		// The shell echoes what is typed, secret variables included; the session log must not keep them.
+		h.Registry.HideInLog(planned.target.ID, plan.command.Secrets)
 		writeContext, cancel := context.WithTimeout(c.Request().Context(), terminalCommandWriteTimeout)
 		err := h.Registry.WriteCommandInput(writeContext, planned.target, plan.command.Command, plan.submit)
 		cancel()

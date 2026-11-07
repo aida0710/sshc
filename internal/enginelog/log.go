@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sshc/internal/filelock"
+	"sshc/internal/privatefile"
 	"sshc/internal/storage"
 )
 
@@ -38,7 +39,7 @@ func Open(stateDir, version string) (*os.File, error) {
 		return nil, err
 	}
 	defer release()
-	file, err := openPrivateAppend(path)
+	file, err := privatefile.OpenAppend(path)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +55,7 @@ func Open(stateDir, version string) (*os.File, error) {
 		if err := (storage.OSFileSystem{}).Rename(path, path+".1"); err != nil {
 			return nil, err
 		}
-		file, err = openPrivateAppend(path)
+		file, err = privatefile.OpenAppend(path)
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +68,7 @@ func Open(stateDir, version string) (*os.File, error) {
 }
 
 func Tail(path string) (string, error) {
-	file, err := openPrivateRead(path)
+	file, err := privatefile.OpenRead(path)
 	if err != nil {
 		return "", err
 	}

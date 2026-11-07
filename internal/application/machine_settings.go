@@ -26,6 +26,8 @@ const (
 	machineSettingsSchemaVersion = 1
 	// MaxMachineNameLength は、マシンの名前の長さの上限である。api/openapi.yaml も同じ値を約束する。
 	MaxMachineNameLength = 80
+	// maxSessionLogDirectoryLength は、ログのフォルダのパスの長さの上限である。開始フォルダと同じ。
+	maxSessionLogDirectoryLength = 4096
 )
 
 var (
@@ -46,6 +48,9 @@ type MachineSettings struct {
 	PresetID string `json:"presetId,omitempty"`
 	// Port は、sshc エンジンが待ち受けるポートである。0 はマシンごとの固定ポート。次の起動から効く。
 	Port int `json:"port,omitempty"`
+	// SessionLogDirectory は、このマシンがセッションのログを置くフォルダである（絶対パスか ~/ で始まる）。
+	// 空なら OS の決まった場所（MachineFacts.SessionLogDirectory）。パスは OS ごとに違うので、マシンごとに持つ。
+	SessionLogDirectory string `json:"sessionLogDirectory,omitempty"`
 }
 
 // Machine は、一覧に出す1台である。Facts は、そのマシンのエンジンが最後に起動したときの記録。
@@ -66,6 +71,11 @@ func validateMachineSettings(settings MachineSettings) error {
 	}
 	if settings.PresetID != "" && !presetIDPattern.MatchString(settings.PresetID) {
 		return fmt.Errorf("%w: presetId", ErrMachineSettings)
+	}
+	// 形（絶対パスか ~/ か）はそのマシンの OS でしか決まらない。別のマシンの画面からも変えるので、ここでは
+	// 長さと文字だけを見て、使うときに確かめる（SessionLogDirectory）。
+	if len(settings.SessionLogDirectory) > maxSessionLogDirectoryLength || strings.ContainsAny(settings.SessionLogDirectory, "\r\n\x00") {
+		return fmt.Errorf("%w: sessionLogDirectory", ErrMachineSettings)
 	}
 	// ポートの範囲は、ブラウザの登録も使うので handoff にある。
 	if settings.Port != 0 && handoff.EnginePort(settings.Port) != nil {

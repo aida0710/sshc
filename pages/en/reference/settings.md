@@ -32,6 +32,7 @@ Settings that are the same on every machine and every preset. Each change is sav
 
 - **Display language**: **Follow the browser**, English, or 日本語. Preferences in Menu switches it as well
 - Terminal connections: **Reconnect after a dropped connection**, **Connection log**, and OSC 52 (allow writing to the clipboard)
+- Session logs: **Save a log of each session to a file** and **Connections not logged** ([Session logs](/en/features/terminal#session-logs))
 - SFTP transfers: how long **Finished transfers** stay in the list, whether to **Resume automatically** **When the connection drops**, and the **Reconnect limit**
 - Background images: **Library capacity** (1 to 1024 MiB, 16 MiB by default)
 
@@ -42,7 +43,7 @@ Lists the machines that sync, this machine first. A machine joins the list when 
 - **Preset**: the preset the machine uses. A change takes effect on that machine once it reaches it through Sync.
 - **Port**: the port that machine's sshc engine listens on, from its next start.
 - **Last start**: when the sshc engine last started on that machine.
-- "…": **Rename** and **Remove from the list**. A machine no longer in use can be removed; this machine cannot. A removed machine comes back the next time sshc runs on it.
+- "…": **Rename**, **Change where logs are kept…** and **Remove from the list**. **Change where logs are kept…** changes the folder the machine keeps its [session logs](/en/features/terminal#session-logs) in; leaving it empty goes back to the usual place for its OS. A machine no longer in use can be removed; this machine cannot. A removed machine comes back the next time sshc runs on it.
 
 Desktop uses a device-local stable port so bookmarks and the installed web app keep the same URL. With **Port** left empty, it first tries `127.0.0.1:54447`, then stores an available fallback for that machine if that port is already in use. You may change the port, but must enrol the browser again at the new origin. The Android app's port cannot be changed: the app keeps its saved data per port, so another port would lose the browser's enrolment.
 
@@ -130,7 +131,7 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 | **Connection** | Limits |
 | **Behaviour** | Starting directory, local shell, clipboard and keyboard, touch input and its link underlines |
 
-Reconnecting, the connection log and OSC 52 are under **General**.
+Reconnecting, the connection log, OSC 52 and session logs are under **General**.
 
 No settings page has a Save button: **Saved** shows under the field you changed for a moment. Choices and checkboxes are saved as soon as they change; numbers and the starting directory are saved when focus leaves them or Enter is pressed.
 

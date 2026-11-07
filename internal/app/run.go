@@ -662,6 +662,7 @@ func prepareMachine(config *application.Service, random io.Reader, version strin
 		Hostname: hostname,
 		Facts: application.MachineFacts{
 			OS: goruntime.GOOS, Version: version, StartedAt: time.Now().UTC().Format(time.RFC3339),
+			SessionLogDirectory: config.DefaultSessionLogDirectory(),
 		},
 	}); err != nil {
 		return fmt.Errorf("prepare this machine: %w", err)
