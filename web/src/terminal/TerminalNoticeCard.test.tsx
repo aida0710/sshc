@@ -34,7 +34,7 @@ type CardOptions = {
 function renderCard(
   shown: TerminalSession,
   actions: SessionRecovery,
-  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: false, giveBack: vi.fn() }, asksNotificationPermission = false, onAnswerPasswordSave, onResumeProgram = vi.fn() }: CardOptions = {},
+  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: () => false, giveBack: vi.fn() }, asksNotificationPermission = false, onAnswerPasswordSave, onResumeProgram = vi.fn() }: CardOptions = {},
 ) {
   const notice = terminalNoticeFor(shown, { phase: "live" }, asksNotificationPermission);
   if (notice === null) throw new Error("no card for this session");
@@ -136,7 +136,7 @@ describe("TerminalNoticeCard", () => {
 
   it("reconnects on an Enter pressed on the card itself when the connection was lost", async () => {
     const actions = recovery();
-    renderCard(lost, actions, { focus: { take: true, giveBack: vi.fn() } });
+    renderCard(lost, actions, { focus: { take: () => true, giveBack: vi.fn() } });
     expect(screen.getByRole("region", { name: "The SSH connection was lost." })).toHaveFocus();
     await userEvent.keyboard("x{Enter}");
     expect(actions.reconnect).toHaveBeenCalledOnce();
@@ -144,7 +144,7 @@ describe("TerminalNoticeCard", () => {
 
   it("leaves an Enter on a shell that exited by itself alone", async () => {
     const actions = recovery();
-    renderCard({ ...session, state: "exited", exited: { code: 3, signal: "", at: "2026-11-02T09:30:00Z" } }, actions, { focus: { take: true, giveBack: vi.fn() } });
+    renderCard({ ...session, state: "exited", exited: { code: 3, signal: "", at: "2026-11-02T09:30:00Z" } }, actions, { focus: { take: () => true, giveBack: vi.fn() } });
     await userEvent.keyboard("{Enter}");
     expect(actions.reconnect).not.toHaveBeenCalled();
   });
@@ -199,7 +199,7 @@ describe("TerminalNoticeCard", () => {
   });
 
   it("takes the focus itself when it appears, not a button an Enter would press", () => {
-    renderCard(lost, recovery(), { focus: { take: true, giveBack: vi.fn() } });
+    renderCard(lost, recovery(), { focus: { take: () => true, giveBack: vi.fn() } });
     expect(screen.getByRole("region", { name: "The SSH connection was lost." })).toHaveFocus();
   });
 
@@ -210,7 +210,7 @@ describe("TerminalNoticeCard", () => {
 
   it("hides with Escape and gives the focus back when it goes away with the focus in it", async () => {
     const giveBack = vi.fn();
-    const { onDismiss, view } = renderCard(lost, recovery(), { focus: { take: true, giveBack } });
+    const { onDismiss, view } = renderCard(lost, recovery(), { focus: { take: () => true, giveBack } });
     await userEvent.keyboard("{Escape}");
     expect(onDismiss).toHaveBeenCalledOnce();
     view.unmount();
@@ -219,7 +219,7 @@ describe("TerminalNoticeCard", () => {
 
   it("does not take the focus back to give away when the card goes without it", () => {
     const giveBack = vi.fn();
-    const { view } = renderCard(lost, recovery(), { focus: { take: false, giveBack } });
+    const { view } = renderCard(lost, recovery(), { focus: { take: () => false, giveBack } });
     view.unmount();
     expect(giveBack).not.toHaveBeenCalled();
   });
