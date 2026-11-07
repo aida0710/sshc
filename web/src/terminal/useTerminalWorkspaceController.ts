@@ -6,6 +6,7 @@ import type { Section } from "../routing/sectionRoute";
 import { duplicateSessionRequest } from "./duplicateSessionRequest";
 import { useSplitView, type SplitRequest } from "./splitView/useSplitView";
 import type { TerminalSessionsState } from "./sessions";
+import { useOpenAfterRemoteUnlock } from "./useOpenAfterRemoteUnlock";
 import { topSessionId } from "./workspaceGrouping";
 
 type TerminalWorkspaceControllerOptions = {
@@ -17,6 +18,8 @@ type TerminalWorkspaceControllerOptions = {
   section: Section | null;
   navigate: (section: Section) => void;
   closeNavigation: () => void;
+  // vaultRevision counts the remote Vault unlocks, for a session refused while it was locked to open after one.
+  vaultRevision?: number;
 };
 
 export function useTerminalWorkspaceController({
@@ -26,6 +29,7 @@ export function useTerminalWorkspaceController({
   section,
   navigate,
   closeNavigation,
+  vaultRevision = 0,
 }: TerminalWorkspaceControllerOptions) {
   const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget, maxSessions: terminalSessions.maxSessions });
   const { selectSession: setActiveSessionId, dispatch: dispatchSplit } = splitView;
@@ -99,17 +103,29 @@ export function useTerminalWorkspaceController({
   // host does not answer, so the terminal screen is shown at once: it says that
   // the host is being reached and, if it cannot be, why. On this machine a
   // failure stays on the current screen.
+  const openAndShow = useCallback(
+    async (request: OpenTerminalSessionRequest) => {
+      const opened = await terminalSessions.open(request);
+      if (opened !== null) showSession(opened.id);
+      return opened;
+    },
+    [showSession, terminalSessions],
+  );
+  const { noteRefused } = useOpenAfterRemoteUnlock({
+    runTarget, refusal: terminalSessions.remoteRefusal, vaultRevision, open: openAndShow,
+  });
+
   const openSession = useCallback(
     async (request: OpenTerminalSessionRequest) => {
       if (runTarget !== null) {
         closeNavigation();
         navigate("Terminal");
       }
-      const opened = await terminalSessions.open(request);
-      if (opened !== null) showSession(opened.id);
+      const opened = await openAndShow(request);
+      if (opened === null) noteRefused(request);
       return opened;
     },
-    [closeNavigation, navigate, runTarget, showSession, terminalSessions],
+    [closeNavigation, navigate, noteRefused, openAndShow, runTarget],
   );
 
   // workspaceId is where the session goes; without one the engine puts it in
