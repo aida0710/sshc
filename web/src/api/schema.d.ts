@@ -4436,6 +4436,8 @@ export interface components {
             user?: string;
             /** @description Resolved SSH port used by this alias. */
             port?: string;
+            /** @description Resolved ProxyJump of this alias, as ssh would use it (comma-separated hops). Absent when the alias connects directly. */
+            proxyJump?: string;
         };
         IncludeReference: {
             line: number;

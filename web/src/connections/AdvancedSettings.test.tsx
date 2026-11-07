@@ -41,12 +41,26 @@ function renderAdvanced(area: "Settings" | "Raw" = "Raw", selected = detail) {
     onBlockRaw: vi.fn(),
     disabled: false,
     onDirtyChange: vi.fn(),
+    savedAliases: ["bastion", "edge", "gateway"],
   };
   const rendered = render(<AdvancedSettings {...props} />);
   return { props, ...rendered };
 }
 
 describe("AdvancedSettings", () => {
+  it("notes a jump host that names no saved connection, as a rename or deletion elsewhere can leave it", async () => {
+    const user = userEvent.setup();
+    renderAdvanced("Settings");
+    const jump = screen.getByLabelText("ProxyJump");
+    expect(screen.queryByText(/is not a saved connection/)).not.toBeInTheDocument();
+    await user.clear(jump);
+    await user.type(jump, "jump");
+    expect(screen.getByText("jump is not a saved connection. ssh connects to it as a host name.")).toBeVisible();
+    await user.clear(jump);
+    await user.type(jump, "gateway");
+    expect(screen.queryByText(/is not a saved connection/)).not.toBeInTheDocument();
+  });
+
   it("keeps a Raw draft across internal views and blocks another editor until discard", async () => {
     const user = userEvent.setup();
     const harness = renderAdvanced();
@@ -135,6 +149,7 @@ describe("AdvancedSettings", () => {
         onBlockRaw={vi.fn()}
         disabled={false}
         onDirtyChange={vi.fn()}
+        savedAliases={[]}
       />,
     );
 

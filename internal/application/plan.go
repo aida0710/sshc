@@ -68,6 +68,9 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 	}
 
 	if !renameFrom.IsZero() {
+		if err := s.addJumpRenames(graph, &prepared, absolute, request.Alias, request.NewAlias); err != nil {
+			return planned{}, err
+		}
 		stored, precondition, err := s.metadata.Load()
 		if err != nil {
 			return planned{}, err

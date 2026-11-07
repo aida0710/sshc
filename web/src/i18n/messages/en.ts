@@ -3227,6 +3227,7 @@ export const en = {
   "conn.analysisSources": "Configuration lines related to this connection",
   "advanced.jumpHeading": "Jump host",
   "advanced.jumpVia": "Connect through",
+  "advanced.jumpUnsaved": "{names} is not a saved connection. ssh connects to it as a host name.",
   "advanced.jumpNone": "None (connect directly)",
   "advanced.forwardListen": "Listens on",
   "advanced.rowActions": "Actions",
@@ -3282,6 +3283,7 @@ export const en = {
     "Primary group controls where sshc organises the connection. Storage file is an advanced override that selects the exact SSH configuration file.",
   "conn.confirmDelete": "Delete it",
   "conn.deleteHeading": "Delete {alias}?",
+  "conn.deleteJumpDependents": "These connections go through a connection you are deleting as a jump host. Once it is deleted, they cannot connect through it.",
   "conn.deleteBody":
     "This removes the Host block from your configuration. You can restore it from History.",
   "conn.deleteCancel": "Keep it",
