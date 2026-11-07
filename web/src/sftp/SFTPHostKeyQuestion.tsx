@@ -17,7 +17,7 @@ export function SFTPHostKeyQuestion({ question, onAnswer }: {
       hostKeyAnswer={hostKeyAnswer}
       // Not from under a dialog or menu. Once answered, the stage line and then the rows take its place; they take
       // nothing back.
-      focus={{ take: !isDismissibleLayerOpen(), giveBack: () => undefined }}
+      focus={{ take: () => !isDismissibleLayerOpen(), giveBack: () => undefined }}
     />
   );
 }

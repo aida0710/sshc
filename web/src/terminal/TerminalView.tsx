@@ -1079,7 +1079,7 @@ export function TerminalView({
                 // Only the terminal the person works in, and not from under a dialog or menu. A phone shows it when the
                 // person asks for the notices, so it always takes the focus there. The hint about the previous shell's
                 // program leaves the focus alone: the new shell is there to type into.
-                take: mobile || (notice.kind !== "resume-program" && active && !isDismissibleLayerOpen()),
+                take: () => mobile || (notice.kind !== "resume-program" && active && !isDismissibleLayerOpen()),
                 // A touch screen would raise its keyboard again for the terminal.
                 giveBack: () => {
                   if (!touchTerminalRef.current) terminal.current?.focus();
