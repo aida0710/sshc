@@ -286,7 +286,11 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 		})
 		if err != nil {
 			closeAll(closers)
-			return nil, nil, err
+			name := hop.Alias
+			if name == "" {
+				name = hop.Address()
+			}
+			return nil, nil, &JumpHostError{Name: name, Hop: index + 1, Hops: hops, Err: err}
 		}
 		closers = append(closers, client)
 		through = client

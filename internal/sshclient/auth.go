@@ -163,6 +163,8 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 // 保存されているなら、それを出す。保管庫に置いてあるのに毎回尋ねるなら、
 // 置く意味が無い。
 func (a Auth) password(target Target, prompt Prompter, stored storedCredentials) func() (string, error) {
+	// typed は、この接続で、打ったパスワードをもう送ったかである。また尋ねられたのは、それが拒否されたからである。
+	typed := false
 	return func() (string, error) {
 		a.observe("password")
 		rejected := stored.password.noteAsked()
@@ -171,19 +173,29 @@ func (a Auth) password(target Target, prompt Prompter, stored storedCredentials)
 			return password, nil
 		}
 		prefix := ""
-		if rejected {
+		switch {
+		case rejected:
 			prefix = "Saved password was rejected. "
 			a.trace.say(connectionlog.Detailed, "保存済みパスワードが拒否されました。パスワードの入力を求めます。")
-		} else {
+		case typed:
+			prefix = typedPasswordRejected + " "
+			a.trace.say(connectionlog.Detailed, "入力したパスワードが拒否されました。もう一度入力を求めます。")
+		default:
 			a.trace.say(connectionlog.Detailed, "パスワードの入力を求めます。")
 		}
 		answer, err := prompt.Secret(prefix + "Password for " + authenticationTarget(target) + ": ")
 		if err == nil {
 			a.typedPasswords.note(target, answer)
+			typed = true
 		}
 		return answer, stored.explainUnanswered(err)
 	}
 }
+
+// typedPasswordRejected は、打ったパスワードが拒否されて、もう一度尋ねるときに前に置く行である。
+// これが無いと、同じ問いがまた出るだけで、打ち間違えたのか届かなかったのかが分からない。文は
+// OpenSSH のものにそろえる。
+const typedPasswordRejected = "Permission denied, please try again."
 
 // keyboard は、keyboard-interactive の結果を作る。
 //
@@ -192,11 +204,15 @@ func (a Auth) password(target Target, prompt Prompter, stored storedCredentials)
 // この方式で聞いてくる。問いが複数あるもの（2FA）や、結果を画面に出す問いに
 // パスワードを差し出す意味は無く、差し出せばそれは間違った結果になる。
 func (a Auth) keyboard(target Target, prompt Prompter, stored storedCredentials) ssh.KeyboardInteractiveChallenge {
+	// typedPassword は、この接続で、打ったパスワードをもう送ったかである。またパスワードを尋ねられたのは、
+	// それが拒否されたからである（2段の認証で次に認証コードを尋ねるのは拒否ではない）。
+	typedPassword := false
 	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		a.observe("keyboard-interactive")
 		a.traceChallenge(name, questions, echos)
 		round := newKeyboardRound(questions, echos)
 		passwordRejected := round.asksPassword() && stored.password.noteAsked()
+		typedPasswordRetried := round.asksPassword() && typedPassword
 		totpRejected := round.asksAnyTOTP() && stored.totp.noteAsked()
 		for index, question := range questions {
 			if !round.asksTOTP[index] || stored.totp.wasOffered() {
@@ -230,6 +246,9 @@ func (a Auth) keyboard(target Target, prompt Prompter, stored storedCredentials)
 		}
 		if passwordRejected {
 			context = "Saved password was rejected.\r\n" + context
+		} else if typedPasswordRetried {
+			a.trace.say(connectionlog.Detailed, "入力したパスワードが拒否されました。もう一度入力を求めます。")
+			context = typedPasswordRejected + "\r\n" + context
 		}
 		challenge := keyboardChallenge{
 			context: context, name: name, instruction: instruction, questions: questions, echos: echos,
@@ -238,6 +257,7 @@ func (a Auth) keyboard(target Target, prompt Prompter, stored storedCredentials)
 		if err == nil {
 			if password, typed := round.typedPassword(answers); typed {
 				a.typedPasswords.note(target, password)
+				typedPassword = true
 			}
 		}
 		return answers, stored.explainUnanswered(err)

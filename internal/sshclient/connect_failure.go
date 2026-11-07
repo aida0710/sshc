@@ -129,6 +129,10 @@ var typedFailureSentence = []struct {
 // FailureSentence は、接続の失敗を、画面のターミナルに出す日本語の文にする。元の英語の文は
 // 接続ログの「詳しく」から出す（Dialer.failSession）。分からない失敗は、元の文を添えて返す。
 func FailureSentence(err error) string {
+	var jump *JumpHostError
+	if errors.As(err, &jump) {
+		return jump.sentence()
+	}
 	var explained *ExplainedError
 	if errors.As(err, &explained) {
 		return explained.Sentence
