@@ -200,6 +200,48 @@ describe("useTerminalWorkspaceController", () => {
     await act(async () => { finish(null); await opening; });
   });
 
+  it("opens a session for each chosen connection in order and shows the first as soon as it opens", async () => {
+    const openEach = vi.fn(async (_requests: unknown, opened: (session: TerminalSession) => void) => {
+      opened(session("web"));
+      opened(session("db"));
+      return [];
+    });
+    const navigate = vi.fn();
+    const { result } = renderHook(() => useTerminalWorkspaceController({
+      terminalSessions: { sessions: [session("web"), session("db")], refresh: vi.fn().mockResolvedValue(undefined), openEach } as unknown as TerminalSessionsState,
+      workspaces,
+      section: "Connections",
+      navigate,
+      closeNavigation: () => undefined,
+    }));
+
+    await act(() => result.current.openSSHSessions(["web", "db"]));
+    expect(openEach).toHaveBeenCalledWith([{ kind: "ssh", alias: "web" }, { kind: "ssh", alias: "db" }], expect.any(Function));
+    expect(result.current.activeSessionId).toBe("web");
+    expect(navigate).toHaveBeenCalledWith("Terminal");
+  });
+
+  it("opens every connection a locked remote Vault held back once it is unlocked", async () => {
+    const openEach = vi.fn()
+      .mockImplementationOnce(async (requests: unknown[]) => requests)
+      .mockImplementationOnce(async () => []);
+    const terminalSessions = { sessions: [], refresh: vi.fn().mockResolvedValue(undefined), openEach, remoteRefusal: null } as unknown as TerminalSessionsState;
+    const { result, rerender } = renderHook(({ vaultRevision }: { vaultRevision: number }) => useTerminalWorkspaceController({
+      runTarget: "r100",
+      vaultRevision,
+      terminalSessions,
+      workspaces,
+      section: "Connections",
+      navigate: () => undefined,
+      closeNavigation: () => undefined,
+    }), { initialProps: { vaultRevision: 0 } });
+
+    await act(() => result.current.openSSHSessions(["web", "db"]));
+    expect(openEach).toHaveBeenCalledOnce();
+    await act(async () => rerender({ vaultRevision: 1 }));
+    expect(openEach).toHaveBeenLastCalledWith([{ kind: "ssh", alias: "web" }, { kind: "ssh", alias: "db" }], expect.any(Function));
+  });
+
   it("shows again the session last shown on each run target when coming back to it", async () => {
     const refresh = vi.fn().mockResolvedValue(undefined);
     const here = [session("s1"), session("s2")];

@@ -41,6 +41,13 @@ export type TerminalSessionsState = {
   rename: (id: string, title: string) => Promise<boolean>;
   unpinTitle?: (id: string) => Promise<boolean>;
   open: (request: OpenTerminalSessionRequest) => Promise<TerminalSession | null>;
+  // openEach opens a session for each request in turn and hands each one to opened as it opens. What could not be
+  // opened is said in one problem that names the connections. A run target that refuses refuses the rest as well, so
+  // the requests from that one on come back unopened, for opening once it lets them.
+  openEach: (
+    requests: readonly OpenTerminalSessionRequest[],
+    opened: (session: TerminalSession) => void,
+  ) => Promise<OpenTerminalSessionRequest[]>;
   reconnect: (id: string) => Promise<boolean>;
   stopReconnect: (id: string) => Promise<boolean>;
   // answerHostKey answers whether to trust the key a connecting session asks about (its hostKeyQuestion).
@@ -222,11 +229,13 @@ export function useTerminalSessions(
     whileHidden: sessions.length > 0,
   });
 
-  const open = useCallback(
-    async (request: OpenTerminalSessionRequest): Promise<TerminalSession | null> => {
+  // openOne asks the engine for one session and lists it as soon as it is made. A run target that could not be reached
+  // is shown where the session would have appeared, as when its list cannot be read, rather than as a line in the
+  // sidebar: that line would stay after the engine answers. Every other failure is the caller's to say.
+  const openOne = useCallback(
+    async (request: OpenTerminalSessionRequest): Promise<{ session: TerminalSession } | { error: unknown }> => {
       beginOperation();
       setPendingOpens((current) => current + 1);
-      setProblem("");
       try {
         const opened = await api.openTerminalSession(request);
         // Any listing requested before the engine created this session cannot
@@ -242,20 +251,61 @@ export function useTerminalSessions(
         // session is still selected, and a session shortcut pressed then would
         // move from the old one.
         void refresh();
-        return opened.session;
+        return { session: opened.session };
       } catch (error) {
-        // A run target that could not be reached is shown where the session
-        // would have appeared, as when its list cannot be read, rather than as
-        // a line in the sidebar: that line would stay after the engine answers.
         if (isRunTargetRefusal(error)) setListFailure({ api, error, at: new Date() });
-        else setProblem(translate(terminalProblemKey(failureCode(error))));
-        return null;
+        return { error };
       } finally {
         setPendingOpens((current) => Math.max(0, current - 1));
         finishOperation();
       }
     },
-    [api, beginMutation, beginOperation, finishOperation, refresh, setProblem, translate],
+    [api, beginMutation, beginOperation, finishOperation, refresh],
+  );
+
+  const open = useCallback(
+    async (request: OpenTerminalSessionRequest): Promise<TerminalSession | null> => {
+      setProblem("");
+      const result = await openOne(request);
+      if ("session" in result) return result.session;
+      if (!isRunTargetRefusal(result.error)) setProblem(translate(terminalProblemKey(failureCode(result.error))));
+      return null;
+    },
+    [openOne, setProblem, translate],
+  );
+
+  const openEach = useCallback(
+    async (
+      requests: readonly OpenTerminalSessionRequest[],
+      opened: (session: TerminalSession) => void,
+    ): Promise<OpenTerminalSessionRequest[]> => {
+      setProblem("");
+      const unopened = new Map<MessageKey, string[]>();
+      let refused: OpenTerminalSessionRequest[] = [];
+      for (const [index, request] of requests.entries()) {
+        const result = await openOne(request);
+        if ("session" in result) {
+          opened(result.session);
+          continue;
+        }
+        if (isRunTargetRefusal(result.error)) {
+          refused = requests.slice(index);
+          break;
+        }
+        const reason = terminalProblemKey(failureCode(result.error));
+        // An engine at its session limit refuses the rest too, so they are not asked for one by one.
+        const full = reason === "terminal.limitRefused";
+        const names = (full ? requests.slice(index) : [request]).map(sessionRequestName);
+        unopened.set(reason, [...(unopened.get(reason) ?? []), ...names]);
+        if (full) break;
+      }
+      if (unopened.size > 0) {
+        setProblem([...unopened].map(([reason, names]) =>
+          translate("terminal.openFailedFor", { names: names.join(", "), reason: translate(reason) })).join(" "));
+      }
+      return refused;
+    },
+    [openOne, setProblem, translate],
   );
 
   const close = useCallback(
@@ -392,9 +442,22 @@ export function useTerminalSessions(
   return {
     sessions: loaded ? sessions : noSessions,
     maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
-    rename, unpinTitle, open, reconnect, stopReconnect, answerHostKey, answerPasswordSave, close, closeAll, refresh, markExited,
+    rename, unpinTitle, open, openEach, reconnect, stopReconnect, answerHostKey, answerPasswordSave, close, closeAll, refresh, markExited,
     programProgressChanged, moveToWorkspace,
   };
+}
+
+// sessionSlotsLeft is how many more sessions the engine in use lets open, counting those that have not ended; null until
+// it has said its limit.
+export function sessionSlotsLeft(state: Pick<TerminalSessionsState, "sessions" | "maxSessions">): number | null {
+  if (state.maxSessions <= 0) return null;
+  const live = state.sessions.filter((session) => session.exited === undefined).length;
+  return Math.max(0, state.maxSessions - live);
+}
+
+// sessionRequestName is the connection a request opens, as the person named it.
+function sessionRequestName(request: OpenTerminalSessionRequest): string {
+  return request.alias ?? request.destination ?? request.kind;
 }
 
 // isRunTargetRefusal is true for a run-target engine that could not be reached or refused, as the remote_engine_
