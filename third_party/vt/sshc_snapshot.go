@@ -45,6 +45,8 @@ type SnapshotEmulator struct {
 	autowrap bool
 	// blankRow is a row of the cell a scroll fills the new bottom row with, kept to copy from.
 	blankRow uv.Line
+	// leavingLines keeps the lines leaving the main screen (NewLeavingLinesEmulator).
+	leavingLines bool
 }
 
 // asciiContents are the cell contents of the printable ASCII characters, made once: the emulator's own print makes
@@ -164,6 +166,7 @@ func (e *SnapshotEmulator) scrollUpAtBottom() bool {
 	}
 	rows := screen.buf.Lines
 	top := rows[region.Min.Y]
+	e.keepLeavingLine(top, region.Min.Y)
 	copy(rows[region.Min.Y:region.Max.Y-1], rows[region.Min.Y+1:region.Max.Y])
 	blank := uv.EmptyCell
 	if cell := screen.blankCell(); cell != nil {

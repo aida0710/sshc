@@ -1,6 +1,6 @@
 //go:build !windows
 
-package enginelog
+package privatefile
 
 import (
 	"os"
@@ -11,7 +11,9 @@ import (
 	"sshc/internal/storage"
 )
 
-func openPrivateAppend(path string) (*os.File, error) {
+// OpenAppend は、path を本人だけが読み書きできるファイルとして、追記で開く。無ければ作る。途中のフォルダも
+// 本人だけのものとして作る。
+func OpenAppend(path string) (*os.File, error) {
 	directory, err := nofollow.OpenOrCreateDirectory(filepath.Dir(path), storage.DirectoryPermission)
 	if err != nil {
 		return nil, err
@@ -36,4 +38,5 @@ func openPrivateAppend(path string) (*os.File, error) {
 	return file, nil
 }
 
-func openPrivateRead(path string) (*os.File, error) { return nofollow.OpenRegular(path) }
+// OpenRead は、path をリンクをたどらずに読むために開く。
+func OpenRead(path string) (*os.File, error) { return nofollow.OpenRegular(path) }
