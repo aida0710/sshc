@@ -1,12 +1,12 @@
 import { useState } from "react";
-import type { HostIdentity } from "../api/config";
+import type { HostEntry, HostIdentity } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { isValidAlias } from "../rules/rules";
 import { asciiTextEntry } from "../ui/softKeyboard";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { InputDialog } from "../ui/InputDialog";
 import { useToast } from "../ui/useToast";
-import { identityKey } from "./connectionBrowser";
+import { DeleteConnectionsBody } from "./DeleteConnectionsBody";
 import { GroupDialogs } from "./GroupDialogs";
 import { movedConnectionsMessage } from "./movedMessage";
 import { MoveToGroupDialog } from "./MoveToGroupDialog";
@@ -14,6 +14,8 @@ import type { ConnectionListActions } from "./useConnectionListActions";
 
 type ConnectionListDialogsProps = {
   actions: ConnectionListActions;
+  // hosts are every saved connection, for the ones that go through a deleted connection as a jump host.
+  hosts: readonly HostEntry[];
   // どの操作も、保存できたかを返す。
   createGroup: (name: string) => Promise<boolean>;
   renameGroup: (from: string, to: string) => Promise<boolean>;
@@ -26,7 +28,7 @@ type ConnectionListDialogsProps = {
 // ConnectionListDialogs は、Connections の一覧の「…」と選択の帯から開くダイアログを並べる。
 // どのダイアログを開いているかは useConnectionListActions が持つ。どのダイアログも、保存を
 // 開いたまま待ち、できたら閉じて知らせ、断られたら理由を中に出す。
-export function ConnectionListDialogs({ actions, createGroup, renameGroup, deleteGroup, renameConnection, failure }: ConnectionListDialogsProps) {
+export function ConnectionListDialogs({ actions, hosts, createGroup, renameGroup, deleteGroup, renameConnection, failure }: ConnectionListDialogsProps) {
   const t = useTranslate();
   const showToast = useToast();
   const { groupDialog, moving, deleting, renamingConnection } = actions;
@@ -95,14 +97,12 @@ export function ConnectionListDialogs({ actions, createGroup, renameGroup, delet
             ? t("conn.deleteHeading", { alias: deleting[0]?.identity.alias ?? "" })
             : t("bulkDelete.heading", { count: deleting.length })}
           body={(
-            <div className="flex flex-col gap-3">
-              <p className="text-sm text-ink-muted">{deleting.length === 1 ? t("conn.deleteBody") : t("bulkDelete.body")}</p>
-              <ul className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
-                {deleting.map((host) => (
-                  <li key={identityKey(host.identity)} className="rounded-md bg-surface-subtle px-2 py-1 font-mono text-xs text-ink">{host.identity.alias}</li>
-                ))}
-              </ul>
-            </div>
+            <DeleteConnectionsBody
+              body={deleting.length === 1 ? t("conn.deleteBody") : t("bulkDelete.body")}
+              deleting={deleting.map((host) => host.identity.alias)}
+              hosts={hosts}
+              listDeleting
+            />
           )}
           confirmLabel={deleting.length === 1 ? t("conn.confirmDelete") : t("bulkDelete.confirm", { count: deleting.length })}
           cancelLabel={t("conn.deleteCancel")}

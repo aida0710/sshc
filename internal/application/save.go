@@ -157,7 +157,12 @@ var hostBlockMutations = map[EditKind]func(*config.Graph, *config.File, config.B
 		if err := refuseTakenAlias(graph, request.Alias, request.NewAlias); err != nil {
 			return err
 		}
-		return RenameHostAlias(file, block, request.Alias, request.NewAlias)
+		if err := RenameHostAlias(file, block, request.Alias, request.NewAlias); err != nil {
+			return err
+		}
+		// 同じファイルの中の踏み台の名前も書き換える。ほかのファイルは planFileEdit が加える。
+		_, err := renameJumpHops(file, request.Alias, request.NewAlias)
+		return err
 	},
 	EditDuplicate: func(graph *config.Graph, file *config.File, _ config.Block, request EditRequest) error {
 		if err := refuseTakenAlias(graph, "", request.NewAlias); err != nil {
