@@ -800,3 +800,39 @@ func TestKeyboardInteractiveTextIsShownWithoutControlSequences(t *testing.T) {
 		t.Fatalf("the prompt lost the server's words: %q", shown)
 	}
 }
+
+// 打ち間違えたパスワードを拒否されたら、同じ問いを黙って出し直さずに、拒否されたと言う。
+// 言わないと、打ったものが届いたのか、違っていたのかが分からない。
+func TestATypedPasswordTheServerRejectsIsCalledRejectedBeforeAskingAgain(t *testing.T) {
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	prompt := &scriptedPrompter{answers: []string{"hunter3", "hunter2"}}
+
+	if err := connect(t, server, targetWith(server), sshclient.Auth{}, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.secretly) != 2 {
+		t.Fatalf("password prompts = %#v, want two", prompt.secretly)
+	}
+	if strings.Contains(prompt.secretly[0], "Permission denied") {
+		t.Errorf("the first prompt says a password was rejected: %q", prompt.secretly[0])
+	}
+	if !strings.HasPrefix(prompt.secretly[1], "Permission denied, please try again. ") {
+		t.Errorf("the second prompt hides that the typed password was rejected: %q", prompt.secretly[1])
+	}
+}
+
+// keyboard-interactive でも同じである。ただし、パスワードのあとに認証コードを尋ねるのは拒否ではない。
+func TestATypedKeyboardPasswordTheServerRejectsIsCalledRejectedBeforeAskingAgain(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Password: ": "hunter2"}})
+	prompt := &scriptedPrompter{answers: []string{"hunter3", "hunter2"}}
+
+	if err := connect(t, server, targetWith(server), sshclient.Auth{}, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.secretly) != 2 {
+		t.Fatalf("password prompts = %#v, want two", prompt.secretly)
+	}
+	if strings.Contains(prompt.secretly[0], "Permission denied") || !strings.HasPrefix(prompt.secretly[1], "Permission denied, please try again.\r\n") {
+		t.Errorf("prompts = %#v, want only the second to say the typed password was rejected", prompt.secretly)
+	}
+}
