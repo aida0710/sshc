@@ -54,5 +54,5 @@ func startupSnippetOf(prepared snippets.PreparedStartup) terminalopen.StartupSni
 	for index, step := range prepared.Steps {
 		steps[index] = terminal.StartupStep{Wait: step.Wait, Send: step.Send, Enter: step.Enter, Optional: step.Optional}
 	}
-	return terminalopen.StartupSnippet{Steps: steps, Wait: prepared.Wait}
+	return terminalopen.StartupSnippet{Steps: steps, Wait: prepared.Wait, Secrets: prepared.Secrets}
 }

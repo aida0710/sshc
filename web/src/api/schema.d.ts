@@ -4701,6 +4701,8 @@ export interface components {
             reconnect?: number;
             verbosity?: number;
             osc52?: boolean;
+            sessionLog?: boolean;
+            sessionLogRules?: string;
         };
         GlobalFileTransferSettings: {
             clearCompletedAfterSeconds?: number;
@@ -4735,12 +4737,14 @@ export interface components {
             name?: string;
             presetId?: string;
             port?: number;
+            sessionLogDirectory?: string;
         };
         MachineFacts: {
             os?: string;
             version?: string;
             /** Format: date-time */
             startedAt?: string;
+            sessionLogDirectory?: string;
         };
         Machine: {
             id: string;

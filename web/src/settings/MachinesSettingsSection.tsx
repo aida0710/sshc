@@ -50,6 +50,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
   const { document, loadFailed } = useSettings();
   const [failure, setFailure] = useState("");
   const [renaming, setRenaming] = useState<Machine | null>(null);
+  const [choosingLogFolder, setChoosingLogFolder] = useState<Machine | null>(null);
   const [removing, setRemoving] = useState<Machine | null>(null);
 
   const portsOffered = document?.machines.some(hasPort) === true;
@@ -81,6 +82,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
                   document={document}
                   onChange={change}
                   onRename={() => setRenaming(machine)}
+                  onChooseLogFolder={() => setChoosingLogFolder(machine)}
                   onRemove={() => setRemoving(machine)}
                 />
               ))}
@@ -106,6 +108,24 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
           onCancel={() => setRenaming(null)}
         />
       )}
+      {choosingLogFolder === null ? null : (
+        <InputDialog
+          id="machine-session-log-folder"
+          heading={t("settings.machineSessionLogHeading")}
+          description={t("settings.machineSessionLogDefault", { path: choosingLogFolder.facts.sessionLogDirectory ?? "" })}
+          label={t("settings.machineSessionLogFolder")}
+          initialValue={choosingLogFolder.settings.sessionLogDirectory ?? ""}
+          submitLabel={t("settings.machineSessionLogSave")}
+          cancelLabel={t("settings.presetCancel")}
+          validate={(value) => value === "" || folderPathFor(choosingLogFolder.facts.os, value) ? "" : t("settings.machineSessionLogInvalid")}
+          onSubmit={(value) => {
+            const id = choosingLogFolder.id;
+            setChoosingLogFolder(null);
+            void change(id, ({ sessionLogDirectory: _previous, ...settings }) => value === "" ? settings : { ...settings, sessionLogDirectory: value });
+          }}
+          onCancel={() => setChoosingLogFolder(null)}
+        />
+      )}
       {removing === null ? null : (
         <ConfirmDialog
           id="machine-remove"
@@ -125,11 +145,12 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
   );
 }
 
-function MachineRow({ machine, document, onChange, onRename, onRemove }: {
+function MachineRow({ machine, document, onChange, onRename, onChooseLogFolder, onRemove }: {
   machine: Machine;
   document: SettingsDocument;
   onChange: (id: string, update: Parameters<typeof updateMachine>[1]) => Promise<unknown>;
   onRename: () => void;
+  onChooseLogFolder: () => void;
   onRemove: () => void;
 }) {
   const { t, locale } = useLanguage();
@@ -178,11 +199,29 @@ function MachineRow({ machine, document, onChange, onRename, onRemove }: {
           triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-7"
           items={[
           { label: t("settings.machineRename"), onSelect: onRename },
+          {
+            label: t("settings.machineSessionLogFolderAction"), onSelect: onChooseLogFolder,
+            disabled: !keepsSessionLogs(machine), title: keepsSessionLogs(machine) ? undefined : t("settings.machineSessionLogUnsupported"),
+          },
           { label: t("settings.machineRemove"), onSelect: onRemove, tone: "danger", disabled: self },
         ]} />
       </div>
     </div>
   );
+}
+
+// keepsSessionLogs says whether a machine can keep session logs: its engine names the usual place for them when it
+// starts, and names none on Android, where a person could not open the files (nor did an sshc before the logs).
+function keepsSessionLogs(machine: Machine): boolean {
+  return (machine.facts.sessionLogDirectory ?? "") !== "";
+}
+
+// folderPathFor reports whether value is a folder the machine's engine takes (sessionlog.Directory): an absolute path
+// on its system, or one under ~/.
+function folderPathFor(os: string | undefined, value: string): boolean {
+  if (value.startsWith("~/")) return true;
+  if (os === "windows") return /^[A-Za-z]:[\\/]/u.test(value) || value.startsWith("\\\\");
+  return value.startsWith("/");
 }
 
 // StackedNamedCell is one column of a machine's row. A wide list has the names in the heading above the rows; a

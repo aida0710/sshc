@@ -36,7 +36,7 @@ sequenceDiagram
 
 - Existing output is not duplicated, and older scrollback retained only by the browser is not cleared.
 - If a long disconnect let required output fall out of the engine buffer, the terminal reports the gap.
-- Both buffers stay in memory and are not written to the vault, backups, or sync snapshots.
+- Both buffers stay in memory and are not written to the vault, backups, or sync snapshots. Terminal output reaches a file only when **Save a log of each session to a file** is on ([Session logs](#session-logs)).
 
 ## See connection progress
 
@@ -164,6 +164,41 @@ The record holds connection names and folder paths only, never passwords or outp
 - A 16 KiB–4 MiB engine replay buffer
 - Clearing the screen with `Ctrl+L` in bash or zsh keeps the cleared output in the scrollback (`clear` empties the scrollback too)
 - **Save scrollback to a file** in the terminal's **…** menu saves the whole scrollback, screen included, as a text file, with wrapped rows joined (**Copy recent terminal context** takes up to 200 rows)
+
+### Session logs
+
+Turning on **Save a log of each session to a file** under **General** in Settings keeps writing the lines the terminal showed, as text, to one file per session. It is off by default.
+
+- The lines written are those that scroll off the top of the screen and those on a screen that is erased. A line still on the screen is written once it scrolls off or the session ends; when the session ends, the lines still on the screen are written too.
+- A program that redraws the same rows (Claude Code, for instance) leaves only what it drew last. What a full-screen program such as vim draws is not written, nor what tmux draws for a connection opened in tmux.
+- For an SSH session, only the shell's output after authentication is written: neither the password prompt nor what was typed at it. The values of secret Snippet variables are replaced with `[secret]`.
+- Connecting, disconnecting, reconnecting and the end of the session are written as lines starting with `[sshc]`, with the time.
+- A file is named `<connection>-<time opened>-<first 8 characters of the session ID>.log`; a local shell's starts with `local-`. One file holds up to 100 MiB, and nothing past that is written.
+
+Each machine keeps its logs in the place below, and they do not sync to other machines. A remote session's log is written on the machine the session runs on. Android keeps no logs.
+
+| OS | Place |
+|---|---|
+| Linux and BSD | `~/.local/state/sshc/session-logs` (`sshc/session-logs` under `XDG_STATE_HOME` when it is set) |
+| macOS | `~/Library/Logs/sshc/sessions` |
+| Windows | `%LOCALAPPDATA%\sshc\session-logs` |
+
+To use another folder, choose **Change where logs are kept…** from that machine's … under **Machines** in Settings.
+
+**Connections not logged** takes the connection name patterns whose sessions are not logged, one per line as in a .gitignore. With none, every session is logged.
+
+```text
+# Production hosts are not logged
+prod-*
+# but prod-web is
+!prod-web
+# nor are local shells
+@local
+```
+
+- Patterns may use `*` and `?`, and are matched regardless of case.
+- A line starting with `!` logs those again, and a later line wins.
+- A change applies to the sessions opened after it.
 
 ### Input and encodings
 

@@ -60,6 +60,9 @@ type Startup struct {
 	Steps []StartupStep
 	// Wait は、待つ文字列のある手順が、それが出るまで待つ長さである。
 	Wait time.Duration
+	// Secrets は、Steps に入っているシークレットの値である。シェルが打ち返すことがあるので、
+	// セッションのログには書かない。
+	Secrets []string
 }
 
 // Registry は、開いているセッションと、終了して残しているセッションを持つ。
@@ -78,6 +81,9 @@ type Registry struct {
 	// the person (blocked_program.go); nil when nobody listens. It runs under the
 	// session's mutex, so it must return at once and not call the session.
 	ProgramBlocked func(BlockedProgramChange)
+	// OpenLog opens the log of a session as it opens, or returns nil when the settings keep none for it
+	// (internal/sessionlog). It is asked for each session, so a change of the settings applies to the next one.
+	OpenLog func(LogTarget) (OutputLog, error)
 	// Network は、このマシンの回線について OS が言うことである。nil なら OS は何も言わない。
 	Network *NetworkWatch
 	// NetworkRetryInterval は、回線が戻ったかを確かめる間隔である。0 なら既定。
@@ -290,6 +296,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		r.discard(process, spec.Cleanup)
 		return nil, ErrShuttingDown
 	}
+	session.openLog(r.OpenLog)
 	session.observeProcess(StateConnecting, "")
 	session.startPump(r.now)
 	return session, nil
@@ -421,6 +428,13 @@ func (r *Registry) WriteCommandInput(ctx context.Context, target CommandTarget, 
 		return ErrNotFound
 	}
 	return session.WriteCommandInput(ctx, target.Generation, command, submit)
+}
+
+// HideInLog keeps secrets out of the log of session id (Session.HideInLog). A session that is gone keeps no log.
+func (r *Registry) HideInLog(id string, secrets []string) {
+	if session, ok := r.Lookup(id); ok {
+		session.HideInLog(secrets)
+	}
 }
 
 // StartForward adds one temporary forward to an existing connected SSH session.

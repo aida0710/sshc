@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"sshc/internal/sessionlog"
 	"sshc/internal/sshclient"
 	"sshc/internal/terminal"
 )
@@ -31,6 +32,11 @@ type GlobalTerminalSettings struct {
 	Verbosity int `json:"verbosity,omitempty"`
 	// OSC52 は、すべてのターミナルで、リモートのプログラムが OSC 52 でクリップボードへ書き込むのを許す。
 	OSC52 bool `json:"osc52,omitempty"`
+	// SessionLog は、セッションのログ（ターミナルに出たものを書き続けるファイル）を保存するかである。
+	SessionLog bool `json:"sessionLog,omitempty"`
+	// SessionLogRules は、ログを保存しない接続先を gitignore の形で書いたものである（sessionlog.Rules）。
+	// 空ならすべてのセッションのログを保存する。
+	SessionLogRules string `json:"sessionLogRules,omitempty"`
 }
 
 // GlobalFileTransferSettings は、SFTP の転送の設定のうち全体に置くものである。
@@ -82,6 +88,9 @@ func validateGlobalTerminalSettings(settings *GlobalTerminalSettings) error {
 	}
 	if settings.Reconnect != nil && (*settings.Reconnect < 0 || *settings.Reconnect > terminal.MaxReconnects) {
 		return fmt.Errorf("%w: reconnect %d", ErrMetadataTerminal, *settings.Reconnect)
+	}
+	if _, err := sessionlog.CompileRules(settings.SessionLogRules); err != nil {
+		return fmt.Errorf("%w: sessionLogRules", ErrMetadataTerminal)
 	}
 	return nil
 }

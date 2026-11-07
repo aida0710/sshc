@@ -53,6 +53,9 @@ type MachineFacts struct {
 	OS        string `json:"os,omitempty"`
 	Version   string `json:"version,omitempty"`
 	StartedAt string `json:"startedAt,omitempty"`
+	// SessionLogDirectory は、設定にフォルダが無いときにセッションのログを置く場所（そのマシンの OS の決まった
+	// 場所）である。ログを保存できないマシン（Android）では空。
+	SessionLogDirectory string `json:"sessionLogDirectory,omitempty"`
 }
 
 // MachineState は、1台のマシンの今の状態である。

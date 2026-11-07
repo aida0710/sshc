@@ -1,6 +1,6 @@
 //go:build windows
 
-package enginelog
+package privatefile
 
 import (
 	"os"
@@ -9,10 +9,10 @@ import (
 	"sshc/internal/platform/windowsacl"
 )
 
-// openPrivateAppend は、ログを本人だけが読める権限で作ってから、追記だけの権限で開き直す。
+// OpenAppend は、ファイルを本人だけが読める権限で作ってから、追記だけの権限で開き直す。
 // 作るときのハンドルは権限を締めるために DELETE なども持つので、それを子へ渡すと、
 // エンジンが動いているあいだほかのプログラムがログを読めなくなる。
-func openPrivateAppend(path string) (*os.File, error) {
+func OpenAppend(path string) (*os.File, error) {
 	directory, err := windowsacl.OpenPrivateDirectory(filepath.Dir(path))
 	if err != nil {
 		return nil, err
@@ -28,6 +28,7 @@ func openPrivateAppend(path string) (*os.File, error) {
 	return windowsacl.OpenAuthenticatedFileForAppend(path)
 }
 
-func openPrivateRead(path string) (*os.File, error) {
+// OpenRead は、path を読むために開く。
+func OpenRead(path string) (*os.File, error) {
 	return windowsacl.OpenAuthenticatedFileForRead(path)
 }

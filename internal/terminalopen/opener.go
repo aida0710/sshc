@@ -38,6 +38,8 @@ type StartupSnippet struct {
 	Steps []terminal.StartupStep
 	// Wait は、待つ文字列のある手順が、それが出るまで待つ長さである。
 	Wait time.Duration
+	// Secrets は、Steps に入れたシークレットの値である（セッションのログに書かないため）。
+	Secrets []string
 	// Notice は、送らなかったことを利用者に知らせる 1 行である。割り当て直すなど、
 	// 利用者の操作で直せる理由のときだけ入れる。
 	Notice string
@@ -224,7 +226,7 @@ func (o Opener) sshSpec(request Request) (terminal.Spec, error) {
 				startup = o.Startup(target)
 			}
 			steps = append(steps, startup.Steps...)
-			return terminal.Startup{Notice: startup.Notice, Steps: steps, Wait: startup.Wait}
+			return terminal.Startup{Notice: startup.Notice, Steps: steps, Wait: startup.Wait, Secrets: startup.Secrets}
 		},
 		ReconnectError:      o.ReconnectError,
 		ReconnectStopNotice: o.ReconnectStopNotice,

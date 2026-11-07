@@ -99,7 +99,16 @@ type Session struct {
 	stopNotice     func(problem string) string
 	reopenFailure  func(error) string
 	startup        func() Startup
-	size           Size
+	// log keeps what the terminal showed (session_log.go); nil when the session keeps no log.
+	log OutputLog
+	// logConnectedBefore tells a reconnect from the first connection in the log.
+	logConnectedBefore bool
+	// logPumpGeneration is the generation whose printed output the log follows from the pump, for a process that
+	// cannot hand over its shell's own output; 0 is none.
+	logPumpGeneration uint64
+	// stopLogWatch stops following the shell output of the generation the log watches (ShellOutput).
+	stopLogWatch func()
+	size         Size
 	// reconnectAttempts は、今の切断から試した自動再接続の回数である。
 	// ReconnectSettled のあいだ安定して繋がったら 0 に戻す。
 	reconnectAttempts int
@@ -435,12 +444,16 @@ func (s *Session) Resize(size Size) error {
 	}
 	s.mutex.Lock()
 	process, exited := s.process, s.exited
+	log := s.log
 	if exited == nil {
 		s.size = size
 		s.screen.resized(s.buffer.Written(), size)
 		s.resizeFollowedScreenLocked(size)
 	}
 	s.mutex.Unlock()
+	if log != nil && exited == nil {
+		log.Resize(size)
+	}
 	if exited != nil {
 		return ErrExited
 	}
@@ -535,7 +548,7 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 		s.problem = ""
 		s.reconnectView = nil
 		s.mutex.Unlock()
-		s.announceConnected(process, successMessage)
+		s.announceConnected(process, generation, successMessage)
 		return
 	}
 	observed := &processReadiness{done: make(chan struct{}), userInitiated: pending == StateConnecting}
@@ -561,7 +574,7 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 		s.mutex.Unlock()
 		close(observed.done)
 		if current && err == nil {
-			s.announceConnected(process, successMessage)
+			s.announceConnected(process, generation, successMessage)
 		}
 	}()
 }
@@ -570,7 +583,7 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 //
 // 動いていた tmux のセッションに戻ったなら、前のプログラムはそこで動いている。新しいシェルとは
 // 言わず、続きからの案内も、打ち込む起動時のコマンドも要らない。
-func (s *Session) announceConnected(process Process, successMessage string) {
+func (s *Session) announceConnected(process Process, generation uint64, successMessage string) {
 	resumed := resumedTmuxSession(process)
 	if resumed {
 		s.mutex.Lock()
@@ -585,6 +598,7 @@ func (s *Session) announceConnected(process Process, successMessage string) {
 	}
 	s.announceProgramToResume()
 	s.signalConnected()
+	s.startLog(process, generation)
 	if !resumed {
 		s.sendStartup(process)
 	}
@@ -607,6 +621,7 @@ func (s *Session) sendStartup(process Process) {
 	if announcer, ok := process.(Announcer); ok && startup.Notice != "" {
 		announcer.Announce(startup.Notice)
 	}
+	s.hideInLog(startup.Secrets)
 	if !startupStepsWait(startup.Steps) {
 		for _, step := range startup.Steps {
 			_, _ = process.Write(step.payload())
@@ -668,6 +683,7 @@ func (s *Session) pump(now func() time.Time) {
 				alternateScreen.Observe(buffer[:read])
 				s.followScreenOutput(generation, buffer[:read])
 				s.publish(buffer[:read])
+				s.logPumpOutput(generation, buffer[:read])
 				if len(commandTimes) > 0 {
 					s.publish(commandTimesSequence(commandTimes))
 					commandTimes = commandTimes[:0]
@@ -689,6 +705,7 @@ func (s *Session) pump(now func() time.Time) {
 			<-ready.done
 			connectionErr = ready.err
 		}
+		s.endLogOfProcess(connectionErr == nil)
 		if info.At.IsZero() {
 			info.At = now()
 		}
@@ -761,10 +778,18 @@ func abandonAndWait(process Process) {
 
 func (s *Session) finish(info ExitInfo) {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
 	if s.exited != nil {
+		s.mutex.Unlock()
 		return
 	}
+	log, stopLogWatch := s.takeLogLocked()
+	s.finishLocked(info)
+	s.mutex.Unlock()
+	closeLog(log, stopLogWatch)
+}
+
+// finishLocked records how the session ended and lets go of what it held. The caller holds the mutex.
+func (s *Session) finishLocked(info ExitInfo) {
 	s.exited = &info
 	s.state = StateExited
 	s.reconnectView = nil
