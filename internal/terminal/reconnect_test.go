@@ -556,7 +556,9 @@ func TestStartupCommandsAreSentOnceEveryConnectionBecomesReady(t *testing.T) {
 	registry, _ := newFastRegistry()
 	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
-		Startup: func() terminal.Startup { return terminal.Startup{Commands: []string{"cd /srv/app"}} },
+		Startup: func() terminal.Startup {
+			return terminal.Startup{Steps: []terminal.StartupStep{{Send: "cd /srv/app", Enter: true}}}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

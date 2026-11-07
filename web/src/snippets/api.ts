@@ -7,6 +7,7 @@ export type SnippetVariable = components["schemas"]["SnippetVariable"];
 export type Snippet = components["schemas"]["Snippet"];
 export type Startup = components["schemas"]["StartupSnippet"];
 export type SnippetDraft = components["schemas"]["SnippetDraft"];
+export type SnippetStep = components["schemas"]["SnippetStep"];
 export type Preview = components["schemas"]["SnippetPreview"];
 export type Job = components["schemas"]["SnippetJob"];
 

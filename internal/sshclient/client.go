@@ -183,8 +183,9 @@ func sendColorTerm(remote *ssh.Session, configured []EnvVar, trace *tracer) {
 
 // start は、チャンネルの上で端末を要求し、シェルかコマンドを起動する。
 func (d Dialer) start(remote *ssh.Session, target Target, session *Session) error {
+	shellWriter := session.shellOutput.tee(session.writer)
 	streams, _, err := encodeStreams(Streams{
-		In: session.input, Out: session.writer, Err: session.writer,
+		In: session.input, Out: shellWriter, Err: shellWriter,
 	}, target.Encoding)
 	if err != nil {
 		return err

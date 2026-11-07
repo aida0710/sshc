@@ -4,6 +4,7 @@ import type { TerminalSession } from "../api/terminalSessions";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { snippetsApi, type Snippet } from "../snippets/api";
+import { commandSnippets } from "../snippets/snippetKind";
 import { clipboard } from "../ui/clipboard";
 import { terminalCommandApi, type TerminalCommandApi, type TerminalCommandPreview, type TerminalCommandRequest } from "./commands/commandApi";
 import { describeTerminalCommandFailure, terminalCommandProblemText } from "./commands/terminalCommandProblem";
@@ -59,8 +60,9 @@ export function TerminalQuickCommands({
       .library()
       .then((library) => {
         if (!active) return;
-        setSnippets(library.snippets);
-        setSelectedId((current) => current || (library.snippets[0]?.id ?? ""));
+        const commands = commandSnippets(library.snippets);
+        setSnippets(commands);
+        setSelectedId((current) => current || (commands[0]?.id ?? ""));
       })
       .catch(() => active && setProblem(t("snippets.loadFailed")))
       .finally(() => active && setBusy(false));

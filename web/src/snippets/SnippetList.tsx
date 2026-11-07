@@ -5,13 +5,15 @@ import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 import { Button } from "../ui/surface";
 import type { Snippet } from "./api";
+import { snippetSummary } from "./snippetKind";
 
 export type SnippetLibraryState = "loading" | "ready" | "failed";
 
 function matchesFilter(snippet: Snippet, filter: string): boolean {
   const needle = filter.trim().toLocaleLowerCase();
   if (needle === "") return true;
-  return [snippet.name, snippet.description ?? "", snippet.command].some((text) => text.toLocaleLowerCase().includes(needle));
+  const stepTexts = (snippet.steps ?? []).flatMap((step) => [step.wait ?? "", step.send]);
+  return [snippet.name, snippet.description ?? "", snippet.command, ...stepTexts].some((text) => text.toLocaleLowerCase().includes(needle));
 }
 
 // SnippetList は、作業場の左の列である。絞り込みの欄と、スニペットごとの名前とコマンドの1行目を並べる。
@@ -78,7 +80,7 @@ export function SnippetList({
                   className={`w-full min-w-0 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 ${columns ? "grid grid-cols-[minmax(0,16rem)_minmax(0,28rem)_minmax(0,1fr)] items-center gap-4" : "flex flex-col gap-0.5"} ${opened ? "bg-select-fill" : "hover:bg-hover"}`}
                 >
                   <span title={snippet.name} className="truncate text-[13.5px] text-ink">{snippet.name}</span>
-                  <code title={snippet.command} className="truncate font-mono text-[11.5px] text-ink-faint">{snippet.command.split("\n")[0]}</code>
+                  <code title={snippet.command} className="truncate font-mono text-[11.5px] text-ink-faint">{snippetSummary(t, snippet)}</code>
                   {columns ? <span title={snippet.description} className="truncate text-[12.5px] text-ink-muted">{snippet.description}</span> : null}
                 </button>
               </li>
