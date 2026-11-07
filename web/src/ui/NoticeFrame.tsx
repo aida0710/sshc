@@ -18,7 +18,9 @@ export const noticeCardButton = "mobile-layout:min-h-11";
 // NoticeFocus says whether a card takes the focus when it appears, and where the focus goes when the card goes away
 // with the focus in it (hidden by the person, or the state it said is over).
 export type NoticeFocus = {
-  take: boolean;
+  // take is asked once, after the card appeared: a menu or dialog that closed in the same update has gone by then, and
+  // asked while drawing, it would still count as open and keep the focus from the card.
+  take: () => boolean;
   giveBack: () => void;
 };
 
@@ -53,7 +55,7 @@ export function NoticeFrame({ tone, kicker, title, body, detail, focus, onDismis
   // Asked only when the card appears: a card already shown does not take the focus back.
   const takesFocusOnShow = useRef(focus.take);
   useEffect(() => {
-    if (takesFocusOnShow.current) section.current?.focus({ preventScroll: true });
+    if (takesFocusOnShow.current()) section.current?.focus({ preventScroll: true });
   }, []);
   // Run while the card is still in the page (a layout effect's cleanup comes before its nodes are removed), so it
   // can tell the focus was in it.
