@@ -55,6 +55,8 @@ type HostDetailPanelProps = {
   savedRevision?: number | undefined;
   // vpnProfiles は、この接続を通せるVPNプロファイルである。
   vpnProfiles?: VPNProfile[] | undefined;
+  // savedAliases は保存した接続先の名前で、踏み台の欄がどれにも当たらない名前を知らせるのに使う。
+  savedAliases?: readonly string[] | undefined;
 };
 
 // The tabs go from what every connection needs to what only some do, and end with the values the
@@ -90,6 +92,7 @@ export function HostDetailPanel({
   disabled = false,
   savedRevision = 0,
   vpnProfiles = [],
+  savedAliases = [],
 }: HostDetailPanelProps) {
   const t = useTranslate();
   const [localPanel, setLocalPanel] = useState<ConnectionPanel>("Basic");
@@ -231,6 +234,7 @@ export function HostDetailPanel({
               disabled={disabled || basicDirty || sshcDirty}
               onDirtyChange={setAdvancedDirty}
               onDiscardReady={discardReceivers.Advanced}
+              savedAliases={savedAliases}
             />
           </div>
 

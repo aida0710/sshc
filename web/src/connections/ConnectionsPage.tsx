@@ -66,6 +66,7 @@ import { GroupEditor } from "./GroupEditor";
 import { ConnectionGroupFacets } from "./ConnectionGroupFacets";
 import { useConnectionDrag } from "./useConnectionDrag";
 import { useConnectionRowColumns } from "./useConnectionRowColumns";
+import { DeleteConnectionsBody } from "./DeleteConnectionsBody";
 
 // The design's width for the connection list; the groups sit beside the card, outside it. The editor keeps the rest.
 const connectionListWidth: ColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 300, minimum: 256, maximum: 720 };
@@ -464,6 +465,7 @@ export function ConnectionsPage({
   }
 
   const nothingToList = hasNothingToList(overview);
+  const savedAliases = overview.hosts.map((host) => host.identity.alias).filter((alias) => alias !== "");
 
   return (
     <>
@@ -565,7 +567,7 @@ export function ConnectionsPage({
         {creating ? (
           <CreateConnectionPane
             groups={overview.groups}
-            aliases={overview.hosts.map((host) => host.identity.alias).filter((alias) => alias !== "")}
+            aliases={savedAliases}
             initialDraft={creationDraft ?? undefined}
             onOpenPrerequisite={leaveForCreationPrerequisite}
             onCreateGroup={groups.createGroup}
@@ -657,6 +659,7 @@ export function ConnectionsPage({
               }}
               savedRevision={savedRevision}
               vpnProfiles={overview.metadata.vpnProfiles ?? []}
+              savedAliases={savedAliases}
               disabled={refreshState !== "idle"}
             />
           </>
@@ -666,6 +669,7 @@ export function ConnectionsPage({
     </PageBoard>
     <ConnectionListDialogs
       actions={listActions}
+      hosts={overview.hosts}
       createGroup={groups.createGroup}
       renameGroup={management.renameGroup}
       deleteGroup={management.deleteGroup}
@@ -676,7 +680,7 @@ export function ConnectionsPage({
       <ConfirmDialog
         id="delete-connection-heading"
         heading={t("conn.deleteHeading", { alias: detail.form.entry.identity.alias })}
-        body={<p className="text-sm text-ink-muted">{t("conn.deleteBody")}</p>}
+        body={<DeleteConnectionsBody body={t("conn.deleteBody")} deleting={[detail.form.entry.identity.alias]} hosts={overview.hosts} />}
         confirmLabel={t("conn.confirmDelete")}
         cancelLabel={t("conn.deleteCancel")}
         onCancel={() => setConfirmingDelete(false)}

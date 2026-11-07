@@ -3228,6 +3228,7 @@ export const ja = {
   "conn.analysisSources": "この接続先に関係する設定行",
   "advanced.jumpHeading": "踏み台",
   "advanced.jumpVia": "経由する接続先",
+  "advanced.jumpUnsaved": "{names}は保存した接続先にありません。sshはホスト名として接続します。",
   "advanced.jumpNone": "なし（直接接続）",
   "advanced.forwardListen": "待ち受け",
   "advanced.rowActions": "操作",
@@ -3284,6 +3285,7 @@ export const ja = {
     "所属グループはsshc上の整理場所です。保存ファイルを変更すると、実際に書き込むSSH設定ファイルが変わります。通常は変更する必要はありません。",
   "conn.confirmDelete": "削除する",
   "conn.deleteHeading": "{alias}を削除しますか？",
+  "conn.deleteJumpDependents": "次の接続先は、削除する接続先を踏み台にしています。削除すると、踏み台を通れずに接続できなくなります。",
   "conn.deleteBody":
     "このHostブロックを設定から削除します。削除後も履歴から復元できます。",
   "conn.deleteCancel": "キャンセル",

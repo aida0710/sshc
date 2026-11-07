@@ -89,6 +89,7 @@ type HostEntry struct {
 	HostName  string       `json:"hostName,omitempty"`
 	User      string       `json:"user,omitempty"`
 	Port      string       `json:"port,omitempty"`
+	ProxyJump string       `json:"proxyJump,omitempty"`
 }
 
 // HostForm は、detail editor に見せる 1 個の Host ブロックである。Raw はそのブロックの
