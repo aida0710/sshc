@@ -45,6 +45,8 @@ export type Shell = {
   onShowSession: (id: string) => void;
   // onOpenSSHSession は、接続を開いてからそのターミナルを表示する。cwd は開始位置である。
   onOpenSSHSession: (alias: string, cwd?: string) => Promise<void>;
+  // onOpenSSHSessions opens a session for each of aliases, in that order, and shows the first.
+  onOpenSSHSessions: (aliases: readonly string[]) => Promise<void>;
   // onOverviewRead hands over what a section read after changing the connections, for the searches outside it.
   onOverviewRead: (overview: Overview) => void;
   // onOpenLocalShell は、ローカルシェルを開いてそのターミナルを表示する。

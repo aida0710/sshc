@@ -41,7 +41,7 @@ The **Sync** line under it sums up synchronization in one line ("Remote sync is 
 
 ## Groups
 
-Groups are folders: a group's connections live in `~/.ssh/connections/<group>/` and its keys in `~/.ssh/keys/<group>/`. Create one with New group at the top of the group column, and use the … next to a group for New group inside, Rename, Edit, Move up, Move down, Hide in Connections, and Delete…. On a computer, right-clicking a group opens the same menu. Deleting a group asks where its connections go. Drag groups to nest them. Changes update the managed `Include` structure.
+Groups are folders: a group's connections live in `~/.ssh/connections/<group>/` and its keys in `~/.ssh/keys/<group>/`. Create one with New group at the top of the group column, and use the … next to a group for Connect all, New group inside, Rename, Edit, Move up, Move down, Hide in Connections, and Delete…. On a computer, right-clicking a group opens the same menu. Deleting a group asks where its connections go. Drag groups to nest them. Changes update the managed `Include` structure.
 
 Move up and Move down change the order of groups at the same level. Hide in Connections works on a group with no connections directly in it. **Show hidden groups (〈count〉)** below the list brings hidden groups into view, and **Close hidden groups** hides them again. While shown they carry a **Hidden** mark, and **Stop hiding** in their **…** menu restores them.
 
@@ -57,9 +57,16 @@ New group in the form for a new connection creates a top-level group without los
 
 ## Act on several connections
 
-Shift-click chooses a range in the list; Ctrl-click (⌘-click on a Mac) adds or removes one connection. With two or more chosen, a bar above the list moves them to a group or deletes them, and dragging any chosen connection onto a group moves them all. Escape clears the choice.
+Shift-click chooses a range in the list; Ctrl-click (⌘-click on a Mac) adds or removes one connection. With two or more chosen, a bar above the list connects to them all, moves them to a group or deletes them, and dragging any chosen connection onto a group moves them all. Escape clears the choice.
 
 On narrow screens, press Select above the list or long-press a connection, then use the bar at the bottom.
+
+**Connect all** opens the chosen connections as sessions one at a time, from the top of the list down, and shows the first one opened. **Connect all** in a group's **…** opens the connections of that group and the groups inside it the same way.
+
+- The sessions go into the **Main** workspace.
+- Connections with the same name are opened once.
+- It cannot be pressed when there are more connections than sessions the engine can still open (up to the maximum sessions in Settings).
+- Connections that could not be opened are listed together in the sidebar, by reason.
 
 A move or delete of several connections is saved as one change. If any of the affected files changed elsewhere, nothing is written.
 

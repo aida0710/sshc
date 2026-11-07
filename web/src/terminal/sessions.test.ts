@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { OpenTerminalSessionResponse, TerminalSession } from "../api/terminalSessions";
-import { terminalProblemKey, useTerminalSessions, type TerminalSessionsApi } from "./sessions";
+import { sessionSlotsLeft, terminalProblemKey, useTerminalSessions, type TerminalSessionsApi } from "./sessions";
 
 const list = { sessions: [], maxSessions: 50 };
 
@@ -723,6 +723,106 @@ describe("useTerminalSessions", () => {
 
     expect(result.current.problem).toBe("terminal.closeFailed");
     expect(result.current.sessions).toHaveLength(1);
+  });
+});
+
+describe("openEach", () => {
+  // namingTranslate shows what a message says about whom, so a test can tell which connections a problem names.
+  const namingTranslate = ((key: string, params?: Record<string, string>) =>
+    params === undefined ? key : `${key}: ${params.names} (${params.reason})`) as never;
+  const opened = (id: string) => ({ session: { id, kind: "ssh", alias: id } }) as unknown as OpenTerminalSessionResponse;
+  const refusal = (code: string) => new ApiError(code, 409, { code, message: "refused" });
+
+  it("opens one session for each request in turn and hands each over as it opens", async () => {
+    const openTerminalSession = vi.fn(async (request: { alias?: string }) => opened(request.alias ?? ""));
+    const client = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, namingTranslate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    const handed: string[] = [];
+
+    await act(async () => {
+      const refused = await result.current.openEach(
+        [{ kind: "ssh", alias: "web" }, { kind: "ssh", alias: "db" }],
+        (session) => handed.push(session.id),
+      );
+      expect(refused).toEqual([]);
+    });
+
+    expect(openTerminalSession.mock.calls.map(([request]) => request.alias)).toEqual(["web", "db"]);
+    expect(handed).toEqual(["web", "db"]);
+    expect(result.current.problem).toBe("");
+  });
+
+  it("names every connection it could not open in one problem, by the reason", async () => {
+    const openTerminalSession = vi.fn()
+      .mockRejectedValueOnce(refusal("alias_unresolvable"))
+      .mockResolvedValueOnce(opened("db"))
+      .mockRejectedValueOnce(refusal("alias_unresolvable"));
+    const client = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, namingTranslate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      await result.current.openEach(
+        [{ kind: "ssh", alias: "web" }, { kind: "ssh", alias: "db" }, { kind: "ssh", alias: "cache" }],
+        () => undefined,
+      );
+    });
+
+    expect(result.current.problem).toBe("terminal.openFailedFor: web, cache (terminal.unresolvable)");
+  });
+
+  it("stops at the session limit and names the connections left unopened", async () => {
+    const openTerminalSession = vi.fn()
+      .mockResolvedValueOnce(opened("web"))
+      .mockRejectedValueOnce(refusal("terminal_session_limit"));
+    const client = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, namingTranslate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      await result.current.openEach(
+        [{ kind: "ssh", alias: "web" }, { kind: "ssh", alias: "db" }, { kind: "ssh", alias: "cache" }],
+        () => undefined,
+      );
+    });
+
+    expect(openTerminalSession).toHaveBeenCalledTimes(2);
+    expect(result.current.problem).toBe("terminal.openFailedFor: db, cache (terminal.limitRefused)");
+  });
+
+  it("hands back the requests from the one a run target refused on, without asking it for the rest", async () => {
+    const locked = new ApiError("remote_engine_vault_locked", 423, { code: "remote_engine_vault_locked", message: "locked" });
+    const openTerminalSession = vi.fn().mockResolvedValueOnce(opened("web")).mockRejectedValueOnce(locked);
+    const client = api({ openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, namingTranslate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      const refused = await result.current.openEach(
+        [{ kind: "ssh", alias: "web" }, { kind: "ssh", alias: "db" }, { kind: "ssh", alias: "cache" }],
+        () => undefined,
+      );
+      expect(refused).toEqual([{ kind: "ssh", alias: "db" }, { kind: "ssh", alias: "cache" }]);
+    });
+
+    expect(openTerminalSession).toHaveBeenCalledTimes(2);
+    expect(result.current.remoteRefusal).toBe(locked);
+    expect(result.current.problem).toBe("");
+  });
+});
+
+describe("sessionSlotsLeft", () => {
+  const live = { id: "a" } as TerminalSession;
+  const ended = { id: "b", exited: { code: 0, at: "" } } as unknown as TerminalSession;
+
+  it("counts the sessions that have not ended against the engine's limit", () => {
+    expect(sessionSlotsLeft({ sessions: [live, ended], maxSessions: 3 })).toBe(2);
+    expect(sessionSlotsLeft({ sessions: [live, live], maxSessions: 1 })).toBe(0);
+  });
+
+  it("knows no limit before the engine has said one", () => {
+    expect(sessionSlotsLeft({ sessions: [live], maxSessions: 0 })).toBeNull();
   });
 });
 

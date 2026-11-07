@@ -38,6 +38,7 @@ With a remote session chosen, some actions still open the session on this machin
 |---|---|
 | **New session** in the sidebar | The chosen engine |
 | **Connect** in Connections | The chosen engine |
+| **Connect all** in Connections | The chosen engine |
 | **Open a local shell** on Home | The chosen engine |
 | A connection card on Home (double click, a tap on a touch screen, or **Connect** in its **…**) | This machine. **Remote session** switches back to localhost |
 

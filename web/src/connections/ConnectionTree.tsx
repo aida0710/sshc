@@ -1,5 +1,4 @@
 import { useEffect, useId, useMemo, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
-import { isGroupOrDescendant } from "../rules/groupPath";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { HostEntry, Notice, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
@@ -17,16 +16,12 @@ import { ConnectionRow, type RowColumns } from "./ConnectionRow";
 import { resultCountText } from "./resultCount";
 import { listGroups, ungroupedCount } from "./groupListing";
 import { isImeComposing } from "../ui/imeComposition";
-import { belongsToGroup, buildGroupTree, decorateHosts, hasNothingToList, type DecoratedHost, type GroupNode } from "./connectionTreeIndex";
+import { belongsToGroup, buildGroupTree, decorateHosts, hasNothingToList, type DecoratedHost } from "./connectionTreeIndex";
+import { listedGroups, listSections, sortedForList, type ListSection, type SortOrder } from "./connectionListOrder";
 import type { ConnectionDrag } from "./useConnectionDrag";
 import { literalTextEntry } from "../ui/softKeyboard";
 
 export type HostSelection = { path: string; alias: string };
-
-type ResultSection = {
-  name: string;
-  items: DecoratedHost[];
-};
 
 export type Scope =
   | { kind: "all" }
@@ -42,6 +37,9 @@ export type ConnectionTreeProps = {
   // 以下は複数選択とグループの操作。渡さなければ今までどおり1件ずつ選ぶ一覧になる。
   scope?: Scope;
   onScopeChange?: (scope: Scope) => void;
+  // sortOrder を渡すと、並び順を呼び出し側が持つ（まとめて開く順を一覧の順にそろえるため）。
+  sortOrder?: SortOrder;
+  onSortOrderChange?: (order: SortOrder) => void;
   checked?: MultiSelection;
   onCheckedChange?: (next: MultiSelection) => void;
   // 編集中の下書きがあるあいだは、Shift と Ctrl で選ばせない（選ぶとエディタが入れ替わるため）。
@@ -61,12 +59,6 @@ export type ConnectionTreeProps = {
   rowColumns?: ((host: HostEntry) => RowColumns) | undefined;
 };
 
-type SortOrder = "configured" | "name";
-
-function labelFor(host: HostEntry): string {
-  return host.identity.alias === "" ? `Host ${host.patterns.join(" ")}` : host.identity.alias;
-}
-
 function hostMatches(item: DecoratedHost, normalizedQuery: string): boolean {
   const host = item.host;
   return hostMatchesQuery({
@@ -83,6 +75,8 @@ export function ConnectionTree({
   drag,
   scope: controlledScope,
   onScopeChange,
+  sortOrder: controlledSortOrder,
+  onSortOrderChange,
   checked = emptyMultiSelection,
   onCheckedChange,
   multiSelectDisabled = false,
@@ -104,7 +98,9 @@ export function ConnectionTree({
   const scope = controlledScope ?? ownScope;
   const setScope = onScopeChange ?? setOwnScope;
   const [query, setQuery] = useState("");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("name");
+  const [ownSortOrder, setOwnSortOrder] = useState<SortOrder>("name");
+  const sortOrder = controlledSortOrder ?? ownSortOrder;
+  const setSortOrder = onSortOrderChange ?? setOwnSortOrder;
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
   const longPress = useLongPress();
@@ -114,15 +110,7 @@ export function ConnectionTree({
   const nothingToList = hasNothingToList(overview);
   const groupTree = useMemo(() => buildGroupTree(overview, decorated), [decorated, overview]);
 
-  const orderedGroups = useMemo(() => {
-    const ordered: GroupNode[] = [];
-    const visit = (node: GroupNode) => {
-      if (!(node.hidden && node.descendantCount === 0)) ordered.push(node);
-      node.children.forEach(visit);
-    };
-    groupTree.forEach(visit);
-    return ordered;
-  }, [groupTree]);
+  const orderedGroups = useMemo(() => listedGroups(groupTree), [groupTree]);
   const declaredGroups = useMemo(() => new Set(orderedGroups.map((group) => group.name)), [orderedGroups]);
 
   const visible = useMemo(() => {
@@ -133,36 +121,13 @@ export function ConnectionTree({
       if (scope.kind === "ungrouped") return item.group === "";
       return belongsToGroup(item, scope.name);
     });
-    return scoped.sort((left, right) => {
-      if (sortOrder === "name") return labelFor(left.host).localeCompare(labelFor(right.host), "ja");
-      return left.order - right.order || left.sourceOrder - right.sourceOrder;
-    });
+    return sortedForList(scoped, sortOrder);
   }, [decorated, query, scope, sortOrder]);
 
-  const resultSections = useMemo<ResultSection[]>(() => {
-    const exact = new Map<string, DecoratedHost[]>();
-    for (const item of visible) {
-      const items = exact.get(item.group) ?? [];
-      items.push(item);
-      exact.set(item.group, items);
-    }
-    if (scope.kind === "ungrouped") {
-      return [{ name: "", items: exact.get("") ?? [] }];
-    }
-
-    const sections = orderedGroups
-      .filter((group) => scope.kind === "all" || isGroupOrDescendant(group.name, scope.name))
-      .filter((group) => visible.some((item) => belongsToGroup(item, group.name)))
-      .map((group) => ({ name: group.name, items: exact.get(group.name) ?? [] }));
-    const undeclared = [...exact.keys()]
-      .filter((name) => name !== "" && !declaredGroups.has(name))
-      .sort((left, right) => left.localeCompare(right, "ja"));
-    sections.push(...undeclared.map((name) => ({ name, items: exact.get(name) ?? [] })));
-    if (scope.kind === "all" && exact.has("")) {
-      sections.push({ name: "", items: exact.get("") ?? [] });
-    }
-    return sections;
-  }, [declaredGroups, orderedGroups, scope, visible]);
+  const resultSections = useMemo<ListSection[]>(
+    () => listSections({ items: visible, groups: orderedGroups, scope }),
+    [orderedGroups, scope, visible],
+  );
 
   // 範囲選択は、見出しで区切られた画面の上から下への順で数える。
   const visibleOrder = useMemo(() => resultSections.flatMap((section) => section.items.map((item) => item.key)), [resultSections]);
@@ -256,7 +221,7 @@ export function ConnectionTree({
     );
   }
 
-  function renderResultSection(section: ResultSection) {
+  function renderResultSection(section: ListSection) {
     const name = section.name === "" ? t("tree.ungrouped") : section.name;
     const colour = (overview.metadata.groups ?? []).find((group) => group.name === section.name)?.colour ?? "";
     // 宣言の無いグループは動かせない。スマホにはドラッグが無い。

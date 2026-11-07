@@ -1018,6 +1018,7 @@ export const ja = {
     "同時に開けるセッション数の上限（{max}）に達しました。どれかを閉じてください。",
   "terminal.limitRefused":
     "これ以上セッションを開けません。どれかを閉じてください。",
+  "terminal.openFailedFor": "{names}を開けませんでした。{reason}",
   "terminal.unresolvable": "この接続先の設定を読み込めませんでした。理由は［Connections］の［最終的な値］タブで確認できます。",
   "terminal.localWorkingDirectoryUnavailable": "このローカルフォルダでシェルを開けません。フォルダの存在とアクセス権を確認してください。",
   "terminal.remoteWorkingDirectoryUnsupported":
@@ -2948,11 +2949,14 @@ export const ja = {
   "tree.deleteEllipsis": "削除…",
   "tree.connectionActions": "{alias}の操作",
   "tree.connect": "接続",
+  "tree.connectAll": "すべて接続",
+  "tree.connectAllOverLimit": "開けるセッションはあと{count}個です。",
   "tree.duplicate": "複製",
   "tree.moveToGroup": "グループへ移動…",
   "tree.select": "選択",
   "tree.selectDone": "完了",
   "tree.selectedCount": "{count}件を選択中",
+  "tree.selectedCountShort": "{count}件",
   "tree.clearSelection": "選択を解除",
   "tree.groupButton": "グループ: {name}",
   "groupDialog.createHeading": "新しいグループ",

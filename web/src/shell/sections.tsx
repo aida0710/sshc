@@ -3,6 +3,7 @@ import { OverviewPanel } from "../overview/OverviewPanel";
 import type { Section } from "../routing/sectionRoute";
 import { parseSettingsPage } from "../settings/settingsRoute";
 import type { SFTPTarget } from "../sftp/SFTPPanel";
+import { sessionSlotsLeft } from "../terminal/sessions";
 import { PageBoard } from "../ui/PageBoard";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import { useTranslate } from "../i18n/context";
@@ -114,6 +115,8 @@ export function SectionView(props: SectionViewProps) {
         preferredKey={props.handoff.connectionKey}
         onPreferredKeyApplied={props.handoff.onConnectionKeyApplied}
         onOpenSSHSession={props.shell.onOpenSSHSession}
+        onOpenSSHSessions={props.shell.onOpenSSHSessions}
+        sessionsLeft={sessionSlotsLeft(props.shell.terminalSessions)}
         onOpenLocalShell={props.shell.onOpenLocalShell}
         onOverviewRead={props.shell.onOverviewRead}
       />

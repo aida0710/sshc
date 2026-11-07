@@ -17,18 +17,18 @@ function render(initial: { runTarget: string | null; refusal: ApiError | null; v
 describe("useOpenAfterRemoteUnlock", () => {
   it("opens the session the locked Vault refused once that Vault is unlocked", () => {
     const { open, result, rerender } = render({ runTarget: "r100", refusal: null, vaultRevision: 0 });
-    act(() => result.current.noteRefused(shell));
+    act(() => result.current.noteRefused([shell]));
     rerender({ runTarget: "r100", refusal: locked, vaultRevision: 0 });
     expect(open).not.toHaveBeenCalled();
     rerender({ runTarget: "r100", refusal: null, vaultRevision: 1 });
-    expect(open).toHaveBeenCalledExactlyOnceWith(shell);
+    expect(open).toHaveBeenCalledExactlyOnceWith([shell]);
     rerender({ runTarget: "r100", refusal: null, vaultRevision: 2 });
     expect(open).toHaveBeenCalledOnce();
   });
 
   it("forgets it when the engine refused for another reason", () => {
     const { open, result, rerender } = render({ runTarget: "r100", refusal: null, vaultRevision: 0 });
-    act(() => result.current.noteRefused(shell));
+    act(() => result.current.noteRefused([shell]));
     rerender({ runTarget: "r100", refusal: unreachable, vaultRevision: 0 });
     rerender({ runTarget: "r100", refusal: null, vaultRevision: 1 });
     expect(open).not.toHaveBeenCalled();
@@ -36,7 +36,7 @@ describe("useOpenAfterRemoteUnlock", () => {
 
   it("forgets it when another engine is chosen", () => {
     const { open, result, rerender } = render({ runTarget: "r100", refusal: locked, vaultRevision: 0 });
-    act(() => result.current.noteRefused(shell));
+    act(() => result.current.noteRefused([shell]));
     rerender({ runTarget: "nas", refusal: locked, vaultRevision: 0 });
     rerender({ runTarget: "nas", refusal: null, vaultRevision: 1 });
     expect(open).not.toHaveBeenCalled();
@@ -44,7 +44,7 @@ describe("useOpenAfterRemoteUnlock", () => {
 
   it("remembers nothing for this machine, whose sessions no remote Vault holds back", () => {
     const { open, result, rerender } = render({ runTarget: null, refusal: null, vaultRevision: 0 });
-    act(() => result.current.noteRefused(shell));
+    act(() => result.current.noteRefused([shell]));
     rerender({ runTarget: null, refusal: null, vaultRevision: 1 });
     expect(open).not.toHaveBeenCalled();
   });

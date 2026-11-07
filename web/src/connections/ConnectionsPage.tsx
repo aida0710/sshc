@@ -83,6 +83,10 @@ type ConnectionsPageProps = {
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
   onOpenSSHSession: (alias: string) => Promise<void>;
+  // onOpenSSHSessions は、選んだ接続先やグループの接続先を、一覧の順にまとめて開く。
+  onOpenSSHSessions: (aliases: readonly string[]) => Promise<void>;
+  // sessionsLeft は、あといくつセッションを開けるか。エンジンが上限を言うまでは null。
+  sessionsLeft: number | null;
   onOpenLocalShell: () => void;
   // onOverviewRead hands over each overview read here, so the searches outside this page know the connections it changed.
   onOverviewRead?: ((overview: Overview) => void) | undefined;
@@ -108,6 +112,8 @@ export function ConnectionsPage({
   preferredKey = null,
   onPreferredKeyApplied,
   onOpenSSHSession,
+  onOpenSSHSessions,
+  sessionsLeft,
   onOpenLocalShell,
   onOverviewRead,
 }: ConnectionsPageProps) {
@@ -225,6 +231,8 @@ export function ConnectionsPage({
     clearTarget: () => void clearTarget(),
     confirmBeforeLeaving,
     onOpenSSHSession,
+    onOpenSSHSessions,
+    sessionsLeft,
     moveConnections: management.moveConnections,
     deleteConnections: management.deleteConnections,
     duplicateConnection: management.duplicateConnection,
@@ -274,6 +282,8 @@ export function ConnectionsPage({
       <SelectionBar
         count={checked.keys.size}
         placement={placement}
+        onConnect={listActions.connectChecked}
+        connectProblem={listActions.connectCheckedProblem}
         onMove={() => listActions.chooseMoveTarget(checkedHosts)}
         onDelete={() => listActions.confirmDeleting(checkedHosts)}
         onClear={clearChecked}
@@ -526,6 +536,8 @@ export function ConnectionsPage({
           treeOptions={{
             scope: listActions.scope,
             onScopeChange: listActions.changeScope,
+            sortOrder: listActions.sortOrder,
+            onSortOrderChange: listActions.setSortOrder,
             checked,
             onCheckedChange: listActions.setChecked,
             multiSelectDisabled: editorDirty,

@@ -60,6 +60,22 @@ test("moves two connections out of the shared entry file into a group with one s
   expect(entry).toContain("# Managed by hand since 2019. Do not reformat.");
 });
 
+test("opens a session for each chosen connection, in the order of the list, and shows the first", async ({ page, installation }) => {
+  await installWorkGroup(installation);
+  const opened: unknown[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/terminal/sessions") opened.push(request.postDataJSON());
+  });
+  const tree = await openConnections(page, installation);
+
+  await tree.getByRole("button", { name: "beta", exact: true }).click();
+  await tree.getByRole("button", { name: "alpha", exact: true }).click({ modifiers: ["Control"] });
+  await page.getByRole("toolbar", { name: "2 selected" }).getByRole("button", { name: "Connect all" }).click();
+
+  await expect.poll(() => opened).toEqual([{ kind: "ssh", alias: "alpha" }, { kind: "ssh", alias: "beta" }]);
+  await expect(page).toHaveURL(/\/terminal/);
+});
+
 test("deletes the chosen connections together after confirming", async ({ page, installation }) => {
   await installWorkGroup(installation);
   const tree = await openConnections(page, installation);

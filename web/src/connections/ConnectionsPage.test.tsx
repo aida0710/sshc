@@ -78,6 +78,8 @@ const detail = {
 
 const terminalSessionProps = {
   onOpenSSHSession: vi.fn(async () => undefined),
+  onOpenSSHSessions: vi.fn(async () => undefined),
+  sessionsLeft: null,
 };
 
 beforeEach(() => {
@@ -178,6 +180,41 @@ describe("ConnectionsPage", () => {
     });
   });
 
+  describe("connecting to several connections at once", () => {
+    const twoInConfig = {
+      ...overview,
+      hosts: [
+        ...overview.hosts,
+        { identity: { path: "config", alias: "edge" }, file: { path: "config", absolute: "/home/tester/.ssh/config" }, line: 4, patterns: ["edge"], editable: true },
+      ],
+    };
+
+    async function chooseEdgeThenBastion(sessionsLeft: number | null) {
+      const user = userEvent.setup();
+      const onOpenSSHSessions = vi.fn(async () => undefined);
+      vi.mocked(configApi.overview).mockResolvedValue(twoInConfig);
+      render(<ToastProvider><ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onOpenSSHSessions={onOpenSSHSessions} sessionsLeft={sessionsLeft} onInspector={() => undefined} onNavigateLocation={vi.fn()} /></ToastProvider>);
+      await user.click(await screen.findByRole("button", { name: "edge" }));
+      fireEvent.click(screen.getByRole("button", { name: "bastion" }), { ctrlKey: true });
+      const bar = await screen.findByRole("toolbar", { name: "2 selected" });
+      return { user, bar, onOpenSSHSessions };
+    }
+
+    it("opens the chosen connections in the order the list shows them, not the order they were chosen", async () => {
+      const { user, bar, onOpenSSHSessions } = await chooseEdgeThenBastion(null);
+      await user.click(within(bar).getByRole("button", { name: "Connect all" }));
+      expect(onOpenSSHSessions).toHaveBeenCalledExactlyOnceWith(["bastion", "edge"]);
+    });
+
+    it("does not offer to open more sessions than the engine has room for, and says how many it has", async () => {
+      const { bar, onOpenSSHSessions } = await chooseEdgeThenBastion(1);
+      const connectAll = within(bar).getByRole("button", { name: "Connect all" });
+      expect(connectAll).toBeDisabled();
+      expect(connectAll).toHaveAttribute("title", "Sessions that can still be opened: 1.");
+      expect(onOpenSSHSessions).not.toHaveBeenCalled();
+    });
+  });
+
   describe("groups as folders", () => {
     const group = (name: string) => ({ name, directory: `connections/${name}`, keyDirectory: `keys/${name}`, memberCount: 0, directoryPresent: true });
     const lab = { path: "connections/lab/10-gpu.conf", absolute: "/home/tester/.ssh/connections/lab/10-gpu.conf" };
@@ -203,6 +240,31 @@ describe("ConnectionsPage", () => {
       await user.click(groups.getByRole("button", { name: `Actions for ${name}` }));
       return user;
     }
+
+    it("opens every connection in a group and its subgroups from the group's menu", async () => {
+      const nested = {
+        ...threeGroups,
+        hosts: [
+          ...threeGroups.hosts,
+          { identity: { path: lab.path, alias: "gpu-03" }, file: lab, line: 7, patterns: ["gpu-03"], editable: true, group: "lab/rack" },
+        ],
+        groups: [...threeGroups.groups, group("lab/rack")],
+      };
+      vi.mocked(configApi.overview).mockResolvedValue(nested);
+      const onOpenSSHSessions = vi.fn(async () => undefined);
+      render(<ToastProvider><ConnectionsPage onOpenLocalShell={vi.fn()} {...terminalSessionProps} onOpenSSHSessions={onOpenSSHSessions} onInspector={() => undefined} onNavigateLocation={vi.fn()} /></ToastProvider>);
+      await screen.findByRole("navigation", { name: "Groups" });
+      const user = await openGroupMenu("lab");
+      await user.click(screen.getByRole("menuitem", { name: "Connect all" }));
+      expect(onOpenSSHSessions).toHaveBeenCalledExactlyOnceWith(["gpu-01", "gpu-02", "gpu-03"]);
+    });
+
+    it("offers nothing to open for a group without connections", async () => {
+      vi.mocked(configApi.overview).mockResolvedValue(threeGroups);
+      await renderPage();
+      await openGroupMenu("home");
+      expect(screen.getByRole("menuitem", { name: "Connect all" })).toBeDisabled();
+    });
 
     it("moves a group up with one save that numbers every sibling in its new place", async () => {
       vi.mocked(configApi.overview).mockResolvedValue(threeGroups);
