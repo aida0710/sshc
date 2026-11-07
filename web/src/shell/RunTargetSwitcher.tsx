@@ -23,11 +23,14 @@ export function RunTargetSwitcher({
   link,
   aliases,
   hosts,
+  onShowTerminal,
 }: {
   targets: RunTargetsState;
   link: RunTargetLink;
   aliases: string[];
   hosts: HostEntry[];
+  // onShowTerminal shows the terminal area, where a refusal of the chosen engine is shown with what fixes it.
+  onShowTerminal: () => void;
 }) {
   const t = useTranslate();
   const [open, setOpen] = useState(false);
@@ -43,8 +46,16 @@ export function RunTargetSwitcher({
   const current = targets.selected ?? t("runTarget.thisMachine");
   const chosenState = linkStateWords();
   const choose = (alias: string | null) => {
-    targets.select(alias);
     setOpen(false);
+    // The chosen engine cannot be used: pressing it again goes to what fixes it. Its row already says why, and the
+    // panel that offers the actions is in the terminal area, out of sight from any other page. A locked Vault is
+    // unlocked here, in its own dialog.
+    if (alias !== null && alias === targets.selected && link.phase === "refused") {
+      if (link.refusal?.problem?.code === "remote_engine_vault_locked") targets.vaultUnlock.ask(alias);
+      else onShowTerminal();
+      return;
+    }
+    targets.select(alias);
   };
   // linkStateWords says what is happening to the chosen one; null when nothing needs saying.
   function linkStateWords(): string | null {

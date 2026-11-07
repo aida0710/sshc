@@ -497,6 +497,10 @@ export function App({
               closeNavigation();
               navigate("Terminal");
             }}
+            onShowTerminal={() => {
+              closeNavigation();
+              navigate("Terminal");
+            }}
             canSplitSession={(id) => id === activeSessionId ? splitBesideActive !== null : splitView.canSplit(id)}
             onSplitSession={(id, edge) => {
               if (activeSessionId === null) return;

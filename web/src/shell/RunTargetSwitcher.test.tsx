@@ -62,7 +62,7 @@ function incompatibleEngine() {
 function SwitcherWithDialogs({ state }: { state: RunTargetsState }) {
   const [openFor, setOpenFor] = useState<string | null>(null);
   const engineInfo = { openFor, ask: setOpenFor, close: () => setOpenFor(null) };
-  return <RunTargetSwitcher targets={{ ...state, engineInfo }} link={linkState()} aliases={["r540"]} hosts={[]} />;
+  return <RunTargetSwitcher targets={{ ...state, engineInfo }} link={linkState()} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />;
 }
 
 describe("useRemoteVaultUnlock", () => {
@@ -108,29 +108,29 @@ describe("RunTargetSwitcher says how the connection is going", () => {
   const chosen = targets({ selected: "r540" });
 
   it("names the run target as usual once it answered", () => {
-    render(<RunTargetSwitcher targets={chosen} link={linkState()} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState()} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Choose the remote session engine (now: r540)" })).toHaveTextContent("Remote sessionr540");
   });
 
   it("says it is connecting while the host has not answered", () => {
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "connecting", connectedEngines: new Set() })} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "connecting", connectedEngines: new Set() })} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Choose the remote session engine (now: r540, Connecting)" })).toHaveTextContent("Connectingr540");
   });
 
   it("says the same while only the engine has not answered", () => {
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "awaitingEngine" })} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "awaitingEngine" })} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
     expect(screen.getByRole("button", { name: /Connecting/ })).toBeInTheDocument();
   });
 
   it("says this machine is loading while its sessions are read", () => {
-    render(<RunTargetSwitcher targets={targets()} link={linkState({ phase: "loading" })} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={targets()} link={linkState({ phase: "loading" })} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Choose the remote session engine (now: localhost, Loading)" })).toHaveTextContent("Loadinglocalhost");
   });
 
   it("does not show a green mark for a host it cannot reach, and gives the reason in the list", async () => {
     const user = userEvent.setup();
     const refusal = new ApiError("remote_engine_unreachable", 502, { code: "remote_engine_unreachable", message: "request rejected" });
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
     const trigger = screen.getByRole("button", { name: "Choose the remote session engine (now: r540, Can't connect)" });
     expect(trigger.querySelector("[data-link-mark]")).toHaveAttribute("data-link-mark", "failed");
     await user.click(trigger);
@@ -139,15 +139,40 @@ describe("RunTargetSwitcher says how the connection is going", () => {
     expect(within(list).getByText("The remote sshc engine cannot be reached. Reconnect, or switch back to localhost.")).toBeInTheDocument();
   });
 
+  it("opens the Vault unlock when the chosen engine that refuses with a locked Vault is pressed again", async () => {
+    const user = userEvent.setup();
+    const refusal = new ApiError("remote_engine_vault_locked", 423, { code: "remote_engine_vault_locked", message: "request rejected" });
+    const state = targets({ selected: "r540" });
+    const onShowTerminal = vi.fn();
+    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal })} aliases={["r540"]} hosts={[]} onShowTerminal={onShowTerminal} />);
+    await user.click(screen.getByRole("button", { name: /Choose the remote session engine/ }));
+    await user.click(screen.getByRole("button", { name: /^r540/ }));
+    expect(state.vaultUnlock.ask).toHaveBeenCalledWith("r540");
+    expect(state.select).not.toHaveBeenCalled();
+    expect(onShowTerminal).not.toHaveBeenCalled();
+  });
+
+  it("shows the terminal area, where the refusal and its actions are, when the chosen engine that cannot be reached is pressed again", async () => {
+    const user = userEvent.setup();
+    const refusal = new ApiError("remote_engine_unreachable", 502, { code: "remote_engine_unreachable", message: "request rejected" });
+    const state = targets({ selected: "r540" });
+    const onShowTerminal = vi.fn();
+    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r540"]} hosts={[]} onShowTerminal={onShowTerminal} />);
+    await user.click(screen.getByRole("button", { name: /Choose the remote session engine/ }));
+    await user.click(screen.getByRole("button", { name: /^r540/ }));
+    expect(onShowTerminal).toHaveBeenCalledOnce();
+    expect(state.select).not.toHaveBeenCalled();
+  });
+
   it("names a locked Vault rather than a failed connection", () => {
     const refusal = new ApiError("remote_engine_vault_locked", 423, { code: "remote_engine_vault_locked", message: "request rejected" });
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal })} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal })} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
     expect(screen.getByRole("button", { name: /Locked/ })).toBeInTheDocument();
   });
 
   it("marks the other run targets by whether this machine is connected to them", async () => {
     const user = userEvent.setup();
-    render(<RunTargetSwitcher targets={targets({ engines: ["r540", "nas"] })} link={linkState()} aliases={["r540", "nas"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={targets({ engines: ["r540", "nas"] })} link={linkState()} aliases={["r540", "nas"]} hosts={[]} onShowTerminal={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /Choose the remote session engine/ }));
     expect(screen.getByRole("button", { name: /^r540/ })).toHaveTextContent("Connected");
     expect(screen.getByRole("button", { name: /^nas/ })).toHaveTextContent("Not connected");
@@ -159,7 +184,7 @@ describe("RunTargetSwitcher says how the connection is going", () => {
 describe("RunTargetSwitcher", () => {
   it("marks the switch and the engine whose terminals sent a notification nobody has seen", async () => {
     const user = userEvent.setup();
-    render(<RunTargetSwitcher targets={targets({ unread: new Set(["r540"]) })} link={linkState()} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={targets({ unread: new Set(["r540"]) })} link={linkState()} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
     const trigger = screen.getByRole("button", { name: /^Choose the remote session engine/ });
     expect(within(trigger).getByText("Another engine has new notifications")).toBeInTheDocument();
     await user.click(trigger);
@@ -170,7 +195,7 @@ describe("RunTargetSwitcher", () => {
   it("chooses an engine from the list that opens upward", async () => {
     const user = userEvent.setup();
     const state = targets();
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     const list = screen.getByRole("list", { name: "Engines" });
     await user.click(within(list).getByRole("button", { name: /^r540/ }));
@@ -180,7 +205,7 @@ describe("RunTargetSwitcher", () => {
   it("offers opening the full screen in a new tab and removing an engine, not this machine", async () => {
     const user = userEvent.setup();
     const state = targets();
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     expect(screen.getAllByRole("button", { name: /^Actions for engine/ })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Actions for engine r540" }));
@@ -228,7 +253,7 @@ describe("RunTargetSwitcher", () => {
     });
     const vaultUnlock = vaultUnlockState({ unlockFor: "r540" });
     const status = vi.fn(async () => ({ alias: "r540", version: "v0.53.0", vault: true, unlocked: false, passwordless: false, sessions: 2 }));
-    render(<RunTargetSwitcher targets={targets({ api: enginesApi({ unlockVault, status }), vaultUnlock })} link={linkState()} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={targets({ api: enginesApi({ unlockVault, status }), vaultUnlock })} link={linkState()} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
 
     const dialog = screen.getByRole("dialog", { name: "Unlock the vault on r540" });
     const field = within(dialog).getByLabelText("Vault password for r540");
@@ -248,7 +273,7 @@ describe("RunTargetSwitcher", () => {
     const user = userEvent.setup();
     const status = vi.fn(async () => ({ alias: "r540", version: "v0.53.0", vault: false, unlocked: false, passwordless: false, sessions: 0 }));
     const state = targets({ api: enginesApi({ status }), vaultUnlock: vaultUnlockState({ unlockFor: "r540" }) });
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r540"]} hosts={[]} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r540"]} hosts={[]} onShowTerminal={vi.fn()} />);
 
     const dialog = await screen.findByRole("dialog", { name: "r540 has no vault" });
     await user.click(within(dialog).getByRole("button", { name: "Open its full screen in a new tab" }));
