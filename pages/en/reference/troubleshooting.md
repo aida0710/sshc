@@ -42,6 +42,29 @@ A master password cannot be recovered. If a new vault fails immediately, inspect
 
 Check whether `IdentityFile` points to the path restored on this device. Keys managed by sshc may be under a group path such as `~/.ssh/keys/...`. Remove stale absolute paths and inspect the resolved path in connection details.
 
+## An SSH connection fails
+
+A session that failed to connect shows a short reason on the second line of its row in the sidebar. The full sentence is in the tooltip and in the notice card when you open the session.
+
+| Shown in the row | Full sentence | What to check |
+|---|---|---|
+| Connection refused | The connection was refused. Check that the SSH server is running and that the port is right. | The host's SSH server, `Port` |
+| No answer | The connection does not answer. Check its power, its network and any firewall. | The host's power, network and firewall, `ConnectTimeout` |
+| Name not found | The connection's name has no IP address. Check HostName. | `HostName`. After renaming or deleting a jump host, also `ProxyJump` ([Connections used as jump hosts](/en/connections/manage#connections-used-as-jump-hosts)) |
+| No network | Cannot reach the network. Check this device's connection. | This machine's network |
+| Not reachable | The connection cannot be reached. Check the network and its power. | The network route, VPN |
+| Closed by the other side | The other side closed the connection. Check its SSH server. | The host's SSH server log |
+| Host key changed | The host key changed. Review Known Hosts before connecting again. | Why it changed, in Known Hosts |
+| Host key not accepted | A key that is not in known_hosts, was declined, or is revoked | Known Hosts |
+| Authentication failed | The password, key or passphrase was not accepted | The authentication settings in Connections |
+| Disconnected, could not reconnect | Automatic reconnecting reached its limit | Fix the reason above, then **Reconnect** |
+
+These cases add to the sentence above:
+
+- A failure at a jump host (partway along `ProxyJump`): the terminal says which jump host and hop first, in Japanese (for example 踏み台のjump（1/2）に接続できませんでした。, "could not connect to the jump host jump (1/2)"). Check that jump host.
+- A typed password that is wrong: `Permission denied, please try again.` comes before the next prompt, as in OpenSSH.
+- An automatic reconnect waiting for a password or code: the heading and the row say "reconnecting 4/5 · waiting for input". Type it in the terminal.
+
 ## A key from IdentityFile is not used
 
 sshc does not use a key whose `IdentityFile` is a relative path (`id_work`), another user's home directory (`~other/...`), a token sshc does not expand (`%T`) or `${NAME}` naming an unset variable.
