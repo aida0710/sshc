@@ -111,8 +111,26 @@ export function useTerminalWorkspaceController({
     },
     [showSession, terminalSessions],
   );
+  // openEachAndShow opens a session for each request and shows the first one as soon as it opens, while the others open
+  // behind it. It hands back the requests a run target refused.
+  const openEachAndShow = useCallback(
+    (requests: readonly OpenTerminalSessionRequest[]) => {
+      let shown = false;
+      return terminalSessions.openEach(requests, (session) => {
+        if (shown) return;
+        shown = true;
+        showSession(session.id);
+      });
+    },
+    [showSession, terminalSessions],
+  );
+  const reopenRefused = useCallback(
+    (requests: readonly OpenTerminalSessionRequest[]) =>
+      requests.length === 1 ? openAndShow(requests[0]!) : openEachAndShow(requests),
+    [openAndShow, openEachAndShow],
+  );
   const { noteRefused } = useOpenAfterRemoteUnlock({
-    runTarget, refusal: terminalSessions.remoteRefusal, vaultRevision, open: openAndShow,
+    runTarget, refusal: terminalSessions.remoteRefusal, vaultRevision, open: reopenRefused,
   });
 
   const openSession = useCallback(
@@ -122,7 +140,7 @@ export function useTerminalWorkspaceController({
         navigate("Terminal");
       }
       const opened = await openAndShow(request);
-      if (opened === null) noteRefused(request);
+      if (opened === null) noteRefused([request]);
       return opened;
     },
     [closeNavigation, navigate, noteRefused, openAndShow, runTarget],
@@ -153,6 +171,24 @@ export function useTerminalWorkspaceController({
       });
     },
     [openSession],
+  );
+
+  // openSSHSessions opens a session for each of aliases, in that order, in the default workspace, as Connections does
+  // for the connections chosen there or in a group. The first is shown as soon as it opens; on a run target the
+  // terminal screen is shown at once, as openSession does.
+  const openSSHSessions = useCallback(
+    async (aliases: readonly string[]) => {
+      if (aliases.length === 0) return;
+      if (runTarget !== null) {
+        closeNavigation();
+        navigate("Terminal");
+      }
+      const refused = await openEachAndShow(
+        aliases.map((alias): OpenTerminalSessionRequest => ({ kind: "ssh", ...sshSessionTarget(alias) })),
+      );
+      noteRefused(refused);
+    },
+    [closeNavigation, navigate, noteRefused, openEachAndShow, runTarget],
   );
 
   const duplicateSession = useCallback(
@@ -189,6 +225,7 @@ export function useTerminalWorkspaceController({
     showSession,
     openLocalShell,
     openSSHSession,
+    openSSHSessions,
     duplicateSession,
     openSessionInSplit,
     reorderSessions: setSessionOrder,

@@ -19,7 +19,7 @@ import { terminalCommandApiFor } from "./commands/commandApi";
 import { WorkspaceCommandCenter } from "./commands/WorkspaceCommandCenter";
 import { SessionCloseConfirmation } from "./SessionCloseConfirmation";
 import { SessionList } from "./SessionList";
-import type { TerminalSessionsState } from "./sessions";
+import { sessionSlotsLeft, type TerminalSessionsState } from "./sessions";
 import type { UnreadSessions } from "./terminalNotifications";
 import type { SeenProgramStatus } from "./programStatus";
 import type { TerminalWorkspacesState } from "./useTerminalWorkspaces";
@@ -150,8 +150,7 @@ export function WorkspaceTree({
     if (collapsed.has(next.workspaceId)) toggleCollapsed(next.workspaceId);
     onSelect(next.id);
   }
-  const live = sessions.filter((session) => session.exited === undefined).length;
-  const atSessionLimit = terminalSessions.maxSessions > 0 && live >= terminalSessions.maxSessions;
+  const atSessionLimit = sessionSlotsLeft({ sessions, maxSessions: terminalSessions.maxSessions }) === 0;
   const canOpenSession = !terminalSessions.busy && !atSessionLimit;
   const moveTargets = workspaces.workspaces.map((workspace) => ({ id: workspace.id, label: workspaceDisplayName(t, workspace) }));
   const selectedWorkspace = sessions.find((session) => session.id === selected)?.workspaceId;
