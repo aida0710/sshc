@@ -29,6 +29,8 @@ type Session struct {
 	// 問いも、シェルの出力も、同じ道を通る。
 	reader *io.PipeReader
 	writer *io.PipeWriter
+	// shellOutput は、writer へ流れるもののうち、リモートのシェルが書いたものだけを見張りへ渡す。
+	shellOutput shellOutput
 
 	// cancel は、まだ握手の途中なら、それごと止める。
 	//

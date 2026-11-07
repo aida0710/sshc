@@ -3,12 +3,14 @@ package httpserver
 import (
 	"bytes"
 	"log/slog"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"sshc/internal/secret"
 	"sshc/internal/snippets"
+	"sshc/internal/terminal"
 	"sshc/internal/terminalopen"
 )
 
@@ -56,7 +58,7 @@ func TestAStartupSnippetIsSentWhileTheDestinationIsUnchanged(t *testing.T) {
 
 	got := prepareStartupSnippet(fixture.service, logger, "production")
 
-	if got != (terminalopen.StartupSnippet{Command: "cd /srv/app"}) {
+	if want := (terminalopen.StartupSnippet{Steps: []terminal.StartupStep{{Send: "cd /srv/app", Enter: true}}}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("startup = %#v", got)
 	}
 	if records.Len() != 0 {
@@ -73,7 +75,7 @@ func TestAStartupSnippetForAChangedDestinationIsHeldBackAndTheTerminalIsTold(t *
 
 	got := prepareStartupSnippet(fixture.service, logger, "production")
 
-	if got != (terminalopen.StartupSnippet{Notice: startupDestinationChangedNotice}) {
+	if !reflect.DeepEqual(got, terminalopen.StartupSnippet{Notice: startupDestinationChangedNotice}) {
 		t.Fatalf("startup = %#v", got)
 	}
 	if !strings.Contains(records.String(), "level=WARN") {
@@ -96,7 +98,7 @@ func TestALockedLibraryDoesNotWarnAboutAStartupSnippetOnEveryConnection(t *testi
 
 	got := prepareStartupSnippet(service, logger, "production")
 
-	if got != (terminalopen.StartupSnippet{}) {
+	if !reflect.DeepEqual(got, terminalopen.StartupSnippet{}) {
 		t.Fatalf("startup = %#v, want nothing to send or say", got)
 	}
 	if strings.Contains(records.String(), "level=WARN") {

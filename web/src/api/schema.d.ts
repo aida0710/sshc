@@ -5365,16 +5365,31 @@ export interface components {
             default?: string;
             description?: string;
         };
+        /** @description One step of a snippet of steps. It waits for wait in the shell's output when wait is given, then types send, with Enter after it when enter is true. */
+        SnippetStep: {
+            wait?: string;
+            send: string;
+            enter: boolean;
+            /** @description A step whose text does not come in time is passed over instead of stopping the steps. */
+            optional?: boolean;
+        };
         SnippetDraft: {
             name: string;
             description: string;
+            /** @description The command, or empty for a snippet of steps. */
             command: string;
+            steps?: components["schemas"]["SnippetStep"][];
+            /** @description How long each step waits for its text; 0 is the default of 10 seconds. */
+            waitSeconds?: number;
             variables: components["schemas"]["SnippetVariable"][];
         };
         Snippet: {
             name: string;
             description: string;
+            /** @description The command, or empty for a snippet of steps. */
             command: string;
+            steps?: components["schemas"]["SnippetStep"][];
+            waitSeconds?: number;
             variables: components["schemas"]["SnippetVariable"][];
             id: string;
             /** Format: date-time */

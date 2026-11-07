@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../../ui/icons";
 import { useTranslate } from "../../i18n/context";
 import { snippetsApi, type Snippet } from "../../snippets/api";
+import { commandSnippets } from "../../snippets/snippetKind";
 import { describeTerminalCommandFailure, terminalCommandProblemText } from "./terminalCommandProblem";
 import { Button, Notice, Segmented } from "../../ui/surface";
 import { ModalShell } from "../../ui/ModalShell";
@@ -79,8 +80,9 @@ export function WorkspaceCommandCenter({
     void snippetsApi
       .library()
       .then((library) => {
-        setSnippets(library.snippets);
-        setSnippetId((current) => current || library.snippets[0]?.id || "");
+        const commands = commandSnippets(library.snippets);
+        setSnippets(commands);
+        setSnippetId((current) => current || commands[0]?.id || "");
       })
       .catch(() => setProblem(t("snippets.loadFailed")));
   }, [t]);

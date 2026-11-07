@@ -15,6 +15,20 @@ Execution has a preview step showing targets, expanded commands, and required in
 
 Under Menu → Snippets, "Connection startup" assigns one Snippet per host. On the first connection and on every automatic reconnection, sshc sends the command and Enter only after authentication and the remote shell have started; it never writes to an authentication prompt. Variable values, secret ones included, are stored encrypted with the assignment, and because the expanded value is typed on every connection it may remain in the remote shell history, TTY echo, or scrollback.
 
+Choosing **Steps** as a Snippet's **Kind** lists steps that wait for the shell's output before they type, for hosts that ask a question before the next input, such as a sudo password or a network device's enable. A Snippet of steps is used only for connection startup; it is not offered to run on several hosts or to send to a terminal.
+
+| Field | What it does |
+|---|---|
+| **Wait for** | Waits until this text appears in the shell's output. Empty sends at once. The output is matched without colours and other control sequences, as plain text rather than a regular expression |
+| **Send** | The text typed. It may use variables, secret ones included |
+| **Enter** | Presses Enter after the text |
+| **Optional** | When the text does not appear, the step is passed over and the next one runs |
+
+- Only the shell's output after authentication is watched. sshc's own authentication prompts and `[sshc]` lines are never answered.
+- Once a step has typed, output from before it does not answer the next step.
+- If a step's text does not appear within **Wait at most** (10 seconds by default, at most 300), the steps stop there and the terminal says so in an `[sshc]` line. An optional step is passed over instead.
+- Every automatic reconnection starts the steps again from the first.
+
 An assignment is bound to the destination and authentication settings it resolved to at that time: host name, user, port, jump hosts, ProxyCommand, ForwardAgent, the VPN profile attached to the connection, and so on. If any of these change after the assignment, sshc stops sending the Snippet to that host so that secret values do not reach a different machine. The terminal says that the Snippet was not sent, and "Connection startup" on the Snippets screen lists the hosts whose assignment stopped. Check the destination and assign it again.
 
 For the VPN profile, the assignment stops in these cases, because the same address can be a different machine on the network of another VPN:

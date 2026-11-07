@@ -154,6 +154,8 @@ func terminalCommandProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "terminal_command_too_large")
 	case errors.Is(err, terminal.ErrUnsafeInsert):
 		return problem(c, http.StatusBadRequest, "terminal_command_insert_unsafe")
+	case errors.Is(err, snippets.ErrStepsOnlyAtStartup):
+		return problem(c, http.StatusConflict, "snippet_steps_startup_only")
 	case errors.Is(err, snippets.ErrInvalidSnippet), errors.Is(err, snippets.ErrInvalidVariable),
 		errors.Is(err, snippets.ErrUnknownVariable), errors.Is(err, snippets.ErrMissingVariable),
 		errors.Is(err, snippets.ErrMalformedTemplate), errors.Is(err, snippets.ErrUnknownSnippet),

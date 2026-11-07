@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObjec
 import { shownFilePath } from "../android/shownFilePath";
 import type { FileNode, HostEntry, HostIdentity } from "../api/config";
 import { snippetsApi, type Snippet } from "../snippets/api";
+import { snippetSummary } from "../snippets/snippetKind";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
@@ -186,7 +187,7 @@ export function CommandPalette({
       id: `snippet:${snippet.id}`,
       kind: "snippet" as const,
       label: snippet.name,
-      detail: snippet.command,
+      detail: snippetSummary(t, snippet),
       search: `snippet snippets スニペット ${snippet.description ?? ""}`,
       action: () => onOpenSnippet(snippet.id),
     })),

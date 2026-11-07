@@ -249,9 +249,10 @@ func TestStartupStoresEncryptedSecretInputsAndAnEditCannotBreakAnAssignment(t *t
 	if err := service.SetStartup("bastion", secret.ID, map[string]string{"token": "hidden"}); err != nil {
 		t.Fatalf("SetStartup(secret) = %v", err)
 	}
-	preparedStartup, err := service.PrepareStartupCommand("bastion")
-	if err != nil || preparedStartup.Command != "echo hidden" || preparedStartup.Display != "echo [secret]" {
-		t.Fatalf("PrepareStartupCommand = %#v, %v", preparedStartup, err)
+	preparedStartup, err := service.PrepareStartup("bastion")
+	if err != nil || len(preparedStartup.Steps) != 1 || preparedStartup.Steps[0] != (PreparedStep{Send: "echo hidden", Enter: true}) ||
+		len(preparedStartup.Secrets) != 1 || preparedStartup.Secrets[0] != "hidden" {
+		t.Fatalf("PrepareStartup = %#v, %v", preparedStartup, err)
 	}
 	bindings, err := service.Startup()
 	if err != nil || len(bindings) != 1 || bindings[0].Stale {
@@ -268,9 +269,9 @@ func TestStartupStoresEncryptedSecretInputsAndAnEditCannotBreakAnAssignment(t *t
 	}); !errors.Is(err, ErrMissingVariable) {
 		t.Fatalf("Update = %v, want ErrMissingVariable", err)
 	}
-	prepared, err := service.PrepareStartupCommand("bastion")
-	if err != nil || prepared.Command != "echo ok" {
-		t.Fatalf("PrepareStartupCommand after the refused update = %#v, %v", prepared, err)
+	prepared, err := service.PrepareStartup("bastion")
+	if err != nil || prepared.Steps[0].Send != "echo ok" {
+		t.Fatalf("PrepareStartup after the refused update = %#v, %v", prepared, err)
 	}
 }
 
@@ -639,8 +640,8 @@ func TestAStartupSnippetIsNotSentOnceTheDestinationChanges(t *testing.T) {
 
 	destination = "198.51.100.20"
 
-	if prepared, err := service.PrepareStartupCommand("bastion"); !errors.Is(err, ErrStartupDestinationChanged) {
-		t.Fatalf("PrepareStartupCommand = %#v, %v; want ErrStartupDestinationChanged", prepared, err)
+	if prepared, err := service.PrepareStartup("bastion"); !errors.Is(err, ErrStartupDestinationChanged) {
+		t.Fatalf("PrepareStartup = %#v, %v; want ErrStartupDestinationChanged", prepared, err)
 	}
 	assignments, err := service.Startup()
 	if err != nil || len(assignments) != 1 || !assignments[0].Stale {
@@ -660,9 +661,9 @@ func TestReassigningAStaleStartupSnippetBindsItToTheNewDestination(t *testing.T)
 	if err := service.SetStartup("bastion", check.ID, nil); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := service.PrepareStartupCommand("bastion")
-	if err != nil || prepared.Command != "uptime" {
-		t.Fatalf("PrepareStartupCommand = %#v, %v", prepared, err)
+	prepared, err := service.PrepareStartup("bastion")
+	if err != nil || prepared.Steps[0].Send != "uptime" {
+		t.Fatalf("PrepareStartup = %#v, %v", prepared, err)
 	}
 }
 
@@ -678,8 +679,8 @@ func TestAStartupAssignmentWithoutABindingIsNotSent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := service.PrepareStartupCommand("bastion"); !errors.Is(err, ErrStartupDestinationChanged) {
-		t.Fatalf("PrepareStartupCommand = %v, want ErrStartupDestinationChanged", err)
+	if _, err := service.PrepareStartup("bastion"); !errors.Is(err, ErrStartupDestinationChanged) {
+		t.Fatalf("PrepareStartup = %v, want ErrStartupDestinationChanged", err)
 	}
 }
 

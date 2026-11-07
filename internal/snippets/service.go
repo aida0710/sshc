@@ -82,6 +82,7 @@ func (s *Service) Create(draft Draft) (Snippet, error) {
 		moment := s.now().UTC()
 		snippet = Snippet{
 			ID: id, Name: draft.Name, Description: draft.Description, Command: draft.Command,
+			Steps: append([]Step(nil), draft.Steps...), WaitSeconds: draft.WaitSeconds,
 			Variables: cloneVariables(draft.Variables), CreatedAt: moment, UpdatedAt: moment,
 		}
 		library.Snippets = append(library.Snippets, snippet)
@@ -109,6 +110,8 @@ func (s *Service) Update(id string, draft Draft) (Snippet, error) {
 		updated.Name = draft.Name
 		updated.Description = draft.Description
 		updated.Command = draft.Command
+		updated.Steps = append([]Step(nil), draft.Steps...)
+		updated.WaitSeconds = draft.WaitSeconds
 		updated.Variables = cloneVariables(draft.Variables)
 		updated.UpdatedAt = s.now().UTC()
 		if updated.UpdatedAt.Before(updated.CreatedAt) {
@@ -291,25 +294,25 @@ func terminalEvidence(source planSource, command string) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-// PrepareStartupCommand returns the executable command for the terminal
-// injector. Public startup previews stay redacted; this internal path is the
-// only one that may hand the expanded value to the PTY writer.
+// PrepareStartup returns what to type into the shell of a connection to alias once it is ready, with the variables
+// put in. Public startup previews stay redacted; this internal path is the only one that may hand the expanded values
+// to the PTY writer.
 //
 // 接続のたびに alias を解決し直し、割り当てた時の接続先と違えば送らない。入力値には
 // シークレットが入るので、別の接続先のシェルへ打ち込まないためである。
-func (s *Service) PrepareStartupCommand(alias string) (PreparedCommand, error) {
+func (s *Service) PrepareStartup(alias string) (PreparedStartup, error) {
 	startup, library, err := s.startupFor(alias)
 	if err != nil {
-		return PreparedCommand{}, err
+		return PreparedStartup{}, err
 	}
 	if err := s.verifyStartupDestination(startup); err != nil {
-		return PreparedCommand{}, err
+		return PreparedStartup{}, err
 	}
-	source, expanded, _, err := planSourceFromLibrary(library, startup.SnippetID, startup.Inputs)
-	if err != nil {
-		return PreparedCommand{}, err
+	index := snippetIndex(library, startup.SnippetID)
+	if index < 0 {
+		return PreparedStartup{}, ErrUnknownSnippet
 	}
-	return prepareTerminalCommand(source, expanded)
+	return prepareStartup(library.Snippets[index], startup.Inputs)
 }
 
 func (s *Service) startupFor(alias string) (Startup, Library, error) {
@@ -422,6 +425,9 @@ func planSourceFromLibrary(library Library, snippetID string, inputs map[string]
 		return planSource{}, expansion{}, nil, ErrUnknownSnippet
 	}
 	snippet := library.Snippets[index]
+	if len(snippet.Steps) > 0 {
+		return planSource{}, expansion{}, nil, ErrStepsOnlyAtStartup
+	}
 	expanded, err := expand(snippet.Command, snippet.Variables, inputs)
 	if err != nil {
 		return planSource{}, expansion{}, nil, err

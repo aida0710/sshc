@@ -81,7 +81,7 @@ func TestFailedAliasRenameRestoresConfigSecretsAndStartup(t *testing.T) {
 			if got := passwordForCurrentTarget(t, service, secrets, "edge"); got != "original-password" {
 				t.Fatal("failed rename published the new vault in memory")
 			}
-			if _, err := library.PrepareStartupCommand("edge"); err != nil {
+			if _, err := library.PrepareStartup("edge"); err != nil {
 				t.Fatalf("failed rename lost startup binding: %v", err)
 			}
 			pending, err := manager.Pending()

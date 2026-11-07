@@ -111,10 +111,10 @@ func TestRenamingAHostCarriesItsStartupSnippet(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("rename: %d", response.Code)
 	}
-	if _, err := service.PrepareStartupCommand("bastion"); err == nil {
+	if _, err := service.PrepareStartup("bastion"); err == nil {
 		t.Error("old alias still owns an executable startup command")
 	}
-	if _, err := service.PrepareStartupCommand("edge"); err != nil {
+	if _, err := service.PrepareStartup("edge"); err != nil {
 		t.Errorf("renamed host lost startup command: %v", err)
 	}
 }

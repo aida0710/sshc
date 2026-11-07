@@ -158,7 +158,7 @@ func TestStoreDoesNotOverwriteAnInvalidOrNewerDocument(t *testing.T) {
 	}{
 		{"invalid", `{"schemaVersion":2,"snippets":[{"id":"bad"}]}`, ErrInvalidDocument},
 		{"older", `{"schemaVersion":1,"snippets":[]}`, ErrInvalidDocument},
-		{"newer", `{"schemaVersion":3,"snippets":[]}`, ErrUnsupportedVersion},
+		{"newer", `{"schemaVersion":4,"snippets":[]}`, ErrUnsupportedVersion},
 		{"trailing document", `{"schemaVersion":2,"snippets":[]} {}`, ErrInvalidDocument},
 		{"unknown field", `{"schemaVersion":2,"snippets":[],"secret":"unexpected"}`, ErrInvalidDocument},
 	} {

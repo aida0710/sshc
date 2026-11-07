@@ -110,13 +110,13 @@ func TestAStartupSnippetStopsWhenTheConnectionMovesToAnotherVPNProfile(t *testin
 
 	for _, other := range []string{"office", ""} {
 		attachVPN(t, services, "web", other)
-		if _, err := services.snippets.PrepareStartupCommand("web"); !errors.Is(err, snippets.ErrStartupDestinationChanged) {
-			t.Fatalf("through %q, PrepareStartupCommand = %v, want ErrStartupDestinationChanged", other, err)
+		if _, err := services.snippets.PrepareStartup("web"); !errors.Is(err, snippets.ErrStartupDestinationChanged) {
+			t.Fatalf("through %q, PrepareStartup = %v, want ErrStartupDestinationChanged", other, err)
 		}
 	}
 	attachVPN(t, services, "web", "lab")
-	if prepared, err := services.snippets.PrepareStartupCommand("web"); err != nil || prepared.Command != "cd /srv/app" {
-		t.Fatalf("back through lab, PrepareStartupCommand = %#v, %v; want the assigned command", prepared, err)
+	if prepared, err := services.snippets.PrepareStartup("web"); err != nil || prepared.Steps[0].Send != "cd /srv/app" {
+		t.Fatalf("back through lab, PrepareStartup = %#v, %v; want the assigned command", prepared, err)
 	}
 }
 
@@ -165,7 +165,7 @@ func assignmentsReleasedToWeb(t *testing.T, services *engineServices) webAssignm
 		t.Fatal(err)
 	}
 	password, _ := storedPassword(services.vault)(target)
-	_, startup := services.snippets.PrepareStartupCommand("web")
+	_, startup := services.snippets.PrepareStartup("web")
 	return webAssignments{
 		password: password,
 		totp:     services.vault.BoundFor(secret.KindTOTP, "web", target.AuthenticationBinding()) != "",

@@ -6,6 +6,7 @@ import (
 
 	"sshc/internal/secret"
 	"sshc/internal/snippets"
+	"sshc/internal/terminal"
 	"sshc/internal/terminalopen"
 )
 
@@ -27,10 +28,10 @@ func prepareStartupSnippet(service *snippets.Service, logger *slog.Logger, alias
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	prepared, err := service.PrepareStartupCommand(alias)
+	prepared, err := service.PrepareStartup(alias)
 	switch {
 	case err == nil:
-		return terminalopen.StartupSnippet{Command: prepared.Command}
+		return startupSnippetOf(prepared)
 	case errors.Is(err, snippets.ErrNoStartup):
 		return terminalopen.StartupSnippet{}
 	case errors.Is(err, snippets.ErrStartupDestinationChanged):
@@ -45,4 +46,13 @@ func prepareStartupSnippet(service *snippets.Service, logger *slog.Logger, alias
 		logger.Warn("startup snippet was not sent", "alias", alias, "reason", err.Error())
 		return terminalopen.StartupSnippet{}
 	}
+}
+
+// startupSnippetOf is what the terminal types for a prepared startup snippet.
+func startupSnippetOf(prepared snippets.PreparedStartup) terminalopen.StartupSnippet {
+	steps := make([]terminal.StartupStep, len(prepared.Steps))
+	for index, step := range prepared.Steps {
+		steps[index] = terminal.StartupStep{Wait: step.Wait, Send: step.Send, Enter: step.Enter, Optional: step.Optional}
+	}
+	return terminalopen.StartupSnippet{Steps: steps, Wait: prepared.Wait}
 }

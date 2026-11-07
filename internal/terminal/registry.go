@@ -53,11 +53,13 @@ type Spec struct {
 
 // Startup は、使える状態になった Process へ、接続のたびに送るものである。
 type Startup struct {
-	// Notice は、コマンドより先にターミナルへ書く 1 行である。空なら書かない。
+	// Notice は、手順より先にターミナルへ書く 1 行である。空なら書かない。
 	// Process が Announcer でなければ（ローカルのシェルなど）書かない。
 	Notice string
-	// Commands は、Notice のあとで 1 つずつ CR を付けて送るコマンドである。
-	Commands []string
+	// Steps は、Notice のあとで順に打ち込むものである（startup_steps.go）。
+	Steps []StartupStep
+	// Wait は、待つ文字列のある手順が、それが出るまで待つ長さである。
+	Wait time.Duration
 }
 
 // Registry は、開いているセッションと、終了して残しているセッションを持つ。
