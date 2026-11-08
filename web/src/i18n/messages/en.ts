@@ -1003,7 +1003,6 @@ export const en = {
   "terminal.exitedUnknown": "exited",
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "No session is open",
-  "terminal.overview.thisMachine": "This machine",
   "terminal.overview.machineLabel": "The machine new shells open on",
   "terminal.overview.cpu": "CPU {percent}%",
   "terminal.overview.memory": "Memory {used} / {total}",

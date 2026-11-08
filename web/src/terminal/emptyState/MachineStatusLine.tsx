@@ -8,8 +8,10 @@ import { operatingSystemName, uptimeText } from "./machineStatusText";
 const pixelsPerPercent = 0.25;
 const lowestBar = 2;
 
-// MachineStatusLine is the machine new shells open on, in one line: its name, then what the machine gives of its
-// CPU, memory and uptime. A value the machine does not give is left out, not shown as zero.
+// MachineStatusLine is the machine new shells open on, in one line: the run target's name when it is another
+// engine, the machine's own name and OS, then what the machine gives of its CPU, memory and uptime. This machine
+// is told by its name alone, so the line starts with it. A value the machine does not give is left out, not shown
+// as zero.
 export function MachineStatusLine({
   machine,
   cpuHistory,
@@ -42,12 +44,18 @@ export function MachineStatusLine({
   if (machine.uptimeSeconds !== undefined) {
     values.push({ key: "uptime", shown: t("terminal.overview.uptime", { duration: uptimeText(machine.uptimeSeconds, t) }) });
   }
-  const host = [machine.hostname, operatingSystemName(machine.os)].filter((part) => part !== "").join(" · ");
+  const operatingSystem = operatingSystemName(machine.os);
+  // The first name on the line stands out: the run target's, or this machine's own.
+  const hostname = runTarget === null && machine.hostname !== "" ? <span className="font-semibold text-ink">{machine.hostname}</span> : machine.hostname;
   return (
     <div aria-label={t("terminal.overview.machineLabel")} className={`flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs leading-[18px] text-ink-muted ${className}`}>
       <span aria-hidden="true" className="size-[7px] shrink-0 rounded-full bg-accent shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-accent)_25%,transparent)]" />
-      <span className="font-semibold text-ink">{runTarget ?? t("terminal.overview.thisMachine")}</span>
-      <span>{host}</span>
+      {runTarget === null ? null : <span className="font-semibold text-ink">{runTarget}</span>}
+      <span>
+        {hostname}
+        {machine.hostname === "" || operatingSystem === "" ? null : " · "}
+        {operatingSystem}
+      </span>
       {values.map(({ key, shown }) => (
         <Fragment key={key}>
           <span aria-hidden="true" className="text-ink-faint">·</span>
