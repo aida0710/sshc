@@ -74,8 +74,7 @@ describe("TerminalEmptyState", () => {
     renderEmptyState(null);
 
     const machine = await screen.findByLabelText("The machine new shells open on");
-    expect(machine).toHaveTextContent("This machine");
-    expect(machine).toHaveTextContent("workstation · macOS");
+    expect(machine).toHaveTextContent(/^workstation · macOS/);
     expect(machine).toHaveTextContent("Memory 16.0 GiB");
     expect(machine).toHaveTextContent("Up 3d");
     expect(machine).not.toHaveTextContent("CPU");

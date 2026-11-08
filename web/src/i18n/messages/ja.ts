@@ -1007,7 +1007,6 @@ export const ja = {
   "terminal.exitedUnknown": "終了しました",
   "terminal.localhost": "localhost",
   "terminal.emptyHeading": "開いているセッションがありません",
-  "terminal.overview.thisMachine": "このマシン",
   "terminal.overview.machineLabel": "新しいシェルが開くマシンの状態",
   "terminal.overview.cpu": "CPU {percent}%",
   "terminal.overview.memory": "メモリ {used} / {total}",
