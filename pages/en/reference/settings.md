@@ -94,14 +94,15 @@ The **Key order** selector switches between named orders. The "…" beside it sa
 
 ## Appearance
 
-**Settings → Appearance** sets the theme and the accent colour of the whole app in the preset being edited:
+**Settings → Appearance** sets the theme, the accent colour, and whether to reduce motion for the whole app in the preset being edited:
 
 - Theme: match the system, light, white blue, white purple, dark, dark blue, or dark purple. Light and dark use greys without a tint; white blue and dark blue tint them blue, and white purple tints them purple. With the lavender accent, white purple uses a slightly deeper purple. Dark purple uses a lighter untinted grey and, with the lavender accent, a purple of its own, which also colours the terminal selection and cursor
 - Accent colour: lavender, blue, sky, pink, mono, or custom. It marks the current item, buttons, and the focused terminal pane. Custom takes one colour of your own from the colour picker or as a code (#rrggbb), used in both the light and the dark theme. A colour that is hard to tell from the background of the theme on screen brings up a notice.
+- Reduce motion: system, on, or off. On leaves out the animation of panels opening and closing and of screens changing. System follows the reduce-motion setting of the OS
 
 Each settings page lists the other settings pages on its left, so you can move between them.
 
-The theme and the accent colour are preset settings and sync to your other machines. The browser also keeps a copy of the theme, so the first screen is drawn in it the next time sshc opens. Amber, green, and red are not among the offered colours because they already mean an unread notification, connected, and an error.
+The theme, the accent colour, and reduce motion are preset settings and sync to your other machines. The browser also keeps a copy of the theme, so the first screen is drawn in it the next time sshc opens. Amber, green, and red are not among the offered colours because they already mean an unread notification, connected, and an error.
 
 **General**, or Preferences in Menu, switches the display language (Japanese or English).
 

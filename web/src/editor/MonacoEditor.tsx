@@ -19,8 +19,8 @@ import "monaco-editor/languages/definitions/typescript/register.js";
 import "monaco-editor/languages/definitions/yaml/register.js";
 import { editorFontFamily } from "./editorFont";
 import { useTheme } from "../theme/context";
-import { editorCursorBlinking, reducedMotionQuery } from "../ui/reducedMotion";
-import { useMediaQuery } from "../ui/useMediaQuery";
+import { editorCursorBlinking } from "../ui/reducedMotion";
+import { useReducedMotion } from "../theme/motionContext";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
 import { noUnrequestedEditOptions, startWithTabIndenting } from "./monacoEditing";
 import { useModelFollowsValue } from "./useModelFollowsValue";
@@ -60,7 +60,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false, initialL
   const pendingReports = useRef<string[]>([]);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const { scheme } = useTheme();
-  const reducedMotion = useMediaQuery(reducedMotionQuery);
+  const reducedMotion = useReducedMotion();
   callback.current = onChange;
   saveCallback.current = onSave;
 

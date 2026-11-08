@@ -4487,6 +4487,7 @@ export interface components {
         AppearanceSettings: {
             accent?: string;
             theme?: string;
+            reduceMotion?: boolean;
         };
         TerminalAppearance: {
             palette?: string;

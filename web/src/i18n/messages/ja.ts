@@ -1539,6 +1539,12 @@ export const ja = {
   "appearance.customColorInvalid": "#rrggbbの形で入力してください。",
   "appearance.customColorLowContrast": "この色は今の配色の背景と見分けにくく、選んでいる項目やフォーカスの枠が見えにくくなります。",
   "appearance.accentSaveFailed": "さし色を保存できませんでした。もう一度選んでください。",
+  "appearance.reduceMotion": "動きを減らす",
+  "appearance.reduceMotionHint": "オンにすると、パネルの開閉や画面の切り替えのアニメーションを省きます。",
+  "appearance.reduceMotion.system": "システムに合わせる",
+  "appearance.reduceMotion.on": "オン",
+  "appearance.reduceMotion.off": "オフ",
+  "appearance.reduceMotionSaveFailed": "動きを減らす設定を保存できませんでした。もう一度選んでください。",
 
   "section.home": "Home",
   "section.about": "About sshc",

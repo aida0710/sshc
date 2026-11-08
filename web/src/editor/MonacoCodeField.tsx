@@ -5,8 +5,8 @@ import * as monaco from "monaco-editor/editor/editor.api.js";
 import "./monacoEditorFeatures";
 import "monaco-editor/languages/definitions/shell/register.js";
 import { useTheme } from "../theme/context";
-import { editorCursorBlinking, reducedMotionQuery } from "../ui/reducedMotion";
-import { useMediaQuery } from "../ui/useMediaQuery";
+import { editorCursorBlinking } from "../ui/reducedMotion";
+import { useReducedMotion } from "../theme/motionContext";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
 import { codeFieldFrame, type CodeMarker, type LoadedCodeFieldProps } from "./CodeField";
 import { editorFontFamily } from "./editorFont";
@@ -48,7 +48,7 @@ export function MonacoCodeField({
   leave.current = onBlur;
   const [height, setHeight] = useState(linesHeight(minLines));
   const { scheme } = useTheme();
-  const reducedMotion = useMediaQuery(reducedMotionQuery);
+  const reducedMotion = useReducedMotion();
   const sshConfig = language === "ssh-config";
 
   useEffect(() => {

@@ -9,6 +9,7 @@ import { defaultTheme, isFirstDarkTheme, isTheme, themeAttributes, themeLabel, t
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { CustomAccentColor } from "./CustomAccentColor";
+import { ReduceMotionField } from "./ReduceMotionField";
 import { SettingsSection } from "./SettingsSection";
 import { FieldRow } from "../ui/FieldRow";
 import { standardPresetId, updatePreset, useSettings, type SettingsPreset } from "./settingsStore";
@@ -31,9 +32,9 @@ function accentColorOnScreen(): string {
   return parseAccentColor(getComputedStyle(document.documentElement).getPropertyValue("--ui-accent")) ?? "#6550d0"; // palette-exempt
 }
 
-// The look of the app in the preset being edited: the theme and the accent colour. While it is the preset this
-// machine uses, the screen shows each choice at once; another preset's choices only show on the machines that
-// use it.
+// The look of the app in the preset being edited: the theme, the accent colour and whether to reduce motion.
+// While it is the preset this machine uses, the screen shows each choice at once; another preset's choices only
+// show on the machines that use it.
 export function AppearanceSettingsSection({ presetId, showHeading }: { presetId: string; showHeading: boolean }) {
   const t = useTranslate();
   const settingsDocument = useSettings().document;
@@ -127,6 +128,7 @@ export function AppearanceSettingsSection({ presetId, showHeading }: { presetId:
           {saving.error === "" ? null : <div className="mt-4"><Notice tone="danger">{saving.error}</Notice></div>}
         </div>
       </FieldRow>
+      <ReduceMotionField presetId={presetId} />
     </SettingsSection>
   );
 }
