@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/recent"
 	"sshc/internal/storage"
 )
@@ -100,18 +100,13 @@ func TestOnlyTheFirstHostsOfABusyHourAreKeptButEveryConnectionIsCounted(t *testi
 func TestABrokenActivityFileIsRefusedRatherThanOverwritten(t *testing.T) {
 	clock := time.Date(2026, 11, 8, 7, 0, 0, 0, time.UTC)
 	store := newActivityStore(t, &clock)
-	if err := os.MkdirAll(filepath.Dir(store.Path()), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	for _, contents := range []string{
 		`{"schemaVersion":1,"hours":[{"hour":"2026-11-08T07:30:00Z","connections":1,"aliases":["web"]}]}`,
 		`{"schemaVersion":1,"hours":[{"hour":"2026-11-08T08:00:00Z","connections":1,"aliases":["web"]},{"hour":"2026-11-08T07:00:00Z","connections":1,"aliases":["db"]}]}`,
 		`{"schemaVersion":1,"hours":[{"hour":"2026-11-08T07:00:00Z","connections":0,"aliases":[]}]}`,
 		`{"schemaVersion":1,"hours":[{"hour":"2026-11-08T07:00:00Z","connections":2,"aliases":["web","web"]}]}`,
 	} {
-		if err := os.WriteFile(store.Path(), []byte(contents), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		acltest.WritePrivateFile(t, store.Path(), []byte(contents))
 		if err := store.Record("web"); !errors.Is(err, recent.ErrInvalidActivity) {
 			t.Fatalf("Record over %s = %v, want ErrInvalidActivity", contents, err)
 		}
@@ -125,9 +120,7 @@ func TestAnActivityFileFromANewerSSHCIsNotRead(t *testing.T) {
 	clock := time.Date(2026, 11, 8, 7, 0, 0, 0, time.UTC)
 	store := newActivityStore(t, &clock)
 	record(t, store, "web")
-	if err := os.WriteFile(store.Path(), []byte(`{"schemaVersion":2,"hours":[]}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, store.Path(), []byte(`{"schemaVersion":2,"hours":[]}`))
 
 	if _, err := store.List(); !errors.Is(err, recent.ErrUnsupportedVersion) {
 		t.Fatalf("List = %v, want ErrUnsupportedVersion", err)
