@@ -281,6 +281,8 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		KnownHosts:            services.knownHosts,
 		RemoteKeys:            services.remoteKeys,
 		Recent:                services.recent,
+		ConnectionActivity:    services.activity,
+		MachineStatus:         services.machineStatus,
 		SFTP:                  services.sftp,
 		SFTPTransferStatePath: filepath.Join(services.workspace.StateDir(), sftpTransferStateName),
 		SFTPDownloadSpoolRoot: dependencies.SFTPDownloadSpoolRoot,
@@ -292,6 +294,9 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		ConnectionOpened: func(alias string) {
 			if err := services.recentStore.Record(alias); err != nil && dependencies.Logger != nil {
 				dependencies.Logger.Warn("record recent SSH connection", "alias", alias, "error", err)
+			}
+			if err := services.activity.Record(alias); err != nil && dependencies.Logger != nil {
+				dependencies.Logger.Warn("record SSH connection activity", "alias", alias, "error", err)
 			}
 		},
 		Sync:                      services.sync,

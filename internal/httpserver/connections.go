@@ -39,6 +39,11 @@ func (h ConnectionHandlers) ListRecent(c *echo.Context) error {
 	if err != nil {
 		return unexpectedProblem(c, "recent_connections_failed", err)
 	}
+	return c.JSON(http.StatusOK, api.RecentConnectionList{Connections: recentConnectionsForAPI(connections)})
+}
+
+// recentConnectionsForAPI は、最近の接続を Home とターミナルの空の状態が読む形にする。
+func recentConnectionsForAPI(connections []recent.Connection) []api.RecentConnection {
 	listed := make([]api.RecentConnection, 0, len(connections))
 	for _, connection := range connections {
 		listed = append(listed, api.RecentConnection{
@@ -46,7 +51,7 @@ func (h ConnectionHandlers) ListRecent(c *echo.Context) error {
 			Port: connection.Port, LastConnectedAt: connection.LastConnectedAt,
 		})
 	}
-	return c.JSON(http.StatusOK, api.RecentConnectionList{Connections: listed})
+	return listed
 }
 
 func (h ConnectionHandlers) Create(c *echo.Context) error {

@@ -52,6 +52,7 @@ var neverTravels = slices.Concat([]string{
 	keys.TrashPathRelative,
 	// 接続履歴はこの端末での操作状態であり、別の端末へ移さない。
 	recent.PathRelative,
+	recent.ActivityPathRelative,
 	// 止まったときに開いていたセッションは、このマシンのエンジンが開き直すためのもの。
 	terminalrestore.PathRelative,
 	// Browser enrolment is a capability for this device's loopback origin. Only

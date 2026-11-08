@@ -138,6 +138,8 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodGet, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},
 		{http.MethodPost, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},
 		{http.MethodDelete, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},
+		{http.MethodGet, "/api/v1/engines/r100/terminal/machine", "r100 /api/v1/terminal/machine"},
+		{http.MethodGet, "/api/v1/engines/r100/terminal/connection-history", "r100 /api/v1/terminal/connection-history"},
 	} {
 		directory.forwarded = nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)

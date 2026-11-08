@@ -839,6 +839,19 @@ type ConflictReport struct {
 	Path           string     `json:"path"`
 }
 
+// ConnectionHistory defines model for ConnectionHistory.
+type ConnectionHistory struct {
+	Hours  []ConnectionHour   `json:"hours"`
+	Recent []RecentConnection `json:"recent"`
+}
+
+// ConnectionHour defines model for ConnectionHour.
+type ConnectionHour struct {
+	Aliases     []string  `json:"aliases"`
+	Connections int       `json:"connections"`
+	Hour        time.Time `json:"hour"`
+}
+
 // ConnectionIdentityFileChange defines model for ConnectionIdentityFileChange.
 type ConnectionIdentityFileChange = json.RawMessage
 
@@ -1227,6 +1240,16 @@ type LocalShellProfile struct {
 // LocalShellProfileList defines model for LocalShellProfileList.
 type LocalShellProfileList struct {
 	Profiles []LocalShellProfile `json:"profiles"`
+}
+
+// MachineStatus defines model for MachineStatus.
+type MachineStatus struct {
+	CpuPercent       *float32 `json:"cpuPercent,omitempty"`
+	Hostname         string   `json:"hostname"`
+	MemoryTotalBytes *int64   `json:"memoryTotalBytes,omitempty"`
+	MemoryUsedBytes  *int64   `json:"memoryUsedBytes,omitempty"`
+	Os               string   `json:"os"`
+	UptimeSeconds    *int64   `json:"uptimeSeconds,omitempty"`
 }
 
 // MoveTerminalSessionRequest defines model for MoveTerminalSessionRequest.

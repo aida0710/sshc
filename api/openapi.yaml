@@ -534,7 +534,7 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
   # 実行先に足した接続先のエンジン。/api/v1/engines/{alias}/terminal… は、接続先の
-  # /api/v1/terminal… へそのまま取り次ぐ（Go の forwardedTerminalRoutes と同じ並び）。
+  # /api/v1/terminal… へそのまま取り次ぐ（Go の registerRemoteEngineRoutes と同じ並び）。
   /api/v1/engines:
     get:
       operationId: listRemoteEngines
@@ -1146,6 +1146,76 @@ paths:
           minLength: 1
           maxLength: 64
       description: Forwarded unchanged to the same terminal operation of the remote engine added as {alias}.
+  /api/v1/engines/{alias}/terminal/machine:
+    get:
+      operationId: remoteEngineGetTerminalMachineStatus
+      responses:
+        '400':
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: The machine the remote engine runs on
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MachineStatus'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: >-
+        Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. An engine
+        older than this route answers 404, and the screen then leaves the overview out.
+  /api/v1/engines/{alias}/terminal/connection-history:
+    get:
+      operationId: remoteEngineGetTerminalConnectionHistory
+      responses:
+        '400':
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Terminal SSH connections the remote engine opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionHistory'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: alias
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+      description: >-
+        Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. An engine
+        older than this route answers 404, and the screen then leaves the overview out.
   /api/v1/engines/{alias}/terminal/sessions/{id}/stream:
     post:
       operationId: remoteEngineIssueTerminalStreamTicket
@@ -1757,6 +1827,37 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  # ターミナルの空の状態に出す、このエンジンが動くマシンの状態と接続の記録。実行先のエンジンの
+  # ものは /api/v1/engines/{alias}/terminal/… から取り次ぐ。
+  /api/v1/terminal/machine:
+    get:
+      operationId: getTerminalMachineStatus
+      responses:
+        "200":
+          description: >-
+            The machine this engine runs on. Values the operating system does not give are left out, and the
+            CPU use is the average since the previous read, so the first read has none.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MachineStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/connection-history:
+    get:
+      operationId: getTerminalConnectionHistory
+      responses:
+        "200":
+          description: >-
+            Terminal SSH connections this engine opened, counted per UTC hour over the last 372 days, and the
+            most recent connections
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionHistory" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/destinations/{connectionAlias}:
     get:
       operationId: resolveTerminalDestination
@@ -6778,6 +6879,50 @@ components:
           type: array
           maxItems: 20
           items: { $ref: "#/components/schemas/RecentConnection" }
+    # エンジンが動くマシンの状態。OS が出さない値は省く（macOS は CPU と使用中のメモリ、FreeBSD と
+    # OpenBSD は使用中のメモリを出さない）。
+    MachineStatus:
+      type: object
+      additionalProperties: false
+      required: [hostname, os]
+      properties:
+        hostname: { type: string, maxLength: 255 }
+        # Go の runtime.GOOS（linux、darwin、windows、freebsd、openbsd、android）。
+        os: { type: string, minLength: 1, maxLength: 32 }
+        uptimeSeconds: { type: integer, format: int64, minimum: 0 }
+        # 前に読んだときからの平均。初めて読んだときは無い。
+        cpuPercent: { type: number, minimum: 0, maximum: 100 }
+        memoryTotalBytes: { type: integer, format: int64, minimum: 0 }
+        memoryUsedBytes: { type: integer, format: int64, minimum: 0 }
+    # ターミナルの SSH 接続の記録。日の区切りは画面を見る人のタイムゾーンで決まるので、回数は UTC の
+    # 1 時間ごとに渡し、画面が日へまとめる。
+    ConnectionHistory:
+      type: object
+      additionalProperties: false
+      required: [hours, recent]
+      properties:
+        # 古い順。接続の無い時間は含めない。372 日 × 24 時間まで。
+        hours:
+          type: array
+          maxItems: 8928
+          items: { $ref: "#/components/schemas/ConnectionHour" }
+        recent:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/RecentConnection" }
+    ConnectionHour:
+      type: object
+      additionalProperties: false
+      required: [hour, connections, aliases]
+      properties:
+        # その時間の始まり（UTC）。
+        hour: { type: string, format: date-time }
+        connections: { type: integer, minimum: 1 }
+        # その時間に接続した接続先。期間の中の台数を数えるためのもので、32 までしか覚えない。
+        aliases:
+          type: array
+          maxItems: 32
+          items: { type: string, minLength: 1, maxLength: 64 }
     HostEntry:
       type: object
       additionalProperties: false
