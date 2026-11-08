@@ -134,6 +134,21 @@ describe("AppearanceSettingsSection", () => {
     expect(saved).toEqual([true]);
   });
 
+  it("draws nothing behind the empty terminal until an art is chosen, and saves the one chosen", async () => {
+    const server = fakeSettingsServer();
+    renderSection();
+    const arts = screen.getByRole("radiogroup", { name: "Background with no session" });
+    expect(within(arts).getByRole("radio", { name: /^None/ })).toBeChecked();
+
+    await userEvent.click(within(arts).getByRole("radio", { name: "Globe" }));
+
+    await waitFor(() => {
+      const saved = server.writesTo("/api/v1/settings/presets/default")
+        .map((body) => (body as { preset: { appearance?: { emptyTerminalArt?: string } } }).preset.appearance?.emptyTerminalArt);
+      expect(saved).toEqual(["globe"]);
+    });
+  });
+
   it("switches the theme from the same page", async () => {
     fakeSettingsServer();
     renderSection();

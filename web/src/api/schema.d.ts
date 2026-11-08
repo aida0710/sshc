@@ -4574,6 +4574,8 @@ export interface components {
         AppearanceSettings: {
             accent?: string;
             theme?: string;
+            /** @enum {string} */
+            emptyTerminalArt?: "none" | "network" | "contours" | "globe";
             reduceMotion?: boolean;
         };
         TerminalAppearance: {

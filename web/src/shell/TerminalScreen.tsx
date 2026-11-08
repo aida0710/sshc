@@ -42,10 +42,15 @@ export function TerminalScreen({
   onOpenLocalShell,
   onAddConnection,
   onOpenSync,
+  onOpenConnection,
+  onShowConnections,
 }: {
   onOpenLocalShell: () => void;
   onAddConnection: () => void;
   onOpenSync: () => void;
+  // onOpenConnection opens a session to a connection the empty state lists as used recently.
+  onOpenConnection: (alias: string) => void;
+  onShowConnections: () => void;
   // onOpenNavigation opens the sidebar from a phone's terminal top bar; undefined while the sidebar stays open.
   onOpenNavigation?: (() => void) | undefined;
   visible: boolean;
@@ -171,7 +176,7 @@ export function TerminalScreen({
     <div className={refusal === null ? "h-full" : "invisible h-full"} inert={refusal !== null}>
       <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} retainedTerminals={settings.retainedTerminals ?? defaultRetainedTerminals} renderTerminal={renderTerminal}
         // Until the engine answers, it is not known to have no sessions.
-        emptyState={terminalSessions.loaded ? <TerminalEmptyState runTarget={runTarget} onOpenLocalShell={onOpenLocalShell} onAddConnection={onAddConnection} onOpenSync={onOpenSync} /> : null}
+        emptyState={terminalSessions.loaded ? <TerminalEmptyState runTarget={runTarget} visible={visible} onOpenLocalShell={onOpenLocalShell} onAddConnection={onAddConnection} onOpenSync={onOpenSync} onOpenConnection={onOpenConnection} onShowConnections={onShowConnections} /> : null}
       />
     </div>
     {waitingForEngine ? (
