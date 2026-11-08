@@ -77,6 +77,8 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.GET("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/sessions", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/shell-profiles", handlers.ForwardTerminal)
+	engine.GET("/api/v1/engines/:alias/terminal/machine", handlers.ForwardTerminal)
+	engine.GET("/api/v1/engines/:alias/terminal/connection-history", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/destinations/:connectionAlias", handlers.ForwardTerminal)
 	// クイックコマンドと一括送信は取り次がない。このマシンでスニペットを展開し、確認のトークンを
 	// 2段にして送る（remote_terminal_commands.go）。

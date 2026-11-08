@@ -611,6 +611,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/engines/{alias}/terminal/machine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. An engine older than this route answers 404, and the screen then leaves the overview out. */
+        get: operations["remoteEngineGetTerminalMachineStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/engines/{alias}/terminal/connection-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. An engine older than this route answers 404, and the screen then leaves the overview out. */
+        get: operations["remoteEngineGetTerminalConnectionHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/engines/{alias}/terminal/sessions/{id}/stream": {
         parameters: {
             query?: never;
@@ -825,6 +859,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listLocalShellProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/machine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTerminalMachineStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/terminal/connection-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTerminalConnectionHistory"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4420,6 +4486,27 @@ export interface components {
         RecentConnectionList: {
             connections: components["schemas"]["RecentConnection"][];
         };
+        MachineStatus: {
+            hostname: string;
+            os: string;
+            /** Format: int64 */
+            uptimeSeconds?: number;
+            cpuPercent?: number;
+            /** Format: int64 */
+            memoryTotalBytes?: number;
+            /** Format: int64 */
+            memoryUsedBytes?: number;
+        };
+        ConnectionHistory: {
+            hours: components["schemas"]["ConnectionHour"][];
+            recent: components["schemas"]["RecentConnection"][];
+        };
+        ConnectionHour: {
+            /** Format: date-time */
+            hour: string;
+            connections: number;
+            aliases: string[];
+        };
         HostEntry: {
             identity: components["schemas"]["HostIdentity"];
             file: components["schemas"]["FileRef"];
@@ -6847,6 +6934,64 @@ export interface operations {
             502: components["responses"]["Problem"];
         };
     };
+    remoteEngineGetTerminalMachineStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The machine the remote engine runs on */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineStatus"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    remoteEngineGetTerminalConnectionHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terminal SSH connections the remote engine opened */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionHistory"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
     remoteEngineIssueTerminalStreamTicket: {
         parameters: {
             query?: {
@@ -7319,6 +7464,53 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    getTerminalMachineStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The machine this engine runs on. Values the operating system does not give are left out, and the CPU use is the average since the previous read, so the first read has none. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    getTerminalConnectionHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terminal SSH connections this engine opened, counted per UTC hour over the last 372 days, and the most recent connections */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionHistory"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
         };
     };
     resolveTerminalDestination: {

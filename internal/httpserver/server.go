@@ -25,6 +25,7 @@ import (
 	"sshc/internal/handoff"
 	"sshc/internal/knownhosts"
 	"sshc/internal/loopbackpeer"
+	"sshc/internal/machinestatus"
 	"sshc/internal/platform"
 	"sshc/internal/recent"
 	"sshc/internal/releasewatch"
@@ -96,7 +97,11 @@ type Options struct {
 	RemoteKeys    *remotekey.Service
 	// Recent は、この端末で成功した接続を現在の設定へ解決する。
 	Recent *recent.Service
-	SFTP   *sshcSFTP.Service
+	// ConnectionActivity は、ターミナルの SSH 接続の回数を時間ごとに持つ。nil なら空の記録を返す。
+	ConnectionActivity *recent.ActivityStore
+	// MachineStatus は、このエンジンが動くマシンの状態を読む。nil なら CPU の使用率の無い状態を返す。
+	MachineStatus *machinestatus.Sampler
+	SFTP          *sshcSFTP.Service
 	// SFTPTransferStatePath stores the device-local transfer ledger. Empty keeps
 	// the historical in-memory behavior used by small handler tests.
 	SFTPTransferStatePath string
@@ -454,6 +459,9 @@ func New(options Options) (*Server, error) {
 	}
 	if options.Terminals != nil {
 		registerTerminalRoutes(e, newTerminalHandlers(options, actions, host))
+		registerTerminalOverviewRoutes(e, TerminalOverviewHandlers{
+			Machine: options.MachineStatus, Activity: options.ConnectionActivity, Recent: options.Recent,
+		})
 		if options.RemoteEngines != nil {
 			registerRemoteEngineRoutes(e, RemoteEngineHandlers{
 				Engines: options.RemoteEngines, ExpectedOrigin: "http://" + host, Snippets: options.Snippets, Actions: actions,

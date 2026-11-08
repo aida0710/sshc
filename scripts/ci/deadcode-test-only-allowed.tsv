@@ -23,3 +23,4 @@ internal/vpn/backend.go	Backends	backends の表の外に方式の並びを持�
 internal/vpn/failure.go	FailureReasons	理由の言い方を持つ internal/vpnrefusal のテストが、言い方の足し忘れを見つける。
 internal/terminal/network.go	NewNetworkWatch	Android の engine だけが作る（mobile/）。PC は回線の有無を OS から聞かないので nil のまま使う。
 internal/terminal/network.go	NetworkWatch.SetAvailable	Android の ConnectivityManager の知らせを mobile.SetNetworkAvailable が渡す。呼び手は JNI の向こうに居る。
+internal/machinestatus/cptime.go	parseCPTime	FreeBSD と OpenBSD の engine だけが使う（read_bsd.go）。deadcode は Linux・macOS・Windows だけを見るので届かないと数える。BSD の外のテストからも確かめられるよう、OS の指定の無いファイルに置く。
