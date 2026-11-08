@@ -125,15 +125,15 @@ describe("TerminalEmptyState", () => {
     expect(screen.queryByRole("region", { name: "Recent connections" })).toBeNull();
   });
 
-  it("draws no art until one is chosen", () => {
+  it("draws the network behind the tiles until another art is chosen", () => {
     fakeSettingsServer();
     const { container } = renderEmptyState(null);
-    expect(container.querySelector("canvas")).toBeNull();
+    expect(container.querySelector("canvas")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("draws the art the preset chooses behind the tiles", () => {
-    fakeSettingsServer({ presets: [{ id: "default", appearance: { emptyTerminalArt: "globe" } }] });
+  it("draws no art when the preset chooses none", () => {
+    fakeSettingsServer({ presets: [{ id: "default", appearance: { emptyTerminalArt: "none" } }] });
     const { container } = renderEmptyState(null);
-    expect(container.querySelector("canvas")).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector("canvas")).toBeNull();
   });
 });

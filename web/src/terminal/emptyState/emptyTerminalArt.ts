@@ -10,8 +10,9 @@ export type EmptyTerminalArt = "none" | "network" | "contours" | "globe";
 
 export const emptyTerminalArts: readonly EmptyTerminalArt[] = ["none", "network", "contours", "globe"];
 
-// Nothing is drawn until the art is chosen: a moving picture costs battery, and the empty state looked so before.
-export const defaultEmptyTerminalArt: EmptyTerminalArt = "none";
+// The network is drawn until another art is chosen. A preset that chooses none keeps "none", so the choice of no
+// picture (to spare the battery) stays.
+export const defaultEmptyTerminalArt: EmptyTerminalArt = "network";
 
 export type DrawnArt = Exclude<EmptyTerminalArt, "none">;
 

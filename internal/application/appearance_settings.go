@@ -15,7 +15,7 @@ var ErrMetadataAppearance = errors.New("appearance settings are out of range")
 var appearanceAccents = []string{"lavender", "blue", "sky", "pink", "mono"}
 
 // emptyTerminalArts は、開いているセッションが無いときのターミナルに描く絵の名前である。絵は画面
-// （web/src/terminal/emptyState/）が描く。空は none と同じで、絵を描かない。
+// （web/src/terminal/emptyState/）が描く。空は既定の network と同じ。none は絵を描かない。
 var emptyTerminalArts = []string{"none", "network", "contours", "globe"}
 
 // accentColorPattern は、利用者が決めた色の形（#rrggbb、小文字）である。画面は
@@ -35,7 +35,7 @@ type AppearanceSettings struct {
 	// 利用者が決めた色（#rrggbb、小文字）。空は既定の色（画面の既定は lavender）。
 	Accent string `json:"accent,omitempty"`
 	// EmptyTerminalArt は、開いているセッションが無いときのターミナルに描く絵である
-	// （emptyTerminalArts の名前）。空は none と同じ。
+	// （emptyTerminalArts の名前）。空は既定の絵（画面の既定は network）。
 	EmptyTerminalArt string `json:"emptyTerminalArt,omitempty"`
 	// ReduceMotion は、画面のアニメーションを省くかである。nil は OS の設定（prefers-reduced-motion）に
 	// 従う。画面だけが読み、エンジンは使わない。
