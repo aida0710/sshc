@@ -552,7 +552,7 @@ export function App({
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                       onOpenNavigation={navigationPinned ? undefined : () => setNavigationOpen(true)}
-                      onOpenLocalShell={() => void openLocalShell()}
+                      onNewSession={() => requestSession({ action: "newSession" })}
                       onAddConnection={addConnection}
                       onOpenSync={() => navigate("Sync")}
                       onOpenConnection={(alias) => void openSSHSession(alias)}
