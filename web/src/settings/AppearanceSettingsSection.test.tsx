@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeSettingsServer } from "../testing/settingsServer";
 import { AccentProvider } from "../theme/accentContext";
 import { ThemeProvider } from "../theme/context";
+import { MotionProvider } from "../theme/motionContext";
 import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
 
 beforeEach(() => {
@@ -19,6 +20,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   document.documentElement.removeAttribute("data-accent");
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-motion");
   document.documentElement.removeAttribute("style");
 });
 
@@ -26,7 +28,9 @@ function renderSection() {
   return render(
     <ThemeProvider initial="dark">
       <AccentProvider>
-        <AppearanceSettingsSection presetId="default" showHeading />
+        <MotionProvider>
+          <AppearanceSettingsSection presetId="default" showHeading />
+        </MotionProvider>
       </AccentProvider>
     </ThemeProvider>,
   );
@@ -114,6 +118,20 @@ describe("AppearanceSettingsSection", () => {
     await waitFor(() => expect(accentsWritten(server).at(-1)).toBe("blue"));
     expect(document.documentElement).toHaveAttribute("data-accent", "blue");
     expect(screen.queryByRole("textbox", { name: "Custom colour code" })).toBeNull();
+  });
+
+  it("reduces motion at once when on is chosen, and saves it in the preset", async () => {
+    const server = fakeSettingsServer();
+    renderSection();
+    const choices = screen.getByRole("group", { name: "Reduce motion" });
+    expect(within(choices).getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(within(choices).getByRole("button", { name: "On" }));
+
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("data-motion", "reduce"));
+    const saved = server.writesTo("/api/v1/settings/presets/default")
+      .map((body) => (body as { preset: { appearance?: { reduceMotion?: boolean } } }).preset.appearance?.reduceMotion);
+    expect(saved).toEqual([true]);
   });
 
   it("switches the theme from the same page", async () => {

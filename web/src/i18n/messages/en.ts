@@ -1540,6 +1540,12 @@ export const en = {
   "appearance.customColorInvalid": "Enter the colour as #rrggbb.",
   "appearance.customColorLowContrast": "This colour is hard to tell from the background in this theme, so the current item and the focus frame are hard to see.",
   "appearance.accentSaveFailed": "The accent colour could not be saved. Choose it again.",
+  "appearance.reduceMotion": "Reduce motion",
+  "appearance.reduceMotionHint": "When on, panels open and close and screens change without animation.",
+  "appearance.reduceMotion.system": "System",
+  "appearance.reduceMotion.on": "On",
+  "appearance.reduceMotion.off": "Off",
+  "appearance.reduceMotionSaveFailed": "The reduce motion setting could not be saved. Choose it again.",
 
   "section.home": "Home",
   "section.about": "About sshc",
