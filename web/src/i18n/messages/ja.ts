@@ -1560,7 +1560,6 @@ export const ja = {
   "appearance.emptyTerminalArt.network": "ネットワーク",
   "appearance.emptyTerminalArt.contours": "等高線",
   "appearance.emptyTerminalArt.globe": "地球儀",
-  "appearance.emptyTerminalArtNoneNote": "電池を使わない",
   "appearance.emptyTerminalArtSaveFailed": "セッションが無いときの背景を保存できませんでした。もう一度選んでください。",
   "appearance.reduceMotion": "動きを減らす",
   "appearance.reduceMotionHint": "オンにすると、背景の絵を止め、パネルの開閉や画面の切り替えのアニメーションを省きます。",

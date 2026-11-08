@@ -53,7 +53,6 @@ export function EmptyTerminalArtField({ presetId }: { presetId: string }) {
               <span className="flex flex-wrap items-center gap-x-2 text-ink-muted peer-checked:text-ink peer-checked:[&>span:first-child]:border-[5px] peer-checked:[&>span:first-child]:border-accent">
                 <span aria-hidden="true" className="size-4 shrink-0 rounded-full border-[1.5px] border-ink-faint" />
                 {t(artLabelKeys[art])}
-                {art === "none" ? <small className="basis-full pl-6 text-[11.5px] text-ink-faint">{t("appearance.emptyTerminalArtNoneNote")}</small> : null}
               </span>
             </label>
           ))}

@@ -1561,7 +1561,6 @@ export const en = {
   "appearance.emptyTerminalArt.network": "Network",
   "appearance.emptyTerminalArt.contours": "Contours",
   "appearance.emptyTerminalArt.globe": "Globe",
-  "appearance.emptyTerminalArtNoneNote": "Uses no battery",
   "appearance.emptyTerminalArtSaveFailed": "The background with no session could not be saved. Choose it again.",
   "appearance.reduceMotion": "Reduce motion",
   "appearance.reduceMotionHint": "When on, the background picture stops, and panels open and close and screens change without animation.",
