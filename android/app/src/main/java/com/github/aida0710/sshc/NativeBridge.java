@@ -1,5 +1,6 @@
 package com.github.aida0710.sshc;
 
+import android.view.HapticFeedbackConstants;
 import android.webkit.JavascriptInterface;
 
 import java.io.IOException;
@@ -27,7 +28,14 @@ final class NativeBridge {
         /** 選んだフォルダの一覧（JSON）。無ければ空文字。 */
         String takeChosenFolder(String requestId);
         void releaseChosenFolder();
+        /** constant は HapticFeedbackConstants の値。 */
+        void performHapticFeedback(int constant);
+        /** Web 画面が最初の画面を中身まで描いた。起動のスプラッシュをやめてよい。 */
+        void firstScreenShown();
     }
+
+    /** 振動の種類が無いときの hapticFeedbackConstant の値。 */
+    static final int NO_HAPTIC_FEEDBACK = -1;
 
     // 通知に載せる文字数の上限。プログラムが送る本文を際限なく Android へ渡さない。
     static final int MAX_NOTIFICATION_TITLE = 200;
@@ -169,6 +177,28 @@ final class NativeBridge {
     public void cancelNotification(String tag) {
         if (!validNotificationTag(tag)) return;
         host.cancelNotification(tag);
+    }
+
+    /**
+     * 触って分かる反応（振動）を鳴らす。種類は Web 画面の HapticFeedback（web/src/android/haptics.ts）。
+     * システムの振動の設定に従わせるため、Vibrator ではなく View の performHapticFeedback で鳴らす。
+     */
+    @JavascriptInterface
+    public void performHapticFeedback(String feedback) {
+        int constant = hapticFeedbackConstant(feedback);
+        if (constant != NO_HAPTIC_FEEDBACK) host.performHapticFeedback(constant);
+    }
+
+    /** 最初の画面を中身まで描いたことを知らせる。Web 画面はページを読み込むたびに 1 回呼ぶ。 */
+    @JavascriptInterface
+    public void firstScreenShown() {
+        host.firstScreenShown();
+    }
+
+    /** keyPress はキーボードのキーと同じ反応。長押しの反応は、ページが長押しを受けたときに WebView が自分で鳴らす。 */
+    static int hapticFeedbackConstant(String feedback) {
+        if ("keyPress".equals(feedback)) return HapticFeedbackConstants.KEYBOARD_TAP;
+        return NO_HAPTIC_FEEDBACK;
     }
 
     synchronized boolean openSave(String requestId, OutputStream output) {

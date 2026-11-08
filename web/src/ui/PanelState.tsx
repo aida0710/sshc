@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Spinner } from "./Spinner";
+import { loadingPlaceholder } from "./loadingPlaceholder";
 
 export type PanelStateTone = "loading" | "empty" | "failed";
 
@@ -32,6 +33,7 @@ export function PanelState({
     <div
       role={tone === "failed" ? "alert" : "status"}
       aria-busy={tone === "loading"}
+      {...(tone === "loading" ? loadingPlaceholder : {})}
       className={`flex min-h-32 flex-col items-center justify-center gap-2 px-4 py-8 text-center ${className}`}
     >
       {icon ?? (tone === "loading" ? <Spinner className="size-4 text-ink-muted" /> : null)}

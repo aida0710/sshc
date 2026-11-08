@@ -1,10 +1,11 @@
-import { Suspense, lazy } from "react";
+import { Suspense } from "react";
 import { OverviewPanel } from "../overview/OverviewPanel";
 import type { Section } from "../routing/sectionRoute";
 import { parseSettingsPage } from "../settings/settingsRoute";
 import type { SFTPTarget } from "../sftp/SFTPPanel";
 import { sessionSlotsLeft } from "../terminal/sessions";
 import { PageBoard } from "../ui/PageBoard";
+import { lazyWithPreload } from "../ui/lazyWithPreload";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import { useTranslate } from "../i18n/context";
 import { menuColumns } from "./menuEntries";
@@ -12,70 +13,83 @@ import { MenuPanel } from "./MenuPanel";
 import { sectionLabels } from "./sectionPresentation";
 import type { Declared, Handoff, Navigation, Shell } from "./sectionProps";
 
-const AboutPage = lazy(() => import("../about/AboutPage").then((module) => ({ default: module.AboutPage })));
-const LicensePage = lazy(() => import("../licenses/LicensePage").then((module) => ({ default: module.LicensePage })));
+const AboutPage = lazyWithPreload(() => import("../about/AboutPage").then((module) => ({ default: module.AboutPage })));
+const LicensePage = lazyWithPreload(() => import("../licenses/LicensePage").then((module) => ({ default: module.LicensePage })));
 
-const ConnectionsPage = lazy(() =>
+const ConnectionsPage = lazyWithPreload(() =>
   import("../connections/ConnectionsPage").then(({ ConnectionsPage }) => ({
     default: ConnectionsPage,
   })),
 );
-const ConfigExplorer = lazy(() =>
+const ConfigExplorer = lazyWithPreload(() =>
   import("../explorer/ConfigExplorer").then(({ ConfigExplorer }) => ({
     default: ConfigExplorer,
   })),
 );
-const HistoryPanel = lazy(() =>
+const HistoryPanel = lazyWithPreload(() =>
   import("../history/HistoryPanel").then(({ HistoryPanel }) => ({
     default: HistoryPanel,
   })),
 );
-const KeysScreen = lazy(() =>
+const KeysScreen = lazyWithPreload(() =>
   import("../keys/KeysScreen").then(({ KeysScreen }) => ({
     default: KeysScreen,
   })),
 );
-const DiagnosticsPanel = lazy(() =>
+const DiagnosticsPanel = lazyWithPreload(() =>
   import("../diagnostics/DiagnosticsPanel").then(({ DiagnosticsPanel }) => ({
     default: DiagnosticsPanel,
   })),
 );
-const SecretsPanel = lazy(() =>
+const SecretsPanel = lazyWithPreload(() =>
   import("../secrets/SecretsPanel").then(({ SecretsPanel }) => ({
     default: SecretsPanel,
   })),
 );
-const SettingsPanel = lazy(() =>
+const SettingsPanel = lazyWithPreload(() =>
   import("../settings/SettingsPanel").then(({ SettingsPanel }) => ({
     default: SettingsPanel,
   })),
 );
-const VPNPanel = lazy(() =>
+const VPNPanel = lazyWithPreload(() =>
   import("../vpn/VPNPanel").then(({ VPNPanel }) => ({ default: VPNPanel })),
 );
-const SyncPanel = lazy(() =>
+const SyncPanel = lazyWithPreload(() =>
   import("../sync/SyncPanel").then(({ SyncPanel }) => ({ default: SyncPanel })),
 );
-const KnownHostsPanel = lazy(() =>
+const KnownHostsPanel = lazyWithPreload(() =>
   import("../knownhosts/KnownHostsPanel").then(({ KnownHostsPanel }) => ({
     default: KnownHostsPanel,
   })),
 );
-const RemoteKeyPanel = lazy(() =>
+const RemoteKeyPanel = lazyWithPreload(() =>
   import("../remotekeys/RemoteKeyPanel").then(({ RemoteKeyPanel }) => ({
     default: RemoteKeyPanel,
   })),
 );
-const SFTPWorkspace = lazy(() =>
+const SFTPWorkspace = lazyWithPreload(() =>
   import("../sftp/SFTPWorkspace").then(({ SFTPWorkspace }) => ({
     default: SFTPWorkspace,
   })),
 );
-const SnippetsPanel = lazy(() =>
+const SnippetsPanel = lazyWithPreload(() =>
   import("../snippets/SnippetsPanel").then(({ SnippetsPanel }) => ({
     default: SnippetsPanel,
   })),
 );
+
+// preloadSectionPages fetches the code of every page drawn on demand, one after another, so that a page
+// opened for the first time is drawn at once instead of after its skeleton. The pages of the phone's bottom bar
+// come first, then the Menu's.
+export async function preloadSectionPages() {
+  const pages = [
+    ConnectionsPage, SFTPWorkspace, SettingsPanel, ConfigExplorer, KeysScreen, KnownHostsPanel, RemoteKeyPanel, SecretsPanel,
+    SnippetsPanel, SyncPanel, VPNPanel, HistoryPanel, DiagnosticsPanel, AboutPage, LicensePage,
+  ];
+  for (const page of pages) {
+    await page.preload();
+  }
+}
 
 export const startSections: Section[] = ["Home", "Connections", "Files"];
 

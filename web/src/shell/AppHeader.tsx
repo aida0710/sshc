@@ -5,6 +5,10 @@ import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
 import { type RefObject } from "react";
 
+// A slot of the top bar shows only while it holds something shown. A kept section that is hidden (KeptSections)
+// leaves its way back and its actions in the slots, hidden with an inline display: none (PageChromePortal).
+const hiddenWithoutShownContent = "[&:not(:has(>:not([style*='display:_none'])))]:hidden";
+
 export function AppHeader({
   route,
   navigationOpen,
@@ -41,7 +45,8 @@ export function AppHeader({
   const { t } = useLanguage();
   return (
     <header data-app-header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:hidden">
-      <div ref={backSlotRef} data-page-back className="flex shrink-0 items-center empty:hidden" />
+      <div ref={backSlotRef} data-page-back className={`flex shrink-0 items-center ${hiddenWithoutShownContent}`} />
+      {/* The menu button gives way to a page's way back that is shown. */}
       {navigationPinned ? null : <button
         ref={navigationToggleRef}
         type="button"
@@ -49,7 +54,7 @@ export function AppHeader({
         aria-expanded={navigationOpen}
         aria-controls={navigationId}
         onClick={onToggleNavigation}
-        className="grid h-10 w-10 shrink-0 place-items-center rounded text-ink-muted hover:bg-select-fill hover:text-ink [[data-page-back]:not(:empty)~&]:hidden"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded text-ink-muted hover:bg-select-fill hover:text-ink [[data-page-back]:has(>:not([style*='display:_none']))~&]:hidden"
       >
         <Icon name="menu" className="h-4 w-4" />
       </button>}
@@ -60,7 +65,7 @@ export function AppHeader({
           : t("shell.pageNotFound")}
       </p>
 
-      <div ref={actionsSlotRef} data-page-actions className="flex shrink-0 items-center gap-2 empty:hidden" />
+      <div ref={actionsSlotRef} data-page-actions className={`flex shrink-0 items-center gap-2 ${hiddenWithoutShownContent}`} />
 
       {inspector === null ? null : (
         <span className="shrink-0 [&>button]:h-10 [&>button]:min-w-10 [&>button]:justify-center">

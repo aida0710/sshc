@@ -3,7 +3,7 @@ import { usePresetLibrarySync } from "./settings/presetLibrary";
 import { useSettingsSync } from "./settings/settingsStore";
 import { useTerminalSettings } from "./settings/terminalSettings";
 import { opensInThisPage } from "./ui/linkClick";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { runsInAndroidApp } from "./android/native";
 import { type HealthResponse } from "./api/client";
 import { vaultApi, type PasswordVaultStatus } from "./api/vault";
@@ -54,7 +54,11 @@ import { mobileViewportQuery, navigationRailQuery, pinnedNavigationQuery, useMed
 import { useAppViewport } from "./ui/useAppViewport";
 import { useFieldLetGoOnLeaving } from "./ui/useFieldLetGoOnLeaving";
 import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckMark, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
-import { SectionView, navigationId, startSections } from "./shell/sections";
+import { navigationId, startSections } from "./shell/sections";
+import { KeptSections } from "./shell/KeptSections";
+import { useKeptSections } from "./shell/useKeptSections";
+import { usePreloadedSectionPages } from "./shell/usePreloadedSectionPages";
+import { useFirstScreenReport } from "./android/firstScreen";
 import { sectionIcons, sectionLabels } from "./shell/sectionPresentation";
 import { TerminalScreen } from "./shell/TerminalScreen";
 import { useDeclaredConfig } from "./shell/useDeclaredConfig";
@@ -116,6 +120,9 @@ export function App({
   // The settings come with the engine being ready; the shell waits for them (settingsLoaded) so the screens
   // open with the widths and views this machine chose rather than the defaults first.
   const settingsLoaded = useSettingsSync(state === "ready");
+  const keptSections = useKeptSections({ shown: section, setNavigationBlocker });
+  usePreloadedSectionPages(state === "ready");
+  useFirstScreenReport(state !== "starting" && (state !== "ready" || settingsLoaded));
   const handoffs = useSectionHandoffs(navigate);
   const declared = useDeclaredConfig(state === "ready", section);
   const [desktopNavigationWidth, resizeDesktopNavigation] = useColumnWidth(navigationWidth);
@@ -560,56 +567,55 @@ export function App({
                     />
                   </div>
                 ) : null}
-                {route.kind === "section" ? (
-                  <PageChromeContext.Provider value={pageChrome}>
-                    <Suspense fallback={<RouteSkeleton />}>
-                      <SectionView
-                        key={route.section}
-                        section={route.section}
-                        navigation={{
-                          location,
-                          fileTarget: handoffs.fileTarget,
-                          onFileTargetHandled: handoffs.consumeFileTarget,
-                          onNavigate: navigate,
-                          onNavigateLocation: navigateLocation,
-                          onNavigateForCreation: (target: CreationPrerequisite) =>
-                            navigate(target),
-                          onOpenFile: handoffs.openFile,
-                          onNavigationBlockerChange: setNavigationBlocker,
-                          onOpenSearch: openPalette,
-                        }}
-                        handoff={{
-                          connectionKey: handoffs.connectionKey,
-                          publicKey: handoffs.publicKey,
-                          connectionDraft: handoffs.connectionDraft,
-                          onAssignGeneratedKey: handoffs.assignGeneratedKey,
-                          onInstallGeneratedKey: handoffs.installGeneratedKey,
-                          onConnectionKeyApplied: handoffs.consumeConnectionKey,
-                          onPublicKeyHandled: handoffs.consumePublicKey,
-                          onConnectionDraftChange: handoffs.setConnectionDraft,
-                        }}
-                        shell={{
-                          onLock: session.lock,
-                          onVaultChanged: session.openVault,
-                          passwordless: session.passwordless,
-                          onInspector: setInspector,
-                          onShowInspector: () => setInspectorOpen(true),
-                          terminalSessions,
-                          onShowSession: showLocalSession,
-                          onOpenSSHSession: openSSHSession,
-                          onOpenSSHSessions: openSSHSessions,
-                          onOverviewRead: declared.adoptOverview,
-                          onOpenLocalShell: () => void openLocalShell(),
-                          onAddConnection: addConnection,
-                          onOpenTerminal: openSFTPTerminal,
-                        }}
-                        declared={{ groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN }}
-                        sftpTarget={handoffs.sftpTarget}
-                        onSftpTargetHandled={handoffs.consumeSftpTarget}
-                      />
-                    </Suspense>
-                  </PageChromeContext.Provider>
-                ) : (
+                <PageChromeContext.Provider value={pageChrome}>
+                  <KeptSections
+                    kept={keptSections.kept}
+                    shown={section}
+                    viewProps={{
+                      navigation: {
+                        location,
+                        fileTarget: handoffs.fileTarget,
+                        onFileTargetHandled: handoffs.consumeFileTarget,
+                        onNavigate: navigate,
+                        onNavigateLocation: navigateLocation,
+                        onNavigateForCreation: (target: CreationPrerequisite) =>
+                          navigate(target),
+                        onOpenFile: handoffs.openFile,
+                        onNavigationBlockerChange: keptSections.setNavigationBlocker,
+                        onOpenSearch: openPalette,
+                      },
+                      handoff: {
+                        connectionKey: handoffs.connectionKey,
+                        publicKey: handoffs.publicKey,
+                        connectionDraft: handoffs.connectionDraft,
+                        onAssignGeneratedKey: handoffs.assignGeneratedKey,
+                        onInstallGeneratedKey: handoffs.installGeneratedKey,
+                        onConnectionKeyApplied: handoffs.consumeConnectionKey,
+                        onPublicKeyHandled: handoffs.consumePublicKey,
+                        onConnectionDraftChange: handoffs.setConnectionDraft,
+                      },
+                      shell: {
+                        onLock: session.lock,
+                        onVaultChanged: session.openVault,
+                        passwordless: session.passwordless,
+                        onInspector: setInspector,
+                        onShowInspector: () => setInspectorOpen(true),
+                        terminalSessions,
+                        onShowSession: showLocalSession,
+                        onOpenSSHSession: openSSHSession,
+                        onOpenSSHSessions: openSSHSessions,
+                        onOverviewRead: declared.adoptOverview,
+                        onOpenLocalShell: () => void openLocalShell(),
+                        onAddConnection: addConnection,
+                        onOpenTerminal: openSFTPTerminal,
+                      },
+                      declared: { groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN },
+                      sftpTarget: handoffs.sftpTarget,
+                      onSftpTargetHandled: handoffs.consumeSftpTarget,
+                    }}
+                  />
+                </PageChromeContext.Provider>
+                {route.kind === "section" ? null : (
                   <NotFoundSection pathname={route.pathname} onGoHome={(event) => followSectionLink(event, "Home")} />
                 )}
               </div>

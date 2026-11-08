@@ -9,6 +9,7 @@ import type { KeyBarLayout } from "../keybar/keyBarLayout";
 import { isModifierKey, type KeyBarKey } from "../keybar/keySequences";
 import { KeyFace, spokenKeyName } from "../keybar/KeyFace";
 import { keyBarKeyGap } from "../keybar/keyBarStyles";
+import { playHaptic } from "../android/haptics";
 
 const keyShape =
   `h-11 min-w-0 rounded-[10px] font-mono text-[12.5px] active:bg-select-fill focus-visible:outline-2 focus-visible:outline-accent ${keyBarKeyGap}`;
@@ -31,6 +32,12 @@ const latchColors: Record<ModifierLatch, string> = {
 };
 
 const modifierNames = { Control: "ctrl", Alt: "alt" } as const satisfies Record<string, ModifierName>;
+
+// A key is felt as it goes down, as on the phone's keyboard, and leaves the keyboard as it is (keepKeyboardAsIs).
+function pressKeyDown(event: { preventDefault(): void }) {
+  keepKeyboardAsIs(event);
+  playHaptic("keyPress");
+}
 
 // KeyBar is the phone's row of keys above its text box, laid out by the key bar preset in use. The keys after
 // 「…」 open above the row.
@@ -98,7 +105,7 @@ export function KeyBar({
             aria-label={t("terminal.extraKeys")}
             title={t("terminal.extraKeys")}
             aria-expanded={moreOpen}
-            onPointerDown={keepKeyboardAsIs}
+            onPointerDown={pressKeyDown}
             onMouseDown={keepKeyboardAsIs}
             onClick={() => setMoreOpen((current) => !current)}
             className={`${keyShape} ${moreKeyWidth} ${moreOpen ? pressedKey : heldBehindMore === undefined ? idleKey : latchColors[modifiers[modifierNames[heldBehindMore]]]}`}
@@ -126,7 +133,7 @@ function ModifierKeyButton({ barKey, latch, onTap }: { barKey: KeyBarKey; latch:
       data-touch-compact
       aria-pressed={isModifierHeld(latch)}
       aria-label={latch === "locked" ? t("terminal.modifierLocked", { key: barKey.key === "Control" ? "Ctrl" : "Alt" }) : undefined}
-      onPointerDown={keepKeyboardAsIs}
+      onPointerDown={pressKeyDown}
       onMouseDown={keepKeyboardAsIs}
       onClick={onTap}
       className={`${keyShape} ${latchColors[latch]}`}
@@ -147,7 +154,7 @@ function DirectInputButton({ on, onTap }: { on: boolean; onTap: () => void }) {
       aria-pressed={on}
       aria-label={t("keyBar.directInput")}
       title={t("keyBar.directInput")}
-      onPointerDown={keepKeyboardAsIs}
+      onPointerDown={pressKeyDown}
       onMouseDown={keepKeyboardAsIs}
       onClick={onTap}
       className={`${keyShape} ${on ? latchColors.locked : idleKey}`}
@@ -165,7 +172,7 @@ function BarKeyButton({ barKey, onPress }: { barKey: KeyBarKey; onPress: (key: K
       type="button"
       data-touch-compact
       aria-label={spokenKeyName(t, barKey)}
-      onPointerDown={keepKeyboardAsIs}
+      onPointerDown={pressKeyDown}
       onMouseDown={keepKeyboardAsIs}
       onClick={() => onPress(barKey)}
       className={`${keyShape} ${idleKey} truncate px-0.5`}

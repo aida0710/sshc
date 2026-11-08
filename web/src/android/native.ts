@@ -1,4 +1,5 @@
 import type { ColorScheme } from "../theme/theme";
+import type { HapticFeedback } from "./haptics";
 import { newIdentifier } from "../ui/randomIdentifier";
 
 export type AndroidBridge = {
@@ -17,6 +18,8 @@ export type AndroidBridge = {
   chooseFolder(requestId: string): string;
   takeChosenFolder(requestId: string): string;
   releaseChosenFolder(): void;
+  performHapticFeedback(feedback: HapticFeedback): void;
+  firstScreenShown(): void;
 };
 
 type AndroidWindow = Window & { sshcAndroid?: AndroidBridge };
