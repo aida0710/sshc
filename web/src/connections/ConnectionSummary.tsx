@@ -1,7 +1,7 @@
 import { useContext } from "react";
-import { createPortal } from "react-dom";
 import { useTranslate } from "../i18n/context";
 import { PageChromeContext } from "../ui/pageChrome";
+import { PageChromePortal } from "../ui/PageChromePortal";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Button } from "../ui/surface";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
@@ -69,7 +69,7 @@ export function ConnectionSummary({
           </div>
           <p className="truncate font-mono text-[11.5px] text-ink-faint" title={summary.endpoint}>{summary.endpoint}</p>
         </div>
-        {phoneActionsSlot === null ? headerActions : createPortal(headerActions, phoneActionsSlot)}
+        {phoneActionsSlot === null ? headerActions : <PageChromePortal slot={phoneActionsSlot}>{headerActions}</PageChromePortal>}
       </header>
       {blocked ? <p id={reasonId} className="mt-3 text-xs text-notice-ink">{blockedReason()}</p> : null}
     </section>

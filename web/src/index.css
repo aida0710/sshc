@@ -791,6 +791,26 @@ select:not([multiple]):not([size]) {
   [data-modal-placement="sheet"] .sshc-modal-panel {
     animation-name: sshc-sheet-enter;
   }
+  /* A long press on the app's own words (a heading, a button, a label) does not select them, as in an app: the
+     browser's selection, with its Copy and Share bar, made sshc feel like a web page. What a person may want to
+     copy stays selectable: what is typed, the terminal (its selection layer is select-text), technical values
+     set in monospace (paths, fingerprints, keys, command output) and error messages, unless they are part of a
+     control. In a layer, so that a select-* utility on an element still decides for it. */
+  @layer base {
+    body {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+    :where(input, textarea, [contenteditable="true"]) {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+    :where(pre, code, samp, .font-mono, [role="alert"]):not(:where(button, a, label, summary, [role="button"], [role="menuitem"], [role="tab"])):not(:where(button, a, label, summary, [role="button"], [role="menuitem"], [role="tab"]) *) {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+  }
   /* A page's heading actions in the top bar (AppHeader) are drawn 30px tall so they do not fill the 48px
      bar. The ::after reaches past the button, up to half the gap beside it, so the place to press stays
      44px tall. */

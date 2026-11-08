@@ -1,6 +1,6 @@
 import { useContext, useId, type ComponentPropsWithoutRef, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { PageChromeContext } from "./pageChrome";
+import { PageChromePortal } from "./PageChromePortal";
 import { mobileViewportQuery, useMediaQuery } from "./useMediaQuery";
 
 // PageHeader is the top of a page: its name, a line on what it is for, and its main actions on the right.
@@ -44,7 +44,7 @@ export function PageHeader({
         {description === undefined ? null : <p className="mt-0.5 max-w-3xl text-xs leading-[18px] text-ink-faint">{description}</p>}
       </div>
       {actionsInTopBar
-        ? actions === undefined ? null : createPortal(actions, phoneActionsSlot)
+        ? actions === undefined ? null : <PageChromePortal slot={phoneActionsSlot}>{actions}</PageChromePortal>
         : hasRowActions ? (
           <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">{rowActions}</div>
         ) : null}

@@ -1,7 +1,8 @@
 import type { SFTPPane } from "./sftpPanes";
 
-// The SFTP section's tabs are taken down when another section is opened, and built again from the stored panes, with
-// new ids, on coming back. Tabs restored that way wait for Connect, so that opening the app connects nowhere by itself.
+// The SFTP section's tabs are taken down when the section is let go, and built again from the stored panes, with new
+// ids, on coming back. The section is kept behind the others while the person moves between sections (KeptSections);
+// it is let go when a draft was guarded in it (an edited file), and it starts again on a reload. Tabs restored that way wait for Connect, so that opening the app connects nowhere by itself.
 // A tab the person had connected when they left the section is different: they were using it a moment ago, and it
 // reopens connected. What is kept here is where those tabs were (the pane, the tab and its host) for as long as the
 // page lives; a reload starts with none.

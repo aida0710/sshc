@@ -27,7 +27,9 @@ test("primary pages have no serious automated accessibility violations", async (
       window.history.pushState(null, "", target);
       window.dispatchEvent(new PopStateEvent("popstate"));
     }, path);
-    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    // Connections opens on its list of servers (connectionRoute).
+    const shownPath = path === "/connections" ? "/connections/servers" : path;
+    await expect(page).toHaveURL(new RegExp(`${shownPath}$`));
     await expect(page.locator("main")).toBeVisible();
     // A section's code loads on the first visit, and a placeholder holds its place until then.
     await expect(page.locator(".sshc-skeleton")).toHaveCount(0);

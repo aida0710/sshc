@@ -92,6 +92,36 @@ public final class NativeBridgeTest {
         @Override
         public void releaseChosenFolder() {
         }
+
+        int hapticFeedback = NativeBridge.NO_HAPTIC_FEEDBACK;
+
+        @Override
+        public void performHapticFeedback(int constant) {
+            hapticFeedback = constant;
+        }
+
+        @Override
+        public void firstScreenShown() {
+        }
+    }
+
+    @Test
+    public void playsTheKeyboardsFeedbackForAKey() {
+        Host host = new Host();
+        NativeBridge bridge = new NativeBridge(host);
+
+        bridge.performHapticFeedback("keyPress");
+        assertEquals(android.view.HapticFeedbackConstants.KEYBOARD_TAP, host.hapticFeedback);
+    }
+
+    @Test
+    public void playsNothingForAnUnknownFeedback() {
+        Host host = new Host();
+        NativeBridge bridge = new NativeBridge(host);
+
+        bridge.performHapticFeedback("longPress");
+        bridge.performHapticFeedback(null);
+        assertEquals(NativeBridge.NO_HAPTIC_FEEDBACK, host.hapticFeedback);
     }
 
     @Test
