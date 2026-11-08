@@ -140,7 +140,7 @@ describe("AppearanceSettingsSection", () => {
     const arts = screen.getByRole("radiogroup", { name: "Background with no session" });
     expect(within(arts).getByRole("radio", { name: "Network" })).toBeChecked();
 
-    await userEvent.click(within(arts).getByRole("radio", { name: /^None/ }));
+    await userEvent.click(within(arts).getByRole("radio", { name: "None" }));
 
     await waitFor(() => {
       const saved = server.writesTo("/api/v1/settings/presets/default")
