@@ -103,6 +103,18 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
   expect(violations).toEqual([]);
 });
 
+test("opens the new session picker from the empty state and starts a local shell from it", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  const main = page.getByRole("main");
+  await main.getByRole("button", { name: /^Open a session/ }).click();
+
+  const dialog = page.getByRole("dialog", { name: "New session" });
+  await dialog.getByRole("button", { name: /^Local shell, localhost/ }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
+});
+
 test("keeps image-backed terminal editing free of stale glyphs", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",

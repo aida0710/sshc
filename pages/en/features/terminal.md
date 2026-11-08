@@ -11,7 +11,9 @@ Open SSH and local shells in the same interface, with search, Quick Commands, an
 
 ## When no session is open
 
-While no session is open, the tiles **Open a local shell**, **Add connection**, and **Receive by sync** have below them what the sshc engine new shells open on can tell about itself. With a [remote session](./remote-session) chosen, it is that sshc engine.
+While no session is open, the tiles **Open a session** and **Add connection** are shown. **Open a session** opens the same picker as **New session** in the sidebar, to choose a connection or a local shell. Until sync is set up, **Receive by sync** is shown too.
+
+Below the tiles is what the sshc engine new shells open on can tell about itself. With a [remote session](./remote-session) chosen, it is that sshc engine.
 
 - Activity: the terminal SSH connections per day. On a PC the recent connections are listed beside it, and choosing one opens it. It is left out until a connection has been opened
 - The machine: its name, operating system, CPU use, memory, and uptime. Values the operating system does not give are left out (macOS gives neither the CPU use nor the memory in use; FreeBSD and OpenBSD do not give the memory in use)

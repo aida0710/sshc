@@ -39,13 +39,14 @@ export function TerminalScreen({
   onOpenRemotePath,
   onOSC52Change,
   onOpenNavigation,
-  onOpenLocalShell,
+  onNewSession,
   onAddConnection,
   onOpenSync,
   onOpenConnection,
   onShowConnections,
 }: {
-  onOpenLocalShell: () => void;
+  // onNewSession opens the picker for a new session from the empty state.
+  onNewSession: () => void;
   onAddConnection: () => void;
   onOpenSync: () => void;
   // onOpenConnection opens a session to a connection the empty state lists as used recently.
@@ -176,7 +177,7 @@ export function TerminalScreen({
     <div className={refusal === null ? "h-full" : "invisible h-full"} inert={refusal !== null}>
       <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} retainedTerminals={settings.retainedTerminals ?? defaultRetainedTerminals} renderTerminal={renderTerminal}
         // Until the engine answers, it is not known to have no sessions.
-        emptyState={terminalSessions.loaded ? <TerminalEmptyState runTarget={runTarget} visible={visible} onOpenLocalShell={onOpenLocalShell} onAddConnection={onAddConnection} onOpenSync={onOpenSync} onOpenConnection={onOpenConnection} onShowConnections={onShowConnections} /> : null}
+        emptyState={terminalSessions.loaded ? <TerminalEmptyState runTarget={runTarget} visible={visible} onNewSession={onNewSession} onAddConnection={onAddConnection} onOpenSync={onOpenSync} onOpenConnection={onOpenConnection} onShowConnections={onShowConnections} /> : null}
       />
     </div>
     {waitingForEngine ? (

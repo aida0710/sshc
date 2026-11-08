@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useTranslate } from "../i18n/context";
 import { presetInUse, useSettings } from "../settings/settingsStore";
+import { useSyncConfigured } from "../sync/useSyncConfigured";
 import { PageBoard } from "../ui/PageBoard";
 import { StartTiles } from "../ui/StartTiles";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
@@ -25,9 +26,10 @@ const bannerArt = { fontSize: 10, globe: { x: 0.5, y: 2.2, radius: 1.85 }, zoom:
 type Props = {
   // runTarget is the engine a new shell opens on; null is this machine.
   runTarget: string | null;
-  // visible is false while another page is shown over the terminal: the machine is not read then.
+  // visible is false while another page is shown over the terminal: the machine and sync are not read then.
   visible: boolean;
-  onOpenLocalShell: () => void;
+  // onNewSession opens the same picker as New session in the sidebar: a connection, or a local shell.
+  onNewSession: () => void;
   onAddConnection: () => void;
   onOpenSync: () => void;
   onOpenConnection: (alias: string) => void;
@@ -46,8 +48,11 @@ export function TerminalEmptyState(props: Props) {
     : <WideLayout art={art === "none" ? null : art} overview={overview} tiles={tiles} {...props} />;
 }
 
-function StartingTiles({ runTarget, onOpenLocalShell, onAddConnection, onOpenSync }: Props) {
+// The board is shown to everyone with nothing open, not only to someone with no connection, so the first tile opens
+// the picker of all the ways to start a session. Someone whose sync is set up already knows the way to it.
+function StartingTiles({ runTarget, visible, onNewSession, onAddConnection, onOpenSync }: Props) {
   const t = useTranslate();
+  const syncConfigured = useSyncConfigured(visible);
   return (
     <div role="status">
       <StartTiles
@@ -57,13 +62,15 @@ function StartingTiles({ runTarget, onOpenLocalShell, onAddConnection, onOpenSyn
         tiles={[
           {
             icon: "terminal",
-            title: t("start.openLocalShell"),
-            note: runTarget === null ? t("start.openLocalShellNote") : t("start.openLocalShellNoteOnRunTarget", { alias: runTarget }),
+            title: t("start.openSession"),
+            note: runTarget === null ? t("start.openSessionNote") : t("start.openSessionNoteOnRunTarget", { alias: runTarget }),
             primary: true,
-            onSelect: onOpenLocalShell,
+            onSelect: onNewSession,
           },
           { icon: "connections", title: t("conn.new"), note: t("start.addConnectionNote"), onSelect: onAddConnection },
-          { icon: "sync", title: t("start.receiveSync"), note: t("start.receiveSyncNote"), onSelect: onOpenSync },
+          ...(syncConfigured === false
+            ? [{ icon: "sync" as const, title: t("start.receiveSync"), note: t("start.receiveSyncNote"), onSelect: onOpenSync }]
+            : []),
         ]}
       />
     </div>

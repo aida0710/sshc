@@ -25,6 +25,18 @@ vi.mock("../api/terminalOverview", () => ({
   },
 }));
 
+// sync.configured is what this machine's sync status says; null makes the status fail to read.
+const sync = vi.hoisted(() => ({ configured: false as boolean | null, reads: 0 }));
+
+vi.mock("../api/sync", () => ({
+  syncApi: {
+    syncStatus: () => {
+      sync.reads++;
+      return sync.configured === null ? Promise.reject(new Error("request_failed")) : Promise.resolve({ configured: sync.configured });
+    },
+  },
+}));
+
 const noHistory: ConnectionHistory = { hours: [], recent: [] };
 
 beforeEach(() => {
@@ -32,38 +44,68 @@ beforeEach(() => {
   overview.machineReads = 0;
   overview.machine = null;
   overview.history = noHistory;
+  sync.configured = false;
+  sync.reads = 0;
 });
 
 function renderEmptyState(runTarget: string | null, visible = true) {
   const handlers = {
-    onOpenLocalShell: vi.fn(), onAddConnection: vi.fn(), onOpenSync: vi.fn(), onOpenConnection: vi.fn(), onShowConnections: vi.fn(),
+    onNewSession: vi.fn(), onAddConnection: vi.fn(), onOpenSync: vi.fn(), onOpenConnection: vi.fn(), onShowConnections: vi.fn(),
   };
-  const { container } = render(<TerminalEmptyState runTarget={runTarget} visible={visible} {...handlers} />);
-  return { handlers, container };
+  const rendered = render(<TerminalEmptyState runTarget={runTarget} visible={visible} {...handlers} />);
+  const showAgain = (shown: boolean) => rendered.rerender(<TerminalEmptyState runTarget={runTarget} visible={shown} {...handlers} />);
+  return { handlers, container: rendered.container, showAgain };
 }
 
 describe("TerminalEmptyState", () => {
-  it("opens a shell, adds a connection or goes to Sync from its tiles", async () => {
+  it("opens the new session picker, adds a connection or goes to Sync from its tiles", async () => {
     const { handlers } = renderEmptyState(null);
 
-    await userEvent.click(screen.getByRole("button", { name: /^Open a local shell/ }));
-    expect(handlers.onOpenLocalShell).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("button", { name: /^Open a session/ }));
+    expect(handlers.onNewSession).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: /^Add connection/ }));
     expect(handlers.onAddConnection).toHaveBeenCalledOnce();
-    await userEvent.click(screen.getByRole("button", { name: /^Receive by sync/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /^Receive by sync/ }));
     expect(handlers.onOpenSync).toHaveBeenCalledOnce();
   });
 
-  it("says the shell opens on this machine when no run target is chosen", () => {
+  it("says the session opens on this machine when no run target is chosen", () => {
     renderEmptyState(null);
-    expect(screen.getByText("Open a shell on this machine right away")).toBeInTheDocument();
+    expect(screen.getByText("Choose a connection or a shell on this machine")).toBeInTheDocument();
+  });
+
+  it("leaves the way to Sync out once sync is set up", async () => {
+    sync.configured = true;
+    renderEmptyState(null);
+
+    await waitFor(() => expect(sync.reads).toBe(1));
+    expect(screen.getByRole("button", { name: /^Open a session/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Receive by sync/ })).toBeNull();
+  });
+
+  it("keeps the way to Sync when the sync status cannot be read", async () => {
+    sync.configured = null;
+    renderEmptyState(null);
+    expect(await screen.findByRole("button", { name: /^Receive by sync/ })).toBeInTheDocument();
+  });
+
+  it("reads sync again when the terminal is shown again, and not while it is hidden", async () => {
+    const { showAgain } = renderEmptyState(null);
+    expect(await screen.findByRole("button", { name: /^Receive by sync/ })).toBeInTheDocument();
+
+    sync.configured = true;
+    showAgain(false);
+    expect(sync.reads).toBe(1);
+    showAgain(true);
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^Receive by sync/ })).toBeNull());
+    expect(sync.reads).toBe(2);
   });
 
   it("names the run target a new shell would open on, and reads that engine's machine and connections", async () => {
     overview.machine = { hostname: "office", os: "windows" };
     renderEmptyState("office-pc");
 
-    expect(screen.getByText("Open a shell on office-pc right away")).toBeInTheDocument();
+    expect(screen.getByText("Choose a connection or a shell to open on office-pc")).toBeInTheDocument();
     expect(overview.runTargets).toContain("office-pc");
     expect(await screen.findByText("office · Windows")).toBeInTheDocument();
     expect(screen.getByLabelText("The machine new shells open on")).toHaveTextContent(/^office-pc/);
