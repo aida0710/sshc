@@ -16,7 +16,7 @@ var appearanceAccents = []string{"lavender", "blue", "sky", "pink", "mono"}
 
 // emptyTerminalArts は、開いているセッションが無いときのターミナルに描く絵の名前である。絵は画面
 // （web/src/terminal/emptyState/）が描く。空は既定の network と同じ。none は絵を描かない。
-var emptyTerminalArts = []string{"none", "network", "contours", "globe"}
+var emptyTerminalArts = []string{"none", "network", "contours", "globe", "aquarium"}
 
 // accentColorPattern は、利用者が決めた色の形（#rrggbb、小文字）である。画面は
 // <input type="color"> の値をそのまま送り、その値は常にこの形になる。

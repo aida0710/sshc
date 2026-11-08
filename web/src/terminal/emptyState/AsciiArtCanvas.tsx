@@ -38,15 +38,26 @@ export function AsciiArtCanvas({
   // The options are compared by value: a parent that builds them on every render does not restart the art.
   const labelsKey = options.labels.join("\n");
   const { x: globeX, y: globeY, radius: globeRadius } = options.globe;
-  const { zoom } = options;
+  const { zoom, fishLabels, swimDepth } = options;
+  const fishKey = options.fish.map((fish) => `${fish.label}\t${fish.weight}`).join("\n");
 
   useEffect(() => {
     if (canvas.current === null || size === null) return;
     return runArt(canvas.current, {
       art, fontSize, intensity, moving, startAt: stillAt,
-      options: { labels: labelsKey === "" ? [] : labelsKey.split("\n"), globe: { x: globeX, y: globeY, radius: globeRadius }, zoom },
+      options: {
+        labels: labelsKey === "" ? [] : labelsKey.split("\n"),
+        globe: { x: globeX, y: globeY, radius: globeRadius },
+        zoom,
+        fish: fishKey === "" ? [] : fishKey.split("\n").map((line) => {
+          const [label = "", weight = "0"] = line.split("\t");
+          return { label, weight: Number(weight) };
+        }),
+        fishLabels,
+        swimDepth,
+      },
     });
-  }, [art, fontSize, intensity, moving, stillAt, size, theme, accent, customColor, labelsKey, globeX, globeY, globeRadius, zoom]);
+  }, [art, fontSize, intensity, moving, stillAt, size, theme, accent, customColor, labelsKey, globeX, globeY, globeRadius, zoom, fishKey, fishLabels, swimDepth]);
 
   return <canvas ref={canvas} aria-hidden="true" className={`block h-full w-full ${className}`} />;
 }

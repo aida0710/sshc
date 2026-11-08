@@ -98,7 +98,7 @@ The **Key order** selector switches between named orders. The "…" beside it sa
 
 - Theme: match the system, light, white blue, white purple, dark, dark blue, or dark purple. Light and dark use greys without a tint; white blue and dark blue tint them blue, and white purple tints them purple. With the lavender accent, white purple uses a slightly deeper purple. Dark purple uses a lighter untinted grey and, with the lavender accent, a purple of its own, which also colours the terminal selection and cursor
 - Accent colour: lavender, blue, sky, pink, mono, or custom. It marks the current item, buttons, and the focused terminal pane. Custom takes one colour of your own from the colour picker or as a code (#rrggbb), used in both the light and the dark theme. A colour that is hard to tell from the background of the theme on screen brings up a notice.
-- Background with no session: none, network, contours, or globe. A moving picture in the terminal while no session is open ([Terminal](/en/features/terminal#when-no-session-is-open)). The default is network
+- Background with no session: none, network, contours, globe, or aquarium. A moving picture in the terminal while no session is open ([Terminal](/en/features/terminal#when-no-session-is-open)). The default is network
 - Reduce motion: system, on, or off. On stops the background picture and leaves out the animation of panels opening and closing and of screens changing. System follows the reduce-motion setting of the OS
 
 Each settings page lists the other settings pages on its left, so you can move between them.

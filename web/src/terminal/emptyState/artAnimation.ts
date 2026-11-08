@@ -1,5 +1,6 @@
-import { asciiFontFamily, beginFrame, createAsciiGrid, presentFrame, resolveCssColor } from "./asciiGrid";
-import { createArt, framesPerSecond, type ArtOptions, type DrawnArt } from "./emptyTerminalArt";
+import { asciiFontFamily, beginFrame, createAsciiGrid, presentFrame, resolveAsciiColors } from "./asciiGrid";
+import { followArtInput, type ArtInput } from "./artInput";
+import { answersInput, createArt, framesPerSecond, type ArtOptions, type DrawnArt } from "./emptyTerminalArt";
 
 export type ArtRun = {
   art: DrawnArt;
@@ -18,6 +19,7 @@ export type ArtRun = {
 export function runArt(canvas: HTMLCanvasElement, run: ArtRun): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let stopInput = () => undefined as void;
   let start = () => undefined as void;
   const pause = () => {
     clearInterval(timer);
@@ -28,19 +30,20 @@ export function runArt(canvas: HTMLCanvasElement, run: ArtRun): () => void {
   // The terminal's font may still be loading; drawing before it would measure the cells in a fallback font.
   void waitForFont(run.fontSize).then(() => {
     if (stopped) return;
-    const colors = { ink: resolveCssColor("var(--ui-ink)"), accent: resolveCssColor("var(--ui-accent)") };
-    const grid = createAsciiGrid(canvas, run.fontSize, run.intensity, colors);
+    const grid = createAsciiGrid(canvas, run.fontSize, run.intensity, resolveAsciiColors());
     if (grid === null) return;
     const draw = createArt(run.art, grid, run.options);
+    const input: ArtInput = { pointer: null, taps: [] };
     const frame = (seconds: number) => {
       beginFrame(grid);
-      draw(seconds);
+      draw(seconds, input);
       presentFrame(grid);
     };
     if (!run.moving) {
       frame(run.startAt);
       return;
     }
+    if (answersInput(run.art)) stopInput = followArtInput(canvas, grid, input);
     let shownSeconds = run.startAt;
     let lastTick = performance.now();
     const tick = () => {
@@ -62,6 +65,7 @@ export function runArt(canvas: HTMLCanvasElement, run: ArtRun): () => void {
   return () => {
     stopped = true;
     pause();
+    stopInput();
     document.removeEventListener("visibilitychange", followVisibility);
   };
 }
