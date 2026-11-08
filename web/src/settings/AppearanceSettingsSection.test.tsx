@@ -134,18 +134,18 @@ describe("AppearanceSettingsSection", () => {
     expect(saved).toEqual([true]);
   });
 
-  it("draws nothing behind the empty terminal until an art is chosen, and saves the one chosen", async () => {
+  it("draws the network behind the empty terminal until another art is chosen, and saves the one chosen", async () => {
     const server = fakeSettingsServer();
     renderSection();
     const arts = screen.getByRole("radiogroup", { name: "Background with no session" });
-    expect(within(arts).getByRole("radio", { name: /^None/ })).toBeChecked();
+    expect(within(arts).getByRole("radio", { name: "Network" })).toBeChecked();
 
-    await userEvent.click(within(arts).getByRole("radio", { name: "Globe" }));
+    await userEvent.click(within(arts).getByRole("radio", { name: /^None/ }));
 
     await waitFor(() => {
       const saved = server.writesTo("/api/v1/settings/presets/default")
         .map((body) => (body as { preset: { appearance?: { emptyTerminalArt?: string } } }).preset.appearance?.emptyTerminalArt);
-      expect(saved).toEqual(["globe"]);
+      expect(saved).toEqual(["none"]);
     });
   });
 
