@@ -37,6 +37,7 @@ With a remote session chosen, some actions still open the session on this machin
 | Action | Opens on |
 |---|---|
 | **New session** in the sidebar | The chosen engine |
+| **Open a session** while no session is open | The chosen engine |
 | **Connect** in Connections | The chosen engine |
 | **Connect all** in Connections | The chosen engine |
 | **Open a local shell** on Home | The chosen engine |
