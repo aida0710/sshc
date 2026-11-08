@@ -348,7 +348,8 @@ test("hides the terminal behind the panel on a phone when the run target stops a
   // composer, the key bar) must not show around the bar.
   await expect(composer).toBeHidden();
   await page.getByRole("navigation", { name: "Quick navigation", exact: true }).getByRole("link", { name: "Connections", exact: true }).click();
-  await expect(page).toHaveURL(/\/connections$/);
+  // Connections opens on its list of servers (connectionRoute).
+  await expect(page).toHaveURL(/\/connections\/servers$/);
 });
 
 test("selects a newly added engine and shows it is incompatible in the terminal area", async ({ page, installation }) => {

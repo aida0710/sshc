@@ -4,6 +4,7 @@ import { KeyBar } from "./KeyBar";
 import { defaultKeyBarLayout, type KeyBarLayout } from "../keybar/keyBarLayout";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { modifierDoubleTapMilliseconds, releasedModifiers, type Modifiers } from "./modifierLatch";
+import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); delete document.documentElement.dataset.keyboardOpen; });
 
@@ -22,6 +23,17 @@ function showMobileKeyBar(modifiers: Modifiers = releasedModifiers, layout: KeyB
 }
 
 describe("mobile key bar", () => {
+  it("is felt in the Android app as each key goes down, as the phone's keyboard is", () => {
+    const bridge = fakeAndroidBridge();
+    vi.stubGlobal("sshcAndroid", bridge);
+    showMobileKeyBar();
+    for (const name of ["Esc", "Ctrl", "Up arrow", "Extra keys"]) {
+      fireEvent.pointerDown(screen.getByRole("button", { name }), { cancelable: true });
+    }
+    expect(bridge.performHapticFeedback).toHaveBeenCalledTimes(4);
+    expect(bridge.performHapticFeedback).toHaveBeenCalledWith("keyPress");
+  });
+
   it("shows common keys in the phone landscape layout and tucks symbols behind extra keys", () => {
     showMobileKeyBar();
     expect(window.matchMedia).toHaveBeenCalledWith(mobileViewportQuery);

@@ -1,3 +1,5 @@
+import { loadingPlaceholder } from "./loadingPlaceholder";
+
 type RouteSkeletonProps = {
   kind?: "section" | "terminal";
 };
@@ -9,7 +11,7 @@ function SkeletonLine({ className }: { className: string }) {
 export function RouteSkeleton({ kind = "section" }: RouteSkeletonProps) {
   if (kind === "terminal") {
     return (
-      <div aria-hidden="true" className="h-full bg-term-bg p-5">
+      <div aria-hidden="true" {...loadingPlaceholder} className="h-full bg-term-bg p-5">
         <div className="flex max-w-3xl flex-col gap-3 opacity-55">
           <SkeletonLine className="h-3 w-48" />
           <SkeletonLine className="h-3 w-72" />
@@ -20,7 +22,7 @@ export function RouteSkeleton({ kind = "section" }: RouteSkeletonProps) {
   }
 
   return (
-    <div aria-hidden="true" className="h-full overflow-hidden p-6">
+    <div aria-hidden="true" {...loadingPlaceholder} className="h-full overflow-hidden p-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <div className="flex flex-col gap-2">
           <SkeletonLine className="h-7 w-52" />

@@ -7,6 +7,7 @@ import { matchesMediaQuery, mobileViewportQuery, useMediaQuery } from "../ui/use
 import { isSoftKeyboardOpen, literalTextEntry } from "../ui/softKeyboard";
 import { pressesEnterOnly } from "./composerSend";
 import { touchFirstQuery } from "./touchMode";
+import { playHaptic } from "../android/haptics";
 
 // The field grows with its text up to this many lines and then scrolls, so the
 // terminal above keeps most of the screen.
@@ -144,8 +145,12 @@ export function TerminalComposer({
         aria-disabled={!sendable}
         aria-label={sendName}
         title={sendName}
-        // The keyboard stays open: the field keeps the focus while the button is pressed.
-        onPointerDown={keepFocus}
+        // The keyboard stays open: the field keeps the focus while the button is pressed. The button is felt as it
+        // goes down, as the key bar's keys are.
+        onPointerDown={(event) => {
+          keepFocus(event);
+          playHaptic("keyPress");
+        }}
         onMouseDown={keepFocus}
         className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-disabled:opacity-60"
       >

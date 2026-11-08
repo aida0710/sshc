@@ -74,6 +74,7 @@ public final class MainActivity extends ComponentActivity {
     private String webAppearance;
     private int webBarColour;
     private Uri engineOrigin;
+    private FirstScreenWait firstScreenWait;
     private final NativeBridge nativeBridge = new NativeBridge(new NativeBridge.Host() {
         @Override
         public void chooseSaveDestination(String requestId, String suggestedName, String mimeType) {
@@ -140,6 +141,18 @@ public final class MainActivity extends ComponentActivity {
         public void releaseChosenFolder() {
             chosenFolder.release();
         }
+
+        @Override
+        public void performHapticFeedback(int constant) {
+            runOnUiThread(() -> {
+                if (webView != null) webView.performHapticFeedback(constant);
+            });
+        }
+
+        @Override
+        public void firstScreenShown() {
+            runOnUiThread(() -> showFirstScreenOnceDrawn());
+        }
     });
     // 選んだフォルダの一覧と、それを受け取る request ID。bridge は UI スレッドの外から呼ぶので folderLock の中で読み書きする。
     private final Object folderLock = new Object();
@@ -195,6 +208,8 @@ public final class MainActivity extends ComponentActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        firstScreenWait = new FirstScreenWait(this);
+        firstScreenWait.start();
         showPreviousRuntimeNotice();
         // 閉じていたアプリを通知から開いた場合。Web 画面は起動したときに受け取りに来る。
         rememberOpenedNotification(getIntent());
@@ -630,6 +645,23 @@ public final class MainActivity extends ComponentActivity {
         }
     }
 
+    /**
+     * Web 画面が最初の画面を中身まで描いたと知らせたら、WebView がその状態を描けるようになってからスプラッシュを消す。
+     * 先に消すと、WebView が最初の絵を作るまでのあいだ何も描かれていない画面が見える。
+     */
+    private void showFirstScreenOnceDrawn() {
+        if (webView == null) {
+            firstScreenWait.show();
+            return;
+        }
+        webView.postVisualStateCallback(0, new WebView.VisualStateCallback() {
+            @Override
+            public void onComplete(long requestId) {
+                firstScreenWait.show();
+            }
+        });
+    }
+
     /** renderer異常を真っ白な画面にせず、engineを維持したまま再読込できるようにする。 */
     private void showWebViewRecovery() {
         NativeScreenContent content = new NativeScreenContent(this).centredVertically();
@@ -645,6 +677,7 @@ public final class MainActivity extends ComponentActivity {
         content.add(reload, NativeScreenContent.GAP_DP);
         setContentView(frame(content.view()));
         showNativeScreenColours();
+        firstScreenWait.show();
     }
 
     /** WindowInsets の padding とページ背景色を適用するコンテナを作る。 */
@@ -764,6 +797,7 @@ public final class MainActivity extends ComponentActivity {
                 ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
         setContentView(frame(scroll));
         showNativeScreenColours();
+        firstScreenWait.show();
     }
 
     /** system bar、display cutout、IME の inset を padding に反映する。 */

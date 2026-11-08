@@ -6,9 +6,10 @@ const report = {
   modifiedAt: "2026-10-10T00:00:00Z", revision: "report-v1",
 };
 
-// Going to another section takes the SFTP panes down. A tab the person connected comes back connected; after a
-// reload, a restored tab still waits for Connect (tabsConnectedOnLeaving.ts).
-test("a tab connected before going to another section is connected again on coming back, but not after a reload", async ({ page, installation }) => {
+// SFTP is a section of the phone's bottom bar, kept behind the others (KeptSections): a tab the person connected is
+// still connected on coming back, with what it had read, and reads nothing again. After a reload, a restored tab
+// still waits for Connect (tabsConnectedOnLeaving.ts).
+test("a tab connected before going to another section is still connected on coming back, but not after a reload", async ({ page, installation }) => {
   let remoteReads = 0;
   await page.route("**/api/v1/sftp/bastion/entries**", (route) => {
     remoteReads += 1;
@@ -27,7 +28,7 @@ test("a tab connected before going to another section is connected again on comi
   await openSection(page, "SFTP");
   await expect(pane.getByRole("button", { name: "report.txt", exact: true })).toBeVisible();
   await expect(pane.getByRole("button", { name: "Connect", exact: true })).toHaveCount(0);
-  expect(remoteReads).toBeGreaterThan(readsBeforeReturn);
+  expect(remoteReads).toBe(readsBeforeReturn);
 
   await page.reload();
   await openSection(page, "SFTP");
