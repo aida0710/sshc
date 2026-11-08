@@ -4,6 +4,8 @@ import { presetInUse, useSettings } from "../settings/settingsStore";
 import { PageBoard } from "../ui/PageBoard";
 import { StartTiles } from "../ui/StartTiles";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { aquariumFish } from "./emptyState/aquariumFish";
+import { aquariumWater } from "./emptyState/aquariumWater";
 import { AsciiArtCanvas } from "./emptyState/AsciiArtCanvas";
 import { ConnectionActivityPanel } from "./emptyState/ConnectionActivityPanel";
 import { emptyTerminalArtOf, type ArtOptions, type DrawnArt } from "./emptyState/emptyTerminalArt";
@@ -14,8 +16,11 @@ import { useTerminalOverview, type TerminalOverview } from "./emptyState/useTerm
 // How each layout draws its art. On a PC the art fills the card behind the tiles, the globe rising from below like a
 // horizon. On a phone the tiles and the cards would hide such a picture, so it is a banner above the tiles, where
 // the landscape is shrunk and darkened to show relief in so little height.
-const wideArt = { fontSize: 13, globe: { x: 0.5, y: 1.42, radius: 0.92 }, zoom: 1, intensity: 1 } as const;
-const bannerArt = { fontSize: 10, globe: { x: 0.5, y: 2.2, radius: 1.85 }, zoom: 3.2, intensity: 1.5 } as const;
+// The fish's names are written on a PC; on a phone's banner they would cover the fish, so a name shows only while
+// its fish eats.
+const wideArt = { fontSize: 13, globe: { x: 0.5, y: 1.42, radius: 0.92 }, zoom: 1, intensity: 1, fishLabels: true, swimDepth: 1 } as const;
+// On the banner the machine's line covers the lower half, so the fish keep to the upper.
+const bannerArt = { fontSize: 10, globe: { x: 0.5, y: 2.2, radius: 1.85 }, zoom: 3.2, intensity: 1.5, fishLabels: false, swimDepth: 0.62 } as const;
 
 type Props = {
   // runTarget is the engine a new shell opens on; null is this machine.
@@ -66,8 +71,15 @@ function StartingTiles({ runTarget, onOpenLocalShell, onAddConnection, onOpenSyn
 }
 
 function artOptions(overview: TerminalOverview, layout: typeof wideArt | typeof bannerArt): ArtOptions {
-  // The network names its points after the connections used last.
-  return { labels: (overview.history?.recent ?? []).map((connection) => connection.alias), globe: layout.globe, zoom: layout.zoom };
+  // The network names its points after the connections used last, and the aquarium's fish stand for them.
+  return {
+    labels: (overview.history?.recent ?? []).map((connection) => connection.alias),
+    globe: layout.globe,
+    zoom: layout.zoom,
+    fish: aquariumFish(overview.history, new Date()),
+    fishLabels: layout.fishLabels,
+    swimDepth: layout.swimDepth,
+  };
 }
 
 // The card does not scroll itself, so the art behind stays put; the content scrolls inside it. A small phone
@@ -87,7 +99,7 @@ function WideLayout({ art, overview, tiles, runTarget, onOpenConnection, onShowC
     // isolate keeps the art behind the content but in front of the card's own background.
     <PageBoard fill className="relative isolate">
       {art === null ? null : (
-        <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className={`pointer-events-none absolute inset-0 -z-10 ${art === "aquarium" ? aquariumWater : ""}`}>
           <AsciiArtCanvas art={art} fontSize={wideArt.fontSize} intensity={wideArt.intensity} options={artOptions(overview, wideArt)} />
         </div>
       )}
@@ -128,7 +140,8 @@ function PhoneLayout({ art, overview, tiles, runTarget }: {
         <div className="m-auto flex w-full max-w-[900px] flex-col gap-3.5">
           {art === null ? machine : (
             <div className="relative h-[132px] shrink-0 overflow-hidden rounded-[14px] border border-line bg-[color-mix(in_srgb,var(--ui-ink)_3%,var(--ui-card))]">
-              <AsciiArtCanvas art={art} fontSize={bannerArt.fontSize} intensity={art === "contours" ? bannerArt.intensity : 1} options={artOptions(overview, bannerArt)} />
+              {art === "aquarium" ? <div aria-hidden="true" className={`absolute inset-0 ${aquariumWater}`} /> : null}
+              <AsciiArtCanvas art={art} fontSize={bannerArt.fontSize} intensity={art === "contours" ? bannerArt.intensity : 1} options={artOptions(overview, bannerArt)} className="relative" />
               {machine}
             </div>
           )}

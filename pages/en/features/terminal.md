@@ -16,7 +16,9 @@ While no session is open, the tiles **Open a local shell**, **Add connection**, 
 - Activity: the terminal SSH connections per day. On a PC the recent connections are listed beside it, and choosing one opens it. It is left out until a connection has been opened
 - The machine: its name, operating system, CPU use, memory, and uptime. Values the operating system does not give are left out (macOS gives neither the CPU use nor the memory in use; FreeBSD and OpenBSD do not give the memory in use)
 
-A moving picture is drawn behind them. Choose it under **Background with no session** in **Settings → Appearance**: network (the default), contours, globe, or none. On a phone the picture is a banner above the tiles. It moves only while this screen is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
+A moving picture is drawn behind them. Choose it under **Background with no session** in **Settings → Appearance**: network (the default), contours, globe, aquarium, or none. On a phone the picture is a banner above the tiles. It moves only while this screen is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
+
+The fish of the aquarium are the recent connections. The more a connection was opened over the last 30 days, the larger its fish, and on a PC each fish's connection name is written under it. Fish come to the mouse, and clicking an empty place (tapping, on a phone) drops food there that they come to eat. On a phone a fish's name shows only while it eats. The colours follow the terminal's colours.
 
 ## How data travels
 
