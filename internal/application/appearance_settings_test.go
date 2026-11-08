@@ -40,18 +40,18 @@ func TestAnEmptyTerminalArtOutsideTheListIsRefused(t *testing.T) {
 	service, _ := newTerminalService(t)
 
 	err := editStandardPreset(t, service, func(preset *SettingsPreset) {
-		preset.Appearance = &AppearanceSettings{EmptyTerminalArt: "aquarium"}
+		preset.Appearance = &AppearanceSettings{EmptyTerminalArt: "lava-lamp"}
 	})
 	if !errors.Is(err, ErrMetadataAppearance) {
 		t.Fatalf("err = %v, want ErrMetadataAppearance", err)
 	}
 	if err := editStandardPreset(t, service, func(preset *SettingsPreset) {
-		preset.Appearance = &AppearanceSettings{EmptyTerminalArt: "globe"}
+		preset.Appearance = &AppearanceSettings{EmptyTerminalArt: "aquarium"}
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if appearance := service.EffectiveSettings().Preset.Appearance; appearance == nil || appearance.EmptyTerminalArt != "globe" {
-		t.Fatalf("appearance = %+v, want globe", appearance)
+	if appearance := service.EffectiveSettings().Preset.Appearance; appearance == nil || appearance.EmptyTerminalArt != "aquarium" {
+		t.Fatalf("appearance = %+v, want aquarium", appearance)
 	}
 }
 

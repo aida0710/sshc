@@ -20,7 +20,7 @@ function setHidden(hidden: boolean) {
   document.dispatchEvent(new Event("visibilitychange"));
 }
 
-const options = { labels: [], globe: { x: 0.5, y: 0.5, radius: 0.4 }, zoom: 1 };
+const options = { labels: [], globe: { x: 0.5, y: 0.5, radius: 0.4 }, zoom: 1, fish: [], fishLabels: false, swimDepth: 1 };
 
 beforeEach(() => {
   drawn.moments = [];

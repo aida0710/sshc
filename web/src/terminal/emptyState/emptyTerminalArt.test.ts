@@ -4,7 +4,7 @@ import { emptyTerminalArtOf, withEmptyTerminalArt } from "./emptyTerminalArt";
 describe("empty terminal art choice", () => {
   it("draws the network for a preset that has not chosen, or names an art this version does not know", () => {
     expect(emptyTerminalArtOf({ id: "default" })).toBe("network");
-    expect(emptyTerminalArtOf({ id: "default", appearance: { emptyTerminalArt: "aquarium" as never } })).toBe("network");
+    expect(emptyTerminalArtOf({ id: "default", appearance: { emptyTerminalArt: "lava-lamp" as never } })).toBe("network");
   });
 
   it("keeps the default as no value and reads back the art chosen", () => {
