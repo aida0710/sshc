@@ -16,7 +16,7 @@ While no session is open, the tiles **Open a local shell**, **Add connection**, 
 - Activity: the terminal SSH connections per day. On a PC the recent connections are listed beside it, and choosing one opens it. It is left out until a connection has been opened
 - The machine: its name, operating system, CPU use, memory, and uptime. Values the operating system does not give are left out (macOS gives neither the CPU use nor the memory in use; FreeBSD and OpenBSD do not give the memory in use)
 
-**Background with no session** in **Settings → Appearance** draws a moving picture behind them: network, contours, or globe. The default is none. On a phone the picture is a banner above the tiles. It moves only while this screen is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
+A moving picture is drawn behind them. Choose it under **Background with no session** in **Settings → Appearance**: network (the default), contours, globe, or none. On a phone the picture is a banner above the tiles. It moves only while this screen is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
 
 ## How data travels
 
