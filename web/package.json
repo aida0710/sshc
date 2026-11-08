@@ -16,12 +16,12 @@
     "e2e": "playwright test"
   },
   "dependencies": {
-    "@xterm/addon-fit": "0.12.0-beta.311",
-    "@xterm/addon-image": "0.10.0-beta.310",
-    "@xterm/addon-search": "0.17.0-beta.310",
-    "@xterm/addon-serialize": "0.15.0-beta.310",
-    "@xterm/addon-webgl": "0.20.0-beta.309",
-    "@xterm/xterm": "6.1.0-beta.315",
+    "@xterm/addon-fit": "0.12.0-beta.332",
+    "@xterm/addon-image": "0.10.0-beta.331",
+    "@xterm/addon-search": "0.17.0-beta.330",
+    "@xterm/addon-serialize": "0.15.0-beta.330",
+    "@xterm/addon-webgl": "0.20.0-beta.329",
+    "@xterm/xterm": "6.1.0-beta.336",
     "lucide-react": "1.48.0",
     "monaco-editor": "0.56.0",
     "react": "19.2.8",
