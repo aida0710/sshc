@@ -194,7 +194,8 @@ async function lookAtEveryPage(page: Page, walk: Walk): Promise<void> {
 async function openConnection(page: Page, alias: string): Promise<void> {
   await goTo(page, "/connections");
   await settle(page);
-  await page.getByRole("main").getByText(alias, { exact: true }).first().click();
+  // Home is kept hidden behind Connections (KeptSections) and lists the same connection; take the one shown.
+  await page.getByRole("main").getByText(alias, { exact: true }).filter({ visible: true }).first().click();
 }
 
 async function lookAtConnectionEditor(page: Page, walk: Walk): Promise<void> {
