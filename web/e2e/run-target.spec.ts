@@ -77,6 +77,11 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       await route.fulfill({ json: { alias: "bastion", version: compatibleVersion ?? localVersion, vault: true, unlocked: true, passwordless: true, sessions: 0 } });
     } else if (path.endsWith("/terminal/sessions")) {
       await route.fulfill({ json: { sessions, maxSessions: 50 } });
+    } else if (path.endsWith("/terminal/machine")) {
+      // The empty terminal shows the run target's machine and its recent connections (terminalOverview.ts).
+      await route.fulfill({ json: { hostname: "bastion", os: "linux" } });
+    } else if (path.endsWith("/terminal/connection-history")) {
+      await route.fulfill({ json: { hours: [], recent: [] } });
     } else if (path.includes("/terminal/destinations/")) {
       // bastion cannot resolve the alias, so this machine does not read that session's files.
       await route.fulfill({ status: 422, contentType: "application/problem+json", json: { code: "alias_unresolvable", message: "request rejected" } });
