@@ -22,13 +22,16 @@ var accentColorPattern = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 // 知らない名前は既定のテーマとして描くので、ここでは形だけを確かめる。
 var themeNamePattern = regexp.MustCompile(`^[a-z0-9-]{1,32}$`)
 
-// AppearanceSettings は、アプリの見た目（テーマとさし色）である。プリセットに入る。
+// AppearanceSettings は、アプリの見た目（テーマ、さし色、動きを減らすか）である。プリセットに入る。
 type AppearanceSettings struct {
 	// Theme は、system（OS に合わせる）かテーマの名前である。空は既定のテーマ（画面の既定は dark）。
 	Theme string `json:"theme,omitempty"`
 	// Accent は、選んでいる項目・ボタン・フォーカスの枠に使う色である。用意した色の名前か、
 	// 利用者が決めた色（#rrggbb、小文字）。空は既定の色（画面の既定は lavender）。
 	Accent string `json:"accent,omitempty"`
+	// ReduceMotion は、画面のアニメーションを省くかである。nil は OS の設定（prefers-reduced-motion）に
+	// 従う。画面だけが読み、エンジンは使わない。
+	ReduceMotion *bool `json:"reduceMotion,omitempty"`
 }
 
 // validateAppearanceSettings は、形の合わないテーマの名前、知らないさし色の名前、色として

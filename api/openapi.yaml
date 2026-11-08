@@ -6881,6 +6881,8 @@ components:
           pattern: "^(lavender|blue|sky|pink|mono|#[0-9a-f]{6})$"
         # system（OS に合わせる）かテーマの名前。省略は既定の dark。知らない名前は既定として描く。
         theme: { type: string, pattern: '^[a-z0-9-]{1,32}$' }
+        # 画面のアニメーションを省くか。省略は OS の設定（prefers-reduced-motion）に従う。
+        reduceMotion: { type: boolean }
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
     # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:

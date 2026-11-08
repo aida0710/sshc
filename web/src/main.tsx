@@ -8,6 +8,7 @@ import { bootstrapSession } from "./session/bootstrap";
 import { LanguageProvider } from "./i18n/context";
 import { AccentProvider } from "./theme/accentContext";
 import { ThemeProvider } from "./theme/context";
+import { MotionProvider } from "./theme/motionContext";
 import { ToastProvider } from "./ui/ToastProvider";
 
 const root = document.getElementById("root");
@@ -43,14 +44,16 @@ createRoot(root).render(
     <CrashBoundary>
     <ThemeProvider>
       <AccentProvider>
-        <LanguageProvider>
-          <ToastProvider>
-            <App
-              bootstrap={() => sessionPromise}
-              health={() => apiClient.health()}
-            />
-          </ToastProvider>
-        </LanguageProvider>
+        <MotionProvider>
+          <LanguageProvider>
+            <ToastProvider>
+              <App
+                bootstrap={() => sessionPromise}
+                health={() => apiClient.health()}
+              />
+            </ToastProvider>
+          </LanguageProvider>
+        </MotionProvider>
       </AccentProvider>
     </ThemeProvider>
     </CrashBoundary>

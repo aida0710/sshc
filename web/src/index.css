@@ -19,6 +19,8 @@
   }
 }
 @custom-variant active (&:active:where(:not(:disabled)));
+/* motion-reduce は、OS の設定ではなく <html data-motion="reduce"> を見る（下の動きを省く規則と同じ）。 */
+@custom-variant motion-reduce (&:where(:root[data-motion="reduce"] *));
 /* タッチ向けの見た目（いつも出す操作、44px の押す場所）は、画面がスマホの組み方のときだけにする。
    条件は useMediaQuery.ts の mobileViewportQuery と同じ。タッチ対応の PC でも、画面が PC の大きさなら
    PC と同じに出す。desktop-layout はその逆（マウスで載せたときに出す操作など）。 */
@@ -292,7 +294,9 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+/* 動きを減らすときは、<html data-motion="reduce">（theme/motionContext.tsx）の下の動きを省く。
+   OS の「動きを減らす」に従うか、Appearance の「動きを減らす」で決めるかは、その属性を付ける側が決める。 */
+:root[data-motion="reduce"] {
   *,
   *::before,
   *::after {
@@ -856,9 +860,7 @@ select:not([multiple]):not([size]) {
   from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: translateY(0); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .sshc-modal-panel { animation: none; }
-}
+:root[data-motion="reduce"] .sshc-modal-panel { animation: none; }
 
 /* Keyboard focus uses the same accent as the current page and selection.
    Terminal and editor surfaces keep their own focus/selection rendering. */

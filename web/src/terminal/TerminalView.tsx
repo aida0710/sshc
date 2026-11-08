@@ -92,7 +92,8 @@ import { useLocalWindowsPaths } from "./useLocalWindowsPaths";
 import { FilePreviewDialog } from "../sftp/FilePreviewDialog";
 import type { RemotePathAction } from "../sftp/SFTPPanel";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
-import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
+import { cursorAnimationEnabled } from "../ui/reducedMotion";
+import { useReducedMotion } from "../theme/motionContext";
 import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
@@ -228,7 +229,7 @@ export function TerminalView({
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
-  const reducedMotion = useMediaQuery(reducedMotionQuery);
+  const reducedMotion = useReducedMotion();
   const mobile = useMediaQuery(mobileViewportQuery);
   const touchTerminal = useTouchTerminal();
   const touchTerminalRef = useRef(touchTerminal);
