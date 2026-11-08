@@ -126,7 +126,39 @@ function buildHome() {
   writeFileSync(join(home, "projects/api-server/docs/2026-10-29-障害報告-レスポンス遅延-詳細版-最終.md"), "# 障害報告\n");
   writeFileSync(join(home, ".bashrc"), "export PS1='$ '\nexport LANG=C.UTF-8\n");
   writeFileSync(join(home, ".bash_profile"), ". ~/.bashrc\n");
+  writeConnectionActivity(ssh);
   return home;
+}
+
+// writeConnectionActivity は、ターミナルの空の状態のアクティビティに出す、過去 53 週の接続の記録を置く。
+// 平日に多く、最近ほど多く、ときどき接続しない週がある。種は固定で、撮るたびに同じ絵になる。今日の分は
+// 置かない（撮影中に開く接続が今の時間に足され、時間は古い順でなければならない）。
+function writeConnectionActivity(ssh) {
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const weeks = 53;
+  const aliases = ["web-01", "web-02", "db-primary", "bastion", "gpu-box", "nas", "stg-web", "osaka-web-01", "raspberrypi", "router", "stg-db", "web-03", "db-replica", "stg-worker"];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const first = new Date(today);
+  first.setDate(first.getDate() - (weeks - 1) * 7 - today.getDay());
+  const hours = [];
+  for (let week = 0; week < weeks; week++) {
+    const quietWeek = random() < 0.08;
+    for (let day = 0; day < 7; day++) {
+      const date = new Date(first);
+      date.setDate(first.getDate() + week * 7 + day);
+      const weekday = day >= 1 && day <= 5 ? 1 : 0.3;
+      const connections = quietWeek ? 0 : Math.floor(Math.pow(random(), 1.3) * 11 * weekday * (0.45 + 0.55 * (week / weeks)));
+      if (connections === 0 || date >= today) continue;
+      date.setHours(12);
+      const hour = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours()));
+      const used = aliases.filter((_, index) => (index + week + day) % 5 === 0).slice(0, Math.min(connections, 4));
+      hours.push({ hour: hour.toISOString().replace(".000Z", "Z"), connections, aliases: used.length === 0 ? [aliases[0]] : used });
+    }
+  }
+  mkdirSync(join(ssh, "sshc"), { recursive: true, mode: 0o700 });
+  writeFileSync(join(ssh, "sshc", "connection-activity.json"), JSON.stringify({ schemaVersion: 1, hours }, null, 2) + "\n", { mode: 0o600 });
 }
 
 function copyPicturesFromServer(home) {

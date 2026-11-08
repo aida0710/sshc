@@ -117,6 +117,9 @@ var servedStringEnums = map[string]func(string) bool{
 	"AppearanceSettings.accent": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
 		preset.Appearance = &application.AppearanceSettings{Accent: value}
 	}),
+	"AppearanceSettings.emptyTerminalArt": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
+		preset.Appearance = &application.AppearanceSettings{EmptyTerminalArt: value}
+	}),
 	"InterfaceSettings.touchMode": acceptedAsPreset(func(preset *application.SettingsPreset, value string) {
 		preset.Interface = &application.InterfaceSettings{TouchMode: value}
 	}),

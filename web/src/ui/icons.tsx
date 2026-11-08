@@ -8,7 +8,9 @@ import {
   ArrowRight,
   ArrowUp,
   ArrowUpDown,
+  Ban,
   Bell,
+  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -80,6 +82,9 @@ import {
 // 名前は画面の中での役割で付け、どの lucide のアイコンを使うかはここだけで決める。
 const shapes = {
   home: House,
+  // The empty terminal: its chart of connections per day, and the choice to draw no background.
+  activity: CalendarDays,
+  noBackground: Ban,
   connections: Server,
   config: FileCog,
   groups: Folder,

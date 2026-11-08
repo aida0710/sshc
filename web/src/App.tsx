@@ -555,6 +555,8 @@ export function App({
                       onOpenLocalShell={() => void openLocalShell()}
                       onAddConnection={addConnection}
                       onOpenSync={() => navigate("Sync")}
+                      onOpenConnection={(alias) => void openSSHSession(alias)}
+                      onShowConnections={() => navigate("Connections")}
                     />
                   </div>
                 ) : null}
