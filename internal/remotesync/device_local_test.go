@@ -32,6 +32,7 @@ func ownedDeviceLocalPaths() []string {
 		path.Join(storage.StateDirectoryName, handoff.MutationLockName),
 		keys.TrashPathRelative,
 		recent.PathRelative,
+		recent.ActivityPathRelative,
 		browserauth.PathRelative,
 		terminalworkspace.PathRelative,
 	}, storage.DeviceLocalPaths()...)
