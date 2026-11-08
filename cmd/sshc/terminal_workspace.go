@@ -3,10 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"sshc/internal/api"
 	"sshc/internal/terminalworkspace"
 )
+
+// builtInWorkspaceDisplayNames は、名前の無い組み込みのワークスペースを画面が出す名前である
+// （web/src/i18n/messages の en.ts と ja.ts の workspace.defaultName と workspace.agentsName）。
+// 利用者は画面に見える名前で --workspace を書くので、画面の言語によらずどちらの名前でも選べるようにする。
+var builtInWorkspaceDisplayNames = map[string][]string{
+	terminalworkspace.DefaultID: {"Main", "メイン"},
+	terminalworkspace.AgentsID:  {"Agents", "エージェント"},
+}
 
 // resolveTerminalWorkspace は、--workspace の値をワークスペースの ID にする。空なら、
 // コマンドで開いたセッションを画面に混ぜないよう、非表示の agents にする。ID と名前の
@@ -19,12 +28,28 @@ func resolveTerminalWorkspace(ctx context.Context, engine *engineAPI, requested 
 	if err := engine.getJSON(ctx, "/api/v1/terminal/workspaces", &listed); err != nil {
 		return "", err
 	}
-	for _, workspace := range listed.Workspaces {
+	if id, found := findTerminalWorkspace(listed.Workspaces, requested); found {
+		return id, nil
+	}
+	return "", fmt.Errorf("%w: %q", errTerminalWorkspaceNotFound, requested)
+}
+
+// findTerminalWorkspace は、ID か利用者が付けた名前が同じワークスペースを探し、無ければ、名前の無い
+// 組み込みのワークスペースを画面の名前で探す。利用者が「Main」のような名前を付けたワークスペースは、
+// 画面の言語で変わる組み込みの名前より先に選ぶ。名前を付け直した組み込みのものは、画面にもその名前が
+// 出るので、付けた名前だけで選ぶ。
+func findTerminalWorkspace(workspaces []api.TerminalWorkspace, requested string) (string, bool) {
+	for _, workspace := range workspaces {
 		if workspace.Id == requested || (workspace.Name != "" && workspace.Name == requested) {
-			return workspace.Id, nil
+			return workspace.Id, true
 		}
 	}
-	return "", fmt.Errorf("no terminal workspace has the ID or name %q", requested)
+	for _, workspace := range workspaces {
+		if workspace.Name == "" && slices.Contains(builtInWorkspaceDisplayNames[workspace.Id], requested) {
+			return workspace.Id, true
+		}
+	}
+	return "", false
 }
 
 // terminalSessionListing は、terminal list の結果である。JSON は engine の一覧と同じ形で、

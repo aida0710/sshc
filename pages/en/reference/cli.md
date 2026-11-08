@@ -304,7 +304,7 @@ sshc terminal close <session-id>
 
 `create shell` opens a local shell on the engine host. `send` appends Enter (CR) by default; `--no-enter` sends the text as is.
 
-A session opened with `create` goes into the hidden Agents [workspace](/en/features/workspace) by default, so connections opened by LLMs and scripts stay out of the sidebar. `--workspace` puts it in another workspace, named by ID or name. `list` also shows the workspace ID of each session.
+A session opened with `create` goes into the hidden Agents [workspace](/en/features/workspace) by default, so connections opened by LLMs and scripts stay out of the sidebar. `--workspace` puts it in another workspace, named by ID or name. Until they are renamed, the built-in Main and Agents workspaces go by the names the web UI shows (メイン and エージェント in Japanese) or by their IDs, `default` and `agents`. `list` also shows the workspace ID of each session.
 
 `read` returns a scrollback cursor and warns when an older position has already been discarded. `send` checks the current process generation to avoid sending to a replacement process.
 
