@@ -41,6 +41,7 @@ const maxTerminalSessionIDLength = 64
 var (
 	errTerminalSessionNotFound   = errors.New("terminal session was not found")
 	errTerminalSelectorAmbiguous = errors.New("terminal session ID prefix is ambiguous")
+	errTerminalWorkspaceNotFound = errors.New("terminal workspace was not found")
 	errTerminalWaitTimeout       = errors.New("terminal wait timed out")
 	errTerminalDeliveryFailed    = errors.New("terminal command was not delivered")
 )
@@ -342,6 +343,8 @@ func classifyTerminalFailure(err error) commandFailure {
 		return commandFailure{Kind: "terminal_session_not_found", Retryable: false}
 	case errors.Is(err, errTerminalSelectorAmbiguous):
 		return commandFailure{Kind: "terminal_session_ambiguous", Retryable: false}
+	case errors.Is(err, errTerminalWorkspaceNotFound):
+		return commandFailure{Kind: "terminal_workspace_not_found", Retryable: false}
 	case errors.Is(err, errTerminalWaitTimeout):
 		return commandFailure{Kind: "terminal_wait_timeout", Retryable: true}
 	case errors.Is(err, errTerminalDeliveryFailed):
@@ -358,6 +361,8 @@ func writeHumanTerminalFailure(stderr io.Writer, failure commandFailure) {
 		fmt.Fprintln(stderr, "sshc: no terminal matches that session ID")
 	case "terminal_session_ambiguous":
 		fmt.Fprintln(stderr, "sshc: that session ID prefix matches more than one terminal; use more characters")
+	case "terminal_workspace_not_found":
+		fmt.Fprintln(stderr, "sshc: no terminal workspace has that ID or name")
 	case "terminal_wait_timeout":
 		fmt.Fprintln(stderr, "sshc: terminal wait timed out")
 	case "terminal_command_delivery_failed", "terminal_command_target_unavailable", "terminal_command_target_changed":
