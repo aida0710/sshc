@@ -94,6 +94,7 @@ describe("the catalogue", () => {
         "terminal.browserNotificationsHeading",
         "terminal.localhost",
         "terminal.notificationVolumeHint",
+        "terminal.overview.cpu",
         "terminal.rowDetail",
         "terminal.settingsHeading",
         "tree.navLabel",

@@ -9,6 +9,15 @@ Open SSH and local shells in the same interface, with search, Quick Commands, an
 
 ![A local shell open in a named workspace](/images/terminal-desktop.png)
 
+## When no session is open
+
+While no session is open, the tiles **Open a local shell**, **Add connection**, and **Receive by sync** have below them what the sshc engine new shells open on can tell about itself. With a [remote session](./remote-session) chosen, it is that sshc engine.
+
+- Activity: the terminal SSH connections per day. On a PC the recent connections are listed beside it, and choosing one opens it. It is left out until a connection has been opened
+- The machine: its name, operating system, CPU use, memory, and uptime. Values the operating system does not give are left out (macOS gives neither the CPU use nor the memory in use; FreeBSD and OpenBSD do not give the memory in use)
+
+**Background with no session** in **Settings → Appearance** draws a moving picture behind them: network, contours, or globe. The default is none. On a phone the picture is a banner above the tiles. It moves only while this screen is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
+
 ## How data travels
 
 The sshc engine runs the shell. The browser receives the output over a WebSocket, draws it, and sends your input. When the browser's connection drops, the session keeps running in the engine.

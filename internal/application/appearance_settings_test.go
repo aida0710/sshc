@@ -36,6 +36,25 @@ func TestTurningMotionReductionOffIsKeptApartFromFollowingTheOS(t *testing.T) {
 	}
 }
 
+func TestAnEmptyTerminalArtOutsideTheListIsRefused(t *testing.T) {
+	service, _ := newTerminalService(t)
+
+	err := editStandardPreset(t, service, func(preset *SettingsPreset) {
+		preset.Appearance = &AppearanceSettings{EmptyTerminalArt: "aquarium"}
+	})
+	if !errors.Is(err, ErrMetadataAppearance) {
+		t.Fatalf("err = %v, want ErrMetadataAppearance", err)
+	}
+	if err := editStandardPreset(t, service, func(preset *SettingsPreset) {
+		preset.Appearance = &AppearanceSettings{EmptyTerminalArt: "globe"}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if appearance := service.EffectiveSettings().Preset.Appearance; appearance == nil || appearance.EmptyTerminalArt != "globe" {
+		t.Fatalf("appearance = %+v, want globe", appearance)
+	}
+}
+
 func TestACustomColourIsStoredAsTheAccent(t *testing.T) {
 	service, _ := newTerminalService(t)
 

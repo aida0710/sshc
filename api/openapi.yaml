@@ -7026,6 +7026,8 @@ components:
           pattern: "^(lavender|blue|sky|pink|mono|#[0-9a-f]{6})$"
         # system（OS に合わせる）かテーマの名前。省略は既定の dark。知らない名前は既定として描く。
         theme: { type: string, pattern: '^[a-z0-9-]{1,32}$' }
+        # 開いているセッションが無いときのターミナルに描く絵。省略は none（描かない）。
+        emptyTerminalArt: { type: string, enum: [none, network, contours, globe] }
         # 画面のアニメーションを省くか。省略は OS の設定（prefers-reduced-motion）に従う。
         reduceMotion: { type: boolean }
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの

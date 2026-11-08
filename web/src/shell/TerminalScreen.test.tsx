@@ -56,7 +56,7 @@ function Screen({ api, targets, connectedEngines = new Set() }: { api: TerminalS
   const terminalSessions = useTerminalSessions(api, t);
   const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget: targets.selected });
   return (
-    <TerminalScreen onOpenLocalShell={vi.fn()} onAddConnection={vi.fn()} onOpenSync={vi.fn()}
+    <TerminalScreen onOpenLocalShell={vi.fn()} onAddConnection={vi.fn()} onOpenSync={vi.fn()} onOpenConnection={vi.fn()} onShowConnections={vi.fn()}
       visible
       terminalSessions={terminalSessions}
       activeSessionId={null}
@@ -224,7 +224,7 @@ function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: Ru
   useEffect(() => { void open({ kind: "ssh", alias: "db" }); }, [open]);
   const connectedEngines: ReadonlySet<string> = new Set();
   return (
-    <TerminalScreen onOpenLocalShell={vi.fn()} onAddConnection={vi.fn()} onOpenSync={vi.fn()}
+    <TerminalScreen onOpenLocalShell={vi.fn()} onAddConnection={vi.fn()} onOpenSync={vi.fn()} onOpenConnection={vi.fn()} onShowConnections={vi.fn()}
       visible
       terminalSessions={terminalSessions}
       activeSessionId={null}
