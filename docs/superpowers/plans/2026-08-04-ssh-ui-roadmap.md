@@ -68,7 +68,7 @@ Found by reading the author's own `~/.ssh` rather than a fixture, and each one o
 
 ## What the API sweep found, and what it cost
 
-Every operation in the contract driven against the author's real `~/.ssh`, 207 cases, recorded in `docs/api-sweep-2026-08-06.md`. Seven defects, all closed. They are worth reading together because six of the seven are the same shape: **a file, an alias or a warning that exists and that nothing reads.**
+Every operation in the contract was driven against a real `~/.ssh`, 207 cases. Seven defects, all closed. They are worth reading together because six of the seven are the same shape: **a file, an alias or a warning that exists and that nothing reads.**
 
 - **A rename took over an alias another file declared.** `move` had refused this since it was written; `rename` had no such check, answered `200`, and silently moved a live alias to a different machine. Now refused as `409 alias_already_declared`.
 - **A cross-file duplicate alias was invisible on the two screens a user looks at.** `ProjectHosts` keyed its check on the file's absolute path, so it fired only for two blocks in one file — the case a reader can already see. The host detail's Effective tab had no detection at all, because it is a second engine (`application.ComputeEffective`) from the one the Diagnostics tab uses (`internal/effective.Project`). Both now report it.
