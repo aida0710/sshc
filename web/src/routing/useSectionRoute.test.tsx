@@ -208,4 +208,23 @@ describe("useSectionRoute", () => {
     );
     expect(window.location.href).toBe(`${window.location.origin}/keys`);
   });
+
+  it("tells where the page is now while the presenter has yet to draw it there", () => {
+    const changesToDraw: Array<() => void> = [];
+    const drawLater = (change: () => void) => { changesToDraw.push(change); };
+    const { result } = renderHook(() => useSectionRoute({ present: drawLater }));
+
+    act(() => {
+      result.current.navigateLocation("/connections/servers?host=bastion");
+    });
+
+    expect(result.current.location).toEqual({ pathname: "/", search: "" });
+    expect(result.current.currentLocation()).toEqual({ pathname: "/connections/servers", search: "?host=bastion" });
+
+    act(() => {
+      changesToDraw.forEach((change) => change());
+    });
+
+    expect(result.current.location).toEqual({ pathname: "/connections/servers", search: "?host=bastion" });
+  });
 });
