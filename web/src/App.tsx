@@ -245,7 +245,8 @@ export function App({
   useEffect(() => {
     if (navigationPinned) setNavigationOpen(false);
   }, [navigationPinned, setNavigationOpen]);
-  useNavigationSwipe({ enabled: mobileLayout && !navigationPinned && state === "ready", open: navigationOpen, panelRef: navigationPanelRef, onOpenChange: setNavigationOpen });
+  const navigationBackdropRef = useRef<HTMLDivElement>(null);
+  useNavigationSwipe({ enabled: mobileLayout && !navigationPinned && state === "ready", open: navigationOpen, panelRef: navigationPanelRef, backdropRef: navigationBackdropRef, onOpenChange: setNavigationOpen });
 
   // A page's heading shows the inspector's toggle among its actions on a wide screen, and puts its actions
   // in the top bar on a phone, where its name is hidden (see pageChrome).
@@ -467,14 +468,18 @@ export function App({
               : ""
           }`}
         >
-          {navigationOpen && !navigationPinned ? (
+          {/* The backdrop stays in the page while the navigation is closed, unseen and not in the way, so that a finger
+              pulling the navigation out darkens it as far as the panel is out (useNavigationSwipe). It fades with the
+              panel's own slide when a button opens or closes the navigation. */}
+          {navigationPinned ? null : (
             <div
+              ref={navigationBackdropRef}
               aria-hidden="true"
               data-navigation-backdrop
               onClick={() => setNavigationOpen(false)}
-              className="sshc-navigation-backdrop fixed inset-0 z-20 bg-canvas/70 md:hidden"
+              className={`sshc-navigation-backdrop fixed inset-0 z-20 bg-canvas/70 transition-opacity motion-reduce:transition-none md:hidden ${navigationOpen ? "opacity-100" : "pointer-events-none opacity-0"}`}
             />
-          ) : null}
+          )}
           {navigationHidden ? (
             // The column the hidden navigation leaves (hiddenNavigationWidth): only the button that shows it again.
             <div className="flex justify-center pt-3">
