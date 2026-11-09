@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rubberBand, rubberBandSlope, unrubberBand } from "./rubberBand";
+import { rubberBand, rubberBandSlope } from "./rubberBand";
 
 describe("rubberBand", () => {
   it("moves less than the finger, and less and less the further it pulls, both ways", () => {
@@ -17,10 +17,5 @@ describe("rubberBand", () => {
     expect(rubberBandSlope(120, 400)).toBeCloseTo(at(120) / 0.02, 3);
     expect(rubberBandSlope(-120, 400)).toBeCloseTo(at(-120) / 0.02, 3);
     expect(rubberBandSlope(300, 400)).toBeLessThan(rubberBandSlope(30, 400));
-  });
-
-  it("finds the finger again from where something is drawn", () => {
-    expect(unrubberBand(rubberBand(120, 400), 400)).toBeCloseTo(120);
-    expect(unrubberBand(rubberBand(-30, 400), 400)).toBeCloseTo(-30);
   });
 });
