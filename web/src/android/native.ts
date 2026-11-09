@@ -20,6 +20,7 @@ export type AndroidBridge = {
   releaseChosenFolder(): void;
   performHapticFeedback(feedback: HapticFeedback): void;
   firstScreenShown(): void;
+  setBackTakenByPage(taken: boolean): void;
 };
 
 type AndroidWindow = Window & { sshcAndroid?: AndroidBridge };

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { notifyAndroidBackClosersChanged } from "./androidBackClosers";
 
 // A BackStop is an open part of a page, such as the search bar over a terminal, that Android's Back closes before it
 // leaves the page. It is not a layer (useDismissibleLayer): opening a layer closes the layer under it, and a layer takes
@@ -15,10 +16,17 @@ export function useAndroidBackStop({ open, close }: { open: boolean; close: () =
     if (!open) return;
     const stop: BackStop = { close: () => latestClose.current() };
     openStops.push(stop);
+    notifyAndroidBackClosersChanged();
     return () => {
       openStops.splice(openStops.indexOf(stop), 1);
+      notifyAndroidBackClosersChanged();
     };
   }, [open]);
+}
+
+// isAndroidBackStopOpen tells whether a part of a page is open for Back to close.
+export function isAndroidBackStopOpen(): boolean {
+  return openStops.length > 0;
 }
 
 // closeTopAndroidBackStop closes the part opened last, and tells whether there was one to close.

@@ -17,6 +17,16 @@ export type NavigateLocationOptions = {
 
 export type NavigationBlocker = (next: BrowserLocation) => boolean;
 
+// LocationPresenter makes a change of the location shown: it calls change, which publishes the new location,
+// and may wrap it (the phone's fade between pages). replaced is whether the change took the place of the current
+// entry (a page settling its own address, Android's Back opening the top of a section).
+export type LocationPresenter = (
+  change: () => void,
+  transition: { from: BrowserLocation; to: BrowserLocation; replaced: boolean },
+) => void;
+
+const presentAtOnce: LocationPresenter = (change) => change();
+
 const navigationPointKey = "__sshcNavigationPoint";
 
 function navigationPoint(state: unknown): number | null {
@@ -36,7 +46,7 @@ function readLocation(): BrowserLocation {
   return { pathname: window.location.pathname, search: window.location.search };
 }
 
-export function useSectionRoute(): {
+export function useSectionRoute({ present = presentAtOnce }: { present?: LocationPresenter } = {}): {
   route: SectionRoute;
   location: BrowserLocation;
   navigate: (section: Section) => boolean;
@@ -53,10 +63,12 @@ export function useSectionRoute(): {
   const restoringPointRef = useRef<number | null>(null);
   const route = useMemo(() => parseSectionPath(location.pathname), [location.pathname]);
 
-  const publish = useCallback((next: BrowserLocation) => {
+  // present is a function that does not change between renders (a module's function), as publish is kept.
+  const publish = useCallback((next: BrowserLocation, { replaced = false } = {}) => {
+    const from = locationRef.current;
     locationRef.current = next;
-    setLocation(next);
-  }, []);
+    present(() => setLocation(next), { from, to: next, replaced });
+  }, [present]);
 
   const setNavigationBlocker = useCallback((blocker: NavigationBlocker | null) => {
     blockerRef.current = blocker;
@@ -119,7 +131,8 @@ export function useSectionRoute(): {
     const path = sectionPath(section);
     const nextLocation = { pathname: path, search: "" };
     if (blockerRef.current !== null && !blockerRef.current(nextLocation)) return false;
-    if (window.location.pathname === path) {
+    const replaced = window.location.pathname === path;
+    if (replaced) {
       if (window.location.search !== "" || window.location.hash !== "") {
         window.history.replaceState(
           stateAtNavigationPoint(window.history.state, navigationPointRef.current ?? 0),
@@ -132,7 +145,7 @@ export function useSectionRoute(): {
       window.history.pushState(stateAtNavigationPoint(null, point), "", path);
       navigationPointRef.current = point;
     }
-    publish(nextLocation);
+    publish(nextLocation, { replaced });
     return true;
   }, [publish]);
 
@@ -155,7 +168,7 @@ export function useSectionRoute(): {
       window.history.pushState(stateAtNavigationPoint(null, point), "", next);
       navigationPointRef.current = point;
     }
-    publish(nextLocation);
+    publish(nextLocation, { replaced: options.replace === true });
     return true;
   }, [publish]);
 

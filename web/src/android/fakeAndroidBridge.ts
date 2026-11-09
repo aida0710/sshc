@@ -22,6 +22,7 @@ export function fakeAndroidBridge(overrides: Partial<AndroidBridge> = {}): Andro
     releaseChosenFolder: vi.fn(),
     performHapticFeedback: vi.fn(),
     firstScreenShown: vi.fn(),
+    setBackTakenByPage: vi.fn(),
     ...overrides,
   };
 }
