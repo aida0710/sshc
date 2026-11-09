@@ -38,7 +38,6 @@ import android.widget.ScrollView;
 import android.widget.Toast;
 
 import androidx.activity.ComponentActivity;
-import androidx.activity.OnBackPressedCallback;
 
 import org.json.JSONObject;
 
@@ -75,6 +74,7 @@ public final class MainActivity extends ComponentActivity {
     private int webBarColour;
     private Uri engineOrigin;
     private FirstScreenWait firstScreenWait;
+    private PageBackCallback backCallback;
     private final NativeBridge nativeBridge = new NativeBridge(new NativeBridge.Host() {
         @Override
         public void chooseSaveDestination(String requestId, String suggestedName, String mimeType) {
@@ -152,6 +152,11 @@ public final class MainActivity extends ComponentActivity {
         @Override
         public void firstScreenShown() {
             runOnUiThread(() -> showFirstScreenOnceDrawn());
+        }
+
+        @Override
+        public void setBackTakenByPage(boolean taken) {
+            runOnUiThread(() -> backCallback.setEnabled(taken));
         }
     });
     // 選んだフォルダの一覧と、それを受け取る request ID。bridge は UI スレッドの外から呼ぶので folderLock の中で読み書きする。
@@ -322,6 +327,8 @@ public final class MainActivity extends ComponentActivity {
         }
         lastEntrance = Entrance.withoutFragment(entrance);
         engineOrigin = Uri.parse(lastEntrance);
+        // 読み込み直したページは、戻るを自分のものかどうかまだ知らせていない。知らせるまではページが受ける。
+        backCallback.setEnabled(true);
         webView = new WebView(this);
         webView.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -883,12 +890,18 @@ public final class MainActivity extends ComponentActivity {
 
     /** AndroidX経由で旧OSのボタンとAndroid 13以降のpredictive backを同じ処理へ渡す。 */
     private void registerBackCallback() {
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+        backCallback = new PageBackCallback(new PageBackCallback.Page() {
             @Override
-            public void handleOnBackPressed() {
+            public void evaluate(String script) {
+                if (webView != null) webView.evaluateJavascript(script, null);
+            }
+
+            @Override
+            public void goBack() {
                 navigateBack();
             }
         });
+        getOnBackPressedDispatcher().addCallback(this, backCallback);
     }
 
     /** Web画面の一時UIと履歴を優先し、ホームならアプリをバックグラウンドへ戻す。 */

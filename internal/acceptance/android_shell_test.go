@@ -208,11 +208,19 @@ func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T
 	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
 	activity := readRepoFile(t, "android", "app", "src", "main", "java",
 		"com", "github", "aida0710", "sshc", "MainActivity.java")
+	backCallback := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "PageBackCallback.java")
 
 	for _, required := range []string{
 		`android:enableOnBackInvokedCallback="true"`,
 		"getOnBackPressedDispatcher().addCallback(",
-		"new OnBackPressedCallback(true)",
+		"extends OnBackPressedCallback",
+		"super(true)",
+		// ジェスチャーの進み具合を Web 画面へ送り、Web 画面がページを縮める。
+		"handleOnBackProgressed(",
+		"sshc-android-back-gesture",
+		// Home の一番上で何も開いていなければ、戻るを Android に任せてホーム画面へ戻る動きを出させる。
+		"backCallback.setEnabled(taken)",
 		"webView.evaluateJavascript(",
 		"sshc-android-back",
 		"[role=dialog]",
@@ -224,13 +232,13 @@ func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T
 		// ページがHomeで離れると答えたら、WebViewの履歴（pushStateも積まれる）を戻さずに背面へ送る。
 		`if ("false".equals(consumed)) {`,
 	} {
-		if !strings.Contains(manifest+activity, required) {
+		if !strings.Contains(manifest+activity+backCallback, required) {
 			t.Errorf("Androidの戻る導線に %q が無い", required)
 		}
 	}
 	// 直接KEYCODE_BACKを見ると、predictive backを持つ端末で二重に反応する。
 	for _, forbidden := range []string{"KeyEvent.KEYCODE_BACK", "onKeyDown("} {
-		if strings.Contains(activity, forbidden) {
+		if strings.Contains(activity+backCallback, forbidden) {
 			t.Errorf("Androidの戻る導線が %q を直に扱っている", forbidden)
 		}
 	}
