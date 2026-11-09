@@ -33,7 +33,7 @@ export type SpringsRun = {
   stop(): number[];
 };
 
-// The clock and frames a spring runs on: the page's, unless a caller with its own (touchScroll.ts) hands them in.
+// The clock and frames a spring runs on: the page's, unless a caller hands in its own (a test that runs slow frames).
 export type SpringClock = {
   now: () => number;
   requestFrame: (callback: FrameRequestCallback) => number;

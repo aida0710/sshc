@@ -1,5 +1,3 @@
-import { rubberBand, rubberBandSlope, unrubberBand } from "../ui/rubberBand";
-import { runSpring, type SpringRun } from "../ui/spring";
 import type { ScreenPoint } from "./tappedLink";
 
 export type Scroller = { scrollLines(amount: number): void };
@@ -20,11 +18,6 @@ export type SmoothScrollback = {
   room(): { above: number; below: number };
   // show draws the rows moved toward newer lines by a fraction of a row (0 ≤ fraction < 1).
   show(fraction: number): void;
-  // overscroll draws the rows pulled past an end by pixels: past the newest line when positive, past the oldest when
-  // negative, with nothing beyond them. height is how tall the rows shown are, which a pull past an end is measured
-  // against (rubberBand).
-  overscroll(pixels: number): void;
-  height(): number;
 };
 // The time a scrollback left between two rows takes to settle on the nearer one.
 const settleMilliseconds = 120;
@@ -35,9 +28,6 @@ const coastTimeConstantMs = 350;
 // The fastest a flick moves the text, in pixels a millisecond: Android's default maximum fling, 8,000 dp a second.
 // At 3, as before, a fast flick went no farther than a slow one.
 const maximumFlickPixelsPerMs = 8;
-// A flick that coasts into an end bounces off it with this share of the speed it reached it with: enough to show it
-// hit the end, not so much that the text leaves the screen.
-const bounceShare = 0.5;
 type TouchScrollOptions = {
   now?: () => number;
   requestFrame?: (callback: FrameRequestCallback) => number;
@@ -61,38 +51,6 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number, options
   // past the row shown at the top, toward newer lines.
   let smooth: SmoothScrollback | null = null;
   let fraction = 0;
-  // pull is how far a finger has gone past an end of the scrollback, in pixels (positive past the newest line), and
-  // pulled how far the rows are drawn past it: less than the finger, as a band gives (rubberBand). bounce is the spring
-  // that takes the rows back to the end once the finger lets go, or after a flick hit it.
-  let pull = 0;
-  let pulled = 0;
-  let bounce: SpringRun | null = null;
-  const clock = { now, requestFrame, cancelFrame };
-  const drawPulled = (pixels: number) => {
-    pulled = pixels;
-    smooth?.overscroll(pixels);
-  };
-  const stopBounce = () => {
-    bounce?.stop();
-    bounce = null;
-  };
-  // bounceBack runs the rows from where they are drawn past an end back to it, leaving at speed (pixels a
-  // millisecond, toward newer lines).
-  const bounceBack = (speed: number) => {
-    stopBounce();
-    pull = 0;
-    bounce = runSpring({
-      from: pulled,
-      to: 0,
-      velocity: speed,
-      onFrame: drawPulled,
-      onRest: () => {
-        bounce = null;
-      },
-      reducedMotion: options.reducedMotion?.() === true,
-      clock,
-    });
-  };
 
   // stop ends the coasting or settling, and leaves the rows where they are drawn.
   const stop = () => {
@@ -106,56 +64,26 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number, options
     fraction = next;
     smooth?.show(next);
   };
-  // cancel ends the gesture and puts the rows back on a row, at their end.
+  // cancel ends the gesture and puts the rows back on a row.
   const cancel = () => {
     stop();
-    stopBounce();
-    pull = 0;
-    if (pulled !== 0) drawPulled(0);
     if (fraction !== 0) showFraction(0);
   };
   // moveSmoothly moves the scrollback by rows, whole rows through the scrollback and the rest by drawing the rows
-  // moved. A finger that goes on past the newest or the oldest row pulls the rows past it, less and less the further
-  // it goes; text that coasts into an end bounces off it.
+  // moved. It never draws past the newest or the oldest row.
   const moveSmoothly = (scrollback: SmoothScrollback, rows: number) => {
-    const cell = cellHeight();
-    let left = rows;
-    // A finger past an end first takes back its pull before the text moves again.
-    if (pull !== 0) {
-      const remaining = pull + left * cell;
-      if (Math.sign(remaining) === Math.sign(pull)) {
-        pull = remaining;
-        drawPulled(rubberBand(pull, scrollback.height()));
-        return 0;
-      }
-      pull = 0;
-      drawPulled(0);
-      left = remaining / cell;
-    }
     const room = scrollback.room();
-    const total = fraction + left;
+    const total = fraction + rows;
     let lines = Math.floor(total);
     let next = total - lines;
-    const pastNewest = lines >= room.below;
-    const pastOldest = lines < -room.above;
-    const end = pastNewest ? room.below : -room.above;
-    if (pastNewest || pastOldest) {
-      lines = end;
-      next = 0;
-    }
+    const atEnd = lines >= room.below || lines < -room.above;
+    if (lines >= room.below) lines = room.below;
+    else if (lines < -room.above) lines = -room.above;
+    if (atEnd) next = 0;
     if (lines !== 0) view.scrollLines(lines);
     showFraction(next);
-    if (!pastNewest && !pastOldest) return lines;
-    const beyond = (total - end) * cell;
-    if (active) {
-      // The finger's speed is kept: let go past the end, the rows leave it at that speed (end).
-      pull = beyond;
-      drawPulled(rubberBand(pull, scrollback.height()));
-      return lines;
-    }
-    // There is nothing left to coast through: the text bounces off the end.
-    if (velocity !== 0) bounceBack(velocity * bounceShare);
-    velocity = 0;
+    // At either end there is nothing left to coast through.
+    if (atEnd) velocity = 0;
     return lines;
   };
   const movePixels = (pixels: number) => {
@@ -226,11 +154,6 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number, options
     start(y: number, smoothScrollback: SmoothScrollback | null = null) {
       if (smoothScrollback !== smooth) cancel();
       stop();
-      // Rows bouncing back from an end are caught where they are drawn.
-      if (bounce !== null && smoothScrollback !== null) {
-        stopBounce();
-        pull = unrubberBand(pulled, smoothScrollback.height());
-      }
       smooth = smoothScrollback;
       active = canScroll();
       last = y;
@@ -257,14 +180,6 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number, options
       active = false;
       if (!canScroll()) {
         cancel();
-        return;
-      }
-      // Let go past an end, the rows go back to it from the speed they moved under the finger (slower than the finger,
-      // as the band gives), and nothing coasts.
-      if (pull !== 0) {
-        const speed = now() - lastTime > 80 ? 0 : velocity * rubberBandSlope(pull, smooth?.height() ?? 0);
-        stop();
-        bounceBack(speed);
         return;
       }
       if (options.reducedMotion?.() === true || now() - lastTime > 80 || Math.abs(velocity) < 0.1) {

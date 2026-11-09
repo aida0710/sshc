@@ -20,12 +20,3 @@ export function rubberBandSlope(overflow: number, dimension: number): number {
   const stretched = (Math.abs(overflow) * give) / dimension + 1;
   return give / (stretched * stretched);
 }
-
-// unrubberBand is where the finger would be for something drawn shown pixels past its end: what a finger that catches
-// it there starts from.
-export function unrubberBand(shown: number, dimension: number): number {
-  if (dimension <= 0 || shown === 0) return 0;
-  const sign = Math.sign(shown);
-  const drawn = Math.min(Math.abs(shown), dimension * 0.999);
-  return sign * (dimension / give) * (1 / (1 - drawn / dimension) - 1);
-}
