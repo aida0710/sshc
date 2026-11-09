@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -32,11 +32,25 @@ function renderDialog(path: string, { paths, alias = "web", onClose = () => unde
   );
 }
 
-// swipe strokes one finger across the picture, from one point to another.
+// swipe strokes one finger across the picture, from one point to another, and lets the spring that finishes the
+// stroke run to its end. jsdom has no pointer capture, which a stroke takes once it moves the picture.
 function swipe(area: Element, from: { x: number; y: number }, to: { x: number; y: number }, pointerId = 1) {
+  Object.assign(area, { hasPointerCapture: () => false, setPointerCapture: vi.fn() });
   fireEvent.pointerDown(area, { pointerId, pointerType: "touch", clientX: from.x, clientY: from.y });
   fireEvent.pointerMove(area, { pointerId, pointerType: "touch", clientX: to.x, clientY: to.y });
   fireEvent.pointerUp(area, { pointerId, pointerType: "touch", clientX: to.x, clientY: to.y });
+  act(() => {
+    vi.advanceTimersByTime(1000);
+  });
+}
+
+// fingerAt sends one touch pointer event at a time (milliseconds), which the speed of a let-go is read from. jsdom
+// stamps an event with the real time and leaves out a timeStamp given with it, and React takes a timeStamp of 0 for
+// none, so the times count from a second in.
+function fingerAt(area: Element, type: "pointerDown" | "pointerMove" | "pointerUp", { x, y, time }: { x: number; y: number; time: number }) {
+  const event = createEvent[type](area, { pointerId: 1, pointerType: "touch", clientX: x, clientY: y });
+  Object.defineProperty(event, "timeStamp", { value: 1000 + time });
+  fireEvent(area, event);
 }
 
 function zoomArea(): Element {
@@ -262,6 +276,8 @@ describe("FilePreviewDialog", () => {
   });
 
   it("steps to the next and previous image with a finger's swipe, and closes on a swipe down", async () => {
+    // The spring that finishes a stroke runs on animation frames; the test moves their time by hand.
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
     vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
     const onClose = vi.fn();
     renderDialog("/tmp/b.png", { paths: ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"], onClose });
@@ -275,9 +291,79 @@ describe("FilePreviewDialog", () => {
 
     swipe(zoomArea(), { x: 200, y: 100 }, { x: 210, y: 260 });
     expect(onClose).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it("draws the picture under the finger while it strokes, and lets a short stroke go back", async () => {
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+    vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
+    renderDialog("/tmp/b.png", { paths: ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"] });
+    const image = await screen.findByRole("img", { name: "b.png" });
+    const area = zoomArea();
+    vi.spyOn(area, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 400, height: 800 } as DOMRect);
+    Object.assign(area, { hasPointerCapture: () => false, setPointerCapture: vi.fn() });
+
+    fingerAt(area, "pointerDown", { x: 300, y: 300, time: 0 });
+    fingerAt(area, "pointerMove", { x: 240, y: 302, time: 100 });
+    expect(image.style.transform).toBe("translate(-60px, 0px) scale(1)");
+
+    // 60px of 400, slowly: not far enough to step, so the picture goes back.
+    fingerAt(area, "pointerUp", { x: 240, y: 302, time: 400 });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByText("2 / 3")).toBeTruthy();
+    expect(image.style.transform).toBe("translate(0px, 0px) scale(1)");
+    vi.useRealTimers();
+  });
+
+  it("steps to the next file as soon as none of the picture is left in sight, before the spring settles", async () => {
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+    vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
+    renderDialog("/tmp/b.png", { paths: ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"] });
+    const image = await screen.findByRole("img", { name: "b.png" });
+    const area = zoomArea();
+    vi.spyOn(area, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 400, height: 800 } as DOMRect);
+    Object.defineProperties(image, { offsetWidth: { value: 400 }, offsetHeight: { value: 300 }, offsetLeft: { value: 0 }, offsetTop: { value: 250 } });
+    Object.assign(area, { hasPointerCapture: () => false, setPointerCapture: vi.fn() });
+
+    fingerAt(area, "pointerDown", { x: 300, y: 300, time: 0 });
+    fingerAt(area, "pointerMove", { x: 200, y: 300, time: 50 });
+    fingerAt(area, "pointerUp", { x: 200, y: 300, time: 50 });
+    // The spring settles past the edge in about 450ms; the picture is out of sight in about 200ms.
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(await screen.findByText("3 / 3")).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it("gives a little where there is no file to go to, and goes back", async () => {
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+    vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
+    renderDialog("/tmp/a.png", { paths: ["/tmp/a.png", "/tmp/b.png"] });
+    const image = await screen.findByRole("img", { name: "a.png" });
+    const area = zoomArea();
+    vi.spyOn(area, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 400, height: 800 } as DOMRect);
+    Object.assign(area, { hasPointerCapture: () => false, setPointerCapture: vi.fn() });
+
+    fingerAt(area, "pointerDown", { x: 100, y: 300, time: 0 });
+    fingerAt(area, "pointerMove", { x: 300, y: 300, time: 50 });
+    const moved = Number(/translate\((-?[\d.]+)px/.exec(image.style.transform)?.[1]);
+    expect(moved).toBeGreaterThan(0);
+    expect(moved).toBeLessThan(200);
+
+    fingerAt(area, "pointerUp", { x: 300, y: 300, time: 60 });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByText("1 / 2")).toBeTruthy();
+    expect(image.style.transform).toBe("translate(0px, 0px) scale(1)");
+    vi.useRealTimers();
   });
 
   it("leaves a stroke across a zoomed image, and a pinch, to the zoom", async () => {
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
     vi.mocked(sftpApi.previewFile).mockResolvedValue(png);
     renderDialog("/tmp/b.png", { paths: ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"] });
     await screen.findByRole("img", { name: "b.png" });
@@ -294,5 +380,6 @@ describe("FilePreviewDialog", () => {
     swipe(zoomArea(), { x: 300, y: 300 }, { x: 150, y: 300 });
     expect(screen.getByText("2 / 3")).toBeTruthy();
     expect(screen.getByRole("img", { name: "b.png" })).toBeTruthy();
+    vi.useRealTimers();
   });
 });

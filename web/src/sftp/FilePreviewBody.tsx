@@ -4,7 +4,7 @@ import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FilePreviewMedia } from "./FilePreviewMedia";
 import { FilePreviewRefusal } from "./FilePreviewRefusal";
 import { loadMonacoEditor } from "../editor/loadMonacoEditor";
-import type { PreviewSwipe } from "./previewSwipe";
+import type { PreviewSwipeHandler } from "./previewSwipe";
 import type { FilePreviewState } from "./useFilePreview";
 
 const MonacoEditor = lazy(() => loadMonacoEditor().then(({ MonacoEditor }) => ({ default: MonacoEditor })));
@@ -19,13 +19,13 @@ function ignoreEdit() {}
 // need a renderer this preview does not otherwise need.
 //
 // onDownload, when given, is offered under a refusal (FilePreviewRefusal).
-// onSwipe, when given, takes a finger's swipe across a fitted image or video.
-export function FilePreviewBody({ preview, path, name, onDownload, onSwipe }: {
+// swipes, when given, takes a finger's swipe across a fitted image or video.
+export function FilePreviewBody({ preview, path, name, onDownload, swipes }: {
   preview: FilePreviewState;
   path: string;
   name: string;
   onDownload?: (() => void) | undefined;
-  onSwipe?: (swipe: PreviewSwipe) => void;
+  swipes?: PreviewSwipeHandler;
 }) {
   switch (preview.kind) {
     case "idle":
@@ -33,7 +33,7 @@ export function FilePreviewBody({ preview, path, name, onDownload, onSwipe }: {
     case "loading":
       return <FilePreviewLoading />;
     case "image":
-      return <FilePreviewImage key={preview.url} url={preview.url} name={name} onSwipe={onSwipe} />;
+      return <FilePreviewImage key={preview.url} url={preview.url} name={name} swipes={swipes} />;
     case "text":
       return (
         <Suspense fallback={<FilePreviewLoading />}>
@@ -41,7 +41,7 @@ export function FilePreviewBody({ preview, path, name, onDownload, onSwipe }: {
         </Suspense>
       );
     case "media":
-      return <FilePreviewMedia key={preview.url} element={preview.element} url={preview.url} name={name} onDownload={onDownload} onSwipe={onSwipe} />;
+      return <FilePreviewMedia key={preview.url} element={preview.element} url={preview.url} name={name} onDownload={onDownload} swipes={swipes} />;
     case "unavailable":
       return <FilePreviewRefusal reason={preview.reason} onDownload={onDownload} />;
   }

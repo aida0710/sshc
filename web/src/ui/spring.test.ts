@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runSpring } from "./spring";
+import { runSpring, runSprings } from "./spring";
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
@@ -44,11 +44,61 @@ describe("runSpring", () => {
     expect(onRest).not.toHaveBeenCalled();
   });
 
+  it("goes the same way to rest on slow frames as on quick ones, without shaking", () => {
+    const pathOn = (frameMilliseconds: number) => {
+      // Frames of a given length, on timers.
+      vi.useRealTimers();
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+      const positions: number[] = [];
+      runSpring({ from: 80, to: 0, velocity: 4.5, onFrame: (position) => positions.push(position), onRest: () => undefined, clock: {
+        now: () => performance.now(),
+        requestFrame: (callback) => window.setTimeout(() => callback(performance.now()), frameMilliseconds),
+        cancelFrame: (id) => window.clearTimeout(id),
+      } });
+      vi.advanceTimersByTime(250);
+      const at250 = positions.at(-1)!;
+      vi.advanceTimersByTime(2000);
+      return { at250, positions };
+    };
+    const quick = pathOn(8);
+    const slow = pathOn(125);
+    expect(slow.at250).toBeCloseTo(quick.at250, 0);
+    // Out past where it started, then back: once it turns, it only comes nearer.
+    const turned = slow.positions.findIndex((position, index) => index > 0 && position < slow.positions[index - 1]!);
+    const back = slow.positions.slice(turned);
+    expect(back.every((position, index) => index === 0 || position <= back[index - 1]!)).toBe(true);
+    expect(Math.min(...slow.positions)).toBeGreaterThanOrEqual(0);
+  });
+
+  it("asks for no more frames once stopped from its own frame", () => {
+    const onFrame = vi.fn();
+    const onRest = vi.fn();
+    const run = runSpring({ from: -200, to: 0, velocity: 0, onFrame: (position) => {
+      onFrame(position);
+      if (position > -150) run.stop();
+    }, onRest });
+    vi.advanceTimersByTime(2000);
+    const stoppedAt = onFrame.mock.calls.length;
+    vi.advanceTimersByTime(2000);
+    expect(onFrame).toHaveBeenCalledTimes(stoppedAt);
+    expect(onFrame.mock.lastCall![0]).toBeLessThan(0);
+    expect(onRest).not.toHaveBeenCalled();
+  });
+
   it("lands at once where motion is reduced", () => {
     const onFrame = vi.fn();
     const onRest = vi.fn();
     runSpring({ from: -200, to: 0, velocity: 3, onFrame, onRest, reducedMotion: true });
     expect(onFrame).toHaveBeenCalledExactlyOnceWith(0);
     expect(onRest).toHaveBeenCalledOnce();
+  });
+
+  it("moves several values together and rests once all of them are there", () => {
+    const frames: number[][] = [];
+    const onRest = vi.fn();
+    runSprings({ from: [1, 0, 0], to: [2, 50, -30], velocity: [0, 0, 0], scale: [100, 1, 1], onFrame: (values) => frames.push(values), onRest });
+    vi.advanceTimersByTime(2000);
+    expect(onRest).toHaveBeenCalledOnce();
+    expect(frames.at(-1)).toEqual([2, 50, -30]);
   });
 });

@@ -1,3 +1,5 @@
+import { rubberBand, rubberBandSlope } from "../ui/rubberBand";
+
 // How far an image or a video in a file preview is zoomed and moved. scale 1 is the whole picture fitted to
 // the preview; x and y move the zoomed picture, in pixels of the fitted picture, from its centre.
 export type PreviewZoom = { scale: number; x: number; y: number };
@@ -36,6 +38,73 @@ export function zoomedAround(zoom: PreviewZoom, factor: number, point: Point, si
 
 export function movedBy(zoom: PreviewZoom, dx: number, dy: number, size: Size): PreviewZoom {
   return keptInside({ scale: zoom.scale, x: zoom.x + dx, y: zoom.y + dy }, size);
+}
+
+// freeZoomedAround is zoomedAround without its limits, for a pinch in progress: the fingers may take the picture past
+// fitted or past the largest size for a while, and stretchedZoom draws how far.
+export function freeZoomedAround(zoom: PreviewZoom, factor: number, point: Point): PreviewZoom {
+  return { scale: zoom.scale * factor, x: point.x - (point.x - zoom.x) * factor, y: point.y - (point.y - zoom.y) * factor };
+}
+
+// freeMovedBy is movedBy without stopping at the edges, for a finger dragging the picture past one.
+export function freeMovedBy(zoom: PreviewZoom, dx: number, dy: number): PreviewZoom {
+  return { scale: zoom.scale, x: zoom.x + dx, y: zoom.y + dy };
+}
+
+// Past its limits a scale gives as a band does (rubberBand), measured in hundredths, as the place is in pixels.
+const scaleUnits = 100;
+
+function stretchedPast(value: number, low: number, high: number, give: (overflow: number) => number): number {
+  if (value < low) return low + give(value - low);
+  if (value > high) return high + give(value - high);
+  return value;
+}
+
+// stretchedZoom is how a pose a finger holds past the limits is drawn: smaller than fitted, larger than the largest
+// size, or moved past an edge, it goes less and less far the further the finger pulls (rubberBand).
+export function stretchedZoom(zoom: PreviewZoom, size: Size): PreviewZoom {
+  const { scale, kept, reachX, reachY } = stretchedFrame(zoom, size);
+  return {
+    scale,
+    x: stretchedPast(zoom.x * kept, -reachX, reachX, (overflow) => rubberBand(overflow, size.width)),
+    y: stretchedPast(zoom.y * kept, -reachY, reachY, (overflow) => rubberBand(overflow, size.height)),
+  };
+}
+
+// stretchedFollow is how far a picture drawn by stretchedZoom moves for each pixel a finger moves it, across and down:
+// all of it within the edges, and less past them, where it gives only a little.
+export function stretchedFollow(zoom: PreviewZoom, size: Size): Point {
+  const { kept, reachX, reachY } = stretchedFrame(zoom, size);
+  return {
+    x: followPast(zoom.x * kept, -reachX, reachX, size.width),
+    y: followPast(zoom.y * kept, -reachY, reachY, size.height),
+  };
+}
+
+// stretchedFrame is the scale stretchedZoom draws a pose at, given past the limits, and how far that scale lets the
+// picture move each way.
+function stretchedFrame(zoom: PreviewZoom, size: Size) {
+  const scale = stretchedPast(zoom.scale, 1, maxPreviewScale, (overflow) => rubberBand(overflow * scaleUnits, scaleUnits) / scaleUnits);
+  return {
+    scale,
+    kept: scale / zoom.scale,
+    reachX: (Math.max(0, scale - 1) * size.width) / 2,
+    reachY: (Math.max(0, scale - 1) * size.height) / 2,
+  };
+}
+
+function followPast(value: number, low: number, high: number, dimension: number): number {
+  if (value < low) return rubberBandSlope(value - low, dimension);
+  if (value > high) return rubberBandSlope(value - high, dimension);
+  return 1;
+}
+
+// restingZoom is where a pose comes to rest once let go: its scale within the limits, around the same spot, and the
+// picture kept inside its edges.
+export function restingZoom(zoom: PreviewZoom, size: Size): PreviewZoom {
+  const scale = clamp(zoom.scale, 1, maxPreviewScale);
+  const kept = scale / zoom.scale;
+  return keptInside({ scale, x: zoom.x * kept, y: zoom.y * kept }, size);
 }
 
 // imageTransform draws the zoom on an image, which grows around its centre.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fittedZoom, maxPreviewScale, movedBy, previewZoomStep, videoViewBox, zoomedAround } from "./previewZoom";
+import { fittedZoom, maxPreviewScale, movedBy, previewZoomStep, stretchedFollow, stretchedZoom, videoViewBox, zoomedAround } from "./previewZoom";
 
 const size = { width: 400, height: 300 };
 
@@ -35,6 +35,20 @@ describe("movedBy", () => {
 
   it("does not move a fitted picture", () => {
     expect(movedBy(fittedZoom, 30, 30, size)).toEqual(fittedZoom);
+  });
+});
+
+describe("stretchedFollow", () => {
+  const size = { width: 400, height: 300 };
+
+  it("follows the finger fully within the edges, and as stretchedZoom draws past them", () => {
+    expect(stretchedFollow({ scale: 2, x: 50, y: -50 }, size)).toEqual({ x: 1, y: 1 });
+    // Twice the size reaches 200px across; 260px is 60px past the edge.
+    const past = stretchedFollow({ scale: 2, x: 260, y: 0 }, size);
+    const drawnAt = (x: number) => stretchedZoom({ scale: 2, x, y: 0 }, size).x;
+    expect(past.x).toBeCloseTo((drawnAt(260.01) - drawnAt(259.99)) / 0.02, 3);
+    expect(past.x).toBeLessThan(1);
+    expect(past.y).toBe(1);
   });
 });
 

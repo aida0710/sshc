@@ -99,12 +99,16 @@ export function attachSelectionOverlay(
     dragged = false;
     beganWithSelection = selectionHeldIn(overlay);
   };
-  const moved = (event: TouchEvent) => {
-    const finger = event.touches[0];
-    if (event.touches.length !== 1) touching = false;
+  const markDraggedIfMoved = (finger: Pick<Touch, "clientX" | "clientY"> | undefined) => {
     if (finger !== undefined && Math.hypot((finger.clientX ?? 0) - touchedX, finger.clientY - touchedY) > tapSlopPixels) dragged = true;
   };
-  const ended = () => {
+  const moved = (event: TouchEvent) => {
+    if (event.touches.length !== 1) touching = false;
+    markDraggedIfMoved(event.touches[0]);
+  };
+  const ended = (event: TouchEvent) => {
+    // A quick flick can end before any of its moves reach the page; where the finger left says it moved all the same.
+    markDraggedIfMoved(event.changedTouches?.[0]);
     const tapped = touching && !dragged && Date.now() - touchedAt < tapHoldMillis;
     touching = false;
     if (!tapped) return;

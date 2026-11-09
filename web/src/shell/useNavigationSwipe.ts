@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
+import { newVelocityTracker, type VelocityTracker } from "../ui/pointerVelocity";
 import { runSpring, type SpringRun } from "../ui/spring";
 
 // How far a finger moves before the swipe is read as sideways or up and down. Below it a tap stays a tap.
@@ -33,9 +34,8 @@ type Gesture = {
   startTime: number;
   dragging: boolean;
   width: number;
-  lastX: number;
-  lastTime: number;
-  speed: number;
+  // tracker follows the finger's speed, for a flick and for the spring that finishes the drag.
+  tracker: VelocityTracker;
 };
 
 function scrollsSideways(element: Element): boolean {
@@ -167,9 +167,7 @@ export function useNavigationSwipe({ enabled, open, panelRef, backdropRef, onOpe
         base: openRef.current ? 0 : -panel.getBoundingClientRect().width,
         offset: openRef.current ? 0 : -panel.getBoundingClientRect().width,
         width: panel.getBoundingClientRect().width,
-        lastX: touch.clientX,
-        lastTime: event.timeStamp,
-        speed: 0,
+        tracker: newVelocityTracker(touch.clientX, touch.clientY, event.timeStamp),
       };
     }
 
@@ -199,18 +197,16 @@ export function useNavigationSwipe({ enabled, open, panelRef, backdropRef, onOpe
       gesture.offset = Math.min(0, Math.max(-gesture.width, gesture.base + across));
       placePanel(gesture.panel, gesture.offset);
       placeBackdrop(gesture.backdrop, gesture.offset, gesture.width);
-      const elapsed = event.timeStamp - gesture.lastTime;
-      if (elapsed > 0) gesture.speed = (touch.clientX - gesture.lastX) / elapsed;
-      gesture.lastX = touch.clientX;
-      gesture.lastTime = event.timeStamp;
+      gesture.tracker.move(touch.clientX, touch.clientY, event.timeStamp);
     }
 
-    function end() {
+    function end(event: TouchEvent) {
       const finished = gesture;
       gesture = null;
       if (finished === null || !finished.dragging) return;
       const travelled = Math.abs(finished.offset - finished.base);
-      const flicked = finished.opening ? finished.speed > flickSpeed : finished.speed < -flickSpeed;
+      const speed = finished.tracker.velocity(event.timeStamp).x;
+      const flicked = finished.opening ? speed > flickSpeed : speed < -flickSpeed;
       const settles = travelled > finished.width * settleShare || flicked;
       const nextOpen = finished.opening ? settles : !settles;
       const run = settlePanel(
@@ -219,7 +215,7 @@ export function useNavigationSwipe({ enabled, open, panelRef, backdropRef, onOpe
           open: nextOpen,
           offset: finished.offset,
           width: finished.width,
-          speed: finished.speed,
+          speed,
           onRest: () => {
             settling = null;
           },

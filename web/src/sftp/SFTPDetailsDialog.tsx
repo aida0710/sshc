@@ -76,7 +76,7 @@ export function SFTPDetailsDialog({
     const next = steps[position];
     if (next !== undefined) onStep?.(next);
   };
-  const onSwipe = usePreviewStepping({ position: stepPosition, count: stepCount, onStep: stepTo, onClose });
+  const swipes = usePreviewStepping({ position: stepPosition, count: stepCount, onStep: stepTo, onClose });
   const overlay = useFilePreviewOverlay(preview);
   const windowName = entry === null ? t("sftp.detailsForCount", { count: entries.length }) : t("sftp.detailsFor", { name: entry.name });
 
@@ -177,13 +177,13 @@ export function SFTPDetailsDialog({
               ))}
             </ul>
           ) : preview.kind !== "idle" ? (
-            <FilePreviewBody preview={preview} path={entry.path} name={entry.name} onDownload={busy ? undefined : download} onSwipe={onSwipe} />
+            <FilePreviewBody preview={preview} path={entry.path} name={entry.name} onDownload={busy ? undefined : download} swipes={swipes} />
           ) : (
             <p className="text-sm text-ink-muted">{t(entryTypeLabelKeys[entry.type])}</p>
           )}
         </FilePreviewArea>
 
-        {mobileViewport ? <details className="min-h-0 shrink-0 overflow-auto border-t border-line"><DisclosureSummary className="px-3 py-3 text-sm text-ink-muted">{t("sftp.properties")}</DisclosureSummary><div className="max-h-40 overflow-auto">{properties}</div></details> : properties}
+        {mobileViewport ? <details data-preview-chrome className="min-h-0 shrink-0 overflow-auto border-t border-line"><DisclosureSummary className="px-3 py-3 text-sm text-ink-muted">{t("sftp.properties")}</DisclosureSummary><div className="max-h-40 overflow-auto">{properties}</div></details> : properties}
       </div>
 
       {mobileViewport || otherActions.length === 0 ? null : (

@@ -75,7 +75,7 @@ describe("terminalTouchScrollTarget", () => {
   });
 
   it("moves the shell's scrollback by the pixel, and a program that scrolls its own text a row at a time", () => {
-    const smooth = { room: () => ({ above: 0, below: 0 }), show: () => {} };
+    const smooth = { room: () => ({ above: 0, below: 0 }), show: () => {}, overscroll: () => {}, height: () => 0 };
     const shell = terminalTouchScrollTarget({ ...terminalView(), modes: { mouseTrackingMode: "none" }, buffer: { active: { type: "normal" } } }, smooth);
     expect(shell.smoothScrollback?.(onOverlay)).toBe(smooth);
     const vim = terminalTouchScrollTarget({ ...terminalView(), modes: { mouseTrackingMode: "none" }, buffer: { active: { type: "alternate" } } }, smooth);

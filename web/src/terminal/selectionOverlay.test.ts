@@ -44,9 +44,10 @@ function harness(lines: string[], onTap?: (point: { clientX: number; clientY: nu
   return { container, overlay, view, screen, detach, repaint: () => repaint() };
 }
 
-function touch(node: HTMLElement, type: string, fingers: { clientX: number; clientY: number }[] = []) {
+function touch(node: HTMLElement, type: string, fingers: { clientX: number; clientY: number }[] = [], lifted: { clientX: number; clientY: number }[] = []) {
   const event = new Event(type, { bubbles: true });
   Object.defineProperty(event, "touches", { value: fingers });
+  Object.defineProperty(event, "changedTouches", { value: lifted });
   node.dispatchEvent(event);
 }
 
@@ -203,6 +204,14 @@ describe("attachSelectionOverlay", () => {
     touch(overlay, "touchstart", [{ clientX: 10, clientY: 10 }]);
     touch(overlay, "touchmove", [{ clientX, clientY }]);
     touch(overlay, "touchend");
+    expect(view.focus).not.toHaveBeenCalled();
+    detach();
+  });
+
+  it("does not focus after a flick whose moves never reached the page", () => {
+    const { overlay, view, detach } = harness(["one"]);
+    touch(overlay, "touchstart", [{ clientX: 10, clientY: 200 }]);
+    touch(overlay, "touchend", [], [{ clientX: 10, clientY: 20 }]);
     expect(view.focus).not.toHaveBeenCalled();
     detach();
   });
