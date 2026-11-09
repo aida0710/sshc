@@ -33,7 +33,7 @@ export function FilePreviewFrame({ headingId, header, overlay, onDismiss, return
         ? "relative flex h-dvh w-full flex-col overflow-hidden rounded-none border-0! shadow-none"
         : "flex h-[min(46rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg"}
     >
-      {overlay ? <div className="absolute inset-x-0 top-0 z-10 bg-linear-to-b from-black/85 from-70% to-transparent pb-7">{header}</div> : header}
+      {overlay ? <div data-preview-chrome className="absolute inset-x-0 top-0 z-10 bg-linear-to-b from-black/85 from-70% to-transparent pb-7">{header}</div> : header}
       {children}
     </ModalShell>
   );
@@ -48,7 +48,7 @@ export const previewPictureArea = "relative grid h-full grid-cols-[minmax(0,1fr)
 export function FilePreviewArea({ overlay, children }: { overlay: boolean; children: ReactNode }) {
   const t = useTranslate();
   return (
-    <div role="group" aria-label={t("sftp.preview")} className={`min-h-0 min-w-0 flex-1 overscroll-contain ${overlay ? "overflow-hidden bg-black" : "overflow-auto bg-surface-subtle p-3"}`}>
+    <div role="group" aria-label={t("sftp.preview")} data-preview-area={overlay ? "overlay" : "inline"} className={`min-h-0 min-w-0 flex-1 overscroll-contain ${overlay ? "overflow-hidden bg-black" : "overflow-auto bg-surface-subtle p-3"}`}>
       {children}
     </div>
   );

@@ -18,7 +18,7 @@ export function PreviewZoomBar({ scale, placement, onZoomIn, onZoomOut, onFit }:
   const percent = `${Math.round(scale * 100)}%`;
   return (
     // A press on the bar is not the start of a drag on the picture under it.
-    <div role="group" aria-label={t("sftp.previewZoom")} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}
+    <div role="group" aria-label={t("sftp.previewZoom")} data-preview-chrome onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}
       className={`absolute right-2 z-10 flex items-center rounded-full border border-line bg-card/90 p-0.5 shadow-pane ${placement === "top" ? "top-2 mobile-layout:top-24" : "bottom-2"}`}>
       <button type="button" className={button} aria-label={t("sftp.previewZoomOut")} title={t("sftp.previewZoomOut")} disabled={scale <= 1} onClick={onZoomOut}>
         <Icon name="zoomOut" className="size-4" />

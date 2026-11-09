@@ -3,7 +3,7 @@ import { drawEdgeRow } from "./edgeRow";
 import { measureCells, type MeasurableTerminal } from "./metrics";
 import type { SmoothScrollback } from "./touchScroll";
 
-type OffsetTerminal = MeasurableTerminal & Pick<Terminal, "cols" | "buffer" | "options">;
+type OffsetTerminal = MeasurableTerminal & Pick<Terminal, "cols" | "rows" | "buffer" | "options">;
 
 // Geometry is where the drawn rows sit in the host, measured once for a run of moves.
 type Geometry = { left: number; bottom: number; cellHeight: number; cellWidth: number };
@@ -74,6 +74,19 @@ export function createScrollbackOffset(host: HTMLElement, view: OffsetTerminal):
       edge.style.height = `${geometry.cellHeight}px`;
       edge.style.display = "block";
       host.style.transform = `translateY(${-fraction * geometry.cellHeight}px)`;
+    },
+    overscroll(pixels) {
+      if (pixels === 0) {
+        clear();
+        return;
+      }
+      // Past an end there is no row to draw beyond the edge: the terminal's background shows there.
+      edge.style.display = "none";
+      host.style.transform = `translateY(${-pixels}px)`;
+    },
+    height() {
+      geometry ??= measure();
+      return geometry === null ? 0 : geometry.cellHeight * view.rows;
     },
     dispose() {
       clear();

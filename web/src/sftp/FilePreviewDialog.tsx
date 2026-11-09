@@ -41,7 +41,7 @@ export function FilePreviewDialog({
   const shown = steps[position] ?? path;
   const preview = useFilePreview(alias, shown);
   const { download, problem } = usePreviewDownload(alias);
-  const onSwipe = usePreviewStepping({ position, count: steps.length, onStep: setPosition, onClose });
+  const swipes = usePreviewStepping({ position, count: steps.length, onStep: setPosition, onClose });
   const overlay = useFilePreviewOverlay(preview);
 
   const header = (
@@ -66,7 +66,7 @@ export function FilePreviewDialog({
   return (
     <FilePreviewFrame headingId={headingId} header={header} overlay={overlay} onDismiss={onClose}>
       <FilePreviewArea overlay={overlay}>
-        <FilePreviewBody preview={preview} path={shown} name={baseName(shown)} onDownload={() => download(shown)} onSwipe={onSwipe} />
+        <FilePreviewBody preview={preview} path={shown} name={baseName(shown)} onDownload={() => download(shown)} swipes={swipes} />
       </FilePreviewArea>
     </FilePreviewFrame>
   );
