@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNavigationSwipe } from "./useNavigationSwipe";
 
 const panelWidth = 300;
@@ -8,10 +8,12 @@ const panelWidth = 300;
 function Harness({ initiallyOpen = false, onOpenChange }: { initiallyOpen?: boolean; onOpenChange: (open: boolean) => void }) {
   const [open, setOpen] = useState(initiallyOpen);
   const panelRef = useRef<HTMLElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   useNavigationSwipe({
     enabled: true,
     open,
     panelRef,
+    backdropRef,
     onOpenChange: (next) => {
       setOpen(next);
       onOpenChange(next);
@@ -20,6 +22,7 @@ function Harness({ initiallyOpen = false, onOpenChange }: { initiallyOpen?: bool
   return (
     <div>
       <nav ref={panelRef} aria-label="navigation" />
+      <div ref={backdropRef} data-testid="backdrop" />
       <p>page</p>
       <div data-terminal-host="">terminal</div>
       <p>selected text</p>
@@ -60,15 +63,32 @@ function renderHarness(initiallyOpen = false) {
   return { onOpenChange, panel };
 }
 
+// The spring that finishes a drag runs on animation frames; the tests move its time by hand.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
+
+function finishSettling() {
+  act(() => {
+    vi.advanceTimersByTime(2000);
+  });
+}
+
+function shownOffset(panel: HTMLElement): number {
+  return Number(/translateX\((-?[\d.]+)px\)/.exec(panel.style.transform)?.[1]);
+}
 
 describe("useNavigationSwipe", () => {
   it("opens the navigation when a finger drags it out past a third of its width", () => {
     const { onOpenChange, panel } = renderHarness();
 
     swipe(screen.getByText("page"), [150, 400], [270, 410]);
+    finishSettling();
 
     expect(onOpenChange).toHaveBeenCalledWith(true);
     expect(screen.getByText("open")).toBeInTheDocument();
@@ -93,6 +113,43 @@ describe("useNavigationSwipe", () => {
 
     expect(panel.style.transform).toBe(`translateX(${120 - panelWidth}px)`);
     expect(moving.defaultPrevented).toBe(true);
+  });
+
+  it("darkens the backdrop as far as the panel is out, and hands it back with the panel", () => {
+    renderHarness();
+    const page = screen.getByText("page");
+    const backdrop = screen.getByTestId("backdrop");
+
+    touch(page, "touchstart", 100, 400, 0);
+    touch(page, "touchmove", 220, 400, 100);
+    expect(backdrop.style.opacity).toBe(String(1 + (120 - panelWidth) / panelWidth));
+
+    touch(page, "touchend", 220, 400, 110);
+    finishSettling();
+    expect(backdrop.style.opacity).toBe("");
+  });
+
+  it("carries on at the speed the finger let go with, and can be caught on the way", () => {
+    const { panel } = renderHarness();
+    const page = screen.getByText("page");
+
+    // A flick: 60px in 20ms, three times the speed that counts as one.
+    touch(page, "touchstart", 100, 400, 0);
+    touch(page, "touchmove", 140, 400, 100);
+    touch(page, "touchmove", 200, 400, 120);
+    touch(page, "touchend", 200, 400, 125);
+    const released = 100 - panelWidth;
+    act(() => {
+      vi.advanceTimersByTime(48);
+    });
+    const onTheWay = shownOffset(panel);
+    expect(onTheWay).toBeGreaterThan(released);
+    expect(onTheWay).toBeLessThan(0);
+
+    // A finger lands on the moving panel and takes it from where it is.
+    touch(page, "touchstart", 300, 400, 200);
+    touch(page, "touchmove", 280, 400, 300);
+    expect(shownOffset(panel)).toBeCloseTo(onTheWay - 20, 0);
   });
 
   it("leaves a scroll up or down to the page", () => {
@@ -145,6 +202,7 @@ describe("useNavigationSwipe", () => {
 
     // Dragged all the way out: nothing is left to animate, so no transition would end.
     swipe(page, [10, 400], [10 + panelWidth + 40, 400]);
+    finishSettling();
 
     expect(onOpenChange).toHaveBeenCalledWith(true);
     expect(panel.style.transform).toBe("");
@@ -160,6 +218,7 @@ describe("useNavigationSwipe", () => {
     touch(page, "touchstart", 150, 500, 150);
     touch(page, "touchmove", 260, 400, 200);
     touch(page, "touchend", 260, 400, 260);
+    finishSettling();
 
     expect(onOpenChange).toHaveBeenCalledWith(true);
     expect(panel.style.transform).toBe("");

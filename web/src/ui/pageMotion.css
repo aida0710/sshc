@@ -26,17 +26,11 @@
   from { opacity: 0; }
 }
 
-/* While Android's back gesture is drawn (backGestureMotion.ts), the page follows the finger as Android's own screens
-   do: it shrinks a little, rounds its corners and moves away from the edge the finger came from, over a darker
-   ground. Taken back, it grows back to its place. */
+/* While Android's back gesture is drawn (backGesturePage.ts writes the app's transform), the page shows over a
+   darker ground and clips its rounded corners. */
 :root[data-back-gesture] body {
   background: color-mix(in srgb, var(--ui-canvas) 55%, black);
 }
 :root[data-back-gesture] .sshc-app {
-  transform: translateX(calc(var(--sshc-back-edge, 1) * var(--sshc-back-progress, 0) * 16px)) scale(calc(1 - var(--sshc-back-progress, 0) * 0.1));
-  border-radius: calc(var(--sshc-back-progress, 0) * 28px);
   overflow: hidden;
-}
-:root[data-back-gesture="settling"] .sshc-app {
-  transition: transform 200ms cubic-bezier(0.2, 0, 0, 1), border-radius 200ms cubic-bezier(0.2, 0, 0, 1);
 }

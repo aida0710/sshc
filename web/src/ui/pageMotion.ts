@@ -2,6 +2,7 @@ import { flushSync } from "react-dom";
 import { parseSectionPath } from "../routing/sectionRoute";
 import type { BrowserLocation } from "../routing/useSectionRoute";
 import { matchesMediaQuery, mobileViewportQuery } from "./useMediaQuery";
+import { drawPageWhole } from "./backGesturePage";
 
 // While a change of the page fades (pageMotion.css), <html> carries this attribute.
 const pageChangingAttribute = "data-page-changing";
@@ -41,9 +42,9 @@ export function presentLocationChange(
   const thisChange = ++changeCount;
   root.setAttribute(pageChangingAttribute, "");
   const transition = document.startViewTransition(() => {
-    // A back gesture that brought the page here leaves the page drawn small (backGesture.ts); the picture before the
-    // change keeps that, and the page after it is drawn whole.
-    delete root.dataset.backGesture;
+    // A back gesture that brought the page here leaves the page drawn small (backGesturePage.ts); the picture before
+    // the change keeps that, and the page after it is drawn whole.
+    drawPageWhole();
     flushSync(change);
   });
   void transition.finished.finally(() => {
