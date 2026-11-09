@@ -59,6 +59,9 @@ import { KeptSections } from "./shell/KeptSections";
 import { useKeptSections } from "./shell/useKeptSections";
 import { usePreloadedSectionPages } from "./shell/usePreloadedSectionPages";
 import { useFirstScreenReport } from "./android/firstScreen";
+import { presentLocationChange } from "./ui/pageMotion";
+import { somethingForBackToClose, useBackOwnership } from "./android/backOwnership";
+import { useBackGestureMotion } from "./android/backGestureMotion";
 import { sectionIcons, sectionLabels } from "./shell/sectionPresentation";
 import { TerminalScreen } from "./shell/TerminalScreen";
 import { useDeclaredConfig } from "./shell/useDeclaredConfig";
@@ -103,7 +106,7 @@ export function App({
   const shortcuts = useBindings();
   const { resolved: resolvedTheme, scheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore } =
-    useSectionRoute();
+    useSectionRoute({ present: presentLocationChange });
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
   const session = useAppSession({ bootstrap, health, vault });
@@ -145,6 +148,15 @@ export function App({
     openPalette,
     openPaletteFromNavigation,
   } = useShellLayers({ mobileLayout, ready: state === "ready", section, onBackWithoutLayer: goBackOnAndroid });
+  // On the top of Home, Back leaves the app: Android takes it there and draws its own way home (backOwnership.ts).
+  // Anywhere else, a Back that goes to another page shrinks the page under the finger (backGestureMotion.ts).
+  const onTopOfHome = location.pathname === "/" && location.search === "";
+  useBackOwnership(onTopOfHome);
+  const backMovesPage = useCallback(
+    () => state === "ready" && !onTopOfHome && !somethingForBackToClose(),
+    [state, onTopOfHome],
+  );
+  useBackGestureMotion(backMovesPage);
 
   // Android's Back once nothing is left to close: Home from the top of a section, one step back inside one
   // (androidBackStep). Leaving the app and going back in the page's history are left to the app (MainActivity).

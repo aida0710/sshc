@@ -32,6 +32,8 @@ final class NativeBridge {
         void performHapticFeedback(int constant);
         /** Web 画面が最初の画面を中身まで描いた。起動のスプラッシュをやめてよい。 */
         void firstScreenShown();
+        /** taken が false のとき、戻るは Android が受ける（PageBackCallback）。 */
+        void setBackTakenByPage(boolean taken);
     }
 
     /** 振動の種類が無いときの hapticFeedbackConstant の値。 */
@@ -187,6 +189,12 @@ final class NativeBridge {
     public void performHapticFeedback(String feedback) {
         int constant = hapticFeedbackConstant(feedback);
         if (constant != NO_HAPTIC_FEEDBACK) host.performHapticFeedback(constant);
+    }
+
+    /** 戻るを Web 画面が受けるかどうかを知らせる。Home の一番上で何も開いていないとき false。 */
+    @JavascriptInterface
+    public void setBackTakenByPage(boolean taken) {
+        host.setBackTakenByPage(taken);
     }
 
     /** 最初の画面を中身まで描いたことを知らせる。Web 画面はページを読み込むたびに 1 回呼ぶ。 */

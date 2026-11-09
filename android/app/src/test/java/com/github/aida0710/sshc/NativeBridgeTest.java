@@ -103,6 +103,24 @@ public final class NativeBridgeTest {
         @Override
         public void firstScreenShown() {
         }
+
+        Boolean backTakenByPage;
+
+        @Override
+        public void setBackTakenByPage(boolean taken) {
+            backTakenByPage = taken;
+        }
+    }
+
+    @Test
+    public void passesOnWhetherThePageTakesBack() {
+        Host host = new Host();
+        NativeBridge bridge = new NativeBridge(host);
+
+        bridge.setBackTakenByPage(false);
+        assertEquals(Boolean.FALSE, host.backTakenByPage);
+        bridge.setBackTakenByPage(true);
+        assertEquals(Boolean.TRUE, host.backTakenByPage);
     }
 
     @Test

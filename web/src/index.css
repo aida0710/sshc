@@ -6,6 +6,8 @@
 @import "./theme/themes/dark.css";
 @import "./theme/themes/dark-blue.css";
 @import "./theme/themes/dark-purple.css";
+/* 画面を移るときの動き（スマホ）。 */
+@import "./ui/pageMotion.css";
 
 /* 押せない要素は、載せても押しても見た目を変えない。hover と active の指定を、:disabled の
    ときは効かせない形に置き換える（:where で詳細度は上げない）。
@@ -833,11 +835,21 @@ select:not([multiple]):not([size]) {
     height: 13px;
   }
 }
-/* 押した瞬間・開いた瞬間の反応は、マウスでもタッチでも同じにする。押した瞬間は filter ではなく
-   opacity で示す。filter は中の absolute の基準を自分に変えるので、行いっぱいに広げた ::after
-   （SessionList の行）が押した瞬間に縮み、離した位置がボタンから外れてクリックにならない。 */
+/* 押した瞬間の反応。PC の大きさの画面では opacity で示す。filter は中の absolute の基準を自分に変えるので、
+   行いっぱいに広げた ::after（SessionList の行）が押した瞬間に縮み、離した位置がボタンから外れてクリックにならない。 */
 :where(button, [role="button"], [role="menuitem"], a, summary):not(:disabled):not(.monaco-editor *):not(.xterm *):active {
   opacity: 0.85;
+}
+/* スマホの組み方では、押している間、地に文字の色を薄く重ねて明るく（ライトでは暗く）する。薄くするだけでは、暗い
+   テーマでほとんど見えなかった。地の色はそのままなので、背景を変えるボタンにも同じように出る。 */
+@media (max-width: 767px), (pointer: coarse) and (max-width: 1023px) {
+  :where(button, [role="button"], [role="menuitem"], a, summary):not(:disabled):not(.monaco-editor *):not(.xterm *):active {
+    opacity: 1;
+    background-image: linear-gradient(var(--sshc-pressed-layer), var(--sshc-pressed-layer));
+  }
+}
+:root {
+  --sshc-pressed-layer: color-mix(in srgb, var(--ui-ink) 12%, transparent);
 }
 .sshc-modal-panel {
   animation: sshc-dialog-enter 140ms ease-out;

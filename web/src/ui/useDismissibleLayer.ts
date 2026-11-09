@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { isImeComposing } from "./imeComposition";
 import { focusRaisesKeyboard } from "./softKeyboard";
+import { notifyAndroidBackClosersChanged } from "./androidBackClosers";
 
 export type DismissReason = "outside" | "escape" | "android-back" | "superseded";
 
@@ -223,6 +224,7 @@ export function useDismissibleLayer({
     if (!nested) previous?.dismiss("superseded");
     layers.push(layer);
     listen();
+    notifyAndroidBackClosersChanged();
     if (trapFocus) {
       const target = layer.initialFocus() ?? layer.containers().flatMap((container) =>
         container === null ? [] : focusableElements(container),
@@ -234,6 +236,7 @@ export function useDismissibleLayer({
       const index = layers.findIndex((candidate) => candidate.id === layer.id);
       if (index >= 0) layers.splice(index, 1);
       unlisten();
+      notifyAndroidBackClosersChanged();
       // A close button or a successful submit unmounts the layer without going
       // through Escape. Restore only if focus was still owned by this layer;
       // an outside click or a replacement layer keeps its newly chosen focus.
