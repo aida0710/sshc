@@ -105,7 +105,7 @@ export function App({
   const navigationRail = useMediaQuery(navigationRailQuery);
   const shortcuts = useBindings();
   const { resolved: resolvedTheme, scheme } = useTheme();
-  const { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore } =
+  const { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore, currentLocation } =
     useSectionRoute({ present: presentLocationChange });
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
@@ -160,9 +160,10 @@ export function App({
 
   // Android's Back once nothing is left to close: Home from the top of a section, one step back inside one
   // (androidBackStep). Leaving the app and going back in the page's history are left to the app (MainActivity).
+  // A Back that comes while the page is still changing goes on from the new page, not from the one still drawn.
   function goBackOnAndroid(event: Event) {
     if (state !== "ready") return;
-    const step = androidBackStep(location, hasEntryBefore());
+    const step = androidBackStep(currentLocation(), hasEntryBefore());
     if (step.kind !== "section") return;
     event.preventDefault();
     navigateLocation(sectionPath(step.section), { replace: true });

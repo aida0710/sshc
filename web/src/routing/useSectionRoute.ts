@@ -55,6 +55,10 @@ export function useSectionRoute({ present = presentAtOnce }: { present?: Locatio
   // hasEntryBefore tells whether the page's history has an entry of sshc before this one; on the first entry,
   // going back would leave sshc (or, in the Android app, do nothing).
   hasEntryBefore: () => boolean;
+  // currentLocation is the location last published. location follows it once the page is drawn there, which the
+  // presenter may put off (the phone's fade draws the new page after a picture of the one before), so what acts on
+  // where the page is now, as Android's Back does, reads this.
+  currentLocation: () => BrowserLocation;
 } {
   const [location, setLocation] = useState<BrowserLocation>(readLocation);
   const locationRef = useRef(location);
@@ -173,6 +177,7 @@ export function useSectionRoute({ present = presentAtOnce }: { present?: Locatio
   }, [publish]);
 
   const hasEntryBefore = useCallback(() => (navigationPointRef.current ?? 0) > 0, []);
+  const currentLocation = useCallback(() => locationRef.current, []);
 
-  return { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore };
+  return { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore, currentLocation };
 }

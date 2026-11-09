@@ -4,6 +4,7 @@ import { everySection } from "./support/sectionNavigation";
 import { answerNoVPNProfiles } from "./support/vpn";
 import { openKeyCreation } from "./support/keys";
 import { pressHeight } from "./support/touchTarget";
+import { codeField, codeFieldLines } from "./support/codeField";
 
 
 const hosts = "Host alpha\n\tHostName 198.51.100.10\n\nHost bravo\n\tHostName 198.51.100.11\n";
@@ -531,8 +532,8 @@ test("keeps the removed connection view switch absent and Config structure align
   await file.click();
   const backToFiles = page.getByRole("button", { name: "ファイル一覧", exact: true });
   await expect(backToFiles).toBeVisible();
-  const editor = page.getByLabel(/ファイル本文.*conf\.d\/20-lab\.conf/);
-  await expect(editor).toBeVisible();
+  const editor = codeField(page, /ファイル本文.*conf\.d\/20-lab\.conf/);
+  await expect(codeFieldLines(editor)).toContainText("Host alpha");
   await expectNoHorizontalOverflow(page, "Config file on a phone");
 
   const appHeader = page.locator("[data-app-header]");
