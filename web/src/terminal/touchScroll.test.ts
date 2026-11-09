@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { rubberBandSlope } from "../ui/rubberBand";
 import { newTouchScroll } from "./touchScroll";
 
 function recorder() {
@@ -163,6 +164,7 @@ function smoothHarness({ above = 50, below = 50 }: { above?: number; below?: num
   const room = { above, below };
   const sent: number[] = [];
   const shown: number[] = [];
+  const pulled: number[] = [];
   let time = 0;
   let nextId = 0;
   const frames = new Map<number, FrameRequestCallback>();
@@ -177,7 +179,12 @@ function smoothHarness({ above = 50, below = 50 }: { above?: number; below?: num
     requestFrame: (callback) => { frames.set(++nextId, callback); return nextId; },
     cancelFrame: (id) => { frames.delete(id); },
   });
-  const smooth = { room: () => ({ ...room }), show: (fraction: number) => shown.push(fraction) };
+  const smooth = {
+    room: () => ({ ...room }),
+    show: (fraction: number) => shown.push(fraction),
+    overscroll: (pixels: number) => pulled.push(pixels),
+    height: () => 400,
+  };
   const advance = (milliseconds: number) => {
     time += milliseconds;
     const callbacks = [...frames.values()];
@@ -186,7 +193,7 @@ function smoothHarness({ above = 50, below = 50 }: { above?: number; below?: num
   };
   // hold moves the finger slowly enough that lifting it does not coast.
   const hold = (milliseconds: number) => { time += milliseconds; };
-  return { scroll, smooth, sent, shown, frames, advance, hold };
+  return { scroll, smooth, sent, shown, pulled, frames, advance, hold };
 }
 
 describe("touch scroll by the pixel through the scrollback", () => {
@@ -210,18 +217,61 @@ describe("touch scroll by the pixel through the scrollback", () => {
     expect(shown.at(-1)).toBeCloseTo(0.75);
   });
 
-  it("draws nothing past the newest or the oldest row", () => {
+  it("pulls the rows past the newest or the oldest row by less than the finger, and lets them go back to it", () => {
     const newest = smoothHarness({ above: 50, below: 0 });
     newest.scroll.start(300, newest.smooth);
-    newest.scroll.move(290);
+    newest.scroll.move(240);
     expect(newest.sent).toEqual([]);
     expect(newest.shown.at(-1)).toBe(0);
+    const pulledUp = newest.pulled.at(-1)!;
+    expect(pulledUp).toBeGreaterThan(0);
+    expect(pulledUp).toBeLessThan(60);
+    newest.hold(200);
+    newest.scroll.end();
+    for (let step = 0; step < 100; step += 1) newest.advance(16);
+    expect(newest.pulled.at(-1)).toBe(0);
 
     const oldest = smoothHarness({ above: 0, below: 50 });
     oldest.scroll.start(300, oldest.smooth);
-    oldest.scroll.move(310);
+    oldest.scroll.move(360);
     expect(oldest.sent).toEqual([]);
-    expect(oldest.shown.at(-1)).toBe(0);
+    expect(oldest.pulled.at(-1)).toBeLessThan(0);
+    expect(oldest.pulled.at(-1)).toBeGreaterThan(-60);
+  });
+
+  it("lets rows pulled past an end go at the speed they moved under the finger, slower than the finger", () => {
+    const { scroll, smooth, pulled, advance } = smoothHarness({ above: 50, below: 0 });
+    scroll.start(300, smooth);
+    scroll.move(300);
+    advance(10);
+    // 60px in 10ms: the finger moves 6px a millisecond, 60px past the newest row.
+    scroll.move(240);
+    scroll.end();
+    const letGo = pulled.at(-1)!;
+    advance(1);
+    expect(pulled.at(-1)! - letGo).toBeCloseTo(6 * rubberBandSlope(60, 400), 0);
+  });
+
+  it("takes the pull back first when the finger turns around past an end", () => {
+    const { scroll, smooth, sent, pulled } = smoothHarness({ above: 50, below: 0 });
+    scroll.start(300, smooth);
+    scroll.move(260);
+    scroll.move(320);
+    expect(pulled.at(-1)).toBe(0);
+    // The 20px left after taking back the 40px pull move the text a row toward older lines.
+    expect(sent).toEqual([-1]);
+  });
+
+  it("bounces text that coasts into an end off it, and back", () => {
+    const { scroll, smooth, pulled, advance } = smoothHarness({ above: 50, below: 2 });
+    scroll.start(300, smooth);
+    scroll.move(290);
+    advance(10);
+    scroll.move(240);
+    scroll.end();
+    for (let step = 0; step < 100; step += 1) advance(16);
+    expect(Math.max(...pulled)).toBeGreaterThan(0);
+    expect(pulled.at(-1)).toBe(0);
   });
 
   it("settles on the nearer row once the finger lets go, slowing down on the way", () => {
