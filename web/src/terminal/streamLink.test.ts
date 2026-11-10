@@ -218,6 +218,37 @@ describe("createStreamLink", () => {
     expect(ticket).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps one stream when a reconnect here and the list both ask to attach after an exit", async () => {
+    const { controller, ticket, onOutput } = startLink();
+    await vi.advanceTimersByTimeAsync(0);
+    streams[0]!.handlers.onExit({ code: 255, signal: "" });
+    streams[0]!.handlers.onClose();
+
+    // 一覧が「接続中」を先に伝え、そのあとに、ここで押した再接続が戻る。
+    controller.attachAfterExit();
+    controller.connect();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const attached = streams.slice(1);
+    expect(ticket).toHaveBeenCalledTimes(3);
+    expect(attached).toHaveLength(1);
+    attached[0]!.handlers.onOutput(new Uint8Array([104, 105]));
+    expect(onOutput).toHaveBeenCalledOnce();
+  });
+
+  it("lets go of the stream it had when it is asked to attach again", async () => {
+    const { controller, onOutput } = startLink();
+    await vi.advanceTimersByTimeAsync(0);
+    streams[0]!.handlers.onExit({ code: 255, signal: "" });
+
+    controller.connect();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(streams[0]!.stream.close).toHaveBeenCalledOnce();
+    streams[0]!.handlers.onOutput(new Uint8Array([104, 105]));
+    expect(onOutput).not.toHaveBeenCalled();
+  });
+
   it("leaves a link whose program is still running as it is when asked to attach after an exit", async () => {
     const { controller, ticket } = startLink();
     await vi.advanceTimersByTimeAsync(0);
