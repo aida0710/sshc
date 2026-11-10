@@ -102,14 +102,14 @@ func readPreviewBytes(ctx context.Context, remote Remote, cleaned string) ([]byt
 	return contents, contentType, nil
 }
 
-// remoteReadChunkBytes is how much one Read asks of a remote file. pkg/sftp sends a Read larger than its packet
-// (32 KiB) as requests that are all out at once, so a file of a few hundred KiB comes back in about one round
-// trip. io.ReadAll's small reads each waited for the server's answer before asking for more: a 200 KiB picture
-// took 2.3 seconds from a server 0.1 seconds away.
+// remoteReadChunkBytes は、リモートのファイルに1回の Read で頼む大きさ。pkg/sftp は packet（32KiB）より大きい
+// Read を、いっせいに送る複数の要求に分けるので、数百KiB のファイルはほぼ1往復で届く。io.ReadAll の小さな
+// 読み出しは、1回ごとにサーバの返事を待ってから次を頼んでいて、往復 0.1秒のサーバで 200KiB の写真に 2.3秒
+// かかった。
 const remoteReadChunkBytes = 1 << 20
 
-// readRemoteToEnd reads a remote file to its end, or until it has read limit bytes, remoteReadChunkBytes at a
-// time. It does not trust the size Lstat gave: a file in /proc says it is empty and still has lines to read.
+// readRemoteToEnd は、リモートのファイルを終わりまで（limit バイトに達したらそこまで）、remoteReadChunkBytes
+// ずつ読む。Lstat の大きさは信じない。/proc のファイルは、大きさ0と言っても読める行がある。
 func readRemoteToEnd(reader io.Reader, limit int64) ([]byte, error) {
 	var contents []byte
 	for int64(len(contents)) < limit {

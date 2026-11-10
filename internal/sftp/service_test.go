@@ -710,8 +710,8 @@ func TestReadPreviewNamesTheTypeFromTheBytesAndRefusesEverythingElse(t *testing.
 	})
 }
 
-// readSizeRecordingRemote records how many bytes each Read of an opened file asks for. Over SFTP, each Read waits
-// for the server's answer, so the number of reads is the number of round trips.
+// readSizeRecordingRemote は、開いたファイルの Read が1回ごとに何バイトを頼んだかを記録する。SFTP では Read の
+// 1回ごとにサーバの返事を待つので、Read の回数が往復の回数になる。
 type readSizeRecordingRemote struct {
 	*fakeRemote
 	asked []int
@@ -746,7 +746,7 @@ func TestReadPreviewAsksForTheRestOfAPictureInOneRead(t *testing.T) {
 	if err != nil || !bytes.Equal(preview.Contents, picture) {
 		t.Fatalf("ReadPreview() = %d bytes, %v", len(preview.Contents), err)
 	}
-	// The first bytes name the type, then one read asks for all the rest.
+	// 型を見る最初のバイトのあと、残りを1回の Read で頼む。
 	if len(remote.asked) < 2 || remote.asked[1] < len(picture)-remote.asked[0] {
 		t.Fatalf("reads asked for %v bytes, want the rest of %d bytes in the second", remote.asked, len(picture))
 	}
@@ -766,7 +766,7 @@ func TestReadTextAsksForAWholeFileInOneRead(t *testing.T) {
 	}
 }
 
-// A file in /proc says it is empty, and still has lines to read.
+// /proc のファイルは、大きさ0と言っても読める行がある。
 func TestReadTextReadsAFileThatSaysItIsEmpty(t *testing.T) {
 	remote := &sizeReportingRemote{fakeRemote: remoteWith(map[string]node{"/cpuinfo": file("cpuinfo", "processor\t: 0\n", 0o444)}), size: 0}
 	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
