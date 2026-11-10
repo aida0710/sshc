@@ -16,6 +16,14 @@ vi.mock("./stream", () => ({
     return stream;
   },
 }));
+// savedNames are the names of the files the terminal saved.
+const savedNames: string[] = [];
+vi.mock("../ui/saveFile", () => ({
+  saveFile: async (_blob: Blob, name: string) => {
+    savedNames.push(name);
+    return { release: () => {} };
+  },
+}));
 vi.mock("./TerminalQuickCommands", () => ({
   TerminalQuickCommands: () => <div role="dialog" aria-label="Quick Commands panel">Server-backed commands</div>,
 }));
@@ -29,6 +37,7 @@ vi.mock("../keybar/keyBarPresets", async (original) => ({
 }));
 
 const { TerminalView } = await import("./TerminalView");
+const { LanguageProvider, useLanguage } = await import("../i18n/context");
 const { setDirectInput } = await import("./useDirectInput");
 
 const session: TerminalSession = {
@@ -42,6 +51,7 @@ function renderView(terminalStreamTicket = vi.fn(async () => ({ streamTicket: "o
 
 beforeEach(() => {
   streams.length = 0;
+  savedNames.length = 0;
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: false,
     media: query,
@@ -816,5 +826,91 @@ describe("TerminalView", () => {
   it("does not offer SSH reconnect for an exited local shell", () => {
     render(<TerminalView session={{ ...session, state: "exited", exited: { code: 0, signal: "", at: "2026-08-26T01:00:00Z" } }} onReconnect={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+  });
+
+  it("saves the scrollback under the name the session has when it is saved", async () => {
+    const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
+    const { rerender } = render(<TerminalView session={session} api={api} />);
+    await waitFor(() => expect(streams).toHaveLength(1));
+    await act(async () => {
+      streams[0]!.handlers.onOutput(new TextEncoder().encode("built\r\n"));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    rerender(<TerminalView session={{ ...session, title: "build" }} api={api} />);
+    await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Save scrollback to a file" }));
+
+    await waitFor(() => expect(savedNames).toHaveLength(1));
+    expect(savedNames[0]).toMatch(/^build-/);
+  });
+
+  it("says what happens in the terminal in the language chosen after it was opened", async () => {
+    function ChooseJapanese() {
+      const { setLocale } = useLanguage();
+      return <button type="button" onClick={() => setLocale("ja")}>Japanese</button>;
+    }
+    const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
+    render(
+      <LanguageProvider initial="en">
+        <ChooseJapanese />
+        <TerminalView session={session} api={api} />
+      </LanguageProvider>,
+    );
+    await waitFor(() => expect(streams).toHaveLength(1));
+
+    await userEvent.click(screen.getByRole("button", { name: "Japanese" }));
+    act(() => streams[0]!.handlers.onSkipped(0));
+
+    expect(await screen.findByText(/再生バッファに残っていない部分を飛ばしました/)).toBeVisible();
+  });
+
+  it("reports the exit to the handler it has when the program exits", async () => {
+    const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
+    const first = vi.fn();
+    const latest = vi.fn();
+    const { rerender } = render(<TerminalView session={session} api={api} onExit={first} />);
+    await waitFor(() => expect(streams).toHaveLength(1));
+
+    rerender(<TerminalView session={session} api={api} onExit={latest} />);
+    act(() => streams[0]!.handlers.onExit({ code: 0, signal: "" }));
+
+    expect(latest).toHaveBeenCalledOnce();
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it("focuses a terminal whose session was connected again before its stream attached", async () => {
+    const focus = vi.spyOn(Terminal.prototype, "focus");
+    let issue: (ticket: { streamTicket: string }) => void = () => {};
+    const api = {
+      streamPath: "/terminal/stream",
+      terminalSessionDirectory: async () => null,
+      terminalStreamTicket: vi.fn(() => new Promise<{ streamTicket: string }>((resolve) => { issue = resolve; })),
+    };
+    try {
+      const { rerender } = render(<TerminalView session={{ ...session, state: "exited", exited: { code: 0, signal: "", at: "2026-08-26T01:00:00Z" } }} api={api} />);
+      rerender(<TerminalView session={session} api={api} />);
+      await act(async () => issue({ streamTicket: "one-time" }));
+
+      await waitFor(() => expect(streams).toHaveLength(1));
+      expect(focus).toHaveBeenCalled();
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
+  it("attaches again when the session it showed as ended is connected again elsewhere", async () => {
+    const ticket = vi.fn(async () => ({ streamTicket: "one-time" }));
+    const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: ticket };
+    const ssh: TerminalSession = { ...session, kind: "ssh", alias: "bastion", title: "bastion" };
+    const { rerender } = render(<TerminalView session={ssh} api={api} />);
+    await waitFor(() => expect(streams).toHaveLength(1));
+    act(() => streams[0]!.handlers.onExit({ code: 255, signal: "" }));
+    rerender(<TerminalView session={{ ...ssh, state: "exited", exited: { code: 255, signal: "", at: "2026-08-26T01:00:00Z" } }} api={api} />);
+
+    // Another browser reconnected it: the list says so, and nothing was pressed here.
+    rerender(<TerminalView session={{ ...ssh, state: "connecting" }} api={api} />);
+
+    await waitFor(() => expect(ticket).toHaveBeenCalledTimes(2));
   });
 });
