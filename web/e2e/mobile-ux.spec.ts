@@ -1396,7 +1396,6 @@ test("on a narrower phone the row of keys scrolls sideways and 「…」 stays i
   const rightBefore = (await right.boundingBox())!;
   expect(rightBefore.x + rightBefore.width).toBeGreaterThan(moreBefore.x);
   const y = (await keys.boundingBox())!.y + 30;
-  await waitForPageFadeToEnd(page);
   await swipe(page, { x: 250, y }, { x: 40, y });
   await expect(page.locator("[data-app-navigation]")).toHaveAttribute("data-navigation-open", "false");
   await expect.poll(async () => { const box = (await right.boundingBox())!; return box.x + box.width; }).toBeLessThanOrEqual(moreBefore.x + 1);
@@ -1504,12 +1503,6 @@ async function swipe(page: Page, from: { x: number; y: number }, to: { x: number
   await client.detach();
 }
 
-// waitForPageFadeToEnd waits for the fade between two pages (pageMotion.ts) to end. A swipe made during the fade does
-// not reach the page: the browser draws its pictures of the two pages over it until the fade ends.
-async function waitForPageFadeToEnd(page: Page) {
-  await expect(page.locator("html")).not.toHaveAttribute("data-page-changing");
-}
-
 test("a swipe across a previewed image steps to the next and previous file, and a swipe down closes it", async ({ page, installation }) => {
   const first = join(installation.home, "first.png");
   const second = join(installation.home, "second.png");
@@ -1614,7 +1607,6 @@ test("a sideways swipe over the terminal opens the navigation, and one up and do
   const box = (await rows.boundingBox())!;
   const navigation = page.locator("[data-app-navigation]");
 
-  await waitForPageFadeToEnd(page);
   await swipe(page, { x: 120, y: box.y + box.height * 0.3 }, { x: 125, y: box.y + box.height * 0.8 });
   await expect(rows).not.toContainText("line 80");
   await expect(navigation).toHaveAttribute("data-navigation-open", "false");

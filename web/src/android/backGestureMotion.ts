@@ -8,11 +8,11 @@ type BackGesture = { phase: "start" | "progress" | "commit" | "cancel"; progress
 
 const backGestureEvent = "sshc-android-back-gesture";
 
-// useBackGestureMotion draws Android's back gesture on the page as Android draws it for its own screens: while the
-// finger moves, the page shrinks a little and moves away from the edge it came from (backGesturePage.ts). Let go,
-// the page goes back with its usual fade (pageMotion.ts draws the page whole again); taken back, it grows back to
-// its place. backMovesPage says whether Back would go to another page: it does not shrink a page whose Back only
-// closes a dialog or a menu, or leaves the app.
+// useBackGestureMotion は、Android が自分の画面に描くのと同じように、戻るジェスチャーをページに描く。指が動く間、
+// ページは少し小さくなり、指が来た端から離れる（backGesturePage.ts）。離すと短いフェードで前のページへ戻り
+// （pageMotion.ts がページを元の大きさに描き直す）、取り消すと元の位置へ大きくなって戻る。backMovesPage は、
+// 戻るで別のページへ移るかを返す。戻るがダイアログやメニューを閉じるだけのときや、アプリを出るときは、ページを
+// 小さくしない。
 export function useBackGestureMotion(backMovesPage: () => boolean) {
   useEffect(() => {
     const root = document.documentElement;
