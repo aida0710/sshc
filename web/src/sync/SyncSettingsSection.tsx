@@ -175,7 +175,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                 )}
                 {setupCheck === null ||
                 setupCheck.state === "incomplete" ? null : (
-                  <div className="flex flex-col gap-3 rounded-[10px] bg-well p-3">
+                  <div className="flex flex-col gap-3 rounded-inset bg-well p-3">
                     <p className="text-sm text-ink">
                       {setupCheck.state === "existing"
                         ? t("sync.setup.existingKey")

@@ -12,7 +12,7 @@ export function KeyInspector({ item, related, now }: { item: KeyItem; related: K
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="rounded-lg bg-surface-subtle p-3">
+      <header className="rounded-inset bg-surface-subtle p-3">
         <p className="[overflow-wrap:anywhere] font-mono text-sm font-semibold text-ink">{item.relativePath}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
           <span className="rounded-md bg-surface px-2 py-1">{describeKeyKind(item.kind, t)}</span>

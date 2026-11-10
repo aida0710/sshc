@@ -101,7 +101,7 @@ export function SyncHistorySection({
                     type="button"
                     disabled={busy}
                     onClick={() => onSelect(revision.key)}
-                    className={`w-full rounded border px-3 py-2 text-left ${
+                    className={`w-full rounded-md border px-3 py-2 text-left ${
                       selectedKey === revision.key
                         ? "border-accent bg-select-fill"
                         : "border-hairline bg-surface hover:border-line"
@@ -137,7 +137,7 @@ export function SyncHistorySection({
               ))}
             </ol>
 
-            <div className="min-w-0 rounded border border-line bg-surface p-3">
+            <div className="min-w-0 rounded-inset border border-line bg-surface p-3">
               {selected === undefined ? (
                 <p className={hintText}>{t("sync.historySelect")}</p>
               ) : (
@@ -167,7 +167,7 @@ export function SyncHistorySection({
                       ).map(([kind, labelKey, paths, tone]) => (
                         <div
                           key={kind}
-                          className="min-w-0 rounded bg-toolbar p-2"
+                          className="min-w-0 rounded-md bg-toolbar p-2"
                         >
                           <p className={`font-medium ${tone}`}>
                             {t(labelKey, {

@@ -152,10 +152,26 @@
   --color-code-bg: var(--ui-code-bg);
   --color-code-fg: var(--ui-code-fg);
   --color-term-bg: var(--ui-term-bg);
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-pane: 11px;
+  /* 角丸は役割で選ぶ。大きさは外側の部品ほど大きく、中に入る部品ほど小さい。
+     ここに無い値を直書きしない（src/ui/radius.test.ts が検査する）。 */
+  /* 小さな札、チェックボックス、サムネイル、24px以下のボタン。 */
+  --radius-sm: 6px;
+  /* 一覧やサイドバーの選ぶ行と、PCの28pxのアイコンボタン。 */
+  --radius-row: 7px;
+  /* 入力欄、ボタン（28pxより大きいアイコンボタンを含む）、メニューの項目、浮かぶ短い知らせ。 */
+  --radius-md: 8px;
+  /* 注意の箱と、34pxのアイコンの台。 */
+  --radius-notice: 9px;
+  /* 板の中に置く箱、キーバーのキー、プレビューの枠。 */
+  --radius-inset: 10px;
+  /* 板、ダイアログ、メニュー。 */
+  --radius-lg: 12px;
+  /* スマホのカードとタイル。 */
+  --radius-card: 14px;
+  /* ログイン前の画面のカード。 */
+  --radius-2xl: 16px;
+  /* スマホの入力欄（1行のとき両端が半円になる高さ44pxの半分）。 */
+  --radius-composer: 22px;
   /* 影は4つだけ。カード（shadow-card）、板（shadow-pane）、メニューや知らせのように浮かぶもの
      （shadow-float）、モーダルと引き出しのように画面を覆うもの（shadow-overlay）。 */
   --shadow-card: var(--ui-card-shadow);
@@ -250,6 +266,8 @@
   background-color: var(--ui-term-bg);
 }
 
+/* レイヤーの外の規則なので、rounded-* のクラスより優先される。この角丸を変える部品は
+   rounded-none! のように important で指定する。 */
 .sshc-card {
   border: 1px solid var(--ui-line);
   border-radius: var(--radius-lg);

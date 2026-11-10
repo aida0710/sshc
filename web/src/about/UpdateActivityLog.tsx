@@ -9,7 +9,7 @@ export function UpdateActivityLog({ entries }: { entries: UpdateActivityEntry[] 
   if (entries.length === 0) return null;
   // The log role sits on a wrapper: on the list itself it would replace the list semantics its items need.
   return (
-    <div role="log" aria-label={t("about.activity")} className="rounded border border-line px-3 py-2 text-xs">
+    <div role="log" aria-label={t("about.activity")} className="rounded-inset border border-line px-3 py-2 text-xs">
       <ol className="grid grid-cols-[minmax(0,1fr)] gap-1">
         {entries.map((entry) => (
           <li key={entry.id} className={`flex gap-3 ${entry.tone === "danger" ? "text-danger" : "text-ink-muted"}`}>

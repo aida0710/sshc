@@ -45,7 +45,7 @@ export function CustomKeyDialog({ initial, onSubmit, onCancel }: {
 
   return (
     <ModalShell labelledBy="custom-key-heading" placement="sheet" onDismiss={onCancel} initialFocusRef={labelRef}
-      panelClassName="flex w-full max-w-md flex-col gap-4 rounded-lg p-4 sm:p-5">
+      panelClassName="flex w-full max-w-md flex-col gap-4 p-4 sm:p-5">
       <h2 id="custom-key-heading" className={dialogHeading}>{t("keyBar.customHeading")}</h2>
       <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); submit(); }}>
         <div className="flex flex-col gap-1">

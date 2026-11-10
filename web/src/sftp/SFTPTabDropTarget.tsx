@@ -65,7 +65,7 @@ export function SFTPTabDropTarget({
     >
       {hovered === null ? null : (
         <div data-sftp-tab-drop-side={hovered} className={`pointer-events-none absolute grid place-items-center border-2 border-accent bg-accent/20 ${shade}`}>
-          <span className="rounded bg-toolbar px-3 py-2 text-xs font-medium shadow">{label}</span>
+          <span className="rounded-md bg-toolbar px-3 py-2 text-xs font-medium shadow">{label}</span>
         </div>
       )}
     </div>

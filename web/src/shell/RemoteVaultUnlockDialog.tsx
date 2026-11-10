@@ -36,7 +36,7 @@ export function RemoteVaultUnlockDialog({
       onDismiss={onClose}
       dismissible={!busy}
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
-      panelClassName="w-full max-w-sm rounded-lg p-4"
+      panelClassName="w-full max-w-sm p-4"
     >
       {form.vaultMissing === true ? (
         <div className="flex flex-col gap-3">

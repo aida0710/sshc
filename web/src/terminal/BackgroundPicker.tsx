@@ -158,7 +158,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
       <div className="flex min-w-0 items-stretch gap-2">
         <span className={`${sizedControl("w-[220px]")} flex min-w-0 shrink items-center gap-2`}>
           {selected === undefined ? null : (
-            <span aria-hidden="true" className="shrink-0"><BackgroundThumbnail name={selected.name} chosen className="size-5 rounded" /></span>
+            <span aria-hidden="true" className="shrink-0"><BackgroundThumbnail name={selected.name} chosen className="size-5 rounded-sm" /></span>
           )}
           <span title={selected?.name ?? unchosen} className={`truncate ${selected === undefined ? "text-ink-faint" : "text-ink"}`}>{selected?.name ?? unchosen}</span>
         </span>
@@ -179,7 +179,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
         onDismiss={() => setLibraryOpen(false)}
         returnFocusRef={openButton}
         placement="sheet"
-        panelClassName="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg"
+        panelClassName="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden"
       >
         <header className="flex items-center gap-3 border-b border-line bg-toolbar px-4 py-3">
           <h3 id="terminal-background-library-heading" className="min-w-0 flex-1 text-sm font-semibold text-ink">{t("terminal.backgroundLibrary")}</h3>

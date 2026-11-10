@@ -103,7 +103,7 @@ export function PendingChangeDialog({
     <ModalShell
       labelledBy={headingId}
       onDismiss={onDismiss}
-      panelClassName="flex h-[min(44rem,calc(100dvh-2rem))] w-full max-w-6xl flex-col overflow-hidden rounded-lg"
+      panelClassName="flex h-[min(44rem,calc(100dvh-2rem))] w-full max-w-6xl flex-col overflow-hidden"
     >
       <header className="border-b border-line bg-toolbar px-4 py-3">
         <h2 id={headingId} className="truncate text-sm font-medium">

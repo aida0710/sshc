@@ -57,7 +57,7 @@ export function GroupFolders({ group, hosts, keys }: GroupFoldersProps) {
       </div>
       <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-ink-faint">
         {t("groupFolders.includeLine")}
-        <code className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-[11.5px] text-ink-muted">{`Include ${group.directory}/*.conf`}</code>
+        <code className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-[11.5px] text-ink-muted">{`Include ${group.directory}/*.conf`}</code>
       </p>
     </section>
   );

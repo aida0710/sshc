@@ -8,7 +8,7 @@ export function SFTPSearchControls({ search, disabled, mobile = false }: { searc
     <label className="flex items-center justify-between gap-2">
       {/* On a phone the sheet around these controls has this very name as its heading. */}
       {mobile ? null : t("sftp.search.mode")}
-      <select aria-label={t("sftp.search.mode")} value={search.mode} disabled={disabled} onChange={(event) => search.setMode(event.target.value === "content" ? "content" : "name")} className={`${mobile ? "w-full " : ""}rounded border border-control-line bg-control px-2 py-1 ${mobile ? "min-h-12 text-base" : ""}`}>
+      <select aria-label={t("sftp.search.mode")} value={search.mode} disabled={disabled} onChange={(event) => search.setMode(event.target.value === "content" ? "content" : "name")} className={`${mobile ? "w-full " : ""}rounded-md border border-control-line bg-control px-2 py-1 ${mobile ? "min-h-12 text-base" : ""}`}>
         <option value="name">{t("sftp.search.name")}</option>
         <option value="content">{t("sftp.search.content")}</option>
       </select>

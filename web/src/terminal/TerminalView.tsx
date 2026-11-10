@@ -555,7 +555,7 @@ export function TerminalView({
             type="button"
             aria-label={t("terminal.search")}
             title={t("terminal.search")}
-            className="flex size-7 shrink-0 items-center justify-center rounded-[7px] text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover focus:outline-none"
+            className="flex size-7 shrink-0 items-center justify-center rounded-row text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover focus:outline-none"
             onClick={search.toggle}
           >
             <Icon name="search" className="size-[15px]" />
@@ -569,7 +569,7 @@ export function TerminalView({
           type="button"
           aria-label={t("terminal.moreActions")}
           aria-expanded={overflowOpen}
-          className={`flex shrink-0 items-center justify-center text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover focus:outline-none ${mobile ? "size-11 rounded-lg" : "size-7 rounded-[7px]"}`}
+          className={`flex shrink-0 items-center justify-center text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover focus:outline-none ${mobile ? "size-11 rounded-md" : "size-7 rounded-row"}`}
           onClick={() => setOverflowOpen((current) => !current)}
         >
           <Icon name="moreHorizontal" className={mobile ? "size-5" : "size-4"} />
@@ -612,7 +612,7 @@ export function TerminalView({
       </TerminalHeader>
       {mobile ? null : statusBanners}
 
-      <div className={`relative min-h-0 flex-1 overflow-clip bg-term-bg ${mobile ? "mx-2 rounded-[14px] border border-line" : ""}`}>
+      <div className={`relative min-h-0 flex-1 overflow-clip bg-term-bg ${mobile ? "mx-2 rounded-card border border-line" : ""}`}>
         <div
           ref={host}
           data-terminal-host=""

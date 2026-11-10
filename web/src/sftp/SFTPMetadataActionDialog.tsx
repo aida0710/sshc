@@ -49,7 +49,7 @@ function MetadataForm({ intent, actions, returnFocusRef }: {
     if (problem === "") void actions.submit({ name, target, uid: Number(uid), gid: Number(gid) });
   }
 
-  return <ModalShell labelledBy={id} onDismiss={actions.cancel} dismissible={!actions.acting} initialFocusRef={initialFocus} returnFocusRef={returnFocusRef} panelClassName="w-full max-w-md rounded-lg p-5">
+  return <ModalShell labelledBy={id} onDismiss={actions.cancel} dismissible={!actions.acting} initialFocusRef={initialFocus} returnFocusRef={returnFocusRef} panelClassName="w-full max-w-md p-5">
     <h2 id={id} className={dialogHeading}>{heading}</h2>
     <p className="mt-2 break-all font-mono text-xs text-ink-muted">{path}</p>
     <p className={`mt-2 ${hintText}`}>{t(intent.kind === "ownership" ? "sftp.ownershipHint" : "sftp.symlinkHint")}</p>

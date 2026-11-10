@@ -32,7 +32,7 @@ type OperatingSystemIconLook = "plain" | "tile" | "accentTile";
 const frames: Record<OperatingSystemIconLook, string> = {
   plain: "size-6 text-ink-muted",
   tile: "size-7 rounded-md bg-well text-ink-muted",
-  accentTile: "size-[34px] rounded-[9px] bg-accent/15 text-accent",
+  accentTile: "size-[34px] rounded-notice bg-accent/15 text-accent",
 };
 
 const marks: Record<OperatingSystemIconLook, string> = {

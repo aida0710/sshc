@@ -89,7 +89,7 @@ export function GroupSheet({ groups, total, ungrouped, active, onChoose, onCreat
       onDismiss={onClose}
       closeOnOutside
       placement="sheet"
-      panelClassName="flex max-h-[80dvh] w-full max-w-md flex-col rounded-lg"
+      panelClassName="flex max-h-[80dvh] w-full max-w-md flex-col"
     >
       <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2">
         <h2 id="group-sheet-heading" className={dialogHeading}>{t("tree.byGroups")}</h2>

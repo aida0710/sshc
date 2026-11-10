@@ -117,7 +117,7 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
                 {group.keys.map((key) => (
                   <button key={key.key ?? key.text} type="button" disabled={unavailable || isPlaced(layout, key)}
                     aria-label={spokenKeyName(t, key)} onClick={() => place(key)}
-                    className="flex h-9 min-w-10 items-center justify-center rounded-[8px] border border-line bg-card px-2 font-mono text-[12px] text-ink disabled:opacity-35">
+                    className="flex h-9 min-w-10 items-center justify-center rounded-md border border-line bg-card px-2 font-mono text-[12px] text-ink disabled:opacity-35">
                     <KeyFace barKey={key} iconClassName="size-[15px]" />
                   </button>
                 ))}
@@ -128,7 +128,7 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
             <span className="text-[11.5px] text-ink-faint">{t("keyBar.groupCustom")}</span>
             <div>
               <button type="button" disabled={unavailable} onClick={() => setEditing({ kind: "create" })}
-                className="flex h-9 items-center gap-1.5 rounded-[8px] border border-dashed border-line px-3 text-[12.5px] text-accent disabled:opacity-35">
+                className="flex h-9 items-center gap-1.5 rounded-md border border-dashed border-line px-3 text-[12.5px] text-accent disabled:opacity-35">
                 <Icon name="plus" className="size-3.5" />{t("keyBar.createCustom")}
               </button>
             </div>

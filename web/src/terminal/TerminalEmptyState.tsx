@@ -124,7 +124,7 @@ function WideLayout({ art, overview, tiles, runTarget, onOpenConnection, onShowC
       </div>
       {overview.machine === null ? null : (
         <MachineStatusLine machine={overview.machine} cpuHistory={overview.cpuHistory} runTarget={runTarget}
-          className="absolute bottom-[18px] left-5 z-[1] rounded-[10px] border border-line bg-[color-mix(in_srgb,var(--ui-card)_80%,transparent)] px-3 py-1.5 backdrop-blur-[8px]" />
+          className="absolute bottom-[18px] left-5 z-[1] rounded-inset border border-line bg-[color-mix(in_srgb,var(--ui-card)_80%,transparent)] px-3 py-1.5 backdrop-blur-[8px]" />
       )}
     </PageBoard>
   );
@@ -146,7 +146,7 @@ function PhoneLayout({ art, overview, tiles, runTarget }: {
       <div className={scrollingContent}>
         <div className="m-auto flex w-full max-w-[900px] flex-col gap-3.5">
           {art === null ? machine : (
-            <div className="relative h-[132px] shrink-0 overflow-hidden rounded-[14px] border border-line bg-[color-mix(in_srgb,var(--ui-ink)_3%,var(--ui-card))]">
+            <div className="relative h-[132px] shrink-0 overflow-hidden rounded-card border border-line bg-[color-mix(in_srgb,var(--ui-ink)_3%,var(--ui-card))]">
               {art === "aquarium" ? <div aria-hidden="true" className={`absolute inset-0 ${aquariumWater}`} /> : null}
               <AsciiArtCanvas art={art} fontSize={bannerArt.fontSize} intensity={art === "contours" ? bannerArt.intensity : 1} options={artOptions(overview, bannerArt)} className="relative" />
               {machine}

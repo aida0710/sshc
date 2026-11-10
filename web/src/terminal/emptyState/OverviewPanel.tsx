@@ -17,7 +17,7 @@ export function OverviewPanel({
   children: ReactNode;
 }) {
   return (
-    <section className="flex min-w-0 flex-col rounded-[14px] border border-line bg-[color-mix(in_srgb,var(--ui-card)_84%,transparent)] px-4 py-3.5 backdrop-blur-[10px]" aria-label={title}>
+    <section className="flex min-w-0 flex-col rounded-card border border-line bg-[color-mix(in_srgb,var(--ui-card)_84%,transparent)] px-4 py-3.5 backdrop-blur-[10px]" aria-label={title}>
       <div className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold text-ink">
         <Icon name={icon} className="size-[15px] shrink-0 text-ink-muted" />
         <h3>{title}</h3>

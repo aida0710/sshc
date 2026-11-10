@@ -27,7 +27,7 @@ export function ConnectionVaultUnlock({
 }) {
   const t = useTranslate();
   return (
-    <div className="flex flex-col gap-2.5 rounded-[9px] bg-notice p-3">
+    <div className="flex flex-col gap-2.5 rounded-notice bg-notice p-3">
       <p className="text-xs leading-[18px] text-notice-ink">
         {t(vault.exists ? "conn.vaultLockedBeforeSave" : "conn.vaultMissingBeforeSave")}
       </p>

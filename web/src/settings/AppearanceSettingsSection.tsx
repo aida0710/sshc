@@ -147,7 +147,7 @@ function ThemeThumbnail({ theme }: { theme: Theme }) {
     <span
       aria-hidden="true"
       style={{ "--thumbnail-accent": "var(--ui-accent)" } as CSSProperties}
-      className="flex h-24 overflow-hidden rounded-[10px] border border-line peer-checked:outline-2 peer-checked:outline-offset-2 peer-checked:outline-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+      className="flex h-24 overflow-hidden rounded-inset border border-line peer-checked:outline-2 peer-checked:outline-offset-2 peer-checked:outline-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
     >
       {halves.map((half) => (
         <span key={half} {...themeAttributes(half)} className="flex flex-1 bg-canvas">
@@ -156,7 +156,7 @@ function ThemeThumbnail({ theme }: { theme: Theme }) {
             <span className="block h-1.5 rounded-full bg-hover" />
             <span className="block h-1.5 w-[80%] rounded-full bg-hover" />
           </span>
-          <span className="m-1.5 flex-1 rounded border border-line bg-term-bg" />
+          <span className="m-1.5 flex-1 rounded-sm border border-line bg-term-bg" />
         </span>
       ))}
     </span>

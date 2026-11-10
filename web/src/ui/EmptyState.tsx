@@ -14,7 +14,7 @@ type EmptyStateProps = {
 export function EmptyState({ icon, title, detail, action }: EmptyStateProps) {
   return (
     <section className="m-auto flex max-w-[440px] flex-col items-center px-6 py-10 text-center" role="status">
-      <span aria-hidden="true" className="mb-3.5 flex size-11 items-center justify-center rounded-xl bg-well text-ink-muted">
+      <span aria-hidden="true" className="mb-3.5 flex size-11 items-center justify-center rounded-lg bg-well text-ink-muted">
         <Icon name={icon} className="size-[22px]" />
       </span>
       <h3 className="text-balance text-lg font-semibold text-ink">{title}</h3>

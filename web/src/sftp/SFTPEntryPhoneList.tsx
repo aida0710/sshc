@@ -7,7 +7,7 @@ import { useEntryRowProps } from "./useEntryRowProps";
 import type { SFTPEntryListModel } from "./useSFTPEntryList";
 
 // As tall as the row's two lines of text, so that a folder with pictures fits as many rows on the screen as any other.
-const phoneThumbnailBox = "size-[38px] rounded";
+const phoneThumbnailBox = "size-[38px] rounded-sm";
 
 // What a row says under its name: the size and the date come first; the permissions and the owner are in the
 // details. A search result says first which folder it is in.

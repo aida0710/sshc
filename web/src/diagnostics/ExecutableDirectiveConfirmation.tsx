@@ -12,7 +12,7 @@ export function ExecutableDirectiveConfirmation({ directives, busy, onAcknowledg
 }) {
   const t = useTranslate();
   return (
-    <div className="rounded-[9px] bg-notice p-3 text-sm">
+    <div className="rounded-notice bg-notice p-3 text-sm">
       <h4 className="font-medium text-notice-ink">{t("conn.checksExecutableHeading")}</h4>
       <p className={hintText}>{t("conn.checksExecutableHint")}</p>
       <ul className="mt-2 flex flex-col gap-2">

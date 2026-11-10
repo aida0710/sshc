@@ -122,7 +122,7 @@ function rowMenu({ row, hosts, panel, hasCode, neighboursReady, actions, t }: {
 function AssignedHosts({ hosts, onUnassign }: { hosts: string[]; onUnassign: (host: string) => void }) {
   const t = useTranslate();
   return (
-    <div className="rounded-lg bg-well px-3 py-2">
+    <div className="rounded-inset bg-well px-3 py-2">
       <p className="mb-1.5 text-xs text-ink-faint">{t("secrets.assignedHosts")}</p>
       {hosts.length === 0 ? (
         <p className="text-sm text-ink-muted">{t("secrets.noAssignedHosts")}</p>

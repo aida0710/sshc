@@ -30,7 +30,7 @@ function floatingListSide(pointerX: number, listWidth: number): "left" | "right"
 }
 
 function facetLook(active: boolean): string {
-  return `flex min-h-[30px] w-full min-w-0 items-center gap-2.5 rounded-[7px] px-2 text-left text-[13px] transition-colors ${
+  return `flex min-h-[30px] w-full min-w-0 items-center gap-2.5 rounded-row px-2 text-left text-[13px] transition-colors ${
     active ? "bg-select-fill font-medium text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
   }`;
 }
@@ -95,7 +95,7 @@ export function ConnectionGroupFacets({
     return (
       <div key={node.name}>
         <div
-          className={`group/row relative flex items-center rounded-[7px] ${dropTargetLook({ accepts: drag.accepts(node.name), over: drag.isOver(node.name) })}`}
+          className={`group/row relative flex items-center rounded-row ${dropTargetLook({ accepts: drag.accepts(node.name), over: drag.isOver(node.name) })}`}
           style={{ paddingInlineStart: `calc(${depth} * ${depthIndent})` }}
           onContextMenu={items.length === 0 ? undefined : (event) => {
             event.preventDefault();
@@ -112,7 +112,7 @@ export function ConnectionGroupFacets({
               aria-expanded={!shut}
               onClick={() => toggle(node.name)}
               style={{ insetInlineStart: `calc(${depth} * ${depthIndent} + 0.375rem)` }}
-              className="absolute top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-ink-faint hover:text-ink"
+              className="absolute top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-sm text-ink-faint hover:text-ink"
             >
               <DisclosureChevron expanded={!shut} className="size-3.5" />
             </button>
@@ -145,7 +145,7 @@ export function ConnectionGroupFacets({
                 items={items}
                 open={openMenu === menuKey}
                 onOpenChange={(open) => setOpenMenu(open ? menuKey : null)}
-                triggerClassName="flex size-6 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink"
+                triggerClassName="flex size-6 items-center justify-center rounded-sm text-ink-muted hover:bg-hover hover:text-ink"
                 iconClassName="size-3.5"
               />
             </div>
@@ -175,7 +175,7 @@ export function ConnectionGroupFacets({
             aria-label={t("tree.newGroup")}
             title={t("tree.newGroup")}
             onClick={onCreateGroup}
-            className="-my-1 flex size-6 items-center justify-center rounded text-ink-faint hover:bg-hover hover:text-ink max-xl:hidden"
+            className="-my-1 flex size-6 items-center justify-center rounded-sm text-ink-faint hover:bg-hover hover:text-ink max-xl:hidden"
           >
             <Icon name="plus" className="size-3.5" />
           </button>
@@ -194,7 +194,7 @@ export function ConnectionGroupFacets({
           <span className="shrink-0 font-mono text-[11.5px] font-normal text-ink-faint">{decorated.length}</span>
         </button>
         {groupTree.map((node) => renderGroup(node))}
-        <div {...drag.dropHandlers("")} className={`rounded-[7px] ${dropTargetLook({ accepts: drag.accepts(""), over: drag.isOver("") })}`}>
+        <div {...drag.dropHandlers("")} className={`rounded-row ${dropTargetLook({ accepts: drag.accepts(""), over: drag.isOver("") })}`}>
           <button type="button" aria-label={t("tree.ungrouped")} aria-pressed={ungroupedActive} onClick={() => onScopeChange({ kind: "ungrouped" })} className={facetLook(ungroupedActive)}>
             {gutter}
             <Icon name="groups" className={`size-[15px] shrink-0 ${ungroupedActive ? "text-accent" : ""}`} />
@@ -207,7 +207,7 @@ export function ConnectionGroupFacets({
             type="button"
             aria-pressed={showHidden}
             onClick={() => setShowHidden((current) => !current)}
-            className="mt-2 self-start rounded px-2 py-1 text-xs text-ink-faint hover:bg-hover hover:text-ink max-xl:hidden"
+            className="mt-2 self-start rounded-md px-2 py-1 text-xs text-ink-faint hover:bg-hover hover:text-ink max-xl:hidden"
           >
             {t(showHidden ? "tree.hideHiddenGroups" : "tree.showHiddenGroups", { count: hiddenCount })}
           </button>

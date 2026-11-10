@@ -22,7 +22,7 @@ const inputWithTail = `${control} pr-9`;
 // いつも出す）。いつも出すと、狭い欄で値がボタンの分だけ切れる。入力欄の高さいっぱいに置くので、
 // スマホの押す場所の決まり（44px）は data-touch-compact で外す。
 const resetButtonLook =
-  "absolute inset-y-px right-px flex w-8 items-center justify-center rounded-r-[5px] bg-control text-ink-faint " +
+  "absolute inset-y-px right-px flex w-8 items-center justify-center rounded-r-row bg-control text-ink-faint " +
   "opacity-0 transition-opacity hover:bg-hover hover:text-ink focus-visible:opacity-100 " +
   "group-hover/field:opacity-100 group-focus-within/field:opacity-100 mobile-layout:opacity-100 [@media(any-hover:none)]:opacity-100";
 // Where the reset button is always shown, the value gives way to it, or the end of a value (the last digits of a

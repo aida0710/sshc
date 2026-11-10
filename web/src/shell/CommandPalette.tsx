@@ -261,7 +261,7 @@ export function CommandPalette({
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       placement="palette"
       zIndexClassName="z-[70]"
-      panelClassName="flex max-h-[72vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg"
+      panelClassName="flex max-h-[72vh] w-full max-w-2xl flex-col overflow-hidden"
     >
         <h2 id="command-palette-heading" className="sr-only">{t("palette.heading")}</h2>
         <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line pl-3 pr-1 desktop-layout:pr-3">
@@ -283,7 +283,7 @@ export function CommandPalette({
             />
           </label>
           {compact ? (
-            <button type="button" aria-label={t("palette.close")} title={t("palette.close")} onClick={onClose} className="flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-surface hover:text-ink">
+            <button type="button" aria-label={t("palette.close")} title={t("palette.close")} onClick={onClose} className="flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-surface hover:text-ink">
               <Icon name="close" className="size-4" />
             </button>
           ) : <kbd className="border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">Esc</kbd>}
@@ -298,7 +298,7 @@ export function CommandPalette({
                 aria-selected={selected === index}
                 onMouseEnter={() => setSelected(index)}
                 onClick={() => void choose(item)}
-                className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-hover"}`}
+                className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-md px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-hover"}`}
               >
                 <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-faint">{t(kindLabelKeys[item.kind])}</span>
                 <span title={item.label} className="col-start-2 truncate font-medium text-ink">{item.label}</span>
@@ -320,7 +320,7 @@ export function CommandPalette({
                     onClose();
                     onOpenHostSettings(host);
                   }}
-                  className="absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded text-ink-muted hover:bg-surface hover:text-ink"
+                  className="absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted hover:bg-surface hover:text-ink"
                 >
                   <Icon name="settings" className="size-4" />
                 </button>

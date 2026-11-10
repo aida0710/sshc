@@ -86,7 +86,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
   }
 
   return (
-    <Card as="section" radius="md" aria-labelledby="group-editor-heading" className="flex shrink-0 flex-col gap-5 p-5">
+    <Card as="section" aria-labelledby="group-editor-heading" className="flex shrink-0 flex-col gap-5 p-5">
       <header className="flex items-start gap-3">
         <span
           aria-hidden="true"
@@ -144,7 +144,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
                 type="button"
                 aria-label={t("groupEditor.removeOther", { keyword: setting.keyword })}
                 onClick={() => setDraft({ ...draft, other: draft.other.filter((_, position) => position !== index) })}
-                className="flex size-7 items-center justify-center rounded text-ink-faint hover:text-danger"
+                className="flex size-7 items-center justify-center rounded-row text-ink-faint hover:text-danger"
               >
                 <Icon name="close" className="size-3.5" />
               </button>

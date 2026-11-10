@@ -44,14 +44,14 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
       labelledBy="reveal-heading"
       onDismiss={close}
       initialFocusRef={showButton}
-      panelClassName="w-full max-w-2xl rounded-lg p-4 sm:p-5"
+      panelClassName="w-full max-w-2xl p-4 sm:p-5"
     >
       <h3 id="reveal-heading" className="font-medium">
         {t("reveal.heading", { path: relativePath })}
       </h3>
       {state === "confirm" && (
         <>
-          <p className="mt-3 rounded-md bg-notice px-3 py-2 text-sm text-notice-ink">{t("reveal.warning")}</p>
+          <p className="mt-3 rounded-notice bg-notice px-3 py-2 text-sm text-notice-ink">{t("reveal.warning")}</p>
           <MoreDetails className="mt-2">{t("reveal.warningMore")}</MoreDetails>
           <Button
             ref={showButton}

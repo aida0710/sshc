@@ -89,7 +89,7 @@ export function TOTPCurrentCode({ name, codes }: { name: string; codes: TOTPCode
 export function TOTPNeighbourCodes({ name, codes }: { name: string; codes: TOTPCodeSet }) {
   const t = useTranslate();
   return (
-    <div className="flex gap-6 rounded-lg bg-well px-3 py-2 text-xs text-ink-faint">
+    <div className="flex gap-6 rounded-inset bg-well px-3 py-2 text-xs text-ink-faint">
       <div>
         <p>{t("secrets.totpPrevious")}</p>
         <CopyableCode code={codes.previous} label={t("secrets.totpCopyPrevious", { name })} className="-ml-1.5 mt-0.5 text-[15px] font-semibold text-ink-muted" />

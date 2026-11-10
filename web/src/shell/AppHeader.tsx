@@ -54,7 +54,7 @@ export function AppHeader({
         aria-expanded={navigationOpen}
         aria-controls={navigationId}
         onClick={onToggleNavigation}
-        className="grid h-10 w-10 shrink-0 place-items-center rounded text-ink-muted hover:bg-select-fill hover:text-ink [[data-page-back]:has(>:not([style*='display:_none']))~&]:hidden"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink [[data-page-back]:has(>:not([style*='display:_none']))~&]:hidden"
       >
         <Icon name="menu" className="h-4 w-4" />
       </button>}

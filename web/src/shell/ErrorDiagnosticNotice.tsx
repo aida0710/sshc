@@ -46,14 +46,14 @@ export function ErrorDiagnosticNotice({
             type="button"
             onClick={onClose}
             aria-label={t("diagnostic.dismiss")}
-            className="shrink-0 rounded border border-control-line px-2 py-1 text-xs text-ink-muted"
+            className="shrink-0 rounded-md border border-control-line px-2 py-1 text-xs text-ink-muted"
           >
             {t("diagnostic.dismiss")}
           </button>
         </div>
         <details className="text-xs">
           <DisclosureSummary className="text-ink-muted">{t("diagnostic.showDetails")}</DisclosureSummary>
-          <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-card p-2 text-ink">
+          <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md border border-line bg-card p-2 text-ink">
             {report}
           </pre>
           <div className="mt-2">

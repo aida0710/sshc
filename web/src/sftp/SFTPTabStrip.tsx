@@ -45,7 +45,7 @@ const stripLook = {
   regular: "gap-1.5 px-3 pt-2.5",
 };
 const tabLook = {
-  compact: { selected: "rounded bg-card shadow-card", other: "rounded hover:bg-card/50" },
+  compact: { selected: "rounded-md bg-card shadow-card", other: "rounded-md hover:bg-card/50" },
   regular: { selected: "rounded-t-md bg-well", other: "rounded-md hover:bg-hover" },
 };
 
@@ -194,8 +194,8 @@ export function SFTPTabStrip({
               className={`group relative flex w-52 shrink-0 items-stretch ${selected ? tabLook[size].selected : tabLook[size].other} ${draggable ? draggableCursor : ""}`}
             >
               {/* The marker is drawn inside the tab: the strip scrolls sideways and would clip it at its edges. */}
-              {dropIndex === index ? <span aria-hidden="true" data-sftp-tab-drop-marker className="pointer-events-none absolute inset-y-1 left-0 w-0.5 rounded bg-accent" /> : null}
-              {dropIndex === pane.tabs.length && index === pane.tabs.length - 1 ? <span aria-hidden="true" data-sftp-tab-drop-marker className="pointer-events-none absolute inset-y-1 right-0 w-0.5 rounded bg-accent" /> : null}
+              {dropIndex === index ? <span aria-hidden="true" data-sftp-tab-drop-marker className="pointer-events-none absolute inset-y-1 left-0 w-0.5 rounded-full bg-accent" /> : null}
+              {dropIndex === pane.tabs.length && index === pane.tabs.length - 1 ? <span aria-hidden="true" data-sftp-tab-drop-marker className="pointer-events-none absolute inset-y-1 right-0 w-0.5 rounded-full bg-accent" /> : null}
               <button
                 type="button"
                 role="tab"
@@ -208,7 +208,7 @@ export function SFTPTabStrip({
                 title={labels.title || labels.name}
                 onClick={() => onSelect(tab.id)}
                 onKeyDown={(event) => keyDown(event, tab, index)}
-                className={`flex min-w-0 flex-1 rounded py-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${compact ? "px-2" : "pl-3 pr-1"} ${tabLayout[size]} ${selected ? "text-ink" : "text-ink-muted"}`}
+                className={`flex min-w-0 flex-1 rounded-md py-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${compact ? "px-2" : "pl-3 pr-1"} ${tabLayout[size]} ${selected ? "text-ink" : "text-ink-muted"}`}
               >
                 {compact || tab.alias === "" ? null : <Icon name={tab.alias === localHostAlias ? "files" : "connections"} className="size-[13px] shrink-0" />}
                 <span className={`block min-w-0 truncate leading-4 ${compact ? "w-full text-sm font-medium" : "text-[12.5px]"}`}>{hostOnly ? labels.host : labels.folder}</span>
@@ -223,7 +223,7 @@ export function SFTPTabStrip({
                   title={t("sftp.chooseHostHeading")}
                   disabled={!canChangeHost(tab)}
                   onClick={() => onChangeHost(tab)}
-                  className={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink ${controlSize[size]}`}
+                  className={`flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink ${controlSize[size]}`}
                 >
                   <Icon name="chevronRight" className="size-3.5 rotate-90" />
                 </button>
@@ -234,7 +234,7 @@ export function SFTPTabStrip({
                   items={actions}
                   open={menuOpenFor === tab.id}
                   onOpenChange={(open) => setMenuOpenFor(open ? tab.id : null)}
-                  triggerClassName={`flex shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink ${controlSize[size]}`}
+                  triggerClassName={`flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink ${controlSize[size]}`}
                   iconClassName="size-3.5"
                 />
               ) : null}
@@ -243,7 +243,7 @@ export function SFTPTabStrip({
                   type="button"
                   aria-label={t("sftp.closeTab", { name: labels.name })}
                   onClick={(event) => onClose(tab, { skipConfirmation: event.shiftKey })}
-                  className={`flex shrink-0 items-center justify-center rounded text-ink-faint hover:bg-hover hover:text-danger ${controlSize[size]}`}
+                  className={`flex shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-danger ${controlSize[size]}`}
                 >
                   <Icon name="close" className={compact ? "size-4" : "size-3"} />
                 </button>
@@ -257,7 +257,7 @@ export function SFTPTabStrip({
         aria-label={t("sftp.newTab")}
         disabled={addDisabled}
         onClick={onAdd}
-        className={`flex shrink-0 items-center justify-center text-ink-muted hover:text-ink ${compact ? "rounded hover:bg-card/50 min-h-11 w-11" : "min-h-[30px] w-7 rounded-[7px] hover:bg-hover mobile-layout:min-h-10 mobile-layout:w-10"}`}
+        className={`flex shrink-0 items-center justify-center text-ink-muted hover:text-ink ${compact ? "rounded-md hover:bg-card/50 min-h-11 w-11" : "min-h-[30px] w-7 rounded-row hover:bg-hover mobile-layout:min-h-10 mobile-layout:w-10"}`}
       >
         <Icon name="plus" className={compact ? "size-5" : "size-4"} />
       </button>

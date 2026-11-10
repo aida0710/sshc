@@ -71,7 +71,7 @@ export function InputDialog({
       dismissible={!submitting}
       initialFocusRef={inputRef}
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
-      panelClassName="flex w-full max-w-md flex-col gap-4 rounded-lg p-4 sm:p-5"
+      panelClassName="flex w-full max-w-md flex-col gap-4 p-4 sm:p-5"
     >
       <div>
         <h2 id={id} className={dialogHeading}>{heading}</h2>

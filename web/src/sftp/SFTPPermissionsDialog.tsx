@@ -81,7 +81,7 @@ function PermissionsForm({ intent, permissions, returnFocusRef }: {
     void permissions.review({ fileMode: normalizedFileMode, directoryMode: normalizedDirectoryMode, recursive });
   }
 
-  return <ModalShell labelledBy={id} onDismiss={permissions.cancel} initialFocusRef={inputRef} returnFocusRef={returnFocusRef} panelClassName="w-full max-w-md rounded-lg p-5">
+  return <ModalShell labelledBy={id} onDismiss={permissions.cancel} initialFocusRef={inputRef} returnFocusRef={returnFocusRef} panelClassName="w-full max-w-md p-5">
     <h2 id={id} className={dialogHeading}>{t(intent.recursive ? "sftp.chmodRecursive" : single ? "sftp.chmod" : "sftp.chmodBatch")}</h2>
     <p className={`mt-2 ${hintText}`}>{t("sftp.chmodSelectionCount", { count: intent.entries.length })}</p>
     <form className="mt-4 space-y-3" onSubmit={(event) => { event.preventDefault(); submit(); }}>

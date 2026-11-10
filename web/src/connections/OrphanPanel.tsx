@@ -70,7 +70,7 @@ export function OrphanPanel({ metadata, hosts, onSave }: OrphanPanelProps) {
   }
 
   return (
-    <section aria-labelledby="orphan-heading" className="flex flex-col gap-3 rounded-xl border border-notice-line bg-notice p-4">
+    <section aria-labelledby="orphan-heading" className="flex flex-col gap-3 rounded-notice border border-notice-line bg-notice p-4">
       <h3 id="orphan-heading" className="text-sm font-medium text-notice-ink">
         {t("orphan.heading")}
       </h3>

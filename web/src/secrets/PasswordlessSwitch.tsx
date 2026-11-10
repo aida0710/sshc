@@ -8,7 +8,7 @@ export function PasswordlessSwitch({ checked, onChange }: { checked: boolean; on
   const { t } = useLanguage();
   const hintId = useId();
   return (
-    <div className="rounded-[10px] bg-well px-3 py-2.5">
+    <div className="rounded-inset bg-well px-3 py-2.5">
       <label className="flex cursor-pointer items-center gap-2.5 text-[13px] text-ink">
         {/* The checkbox lies transparent over the drawn switch, so pressing the switch presses the checkbox. */}
         <span className="relative h-[18px] w-[30px] shrink-0">

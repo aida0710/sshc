@@ -74,7 +74,7 @@ export function TerminalLinkPopover({
             key={action.label}
             ref={index === 0 ? firstAction : undefined}
             type="button"
-            className="rounded px-2 py-1.5 text-left text-sm hover:bg-select-fill"
+            className="rounded-md px-2 py-1.5 text-left text-sm hover:bg-select-fill"
             onClick={action.run}
           >
             {action.label}
