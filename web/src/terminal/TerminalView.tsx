@@ -69,11 +69,7 @@ import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
 import { TerminalNoticeCard } from "./TerminalNoticeCard";
 import { TerminalNoticesButton } from "./TerminalNoticesButton";
-import { noticeSeverity, rowsSaidByCard, statusBannerRows, type StatusBannerRow } from "./statusBannerRows";
-import { useMobileNotices } from "./useMobileNotices";
-import { useNotificationPermissionNotice } from "./useNotificationPermissionNotice";
-import { forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
-import { terminalNoticeFor } from "./terminalNotice";
+import { useTerminalNotices } from "./useTerminalNotices";
 import { savedConnectionOf } from "./terminalPresentation";
 import { useSessionRecovery } from "./useSessionRecovery";
 import { useHostKeyAnswer } from "../shell/useHostKeyAnswer";
@@ -283,33 +279,15 @@ export function TerminalView({
   reconnectByEnter.current = reconnectsOnEnter(session) ? recovery.reconnect ?? null : null;
   const composerReconnects = reconnectByEnter.current !== null;
   const hostKeyAnswer = useHostKeyAnswer(onAnswerHostKey);
-  const notificationPermission = useNotificationPermissionNotice(session);
   const savedConnection = savedConnectionOf(session);
-  const notice = terminalNoticeFor(session, link, notificationPermission.due);
-  const noticeDismissal = useTerminalNoticeDismissal(notice?.key ?? null);
-  const noticeRows = statusBannerRows({
-    session, problem, link, reconnectFailed: recovery.reconnectFailed, answersHostKey: hostKeyAnswer.answer !== undefined,
+  const notices = useTerminalNotices({
+    session,
+    problem,
+    link,
+    reconnectFailed: recovery.reconnectFailed,
+    answersHostKey: hostKeyAnswer.answer !== undefined,
+    mobile,
   });
-  // The strip has nothing to say about the questions that only have a card (the notification permission, a typed password).
-  const noticesSeverity = noticeSeverity(noticeRows, { session, link }) ?? (notice === null ? null : "notice");
-  const noticesButton = useRef<HTMLButtonElement>(null);
-  const noticesStrip = useRef<HTMLDivElement>(null);
-  const noticeCardFrame = useRef<HTMLDivElement>(null);
-  // A phone keeps its notices behind a button in the top bar, so they cover neither the terminal nor its rows.
-  const mobileNotices = useMobileNotices({
-    enabled: mobile,
-    present: noticesSeverity !== null || notice !== null,
-    containerRefs: [noticesButton, noticesStrip, noticeCardFrame],
-  });
-  const cardShown = notice !== null && (mobile ? mobileNotices.open : !noticeDismissal.dismissed);
-  // A wider screen keeps the strip on while the card can be hidden. A phone opens both at once over the terminal, so
-  // the strip leaves out what the card says, and the card's own button is the only one for its action.
-  const stripHiddenRows: readonly StatusBannerRow[] = mobile && cardShown ? rowsSaidByCard(notice.kind) : [];
-  const stripHasRows = noticeRows.some((row) => !stripHiddenRows.includes(row));
-  const working = session.state === "connected" && link.phase === "live";
-  useEffect(() => {
-    if (working) forgetDismissedTerminalNotices(session.id);
-  }, [session.id, working]);
   // drawnLive tells whether the screen is drawn as it is while the link is live, without the banner
   // above it that says the link is connecting (see the layout effect below).
   const drawnLive = useRef(false);
@@ -927,7 +905,7 @@ export function TerminalView({
       recovery={recovery}
       hostKeyAnswer={hostKeyAnswer}
       onResumeProgram={resumeProgram}
-      hiddenRows={stripHiddenRows}
+      hiddenRows={notices.stripHiddenRows}
     />
   );
 
@@ -988,8 +966,8 @@ export function TerminalView({
             <Icon name="search" className="size-[15px]" />
           </button>
         )}
-        {mobile && noticesSeverity !== null ? (
-          <TerminalNoticesButton severity={noticesSeverity} expanded={mobileNotices.open} onToggle={mobileNotices.toggle} buttonRef={noticesButton} />
+        {mobile && notices.severity !== null ? (
+          <TerminalNoticesButton severity={notices.severity} expanded={notices.mobileOpen} onToggle={notices.toggleMobile} buttonRef={notices.buttonRef} />
         ) : null}
         <button
           ref={overflowTrigger}
@@ -1071,29 +1049,29 @@ export function TerminalView({
           <TerminalCommandHeader block={topCommand} onGoTo={() => terminal.current?.scrollToLine(topCommand.start.line)} />
         ) : null}
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
-        {mobile && mobileNotices.open && stripHasRows ? (
+        {notices.stripShown ? (
           // Over the top of the terminal, not above it: the terminal keeps its rows, and its program does not draw again.
-          <div ref={noticesStrip} tabIndex={-1} className="absolute inset-x-0 top-0 z-20 bg-canvas shadow-float outline-none">
+          <div ref={notices.stripRef} tabIndex={-1} className="absolute inset-x-0 top-0 z-20 bg-canvas shadow-float outline-none">
             {statusBanners}
           </div>
         ) : null}
-        {notice === null || !cardShown ? null : (
+        {notices.card === null || !notices.cardShown ? null : (
           // Low in the terminal, where the person's eyes are after the last line; the strip above keeps saying it.
-          <div ref={noticeCardFrame} className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center mobile-layout:inset-x-2 mobile-layout:bottom-2">
+          <div ref={notices.cardFrameRef} className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center mobile-layout:inset-x-2 mobile-layout:bottom-2">
             <TerminalNoticeCard
               // A new notice is a new card, which takes the focus again.
-              key={notice.key}
-              notice={notice}
+              key={notices.card.key}
+              notice={notices.card}
               session={session}
               title={displayTitle}
               recovery={recovery}
               hostKeyAnswer={hostKeyAnswer}
-              notificationPermission={notificationPermission}
+              notificationPermission={notices.notificationPermission}
               focus={{
                 // Only the terminal the person works in, and not from under a dialog or menu. A phone shows it when the
                 // person asks for the notices, so it always takes the focus there. The hint about the previous shell's
                 // program leaves the focus alone: the new shell is there to type into.
-                take: () => mobile || (notice.kind !== "resume-program" && active && !isDismissibleLayerOpen()),
+                take: () => mobile || (notices.card?.kind !== "resume-program" && active && !isDismissibleLayerOpen()),
                 // A touch screen would raise its keyboard again for the terminal.
                 giveBack: () => {
                   if (!touchTerminalRef.current) terminal.current?.focus();
@@ -1102,7 +1080,7 @@ export function TerminalView({
               onLinkNow={() => streamLinkController.current?.connect()}
               onCloseSession={onCloseSession}
               onAnswerPasswordSave={onAnswerPasswordSave}
-              onDismiss={mobile ? mobileNotices.close : noticeDismissal.dismiss}
+              onDismiss={notices.dismissCard}
               onResumeProgram={resumeProgram}
             />
           </div>
