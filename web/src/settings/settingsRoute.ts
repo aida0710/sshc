@@ -42,14 +42,12 @@ export const settingsPageMeta: Record<
   Terminal: {
     path: "/settings/terminal",
     label: "terminal.settingsHeading",
-    description: "settings.presetDescription",
     icon: "terminal",
     group: "preset",
   },
   SFTP: {
     path: "/settings/sftp",
     label: "sftp.settingsHeading",
-    description: "settings.presetDescription",
     icon: "files",
     group: "preset",
   },

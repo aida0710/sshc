@@ -33,16 +33,22 @@ type KeyBarPreset struct {
 var ErrKeyBarPresets = errors.New("invalid key bar presets")
 var ErrKeyBarConflict = errors.New("key bar presets changed; reload before saving")
 
+// keyBarPresetRules は、キーバーのプリセットの一覧の決まりである。後のビルドが足した用意したキーは、
+// そのキーだけを読み飛ばし、利用者が作った並びは残す。
+var keyBarPresetRules = presetLibraryRules[KeyBarPreset]{
+	limit: validate.MaxKeyBarPresets,
+	id:    func(p KeyBarPreset) string { return p.ID },
+	valid: validKeyBarPreset,
+	readable: func(p KeyBarPreset) KeyBarPreset {
+		p.Keys = withoutUnknownKeyBarKeys(p.Keys)
+		p.MoreKeys = withoutUnknownKeyBarKeys(p.MoreKeys)
+		return p
+	},
+}
+
 func validateKeyBarPresets(presets []KeyBarPreset) error {
-	if len(presets) > validate.MaxKeyBarPresets {
+	if !validPresetLibrary(presets, keyBarPresetRules) {
 		return ErrKeyBarPresets
-	}
-	ids := map[string]bool{}
-	for _, p := range presets {
-		if !validKeyBarPreset(p) || ids[p.ID] {
-			return ErrKeyBarPresets
-		}
-		ids[p.ID] = true
 	}
 	return nil
 }
@@ -71,25 +77,9 @@ func validKeyBarKey(key KeyBarKey) bool {
 	return validate.KeyBarLabel(key.Label) == nil && validate.KeyBarText(key.Text) == nil
 }
 
-// withoutUnreadableKeyBarPresets は、このビルドが使えるキーバーのプリセットだけを残す。後のビルドが
-// 足した用意したキーは、そのキーだけを読み飛ばし、利用者が作った並びは残す。それでも決まりに合わない
-// プリセットは捨てる。残すと、metadata を保存するたびに検証で断られる。
+// withoutUnreadableKeyBarPresets は、このビルドが使えるキーバーのプリセットだけを残す。
 func withoutUnreadableKeyBarPresets(metadata *Metadata) {
-	kept := metadata.KeyBarPresets[:0]
-	ids := map[string]bool{}
-	for _, p := range metadata.KeyBarPresets {
-		p.Keys = withoutUnknownKeyBarKeys(p.Keys)
-		p.MoreKeys = withoutUnknownKeyBarKeys(p.MoreKeys)
-		if len(kept) >= validate.MaxKeyBarPresets || !validKeyBarPreset(p) || ids[p.ID] {
-			continue
-		}
-		ids[p.ID] = true
-		kept = append(kept, p)
-	}
-	if len(kept) == 0 {
-		kept = nil
-	}
-	metadata.KeyBarPresets = kept
+	metadata.KeyBarPresets = readablePresetLibrary(metadata.KeyBarPresets, keyBarPresetRules)
 }
 
 func withoutUnknownKeyBarKeys(keys []KeyBarKey) []KeyBarKey {

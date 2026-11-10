@@ -343,7 +343,8 @@ describe("SettingsPanel", () => {
   it("edits the chosen preset, with the engine's and the browser's limits apart and the global settings elsewhere", async () => {
     render(<SettingsPanel api={buildApi()} page="Terminal" />);
 
-    expect(screen.getByText("Edits the chosen preset.")).toBeVisible();
+    // The preset band next to the page already says which preset is edited.
+    expect(screen.queryByText("Edits the chosen preset.")).not.toBeInTheDocument();
     const terminal = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(terminal, "Connection");
     expect(within(terminal).getByLabelText("Engine replay buffer (KiB)")).toHaveAttribute("max", "4096");

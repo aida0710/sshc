@@ -19,17 +19,23 @@ var ErrShortcutConflict = errors.New("shortcut presets changed; reload before sa
 // internal/validate, which the settings screen receives through rulegen, so a
 // chord the screen records is one this accepts.
 func validateShortcutPresets(presets []ShortcutPreset) error {
-	if len(presets) > validate.MaxShortcutPresets {
+	if !validPresetLibrary(presets, shortcutPresetRules) {
 		return ErrShortcutPresets
 	}
-	ids := map[string]bool{}
-	for _, p := range presets {
-		if !validShortcutPreset(p) || ids[p.ID] {
-			return ErrShortcutPresets
-		}
-		ids[p.ID] = true
-	}
 	return nil
+}
+
+// shortcutPresetRules are the rules of the list of shortcut presets. A preset saved before an action was added
+// does not bind it: the action is read as unassigned, so the preset the user made stays (the user's choice,
+// 2026-11-01). A binding of an action no longer offered is left out.
+var shortcutPresetRules = presetLibraryRules[ShortcutPreset]{
+	limit: validate.MaxShortcutPresets,
+	id:    func(p ShortcutPreset) string { return p.ID },
+	valid: validShortcutPreset,
+	readable: func(p ShortcutPreset) ShortcutPreset {
+		p.Bindings = withEveryShortcutAction(p.Bindings)
+		return p
+	},
 }
 
 // validShortcutPreset says whether p names itself properly and binds every
@@ -54,26 +60,10 @@ func validShortcutPreset(p ShortcutPreset) bool {
 	return true
 }
 
-// withoutUnreadableShortcutPresets keeps the presets this build can use. A preset saved before an action was
-// added does not bind it: the action is read as unassigned, so the preset the user made stays (the user's
-// choice, 2026-11-01). A binding of an action no longer offered is left out. A preset still broken after
-// that (a chord this build does not record, the same chord twice) is dropped, or every later save of
-// metadata would refuse.
+// withoutUnreadableShortcutPresets keeps the presets this build can use. A preset still broken after its
+// bindings are read (a chord this build does not record, the same chord twice) is dropped.
 func withoutUnreadableShortcutPresets(metadata *Metadata) {
-	kept := metadata.ShortcutPresets[:0]
-	ids := map[string]bool{}
-	for _, p := range metadata.ShortcutPresets {
-		p.Bindings = withEveryShortcutAction(p.Bindings)
-		if len(kept) >= validate.MaxShortcutPresets || !validShortcutPreset(p) || ids[p.ID] {
-			continue
-		}
-		ids[p.ID] = true
-		kept = append(kept, p)
-	}
-	if len(kept) == 0 {
-		kept = nil
-	}
-	metadata.ShortcutPresets = kept
+	metadata.ShortcutPresets = readablePresetLibrary(metadata.ShortcutPresets, shortcutPresetRules)
 }
 
 // withEveryShortcutAction is bindings with exactly the actions this build offers: an action missing from it

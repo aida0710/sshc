@@ -7,7 +7,7 @@ description: Group terminal sessions into named workspaces, and keep connections
 
 ![Sessions grouped by workspace](/images/terminal-desktop.png)
 
-The sidebar shows sessions grouped by workspace. Press a workspace row to show or hide its sessions; this browser remembers which ones are folded.
+The sidebar shows sessions grouped by workspace. Press a workspace row to show or hide its sessions. Which ones are folded is remembered for each machine and travels with Sync.
 
 Each session row has a dot for its state, the session name on its first line and the destination on its second, so the name has the whole width.
 

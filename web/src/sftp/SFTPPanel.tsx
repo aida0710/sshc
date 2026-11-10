@@ -704,7 +704,7 @@ export function SFTPPanel({
           {waitingFor === null ? null : <SFTPWaitingOverlay label={waitingFor.label} detail={waitingFor.detail} />}
           <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={list.handleListKeys}>
             {alias === "" || can === undefined ? (
-              <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.chooseHost")}
+              <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.noHostChosen")}
                 action={(
                   <div className="flex flex-col items-center">
                     {onChooseHost === undefined ? null : <Button kind="primary" onClick={onChooseHost}>{t("sftp.chooseHostAction")}</Button>}
