@@ -205,6 +205,29 @@ describe("createStreamLink", () => {
     expect(ticket).toHaveBeenCalledTimes(1);
   });
 
+  it("attaches again after the program exited when asked to, and only once", async () => {
+    const { controller, ticket } = startLink();
+    await vi.advanceTimersByTimeAsync(0);
+    streams[0]!.handlers.onExit({ code: 255, signal: "" });
+    streams[0]!.handlers.onClose();
+
+    controller.attachAfterExit();
+    controller.attachAfterExit();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ticket).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves a link whose program is still running as it is when asked to attach after an exit", async () => {
+    const { controller, ticket } = startLink();
+    await vi.advanceTimersByTimeAsync(0);
+
+    controller.attachAfterExit();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ticket).toHaveBeenCalledTimes(1);
+  });
+
   it("attaches at once when the page comes back from the back-forward cache instead of waiting out the delay", async () => {
     const { links, ticket } = startLink();
     await vi.advanceTimersByTimeAsync(0);

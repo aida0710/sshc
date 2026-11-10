@@ -47,6 +47,9 @@ export type StreamLinkController = {
   // wait out the delay or wants retrying back after stopping it.
   connect: () => void;
   stopRetrying: () => void;
+  // attachAfterExit は、プログラムの終了で止まったリンクを付け直す。終了を受け取っていないリンクと、
+  // すでに付け直しているリンクには何もしない。
+  attachAfterExit: () => void;
   currentStream: () => TerminalStream | null;
   close: () => void;
 };
@@ -64,6 +67,8 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
   let replacing: TerminalStream | null = null;
   let closed = false;
   let stopped = false;
+  // ended は、プログラムの終了を受け取ってから、次に付け直すまでのあいだ真である。
+  let ended = false;
   let attempts = 0;
   let attachedAt = 0;
   let countdown: ReturnType<typeof setInterval> | undefined;
@@ -87,6 +92,7 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
     clearInterval(countdown);
     waiting = false;
     stopped = false;
+    ended = false;
     attempts += 1;
     if (!quiet) options.onLink({ phase: "connecting", attempt: attempts });
     const resumeFrom = cursor;
@@ -117,6 +123,7 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
           onExit: (exit) => {
             if (muted.has(attached)) return;
             stopped = true;
+            ended = true;
             options.onLink({ phase: "live" });
             options.onExit(exit);
           },
@@ -189,6 +196,9 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
       waiting = false;
       clearInterval(countdown);
       options.onLink({ phase: "stopped", gone: false });
+    },
+    attachAfterExit: () => {
+      if (ended && !closed) connect();
     },
     currentStream: () => stream ?? replacing,
     close: () => {

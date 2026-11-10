@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
-import { useTranslate } from "../i18n/context";
+import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
@@ -228,6 +228,10 @@ export function TerminalView({
   commandScrollbarMarks = true,
 }: TerminalViewProps) {
   const t = useTranslate();
+  // ターミナルを組み立てる effect は、セッションごとに1度しか走らない。その中の関数が、あとから変わる値を
+  // 呼ばれた時点で読むための写しである。
+  const latest = useRef({ session, t, onExit });
+  latest.current = { session, t, onExit };
   const { resolved } = useTheme();
   const reducedMotion = useReducedMotion();
   const mobile = useMediaQuery(mobileViewportQuery);
@@ -414,6 +418,14 @@ export function TerminalView({
     setPendingPaste(null);
   }, [clearProgramProgress, initialOsc52Enabled, session.id, session.state]);
 
+  // 終わったと出していたセッションが、ここでの操作なしにつなぎ直された（ほかのブラウザが再接続した）ら、
+  // 新しいシェルの出力を受け取り直す。
+  const shownAsEnded = useRef(session.state === "exited");
+  useEffect(() => {
+    if (shownAsEnded.current && session.state !== "exited") streamLinkController.current?.attachAfterExit();
+    shownAsEnded.current = session.state === "exited";
+  }, [session.state]);
+
   useEffect(() => {
     if (terminalNotice === "") return;
     const timer = window.setTimeout(() => setTerminalNotice(""), toastVisibleMs);
@@ -435,6 +447,7 @@ export function TerminalView({
     const container = host.current;
     if (container === null) return;
 
+    const translate: Translate = (key, values) => latest.current.t(key, values);
     const parts = createTerminalView(container, {
       backgroundImage: backgroundConfigured,
       cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
@@ -459,8 +472,8 @@ export function TerminalView({
     const copyActions = terminalCopyActions({
       view,
       serializeAddon,
-      title: () => terminalDisplayTitle(session),
-      t,
+      title: () => terminalDisplayTitle(latest.current.session),
+      t: translate,
       notice: setTerminalNotice,
       problem: setProblem,
     });
@@ -493,7 +506,7 @@ export function TerminalView({
     });
     const sequences = attachTerminalSequences({
       view,
-      t,
+      t: translate,
       replaying: () => output.isReplaying(),
       clipboardWritesAllowed: () => osc52EnabledRef.current,
       reply: (sequence) => sendInput.current(sequence),
@@ -560,7 +573,7 @@ export function TerminalView({
         output.abandonReplay();
         // A new stream starts as shown to the engine; it is told the truth at once.
         linkController.currentStream()?.reportShown(isTerminalShown(container));
-        if (activeRef.current && !touchTerminalRef.current && session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current) && !isInNoticeCard()) {
+        if (activeRef.current && !touchTerminalRef.current && latest.current.session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current) && !isInNoticeCard()) {
           view.focus();
         }
         fitAndSync();
@@ -570,11 +583,11 @@ export function TerminalView({
         if (!replay.truncated) return;
         // Only a link that was offline lost output; a view shown afresh lacks
         // only the session's oldest output.
-        setTerminalNotice(t(resumed ? "terminal.replayTruncated" : "terminal.replayTruncatedOldest"));
+        setTerminalNotice(translate(resumed ? "terminal.replayTruncated" : "terminal.replayTruncatedOldest"));
       },
       onSkipped: (screen) => {
         output.skip(screen);
-        setTerminalNotice(t("terminal.outputSkipped"));
+        setTerminalNotice(translate("terminal.outputSkipped"));
       },
       // Output alone keeps a pending paste: full-screen programs redraw all
       // the time, and on the focus change that opening the review causes.
@@ -584,7 +597,7 @@ export function TerminalView({
       onExit: (exit) => {
         view.options.cursorBlink = false;
         setPendingPaste(null);
-        onExit?.(exit);
+        latest.current.onExit?.(exit);
       },
       onClose: () => {
         output.abandonReplay();
@@ -673,10 +686,10 @@ export function TerminalView({
       clipboard,
       coarsePointer: () => touchTerminalRef.current,
       settings: () => clipboardSettings.current,
-      refuse: () => setProblem(t("terminal.clipboardRefused")),
-      nothingToPaste: (image) => setTerminalNotice(t(image ? "terminal.pasteImageUnsupported" : "terminal.pasteEmpty")),
+      refuse: () => setProblem(translate("terminal.clipboardRefused")),
+      nothingToPaste: (image) => setTerminalNotice(translate(image ? "terminal.pasteImageUnsupported" : "terminal.pasteEmpty")),
       takePaste: (items) => kittyClipboard.takePaste(items),
-      copied: () => setTerminalNotice(t("copy.done")),
+      copied: () => setTerminalNotice(translate("copy.done")),
       enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current),
       sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),
       selectionIsSearchMatch: search.isSelectingMatch,
