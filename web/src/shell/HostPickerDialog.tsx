@@ -156,7 +156,7 @@ export function HostPickerDialog({
       initialFocusRef={focusFirst === "close" ? closeButton : search}
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       placement="palette"
-      panelClassName="flex max-h-[76vh] w-full max-w-xl flex-col overflow-hidden rounded-xl"
+      panelClassName="flex max-h-[76vh] w-full max-w-xl flex-col overflow-hidden"
     >
       <div className="border-b border-line p-3">
         <div className="mb-3 flex items-center justify-between gap-3">

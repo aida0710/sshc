@@ -92,8 +92,8 @@ export function PresetPicker({ editing, onEdit, layout }: {
 
   return (
     <div data-preset-picker className={layout === "list"
-      ? "mx-0.5 mb-1.5 flex flex-col gap-1.5 rounded-[10px] border border-hairline bg-surface-subtle p-2"
-      : "mt-3 flex flex-col gap-2 rounded-[10px] border border-hairline bg-surface-subtle px-3 py-2.5"}>
+      ? "mx-0.5 mb-1.5 flex flex-col gap-1.5 rounded-inset border border-hairline bg-surface-subtle p-2"
+      : "mt-3 flex flex-col gap-2 rounded-inset border border-hairline bg-surface-subtle px-3 py-2.5"}>
       <span className="px-0.5 text-[11.5px] text-ink-faint">{t("settings.presetToEdit")}</span>
       {layout === "list" ? select : <div className="flex min-w-0 items-center gap-2">{select}{menu}</div>}
       <div className="flex min-w-0 items-center gap-1.5">

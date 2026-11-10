@@ -28,7 +28,7 @@ export function TerminalPasteDialog({
       describedBy={descriptionId}
       onDismiss={onCancel}
       initialFocusRef={cancel}
-      panelClassName="flex max-h-[90dvh] overflow-y-auto w-full max-w-2xl flex-col gap-3 rounded-lg p-4"
+      panelClassName="flex max-h-[90dvh] overflow-y-auto w-full max-w-2xl flex-col gap-3 p-4"
     >
       <h2 id={headingId} className="text-base font-semibold text-ink">
         {t("terminal.pasteHeading", { target })}
@@ -49,10 +49,10 @@ export function TerminalPasteDialog({
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
-          className="w-full resize-y rounded border border-control-line bg-control p-3 font-mono text-xs focus:border-accent focus:outline-none"
+          className="w-full resize-y rounded-md border border-control-line bg-control p-3 font-mono text-xs focus:border-accent focus:outline-none"
         />
       </label>
-      <details className="overflow-hidden rounded border border-control-line bg-control">
+      <details className="overflow-hidden rounded-md border border-control-line bg-control">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm text-ink-muted hover:text-ink focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
           <DisclosureChevron className="size-3.5" />
           <span>{t("terminal.pastePreview")}</span>

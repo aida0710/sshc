@@ -65,7 +65,7 @@ export function MenuPanel({
         <button
           type="button"
           onClick={onOpenSearch}
-          className="flex h-11 w-full items-center gap-2 rounded-[14px] border border-line bg-sidebar px-3.5 text-left text-[15px] text-ink-faint"
+          className="flex h-11 w-full items-center gap-2 rounded-card border border-line bg-sidebar px-3.5 text-left text-[15px] text-ink-faint"
         >
           <Icon name="search" className="size-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{t("menu.search")}</span>
@@ -81,7 +81,7 @@ function MenuGroupSection({ label, compact, children }: { label: string; compact
   return (
     <section aria-labelledby={headingId}>
       <h3 id={headingId} className={`pb-1.5 text-xs leading-[17px] text-ink-faint ${compact ? "px-1.5" : "px-2.5"}`}>{label}</h3>
-      <ul className={compact ? "overflow-hidden rounded-[14px] border border-line bg-sidebar [&>li+li>:first-child]:border-t [&>li+li>:first-child]:border-line" : ""}>
+      <ul className={compact ? "overflow-hidden rounded-card border border-line bg-sidebar [&>li+li>:first-child]:border-t [&>li+li>:first-child]:border-line" : ""}>
         {children}
       </ul>
     </section>

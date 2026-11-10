@@ -45,7 +45,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
         <PanelState tone="failed" title={bucketState.message} action={<Button onClick={onRefresh}>{t("sync.bucketRefresh")}</Button>} />
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
-          <div className="rounded border border-line bg-surface p-3">
+          <div className="rounded-inset border border-line bg-surface p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
               {t("sync.bucketLive")}
             </p>
@@ -85,7 +85,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
             )}
           </div>
 
-          <div className="rounded border border-line bg-surface p-3">
+          <div className="rounded-inset border border-line bg-surface p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
               {t("sync.bucketHistory", {
                 count: bucketState.value.history.length,
@@ -112,7 +112,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
                   {visibleHistory.map((item) => (
                     <li
                       key={item.key}
-                      className="rounded border border-hairline px-2 py-1.5"
+                      className="rounded-md border border-hairline px-2 py-1.5"
                     >
                       <p className={hintText}>
                         {t("sync.bucketObjectMeta", {

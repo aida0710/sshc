@@ -305,7 +305,7 @@ export function WorkspaceTree({
             >
               {/* The line sits in the gap between workspaces, where the dragged one would go. */}
               {dropSide === null ? null : (
-                <span aria-hidden="true" className={`absolute inset-x-2 z-[2] block h-0.5 rounded bg-accent ${dropSide === "before" ? "-top-1" : "-bottom-1"}`} />
+                <span aria-hidden="true" className={`absolute inset-x-2 z-[2] block h-0.5 rounded-full bg-accent ${dropSide === "before" ? "-top-1" : "-bottom-1"}`} />
               )}
               {/* Like the group headings of the connection list, a workspace's name stays under the Workspaces
                   heading while its sessions scroll by, and gives way to the next workspace's. The offset is the
@@ -363,7 +363,7 @@ export function WorkspaceTree({
         type="button"
         disabled={!canOpenSession}
         onClick={() => setPickerWorkspace(newSessionWorkspace)}
-        className="mt-1.5 flex min-h-10 w-full min-w-0 items-center gap-2.5 rounded-[7px] px-2 text-left text-[13px] text-accent hover:bg-hover md:min-h-[30px]"
+        className="mt-1.5 flex min-h-10 w-full min-w-0 items-center gap-2.5 rounded-row px-2 text-left text-[13px] text-accent hover:bg-hover md:min-h-[30px]"
       >
         <Icon name="plus" className="size-3.5" aria-hidden="true" />
         {t("terminal.newSession")}

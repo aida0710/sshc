@@ -59,7 +59,7 @@ export function EngineInfoDialog({
         dismissible={!busy}
         initialFocusRef={closeRef}
         {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
-        panelClassName="flex w-full max-w-md flex-col gap-3 rounded-lg p-4"
+        panelClassName="flex w-full max-w-md flex-col gap-3 p-4"
       >
         <h2 id={headingId} className={dialogHeading}>
           {t("engineInfo.heading", { alias })}

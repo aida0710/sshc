@@ -40,7 +40,7 @@ export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCan
       dismissible={!move.pending}
       closeOnOutside
       placement="sheet"
-      panelClassName="flex max-h-[80dvh] w-full max-w-md flex-col rounded-lg"
+      panelClassName="flex max-h-[80dvh] w-full max-w-md flex-col"
     >
       <h2 id="move-to-group-heading" className="border-b border-line px-4 py-3 text-base font-semibold text-ink">
         {aliases.length === 1 ? t("moveDialog.headingOne", { alias: aliases[0] ?? "" }) : t("moveDialog.heading", { count: aliases.length })}

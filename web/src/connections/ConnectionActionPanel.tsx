@@ -104,7 +104,7 @@ export function ConnectionActionPanel({
   }[action];
 
   return (
-    <section className="flex shrink-0 flex-col gap-2 rounded-[10px] bg-surface-subtle p-3">
+    <section className="flex shrink-0 flex-col gap-2 rounded-inset bg-surface-subtle p-3">
       <label htmlFor={fieldId} className="text-[13px] font-medium text-ink">{form.title}</label>
       <fieldset disabled={disabled || pending.running !== null} className="contents">
         {form.body}

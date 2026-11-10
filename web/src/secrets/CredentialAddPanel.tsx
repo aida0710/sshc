@@ -49,7 +49,7 @@ export function CredentialAddPanel({ kind, onStore, onCancel }: {
 
   return (
     <InlinePanel className="mb-3">
-      <section aria-labelledby={headingId} className={`flex flex-col gap-3 ${compact ? `${phoneCardFrame} px-3.5 py-3` : "rounded-lg bg-well p-3"}`}>
+      <section aria-labelledby={headingId} className={`flex flex-col gap-3 ${compact ? `${phoneCardFrame} px-3.5 py-3` : "rounded-inset bg-well p-3"}`}>
         <h3 id={headingId} className="text-sm font-semibold text-ink">{t(headingKeys[kind])}</h3>
         <div className="grid gap-3 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] @2xl:items-end">
           <Field label={t("secrets.credentialName")}>

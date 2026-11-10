@@ -68,7 +68,7 @@ export function SnippetStartupSection({
             <Notice compact>{t("snippets.startupStaleCount", { count: staleAliases.length })}</Notice>
             <ul aria-label={t("snippets.startupStaleHosts")} className="flex flex-wrap gap-1">
               {staleAliases.map((stale) => (
-                <li key={stale} className="rounded border border-line px-1.5 py-0.5 font-mono text-xs text-ink-muted">
+                <li key={stale} className="rounded-sm border border-line px-1.5 py-0.5 font-mono text-xs text-ink-muted">
                   {stale}
                 </li>
               ))}

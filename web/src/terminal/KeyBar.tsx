@@ -12,7 +12,7 @@ import { keyBarKeyGap } from "../keybar/keyBarStyles";
 import { playHaptic } from "../android/haptics";
 
 const keyShape =
-  `h-11 min-w-0 rounded-[10px] font-mono text-[12.5px] active:bg-select-fill focus-visible:outline-2 focus-visible:outline-accent ${keyBarKeyGap}`;
+  `h-11 min-w-0 rounded-inset font-mono text-[12.5px] active:bg-select-fill focus-visible:outline-2 focus-visible:outline-accent ${keyBarKeyGap}`;
 // The row always shown: the keys share the width, each at least 39px, and past that the row scrolls sideways. 39px is
 // the most that shows all ten keys of the default row on a phone 412px wide (1080 pixels at 420dpi); the 44px of a
 // place to press elsewhere would hide a key there, and these are what a person reaches for while a program waits.
@@ -115,7 +115,7 @@ export function KeyBar({
         )}
       </div>
       {moreOpen ? (
-        <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-6 gap-y-1 rounded border border-line bg-toolbar p-1 shadow-float">
+        <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-6 gap-y-1 rounded-lg border border-line bg-toolbar p-1 shadow-float">
           {layout.moreKeys.map((key, index) => keyButton(key, index, tapModifierBehindMore))}
         </div>
       ) : null}

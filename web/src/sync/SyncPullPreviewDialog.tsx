@@ -44,7 +44,7 @@ export function SyncPullPreviewDialog({
         if (!busy) onClose();
       }}
       placement="sheet"
-      panelClassName="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg"
+      panelClassName="max-h-[90vh] w-full max-w-2xl overflow-auto"
     >
         <header className="flex items-center gap-2 border-b border-line bg-toolbar px-4 py-3">
           <Icon name="config" className="h-4 w-4 text-ink-muted" />
@@ -141,7 +141,7 @@ export function SyncPullPreviewDialog({
                 checked={acceptedRemovals}
                 onChange={onAcceptRemovals}
                 tone="notice"
-                className="rounded border border-notice-line bg-notice p-3"
+                className="rounded-notice border border-notice-line bg-notice p-3"
               />
             </>
           )}

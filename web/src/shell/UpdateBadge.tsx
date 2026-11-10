@@ -84,7 +84,7 @@ export function UpdateBadge({ api = updateApi, current = "", leading, indicator,
         )}
         {!hasDetails ? null : (
           <button type="button" aria-label={t("update.toggleNotice")} aria-expanded={isOpen}
-            aria-controls={detailsId} className="rounded p-1 hover:bg-hover hover:text-ink" onClick={toggleDetails}>
+            aria-controls={detailsId} className="rounded-sm p-1 hover:bg-hover hover:text-ink" onClick={toggleDetails}>
             <DisclosureChevron expanded={isOpen} className="size-3" />
           </button>
         )}

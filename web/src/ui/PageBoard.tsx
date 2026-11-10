@@ -40,7 +40,7 @@ export function PageBoard({
     : fill ? "flex h-full min-h-0 gap-2 p-2" : `flex min-h-full w-full gap-2 p-2 ${wide ? "" : aside ? "max-w-6xl" : "mx-auto max-w-6xl"}`;
   const card = compact
     ? fill ? "flex min-h-0 flex-1 flex-col" : `px-3 pb-[18px] pt-3.5 ${stretch ? "flex flex-1 flex-col" : ""}`
-    : `@container min-w-0 flex-1 rounded-xl border border-line bg-sidebar shadow-pane ${fill ? "flex min-h-0 flex-col overflow-hidden" : `px-8 py-[26px] ${stretch ? "flex flex-col" : ""}`}`;
+    : `@container min-w-0 flex-1 rounded-lg border border-line bg-sidebar shadow-pane ${fill ? "flex min-h-0 flex-col overflow-hidden" : `px-8 py-[26px] ${stretch ? "flex flex-col" : ""}`}`;
   return (
     <div className={frame}>
       {compact ? null : aside}

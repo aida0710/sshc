@@ -63,13 +63,13 @@ function Tile({ tile }: { tile: StartTile }) {
     <button
       type="button"
       onClick={tile.onSelect}
-      className={`flex items-center gap-3 rounded-[14px] border p-3.5 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent @2xl:relative @2xl:min-h-[172px]! @2xl:flex-col @2xl:items-start @2xl:gap-1 @2xl:px-[18px] @2xl:pb-5 @2xl:pt-[18px] ${
+      className={`flex items-center gap-3 rounded-card border p-3.5 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent @2xl:relative @2xl:min-h-[172px]! @2xl:flex-col @2xl:items-start @2xl:gap-1 @2xl:px-[18px] @2xl:pb-5 @2xl:pt-[18px] ${
         primary
           ? "border-[color-mix(in_srgb,var(--ui-accent)_60%,transparent)] bg-[color-mix(in_srgb,var(--ui-accent)_9%,var(--ui-card))] hover:bg-[color-mix(in_srgb,var(--ui-accent)_15%,var(--ui-card))]"
           : "border-line bg-card hover:bg-hover"
       }`}
     >
-      <span className={`flex size-10 shrink-0 items-center justify-center rounded-[10px] ${primary ? "bg-accent text-accent-ink" : "bg-[color-mix(in_srgb,var(--ui-ink)_8%,transparent)] text-ink-muted"}`}>
+      <span className={`flex size-10 shrink-0 items-center justify-center rounded-inset ${primary ? "bg-accent text-accent-ink" : "bg-[color-mix(in_srgb,var(--ui-ink)_8%,transparent)] text-ink-muted"}`}>
         <Icon name={tile.icon} className="size-5" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 @2xl:mt-auto @2xl:flex-none @2xl:gap-1">

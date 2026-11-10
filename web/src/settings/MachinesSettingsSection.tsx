@@ -67,7 +67,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
         : (
           <div className="flex flex-col gap-3">
             {failure === "" ? null : <Notice tone="danger" compact>{failure}</Notice>}
-            <div className="@container/machines overflow-hidden rounded-[10px] border border-line">
+            <div className="@container/machines overflow-hidden rounded-inset border border-line">
               <div className={`hidden border-b border-line px-3 py-2 text-[11.5px] text-ink-faint @2xl/machines:grid ${columns}`} aria-hidden="true">
                 <span>{t("settings.machineColumnName")}</span>
                 <span>{t("settings.machineColumnPreset")}</span>

@@ -41,7 +41,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
 
   return (
     <>
-      <ModalShell labelledBy="sftp-compare-heading" onDismiss={onDismiss} panelClassName="flex h-[min(44rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg">
+      <ModalShell labelledBy="sftp-compare-heading" onDismiss={onDismiss} panelClassName="flex h-[min(44rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden">
         <header className="border-b border-line/60 px-5 py-4">
           <h2 id="sftp-compare-heading" className={dialogHeading}>{t("sftp.compare.heading")}</h2>
           <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 font-mono text-xs text-ink-muted">
@@ -52,7 +52,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
           <details className="mt-2 text-xs text-ink-muted"><DisclosureSummary>{t("sftp.compare.explanation")}</DisclosureSummary><p className="mt-2">{t(readOnly ? "sftp.compare.readOnlyDescription" : "sftp.compare.description")}</p>{mode === "content" ? <p className="mt-2">{t("sftp.compare.contentHint")}</p> : null}</details>
           <label className="mt-3 flex items-center gap-2 text-sm text-ink-muted">
             {t("sftp.compare.mode")}
-            <select aria-label={t("sftp.compare.mode")} value={mode} onChange={(event) => setMode(event.target.value === "content" ? "content" : "metadata")} className="rounded border border-control-line bg-control px-2 py-1">
+            <select aria-label={t("sftp.compare.mode")} value={mode} onChange={(event) => setMode(event.target.value === "content" ? "content" : "metadata")} className="rounded-md border border-control-line bg-control px-2 py-1">
               <option value="metadata">{t("sftp.compare.metadata")}</option>
               <option value="content">{t("sftp.compare.content")}</option>
             </select>

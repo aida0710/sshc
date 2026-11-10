@@ -101,7 +101,7 @@ export function HostInspector({
                   : draft.colour
               }
               onChange={(event) => setDraft({ ...draft, colour: event.target.value })}
-              className="h-8 w-14 rounded border border-control-line bg-control mobile-layout:h-11"
+              className="h-8 w-14 rounded-md border border-control-line bg-control mobile-layout:h-11"
             />
           </FieldRow>
 

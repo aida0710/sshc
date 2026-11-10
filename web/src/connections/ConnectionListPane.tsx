@@ -47,7 +47,7 @@ export function ConnectionListPane({
       {startTiles !== null ? (
         <div className="flex h-full overflow-y-auto px-5 pb-(--mobile-navigation-inset)">{startTiles}</div>
       ) : invalidLocation ? (
-        <section className="m-3.5 flex flex-col gap-2 rounded-[10px] bg-well p-3 text-sm" role="status">
+        <section className="m-3.5 flex flex-col gap-2 rounded-inset bg-well p-3 text-sm" role="status">
           <p className="font-medium">{t("browser.invalidUrl")}</p>
           <Button
             className="min-h-10 self-start md:min-h-0"

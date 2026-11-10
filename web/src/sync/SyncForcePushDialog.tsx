@@ -37,7 +37,7 @@ export function SyncForcePushDialog({
         if (!busy) onClose();
       }}
       placement="sheet"
-      panelClassName="flex max-h-[90vh] w-full max-w-lg flex-col overflow-auto rounded-lg"
+      panelClassName="flex max-h-[90vh] w-full max-w-lg flex-col overflow-auto"
     >
         <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
           <h3 id="sync-force-push-heading" className={sectionHeading}>

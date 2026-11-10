@@ -206,7 +206,7 @@ export function LockScreen({
   }
 
   const noRecovery = exists || noPassword ? undefined : (
-    <p className="flex gap-2.5 rounded-[9px] bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">
+    <p className="flex gap-2.5 rounded-notice bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">
       <Icon name="warning" className="mt-0.5 size-[15px]" />
       {t("lock.noRecovery")}
     </p>
@@ -231,7 +231,7 @@ export function LockScreen({
         )}
         {error === "" ? null : <Notice tone="danger">{error}</Notice>}
         {versionMismatch === null ? null : (
-          <div className="flex flex-col gap-3 rounded-[10px] bg-well p-4">
+          <div className="flex flex-col gap-3 rounded-inset bg-well p-4">
             <p className="text-sm leading-6 text-ink-muted">{t("lock.schemaRecoveryHint")}</p>
             <Button type="button" disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
               {t("lock.restoreCompatibleBackup")}

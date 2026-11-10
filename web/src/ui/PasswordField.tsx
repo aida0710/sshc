@@ -95,7 +95,7 @@ export function PasswordInput({
         aria-label={t(shown ? "password.hideNamed" : "password.showNamed", {
           label,
         })}
-        className="absolute right-1 top-1/2 -translate-y-1/2 whitespace-nowrap rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink"
+        className="absolute right-1 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink"
       >
         {shown ? t("password.hide") : t("password.show")}
       </button>

@@ -33,7 +33,7 @@ export function CredentialEditPanel({ kind, name, api, onSaved, onClose }: Crede
       : t("secrets.editPassphrase");
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-lg bg-well p-3">
+    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-inset bg-well p-3">
       <div>
         <h4 id={headingId} className="text-sm font-semibold text-ink">{heading}</h4>
         <p className={`mt-1 ${hintText}`}>{t("secrets.editNote")}</p>

@@ -50,7 +50,7 @@ export function RemoteKeyPlanCard({ plan, manual }: { plan: RemoteKeyPlan; manua
           </pre>
           <div className="mt-1"><CopyButton value={plan.routine} label="copy.remoteCommand" /></div>
           {manual ? (
-            <div className="mt-4 rounded-[10px] bg-well p-3">
+            <div className="mt-4 rounded-inset bg-well p-3">
               <h5 className="font-medium text-notice-ink">{t("rk.manualHeading")}</h5>
               <ol className="mt-1 list-decimal pl-5">
                 {plan.manual.map((step) => <li key={step}>{step}</li>)}

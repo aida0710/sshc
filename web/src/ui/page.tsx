@@ -86,7 +86,7 @@ export function SummaryStat({ label, value, attention = false }: { label: string
 }
 
 // phoneCardFrame is how a part of a page looks on a phone: a card of its own. Each part sets its padding.
-export const phoneCardFrame = "rounded-[14px] border border-line bg-sidebar";
+export const phoneCardFrame = "rounded-card border border-line bg-sidebar";
 
 function usePageSectionFrameClass(): string {
   return useMediaQuery(mobileViewportQuery) ? `${phoneCardFrame} px-3.5 py-3` : "border-t border-line pt-5";

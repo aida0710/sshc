@@ -36,7 +36,7 @@ export function SFTPCompareTabsDialog({ tabs, currentTabId, onCompare, onDismiss
     onCompare({ alias: firstTab.alias, path: firstTab.path }, { alias: secondTab.alias, path: secondTab.path });
   }
 
-  return <ModalShell labelledBy={id} describedBy={`${id}-hint`} onDismiss={onDismiss} initialFocusRef={initialFocus} panelClassName="w-full max-w-md rounded-lg p-5">
+  return <ModalShell labelledBy={id} describedBy={`${id}-hint`} onDismiss={onDismiss} initialFocusRef={initialFocus} panelClassName="w-full max-w-md p-5">
     <h2 id={id} className={dialogHeading}>{t("sftp.compare.chooseTabsHeading")}</h2>
     <p id={`${id}-hint`} className={`mt-2 ${hintText}`}>{t("sftp.compare.chooseTabsHint")}</p>
     <form className="mt-4 space-y-4" onSubmit={(event) => { event.preventDefault(); compare(); }}>

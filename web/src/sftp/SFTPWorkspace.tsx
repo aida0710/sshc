@@ -368,12 +368,12 @@ export function SFTPWorkspace({
     </div>
   );
   // The transfer queue's card does not clip: its resize grip reaches above its top edge.
-  const boardFrame = "rounded-xl border border-line bg-sidebar shadow-pane";
+  const boardFrame = "rounded-lg border border-line bg-sidebar shadow-pane";
   const boardLook = `overflow-hidden ${boardFrame}`;
   const compactComparisonButton = canCompare ? (
     <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
       onClick={requestComparison}
-      className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded text-sm text-ink-muted hover:bg-card/50 hover:text-ink">
+      className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded-md text-sm text-ink-muted hover:bg-card/50 hover:text-ink">
       <Icon name="arrowLeftRight" className="size-5" />
     </button>
   ) : null;

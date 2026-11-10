@@ -59,7 +59,7 @@ export function ConnectionRow({
   );
   // 同じ名前の接続先が並ぶときは、どのファイルの行かを添えて見分けられるようにする。
   const destination = duplicateAlias ? `${targetFor(host)} · ${host.file.path ?? host.file.absolute}:${host.line}` : targetFor(host);
-  const tagLabels = tags.map((tag) => <span key={tag} className="shrink-0 rounded bg-toolbar px-1 text-[0.65rem] text-ink-muted">{tag}</span>);
+  const tagLabels = tags.map((tag) => <span key={tag} className="shrink-0 rounded-sm bg-toolbar px-1 text-[0.65rem] text-ink-muted">{tag}</span>);
   return (
     <li
       className="group/row relative"
@@ -89,13 +89,13 @@ export function ConnectionRow({
         onPointerCancel={onPointerEnd}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        className={`w-full select-none rounded-md py-[7px] pl-3.5 text-left text-[13px] text-ink transition-colors ${menuItems.length === 0 ? "pr-3.5" : "pr-11 hover-reveal:pr-3.5"} ${draggable ? draggableCursor : ""} ${highlighted ? "bg-select-fill" : "hover:bg-hover"}`}
+        className={`w-full select-none rounded-row py-[7px] pl-3.5 text-left text-[13px] text-ink transition-colors ${menuItems.length === 0 ? "pr-3.5" : "pr-11 hover-reveal:pr-3.5"} ${draggable ? draggableCursor : ""} ${highlighted ? "bg-select-fill" : "hover:bg-hover"}`}
       >
         <span className="flex min-w-0 items-center gap-2.5">
           {showCheckbox ? (
             <span
               aria-hidden="true"
-              className={`flex size-5 shrink-0 items-center justify-center rounded border ${chosen ? "border-accent bg-accent text-card" : "border-control-line bg-control"}`}
+              className={`flex size-5 shrink-0 items-center justify-center rounded-sm border ${chosen ? "border-accent bg-accent text-card" : "border-control-line bg-control"}`}
             >
               {chosen ? <Icon name="check" className="size-3.5" /> : null}
             </span>

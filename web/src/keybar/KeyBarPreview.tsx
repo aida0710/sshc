@@ -4,7 +4,7 @@ import type { KeyBarLayout, KeyBarRow, KeySlot } from "./keyBarLayout";
 import { KeyFace, spokenKeyName } from "./KeyFace";
 import { keyBarKeyGap } from "./keyBarStyles";
 
-const keyShape = `h-11 min-w-0 truncate rounded-[9px] font-mono text-[11px] ${keyBarKeyGap}`;
+const keyShape = `h-11 min-w-0 truncate rounded-inset font-mono text-[11px] ${keyBarKeyGap}`;
 // The row wraps instead of scrolling as on the bar: to arrange the keys, all of them must be in sight and 44px wide.
 const keyGrid = "grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-y-1";
 
@@ -30,7 +30,7 @@ export function KeyBarPreview({ layout, selected, onSelect, disabled }: {
     );
   });
   return (
-    <div data-key-bar-preview className="flex flex-col gap-2 rounded-[10px] bg-canvas p-2">
+    <div data-key-bar-preview className="flex flex-col gap-2 rounded-inset bg-canvas p-2">
       <div role="group" aria-label={t("keyBar.keysRow")} className={keyGrid}>
         {row("keys")}
         {layout.moreKeys.length === 0 ? null : (

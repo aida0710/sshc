@@ -57,7 +57,7 @@ export function SnippetRunSection({
         {t("snippets.preview")}
       </Button>
       {preview === null ? null : (
-        <section className="mt-4 min-w-0 rounded-[10px] bg-notice p-4">
+        <section className="mt-4 min-w-0 rounded-notice bg-notice p-4">
           <h4 className="text-sm font-medium">{t("snippets.confirm")}</h4>
           {preview.targets.map((target) => (
             <div key={target.targetId} className="mt-2">

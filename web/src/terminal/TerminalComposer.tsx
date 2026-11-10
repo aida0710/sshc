@@ -13,7 +13,7 @@ import { playHaptic } from "../android/haptics";
 // terminal above keeps most of the screen.
 const maximumComposerLines = 4;
 
-const fieldLook = "min-h-11 min-w-0 grow rounded-[22px] bg-card px-3.5 py-2.5 text-base leading-6 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-accent";
+const fieldLook = "min-h-11 min-w-0 grow rounded-composer bg-card px-3.5 py-2.5 text-base leading-6 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-accent";
 
 function keepFocus(event: { preventDefault(): void }) {
   event.preventDefault();

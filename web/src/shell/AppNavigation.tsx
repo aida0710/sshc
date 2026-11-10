@@ -138,7 +138,7 @@ export function AppNavigation({
       inert={mobileLayout && !navigationOpen}
       data-navigation-open={navigationOpen}
       data-app-navigation
-      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden bg-sidebar px-2.5 pb-3 pt-3.5 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:flex md:w-auto md:max-w-none md:m-2 md:mr-0 md:translate-x-0 md:rounded-xl md:border md:border-line md:shadow-pane ${
+      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden bg-sidebar px-2.5 pb-3 pt-3.5 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:flex md:w-auto md:max-w-none md:m-2 md:mr-0 md:translate-x-0 md:rounded-lg md:border md:border-line md:shadow-pane ${
         navigationOpen ? "translate-x-0 shadow-overlay" : "-translate-x-full shadow-none"
       }`}
     >
@@ -287,7 +287,7 @@ function NavigationLink({
       onClick={(event) => {
         onNavigate(event, name);
       }}
-      className={`group relative flex min-h-10 w-full items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-left text-[13px] transition-colors md:min-h-[30px] ${
+      className={`group relative flex min-h-10 w-full items-center gap-2.5 overflow-hidden rounded-row px-2 text-left text-[13px] transition-colors md:min-h-[30px] ${
         active
           ? "bg-select-fill text-ink"
           : "text-ink-muted hover:bg-hover hover:text-ink"

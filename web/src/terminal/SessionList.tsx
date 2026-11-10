@@ -243,10 +243,10 @@ export function SessionList({
                 className={`relative ${rowCursor} ${heldSessionId === session.id ? "opacity-40" : ""}`}
               >
                 {dropBefore === session.id && heldSessionId !== null && heldSessionId !== session.id ? (
-                  <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
+                  <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded-full bg-accent" />
                 ) : null}
                 <div
-                  className={`group/row relative flex items-start gap-2.5 rounded-[7px] pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[3px] ${
+                  className={`group/row relative flex items-start gap-2.5 rounded-row pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[3px] ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : isSelected ? "bg-select-fill" : "hover:bg-hover"
@@ -275,7 +275,7 @@ export function SessionList({
                           if (event.key === "Enter") void commitRename(session.id);
                           if (event.key === "Escape") setRenaming(null);
                         }}
-                        className="w-full rounded border border-accent bg-card px-1 py-0.5 text-xs text-ink"
+                        className="w-full rounded-sm border border-accent bg-card px-1 py-0.5 text-xs text-ink"
                       />
                         {details}
                         {statusDescription}
@@ -289,7 +289,7 @@ export function SessionList({
                       aria-describedby={statusId}
                       aria-current={isSelected ? "true" : undefined}
                       onClick={() => onSelect(session.id)}
-                      className={`flex min-w-0 grow items-start gap-2.5 py-0.5 text-left after:absolute after:inset-0 after:rounded-[7px] md:py-0 ${rowCursor}`}
+                      className={`flex min-w-0 grow items-start gap-2.5 py-0.5 text-left after:absolute after:inset-0 after:rounded-row md:py-0 ${rowCursor}`}
                     >
                       {marker}
                       <span className="min-w-0 grow">

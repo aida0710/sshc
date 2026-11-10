@@ -103,7 +103,7 @@ export function NotFoundSection({ pathname, onGoHome }: {
     <div className="h-full overflow-y-auto">
       <PageBoard labelledBy="not-found-heading" className="grid place-items-center">
         <div className="flex max-w-md flex-col items-center gap-1.5 text-center">
-          <span aria-hidden="true" className="mb-2 grid size-11 place-items-center rounded-xl bg-well text-ink-muted">
+          <span aria-hidden="true" className="mb-2 grid size-11 place-items-center rounded-lg bg-well text-ink-muted">
             <Icon name="pageNotFound" className="size-[22px]" />
           </span>
           <h2 id="not-found-heading" className="text-lg font-semibold text-ink">{t("shell.pageNotFound")}</h2>

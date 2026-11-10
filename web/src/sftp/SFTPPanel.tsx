@@ -546,7 +546,7 @@ export function SFTPPanel({
 
       {problem === "" || listingFailed ? null : <Notice tone="danger">{problem}</Notice>}
       {transfers.exclusionNotice === "" ? null : <Notice compact>{transfers.exclusionNotice}</Notice>}
-      {searchOptionsOpen && can?.search ? <ModalShell labelledBy={`${headingId}-search-options`} onDismiss={() => setSearchOptionsOpen(false)} closeOnOutside panelClassName="w-full max-w-md rounded-xl p-4">
+      {searchOptionsOpen && can?.search ? <ModalShell labelledBy={`${headingId}-search-options`} onDismiss={() => setSearchOptionsOpen(false)} closeOnOutside panelClassName="w-full max-w-md p-4">
         <div className="flex items-center justify-between gap-2"><h3 id={`${headingId}-search-options`} className="font-medium">{t("sftp.search.mode")}</h3><button type="button" aria-label={t("sftp.close")} onClick={() => setSearchOptionsOpen(false)} className="flex size-12 items-center justify-center rounded-md text-ink-muted"><Icon name="close" className="size-5" /></button></div>
         <SFTPSearchControls search={search} disabled={busy || dirty} mobile />
       </ModalShell> : null}
@@ -806,7 +806,7 @@ export function SFTPPanel({
       ) : null}
 
       {transfers.remoteDrop === null ? null : (
-        <ModalShell labelledBy={`${headingId}-remote-drop`} onDismiss={transfers.dismissRemoteDrop} panelClassName="w-full max-w-md rounded-lg p-5">
+        <ModalShell labelledBy={`${headingId}-remote-drop`} onDismiss={transfers.dismissRemoteDrop} panelClassName="w-full max-w-md p-5">
           <h3 id={`${headingId}-remote-drop`} className="text-base font-semibold text-ink">{t("sftp.remoteDropTitle")}</h3>
           <p className="mt-2 text-sm leading-6 text-ink-muted">
             {t("sftp.remoteDropDescription", { count: transfers.remoteDrop.entries.length, alias })}

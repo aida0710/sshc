@@ -133,7 +133,7 @@ export function QuickConnectBrowser({
           event.preventDefault();
           trigger.click();
         }}
-        className={`group/row relative min-w-0 rounded-xl border transition-colors ${
+        className={`group/row relative min-w-0 rounded-lg border transition-colors ${
           selected || opening ? "border-accent bg-select-fill" : "border-transparent bg-well hover:border-accent/45"
         }`}
       >
@@ -160,7 +160,7 @@ export function QuickConnectBrowser({
             event.preventDefault();
             connect();
           }}
-          className="flex w-full min-w-0 items-center gap-3 rounded-xl p-3.5 pr-12 text-left disabled:cursor-wait hover-reveal:pr-3.5"
+          className="flex w-full min-w-0 items-center gap-3 rounded-lg p-3.5 pr-12 text-left disabled:cursor-wait hover-reveal:pr-3.5"
         >
           <OperatingSystemIcon os={server.os} colour={server.colour} look="accentTile" />
           <span className="min-w-0 flex-1">
@@ -243,7 +243,7 @@ export function QuickConnectBrowser({
         <section aria-label={t("home.groups")} className="flex flex-col gap-2">
           {groupTrail.length === 0 ? null : (
             <nav aria-label={t("home.groupBreadcrumb")} className="flex min-w-0 items-center gap-1 text-xs text-ink-muted">
-              <button type="button" onClick={() => setGroupTrail([])} className="shrink-0 rounded px-1 py-0.5 hover:bg-card hover:text-ink">
+              <button type="button" onClick={() => setGroupTrail([])} className="shrink-0 rounded-sm px-1 py-0.5 hover:bg-card hover:text-ink">
                 {t("home.allGroups")}
               </button>
               {groupTrail.map((name, position) => {
@@ -255,7 +255,7 @@ export function QuickConnectBrowser({
                       type="button"
                       aria-current={selected ? "page" : undefined}
                       onClick={() => setGroupTrail(groupTrail.slice(0, position + 1))}
-                      className={`truncate rounded px-1 py-0.5 hover:bg-card hover:text-ink ${selected ? "font-medium text-ink" : ""}`}
+                      className={`truncate rounded-sm px-1 py-0.5 hover:bg-card hover:text-ink ${selected ? "font-medium text-ink" : ""}`}
                     >
                       {index.groupByName.get(name)?.label ?? name}
                     </button>
@@ -299,7 +299,7 @@ export function QuickConnectBrowser({
       </div>
 
       {servers.length === 0 ? (
-        <p className="rounded-[10px] bg-well p-4 text-sm text-ink-muted">
+        <p className="rounded-inset bg-well p-4 text-sm text-ink-muted">
           {t("home.noMatches")}
         </p>
       ) : (

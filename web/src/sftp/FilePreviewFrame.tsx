@@ -30,8 +30,8 @@ export function FilePreviewFrame({ headingId, header, overlay, onDismiss, return
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       placement={mobile ? "fullscreen" : "center"}
       panelClassName={mobile
-        ? "relative flex h-dvh w-full flex-col overflow-hidden rounded-none border-0! shadow-none"
-        : "flex h-[min(46rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-lg"}
+        ? "relative flex h-dvh w-full flex-col overflow-hidden rounded-none! border-0! shadow-none"
+        : "flex h-[min(46rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden"}
     >
       {overlay ? <div data-preview-chrome className="absolute inset-x-0 top-0 z-10 bg-linear-to-b from-black/85 from-70% to-transparent pb-7">{header}</div> : header}
       {children}

@@ -178,7 +178,7 @@ export function WorkspaceCommandCenter({
       // 実行中に閉じると、どのペインへ届いたかを確かめられないので、終わるまで閉じない。
       dismissible={!busy}
       initialFocusRef={closeButton}
-      panelClassName="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-lg p-4"
+      panelClassName="max-h-[90vh] w-full max-w-5xl overflow-auto p-4"
     >
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
@@ -319,7 +319,7 @@ export function WorkspaceCommandCenter({
           </div>
         </div>
         {prepared === null ? null : (
-          <section className="rounded-lg border border-notice-line bg-notice p-3">
+          <section className="rounded-notice border border-notice-line bg-notice p-3">
             <h3 className="text-sm font-medium">
               {t("workspace.previewHeading")}
             </h3>

@@ -72,7 +72,7 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
           {panes.map(({ sessionId }) => {
             const session = sessionById.get(sessionId);
             return session === undefined ? null : (
-              <button key={sessionId} type="button" aria-current={selected === sessionId ? "true" : undefined} className={`min-h-11 shrink-0 rounded px-3 text-sm ${selected === sessionId ? "bg-select-fill text-accent" : "text-ink-muted"}`} onClick={() => selectSession(sessionId)}>{terminalDisplayTitle(session)}</button>
+              <button key={sessionId} type="button" aria-current={selected === sessionId ? "true" : undefined} className={`min-h-11 shrink-0 rounded-md px-3 text-sm ${selected === sessionId ? "bg-select-fill text-accent" : "text-ink-muted"}`} onClick={() => selectSession(sessionId)}>{terminalDisplayTitle(session)}</button>
             );
           })}
         </nav>
@@ -82,7 +82,7 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
         <div className="relative min-h-0 min-w-0 flex-1" data-split-view>
           {/* Moving the drag source to make room for this hint interrupts native dragging. */}
           {drag.moving === null ? null : (
-            <p role="status" className="pointer-events-none absolute inset-x-2 bottom-2 z-30 rounded bg-toolbar px-2 py-1 text-xs text-ink-muted">
+            <p role="status" className="pointer-events-none absolute inset-x-2 bottom-2 z-30 rounded-md bg-toolbar px-2 py-1 text-xs text-ink-muted">
               {t("splitView.swapHint")}
             </p>
           )}
@@ -131,11 +131,11 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
                 onDragOver={(event) => drag.dragOver(event, sessionId)}
                 onDragLeave={drag.leave}
                 onDrop={(event) => drag.drop(event, sessionId)}>
-                <div data-split-view-board className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${compact ? "" : `rounded-pane border shadow-pane ${multiple && active ? "border-accent/45" : "border-line"}`}`}>
+                <div data-split-view-board className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${compact ? "" : `rounded-lg border shadow-pane ${multiple && active ? "border-accent/45" : "border-line"}`}`}>
                   {renderTerminal(session, headerActions, !hidden)}
                   {target === null || compact ? null : (
                     <div data-pane-drop-preview={target.edge ?? "swap"} className={`pointer-events-none absolute z-20 grid place-items-center border-2 border-accent bg-accent/20 ${target.edge === null ? "inset-0" : previewClass[target.edge]}`}>
-                      <span className="rounded bg-card px-2 py-1 text-xs text-ink" role="status">{dropHint(target.edge === null)}</span>
+                      <span className="rounded-md bg-card px-2 py-1 text-xs text-ink" role="status">{dropHint(target.edge === null)}</span>
                     </div>
                   )}
                 </div>

@@ -7,7 +7,7 @@ import { terminalDisplayTitle } from "./terminalPresentation";
 export function SessionNamesList({ sessions, label }: { sessions: TerminalSession[]; label: string }) {
   return (
     // A long list scrolls, so it takes focus for the keyboard to scroll it.
-    <ul aria-label={label} tabIndex={0} className="max-h-40 overflow-y-auto rounded border border-line">
+    <ul aria-label={label} tabIndex={0} className="max-h-40 overflow-y-auto rounded-md border border-line">
       {sessions.map((session) => <SessionNameRow key={session.id} session={session} />)}
     </ul>
   );

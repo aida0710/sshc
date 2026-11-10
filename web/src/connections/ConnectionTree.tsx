@@ -280,7 +280,7 @@ export function ConnectionTree({
               ) : null}
               <label className="flex items-center gap-2">
                 <span className="sr-only">{t("tree.sortLabel")}</span>
-                <select value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value as SortOrder)} className="rounded border-0 bg-transparent py-0.5 text-xs text-ink-faint">
+                <select value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value as SortOrder)} className="rounded-sm border-0 bg-transparent py-0.5 text-xs text-ink-faint">
                   <option value="configured">{t("tree.sortConfigured")}</option>
                   <option value="name">{t("tree.sortName")}</option>
                 </select>

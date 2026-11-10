@@ -122,9 +122,9 @@ describe("Button", () => {
 
 describe("Card", () => {
   it("supports semantic containers without rebuilding card classes", () => {
-    render(<Card as="section" aria-label="Summary" radius="md" tone="notice">Body</Card>);
+    render(<Card as="section" aria-label="Summary" tone="notice">Body</Card>);
 
-    expect(screen.getByRole("region", { name: "Summary" })).toHaveClass("sshc-card", "rounded-md", "bg-notice");
+    expect(screen.getByRole("region", { name: "Summary" })).toHaveClass("sshc-card", "bg-notice");
   });
 });
 

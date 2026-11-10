@@ -26,13 +26,13 @@ export function SFTPTextEditor({ editor, busy = false }: {
         <ModalShell
           labelledBy={`${id}-editor`}
           onDismiss={editor.dismiss}
-          panelClassName="flex h-[min(52rem,calc(100dvh-2rem))] w-full max-w-6xl flex-col overflow-hidden rounded-lg"
+          panelClassName="flex h-[min(52rem,calc(100dvh-2rem))] w-full max-w-6xl flex-col overflow-hidden"
         >
           <div className="flex items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
             <h2 id={`${id}-editor`} title={opened.entry.path} className="min-w-0 grow font-mono text-xs"><PathText path={opened.entry.path} /></h2>
             <span role="status" className="shrink-0 text-xs text-ink-muted">{editor.saving ? t("sftp.editorSaving") : dirty ? t("sftp.unsaved") : editor.saved ? t("sftp.editorSaved") : ""}</span>
             <Button disabled={writeDisabled} className="shrink-0" onClick={() => void editor.save()}>{editor.saving ? t("sftp.editorSaving") : t("sftp.save")}</Button>
-            <button type="button" className="shrink-0 rounded px-2 py-1 text-xs text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink" onClick={editor.dismiss}>{t("sftp.close")}</button>
+            <button type="button" className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink" onClick={editor.dismiss}>{t("sftp.close")}</button>
           </div>
           {problem === null ? null : (
             <div className="border-b border-line px-3 py-2">

@@ -45,7 +45,7 @@ export function ConfigPathForm({
   const unchanged = path.trim() === "" || (task === "rename" && path.trim() === currentPath);
   return (
     <form
-      className="mb-3 flex flex-col gap-2 rounded-[10px] bg-well px-3.5 py-3"
+      className="mb-3 flex flex-col gap-2 rounded-inset bg-well px-3.5 py-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (!unchanged && !busy) onSubmit();

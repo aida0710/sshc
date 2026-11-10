@@ -16,7 +16,7 @@ export function SFTPActionSheet({ heading, onDismiss, returnFocusRef, footer, ch
   const t = useTranslate();
   const headingId = useId();
   return (
-    <ModalShell labelledBy={headingId} onDismiss={onDismiss} closeOnOutside returnFocusRef={returnFocusRef} placement="sheet" panelClassName="flex max-h-[80dvh] w-full max-w-lg flex-col overflow-hidden rounded-xl">
+    <ModalShell labelledBy={headingId} onDismiss={onDismiss} closeOnOutside returnFocusRef={returnFocusRef} placement="sheet" panelClassName="flex max-h-[80dvh] w-full max-w-lg flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-1">
         <h3 id={headingId} title={heading} className="min-w-0 truncate font-medium">{heading}</h3>
         <button type="button" aria-label={t("sftp.close")} onClick={onDismiss} className={`${iconAction} size-12`}><Icon name="close" className="size-5" /></button>

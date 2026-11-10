@@ -16,7 +16,6 @@ type CardElement = "div" | "section" | "article" | "dl" | "ul";
 type CardProps = {
   as?: CardElement;
   padded?: boolean;
-  radius?: "sm" | "md" | "lg";
   tone?: "card" | "notice" | "subtle";
   overflow?: "hidden" | "visible" | "x-auto";
 } & HTMLAttributes<HTMLElement>;
@@ -25,19 +24,17 @@ export function Card({
   as,
   children,
   padded = false,
-  radius = "lg",
   tone = "card",
   overflow = "hidden",
   className = "",
   ...rest
 }: CardProps) {
   const Component = (as ?? "div") as ElementType;
-  const radiusClass = radius === "sm" ? "rounded" : radius === "md" ? "rounded-md" : "rounded-lg";
   const toneClass = tone === "notice" ? "bg-notice" : tone === "subtle" ? "bg-surface-subtle" : "bg-card";
   const overflowClass = overflow === "visible" ? "overflow-visible" : overflow === "x-auto" ? "overflow-x-auto" : "overflow-hidden";
   return (
     <Component
-      className={`sshc-card ${overflowClass} ${radiusClass} ${toneClass} ${
+      className={`sshc-card ${overflowClass} ${toneClass} ${
         padded ? "flex flex-col gap-3 p-3" : ""
       } ${className}`}
       {...rest}
@@ -136,7 +133,7 @@ export function Notice({
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
-      className={`rounded-md border ${spacing} ${noticeToneClasses[tone]}`}
+      className={`rounded-notice border ${spacing} ${noticeToneClasses[tone]}`}
     >
       <div className="flex items-center gap-2">{children}</div>
       {actions === undefined ? null : <div className={`flex flex-wrap items-center gap-2 ${compact ? "mt-1.5" : "mt-2"}`}>{actions}</div>}
