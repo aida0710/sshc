@@ -47,6 +47,9 @@ type runTargetForwardKey struct {
 
 // runTargetForwardRelays は、実行先のセッションの転送ごとの、このマシンの待ち受けの一覧である。
 type runTargetForwardRelays struct {
+	// starting は、転送を開く手順を1つずつにする。開いた転送は「開く前の一覧に無かったもの」で見分けるので、
+	// 2つを同時に開くと互いの転送を取り違える。
+	starting  sync.Mutex
 	mutex     sync.Mutex
 	listeners map[runTargetForwardKey]net.Listener
 }
@@ -141,6 +144,8 @@ func (h RemoteEngineHandlers) StartRunTargetForward(c *echo.Context) error {
 			Code: "terminal_forward_bind_failed", Reason: sshclient.ListenProblem(err), Detail: boundedProblemDetail(err.Error()),
 		})
 	}
+	h.forwards.starting.Lock()
+	defer h.forwards.starting.Unlock()
 	before, err := h.runTargetForwardIDs(c.Request().Context(), alias, sessionID)
 	if err != nil {
 		_ = listener.Close()

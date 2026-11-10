@@ -25,13 +25,25 @@ func resumedTmuxSession(process Process) bool {
 // the name can be written into a command without quoting.
 func tmuxSessionName(alias string) string {
 	return tmuxSessionPrefix + strings.Map(func(character rune) rune {
-		switch {
-		case character >= 'a' && character <= 'z', character >= 'A' && character <= 'Z',
-			character >= '0' && character <= '9', character == '-', character == '_':
+		if isTmuxSessionNameCharacter(character) {
 			return character
 		}
 		return '_'
 	}, alias)
+}
+
+func isTmuxSessionNameCharacter(character rune) bool {
+	return character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
+		character >= '0' && character <= '9' || character == '-' || character == '_'
+}
+
+// ValidTmuxSessionName reports whether name is one sshc gives a tmux session, or empty. A name read from a record
+// is written into a command on the server without quoting, so anything else is refused.
+func ValidTmuxSessionName(name string) bool {
+	if name == "" {
+		return true
+	}
+	return strings.HasPrefix(name, tmuxSessionPrefix) && strings.IndexFunc(name, func(character rune) bool { return !isTmuxSessionNameCharacter(character) }) < 0
 }
 
 // claimTmuxSessionLocked picks the tmux session name of a session being opened:
