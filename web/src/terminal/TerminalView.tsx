@@ -2,10 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import type { Terminal } from "@xterm/xterm";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
-import { exitedAbnormally, reconnectsOnEnter, sessionStateText, sessionStatusTone } from "./sessionStatus";
+import { reconnectsOnEnter } from "./sessionStatus";
 import { useTerminalFont } from "./useTerminalFont";
 import { defaultTint } from "./appearance";
 import { useBackgroundImage } from "./backgroundImage";
@@ -33,7 +32,6 @@ import { setDirectInput, useDirectInput } from "./useDirectInput";
 import { useModifierKeys } from "./useModifierKeys";
 import type { ModifierName } from "./modifierLatch";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
-import { useSessionDestination } from "./sessionDestination";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { createTerminalOutput } from "./output";
 import { createStatusLineRouter } from "./statusLine";
@@ -49,6 +47,7 @@ import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 import { useProgramProgress } from "./useProgramProgress";
 import { TerminalProgressBar } from "./TerminalProgressBar";
+import { TerminalHeader } from "./TerminalHeader";
 import type { LigatureDrawing } from "./ligatures";
 import { createTerminalView } from "./createTerminalView";
 import { terminalCopyActions } from "./terminalCopyActions";
@@ -69,21 +68,16 @@ import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
 import { TerminalNoticeCard } from "./TerminalNoticeCard";
 import { TerminalNoticesButton } from "./TerminalNoticesButton";
-import { noticeSeverity, rowsSaidByCard, statusBannerRows, type StatusBannerRow } from "./statusBannerRows";
-import { useMobileNotices } from "./useMobileNotices";
-import { useNotificationPermissionNotice } from "./useNotificationPermissionNotice";
-import { forgetDismissedTerminalNotices, useTerminalNoticeDismissal } from "./dismissedTerminalNotices";
-import { terminalNoticeFor } from "./terminalNotice";
+import { useTerminalNotices } from "./useTerminalNotices";
 import { savedConnectionOf } from "./terminalPresentation";
 import { useSessionRecovery } from "./useSessionRecovery";
 import { useHostKeyAnswer } from "../shell/useHostKeyAnswer";
-import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import { createStreamLink, type StreamLink, type StreamLinkController } from "./streamLink";
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
-import { TerminalComposer, type ComposerField } from "./TerminalComposer";
-import { composerSendBlock, planComposerSend, type ComposerSendBlock } from "./composerSend";
+import { TerminalComposer } from "./TerminalComposer";
+import { useTerminalComposer } from "./useTerminalComposer";
 import { textBeforeCursor } from "./cursorLineText";
 import { asksForSecret, secretPromptRowsRead } from "./secretPrompt";
 import { terminalCommandApiFor } from "./commands/commandApi";
@@ -178,12 +172,6 @@ const linkPopoverOffsetPx = 8;
 // stays legible on its small screen.
 const mobileTerminalFontSize = 15;
 const desktopTerminalFontSize = 13;
-
-const composerSendBlockMessages: Record<ComposerSendBlock, MessageKey> = {
-  "wait-for-connection": "terminal.composerWaitForConnection",
-  "reconnect-first": "terminal.composerReconnectFirst",
-  "session-ended": "terminal.composerSessionEnded",
-};
 
 export function TerminalView({
   session,
@@ -281,35 +269,16 @@ export function TerminalView({
   // session. It is read when a key arrives, long after the effect that sets up the terminal ran.
   const reconnectByEnter = useRef<(() => void) | null>(null);
   reconnectByEnter.current = reconnectsOnEnter(session) ? recovery.reconnect ?? null : null;
-  const composerReconnects = reconnectByEnter.current !== null;
   const hostKeyAnswer = useHostKeyAnswer(onAnswerHostKey);
-  const notificationPermission = useNotificationPermissionNotice(session);
   const savedConnection = savedConnectionOf(session);
-  const notice = terminalNoticeFor(session, link, notificationPermission.due);
-  const noticeDismissal = useTerminalNoticeDismissal(notice?.key ?? null);
-  const noticeRows = statusBannerRows({
-    session, problem, link, reconnectFailed: recovery.reconnectFailed, answersHostKey: hostKeyAnswer.answer !== undefined,
+  const notices = useTerminalNotices({
+    session,
+    problem,
+    link,
+    reconnectFailed: recovery.reconnectFailed,
+    answersHostKey: hostKeyAnswer.answer !== undefined,
+    mobile,
   });
-  // The strip has nothing to say about the questions that only have a card (the notification permission, a typed password).
-  const noticesSeverity = noticeSeverity(noticeRows, { session, link }) ?? (notice === null ? null : "notice");
-  const noticesButton = useRef<HTMLButtonElement>(null);
-  const noticesStrip = useRef<HTMLDivElement>(null);
-  const noticeCardFrame = useRef<HTMLDivElement>(null);
-  // A phone keeps its notices behind a button in the top bar, so they cover neither the terminal nor its rows.
-  const mobileNotices = useMobileNotices({
-    enabled: mobile,
-    present: noticesSeverity !== null || notice !== null,
-    containerRefs: [noticesButton, noticesStrip, noticeCardFrame],
-  });
-  const cardShown = notice !== null && (mobile ? mobileNotices.open : !noticeDismissal.dismissed);
-  // A wider screen keeps the strip on while the card can be hidden. A phone opens both at once over the terminal, so
-  // the strip leaves out what the card says, and the card's own button is the only one for its action.
-  const stripHiddenRows: readonly StatusBannerRow[] = mobile && cardShown ? rowsSaidByCard(notice.kind) : [];
-  const stripHasRows = noticeRows.some((row) => !stripHiddenRows.includes(row));
-  const working = session.state === "connected" && link.phase === "live";
-  useEffect(() => {
-    if (working) forgetDismissedTerminalNotices(session.id);
-  }, [session.id, working]);
   // drawnLive tells whether the screen is drawn as it is while the link is live, without the banner
   // above it that says the link is connecting (see the layout effect below).
   const drawnLive = useRef(false);
@@ -355,10 +324,6 @@ export function TerminalView({
     // cleared once it is sent.
     fromComposer?: boolean;
   } | null>(null);
-  const [composerText, setComposerText] = useState("");
-  // The answer typed in the phone's password field. It stays in this state and nowhere else, and is sent as it is.
-  const [composerSecret, setComposerSecret] = useState("");
-  const [cursorAtSecretPrompt, setCursorAtSecretPrompt] = useState(false);
   const sendPaste = useRef<(text: string) => void>(() => {});
   const allowWindowsPaths = useLocalWindowsPaths(session.kind, runTarget);
   const windowsPathsRef = useRef(allowWindowsPaths);
@@ -403,13 +368,23 @@ export function TerminalView({
   // Direct input holds only while the key bar offers the key that switches it back: a key bar preset without the
   // key would otherwise leave the text box hidden with no way to bring it back.
   const directInput = useDirectInput() && offersDirectInput(keyBarLayout);
-  // The phone's field that takes the typing, while it is shown (TerminalComposer).
-  const composerField = useRef<ComposerField>(null);
   // sendKey sends a key of the key bar.
   const sendKey = useRef<(key: KeyBarKey) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
   const promptCursor = useRef<PromptCursor | null>(null);
   const promptJump = useRef<PromptJump | null>(null);
+  const composer = useTerminalComposer({
+    session,
+    link,
+    reconnect: reconnectByEnter.current,
+    bracketedPaste: () => terminal.current?.modes.bracketedPasteMode ?? false,
+    sendInput: (text) => sendInput.current(text),
+    sendPaste: (text) => sendPaste.current(text),
+    confirmPaste: (text) => setPendingPaste({ sessionId: session.id, raw: text, fromComposer: true }),
+    notice: setTerminalNotice,
+  });
+  const composerField = composer.fieldRef;
+  const { setCursorAtSecretPrompt } = composer;
 
   useEffect(() => {
     setOsc52Enabled(initialOsc52Enabled);
@@ -784,7 +759,7 @@ export function TerminalView({
       releaseImeKeys();
       detachOverlay();
     };
-  }, [touchTerminal, selectLinkAt, session.id, api, backgroundConfigured, webglEnabled]);
+  }, [touchTerminal, selectLinkAt, composerField, session.id, api, backgroundConfigured, webglEnabled]);
 
   // Showing a session (opening one, picking one, or the one left after closing another) focuses it. A touch
   // terminal is left alone: focusing it raises the software keyboard, which comes up only for a tap on the terminal.
@@ -848,14 +823,8 @@ export function TerminalView({
     if (changed.refit) refit.current?.();
   }, [shownFontSize, reducedMotion, scrollbackLines, session.state]);
 
-  const connectionStatus = sessionStateText(t, session);
-  // The header puts the state in words only while it is connecting. Connected, the dot says it; reconnecting,
-  // ended or with the browser's link down, the row under the header says it, and says it once. The words stay
-  // for screen readers either way.
-  const headerSaysState = session.state === "connecting" && link.phase === "live";
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session, t);
-  const destination = useSessionDestination(session);
   // Ctrl and Alt apply to the next key typed into the terminal, so one held while typing in the text box
   // moves the typing there, keeping the keyboard up. A closed keyboard stays closed: the key bar has already
   // let go of the focus then (keepKeyboardAsIs).
@@ -870,46 +839,12 @@ export function TerminalView({
     if (!directInput) {
       if (document.activeElement === composerField.current) terminal.current?.focus();
       setDirectInput(true);
-      setComposerSecret("");
+      composer.forgetSecret();
       return;
     }
     const typingInTerminal = terminal.current?.textarea !== undefined && document.activeElement === terminal.current.textarea;
     flushSync(() => setDirectInput(false));
     if (typingInTerminal) composerField.current?.focus();
-  }
-
-  const sendBlock = composerSendBlock(session, link);
-  // A question on the screen of a session that has ended waits for nothing. A link that is only trying to connect
-  // keeps the field hidden, with what was typed: the question is still there when it is back.
-  const composerMasked = cursorAtSecretPrompt && sendBlock !== "reconnect-first" && sendBlock !== "session-ended";
-  // What was typed for a question ends with the question, so it never shows in the clear.
-  if (!composerMasked && composerSecret !== "") setComposerSecret("");
-
-  function submitComposer() {
-    // What is typed in the box stays there, to send to the reconnected shell.
-    if (reconnectByEnter.current !== null) {
-      reconnectByEnter.current();
-      return;
-    }
-    if (sendBlock !== null) {
-      setTerminalNotice(t(composerSendBlockMessages[sendBlock]));
-      return;
-    }
-    if (composerMasked) {
-      // As if typed: a paste could be bracketed, which a password prompt would take as part of the password, and the
-      // dialog that confirms a risky paste would show it.
-      sendInput.current(`${composerSecret}\r`);
-      setComposerSecret("");
-      return;
-    }
-    const plan = planComposerSend(composerText, { bracketedPaste: terminal.current?.modes.bracketedPasteMode ?? false });
-    if (plan.kind === "confirm") {
-      setPendingPaste({ sessionId: session.id, raw: plan.text, fromComposer: true });
-      return;
-    }
-    if (plan.kind === "paste") sendPaste.current(plan.text);
-    sendInput.current("\r");
-    setComposerText("");
   }
 
   function resumeProgram(command: string) {
@@ -927,56 +862,13 @@ export function TerminalView({
       recovery={recovery}
       hostKeyAnswer={hostKeyAnswer}
       onResumeProgram={resumeProgram}
-      hiddenRows={stripHiddenRows}
+      hiddenRows={notices.stripHiddenRows}
     />
   );
 
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
-      {/* The header follows the design: a 40px row on a desktop, the screen's top bar on a phone
-          (the menu button opens the navigation, the title and destination, and the other actions). */}
-      <div className={`group/header relative flex shrink-0 items-center ${mobile ? "h-[54px] gap-1.5 pl-0.5 pr-1.5" : "h-10 gap-[9px] bg-term-bg pl-3.5 pr-2.5"}`}>
-        {mobile && onOpenNavigation !== undefined ? (
-          <button
-            type="button"
-            aria-label={t("shell.navigationToggle")}
-            title={t("shell.navigationToggle")}
-            onClick={onOpenNavigation}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-muted hover:bg-hover"
-          >
-            {/* The same icon as the menu button of the other sections' header: a ‹ here read as Back. */}
-            <Icon name="menu" className="size-5" />
-          </button>
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-[9px]">
-            <span
-              aria-hidden="true"
-              className={`size-2 shrink-0 rounded-full ${
-                session.state === "exited"
-                  ? exitedAbnormally(session) ? "bg-danger" : "bg-ink-faint"
-                  : session.state === "reconnecting" || session.state === "connecting" || link.phase !== "live"
-                    ? "bg-notice-ink"
-                    : "bg-live"
-              }`}
-            />
-            <p title={displayTitle} className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-[15px]" : "max-w-48 shrink-0 text-[13px]"}`}>{displayTitle}</p>
-            {mobile ? null : <span title={destination} className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{destination}</span>}
-            {/* While connected the dot says it; the words stay for screen readers. A phone has no room for them
-                either way, but they are still read out there. */}
-            <span role="status" className={!headerSaysState || mobile ? "sr-only" : `shrink-0 text-[11.5px] ${sessionStatusTone(session)}`}>{connectionStatus}</span>
-            {mobile ? null : <VPNProfileChip name={vpnProfile} />}
-            {mobile || runTarget === undefined ? null : (
-              <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-[11px] text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>
-            )}
-          </div>
-          {mobile ? (
-            <p className="mt-px flex min-w-0 items-center gap-1 pl-[17px] text-xs text-ink-faint">
-              <span title={destination} className="truncate">{destination}</span>
-              {headerSaysState ? <span className={`shrink-0 ${sessionStatusTone(session)}`}>· {connectionStatus}</span> : null}
-            </p>
-          ) : null}
-        </div>
+      <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} runTarget={runTarget} onOpenNavigation={onOpenNavigation}>
         {mobile ? null : (
           <button
             type="button"
@@ -988,8 +880,8 @@ export function TerminalView({
             <Icon name="search" className="size-[15px]" />
           </button>
         )}
-        {mobile && noticesSeverity !== null ? (
-          <TerminalNoticesButton severity={noticesSeverity} expanded={mobileNotices.open} onToggle={mobileNotices.toggle} buttonRef={noticesButton} />
+        {mobile && notices.severity !== null ? (
+          <TerminalNoticesButton severity={notices.severity} expanded={notices.mobileOpen} onToggle={notices.toggleMobile} buttonRef={notices.buttonRef} />
         ) : null}
         <button
           ref={overflowTrigger}
@@ -1036,7 +928,7 @@ export function TerminalView({
           />
         ) : null}
         <TerminalProgressBar progress={programProgress} />
-      </div>
+      </TerminalHeader>
       {mobile ? null : statusBanners}
 
       <div className={`relative min-h-0 flex-1 overflow-clip bg-term-bg ${mobile ? "mx-2 rounded-[14px] border border-line" : ""}`}>
@@ -1071,29 +963,29 @@ export function TerminalView({
           <TerminalCommandHeader block={topCommand} onGoTo={() => terminal.current?.scrollToLine(topCommand.start.line)} />
         ) : null}
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
-        {mobile && mobileNotices.open && stripHasRows ? (
+        {notices.stripShown ? (
           // Over the top of the terminal, not above it: the terminal keeps its rows, and its program does not draw again.
-          <div ref={noticesStrip} tabIndex={-1} className="absolute inset-x-0 top-0 z-20 bg-canvas shadow-float outline-none">
+          <div ref={notices.stripRef} tabIndex={-1} className="absolute inset-x-0 top-0 z-20 bg-canvas shadow-float outline-none">
             {statusBanners}
           </div>
         ) : null}
-        {notice === null || !cardShown ? null : (
+        {notices.card === null || !notices.cardShown ? null : (
           // Low in the terminal, where the person's eyes are after the last line; the strip above keeps saying it.
-          <div ref={noticeCardFrame} className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center mobile-layout:inset-x-2 mobile-layout:bottom-2">
+          <div ref={notices.cardFrameRef} className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center mobile-layout:inset-x-2 mobile-layout:bottom-2">
             <TerminalNoticeCard
               // A new notice is a new card, which takes the focus again.
-              key={notice.key}
-              notice={notice}
+              key={notices.card.key}
+              notice={notices.card}
               session={session}
               title={displayTitle}
               recovery={recovery}
               hostKeyAnswer={hostKeyAnswer}
-              notificationPermission={notificationPermission}
+              notificationPermission={notices.notificationPermission}
               focus={{
                 // Only the terminal the person works in, and not from under a dialog or menu. A phone shows it when the
                 // person asks for the notices, so it always takes the focus there. The hint about the previous shell's
                 // program leaves the focus alone: the new shell is there to type into.
-                take: () => mobile || (notice.kind !== "resume-program" && active && !isDismissibleLayerOpen()),
+                take: () => mobile || (notices.card?.kind !== "resume-program" && active && !isDismissibleLayerOpen()),
                 // A touch screen would raise its keyboard again for the terminal.
                 giveBack: () => {
                   if (!touchTerminalRef.current) terminal.current?.focus();
@@ -1102,7 +994,7 @@ export function TerminalView({
               onLinkNow={() => streamLinkController.current?.connect()}
               onCloseSession={onCloseSession}
               onAnswerPasswordSave={onAnswerPasswordSave}
-              onDismiss={mobile ? mobileNotices.close : noticeDismissal.dismiss}
+              onDismiss={notices.dismissCard}
               onResumeProgram={resumeProgram}
             />
           </div>
@@ -1168,7 +1060,7 @@ export function TerminalView({
             sendPaste.current(raw);
             if (pendingPaste.fromComposer === true) {
               sendInput.current("\r");
-              setComposerText("");
+              composer.setText("");
             }
           }}
         />
@@ -1182,15 +1074,15 @@ export function TerminalView({
         onDirectInput={switchDirectInput}
       />
       {directInput ? null : <TerminalComposer
-        value={composerText}
-        secret={composerMasked ? composerSecret : null}
-        sendable={sendBlock === null || composerReconnects}
-        placeholder={composerReconnects ? t("terminal.composerReconnectPlaceholder") : undefined}
+        value={composer.text}
+        secret={composer.secret}
+        sendable={composer.sendable}
+        placeholder={composer.placeholder}
         enterSends={composerEnterSends}
-        fieldRef={composerField}
-        onChange={setComposerText}
-        onSecretChange={setComposerSecret}
-        onSubmit={submitComposer}
+        fieldRef={composer.fieldRef}
+        onChange={composer.setText}
+        onSecretChange={composer.setSecret}
+        onSubmit={composer.submit}
       />}
     </section>
   );
