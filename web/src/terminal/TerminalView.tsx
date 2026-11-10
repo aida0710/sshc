@@ -1,64 +1,40 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
-import { useTranslate, type Translate } from "../i18n/context";
+import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { reconnectsOnEnter } from "./sessionStatus";
 import { useTerminalFont } from "./useTerminalFont";
 import { defaultTint } from "./appearance";
 import { useBackgroundImage } from "./backgroundImage";
-import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
-import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
+import { attachSelectionOverlay } from "./selectionOverlay";
 import { cellAtPoint, linkAtPoint, type ScreenPoint } from "./tappedLink";
-import { attachPromptCursorClicks, type PromptCursor } from "./promptCursor";
-import { attachPromptJumpKeys, type PromptJump } from "./promptJump";
 import { useTouchTerminal } from "./touchMode";
-import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
-import { attachFontZoom } from "./attachFontZoom";
-import { attachTerminalShortcuts } from "./attachTerminalShortcuts";
-import { registerTerminalActions } from "./terminalActions";
-import { steppedFontSize } from "./fontSize";
-import { attachTouchScroll } from "./touchScroll";
-import { terminalTouchScrollTarget } from "./touchScrollTarget";
-import { createScrollbackOffset } from "./scrollbackOffset";
 import { flushSync } from "react-dom";
 import { KeyBar } from "./KeyBar";
-import { keyBarInput, withModifiers, type KeyBarKey } from "../keybar/keySequences";
 import { useKeyBarLayout } from "../keybar/keyBarPresets";
 import { offersDirectInput } from "../keybar/keyBarLayout";
 import { setDirectInput, useDirectInput } from "./useDirectInput";
 import { useModifierKeys } from "./useModifierKeys";
 import type { ModifierName } from "./modifierLatch";
-import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
-import { createTerminalOutput } from "./output";
-import { createStatusLineRouter } from "./statusLine";
-import { createStatusLineTerminal, type StatusLineTerminal } from "./statusLineTerminal";
 import type { ExitReport } from "./stream";
-import { encodeIntlYen } from "./intlYenKey";
-import { attachLinkProvider } from "./linkProvider";
-import { attachLinkUnderlines, type LinkUnderlines } from "./linkUnderlines";
 import { useTouchLinkUnderlines } from "./touchLinkUnderlines";
-import { openTerminalURL, TerminalLinkPopover, type TerminalLinkSelection } from "./TerminalLinkPopover";
+import { TerminalLinkPopover, type TerminalLinkSelection } from "./TerminalLinkPopover";
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 import { useProgramProgress } from "./useProgramProgress";
 import { TerminalProgressBar } from "./TerminalProgressBar";
 import { TerminalHeader } from "./TerminalHeader";
-import type { LigatureDrawing } from "./ligatures";
-import { createTerminalView } from "./createTerminalView";
-import { terminalCopyActions } from "./terminalCopyActions";
-import { attachTerminalSequences } from "./attachTerminalSequences";
+import { assembleTerminal, type AssembledTerminal, type TerminalLiveValues } from "./terminalAssembly";
 import type { CommandBlock } from "./commandBlocks";
-import { attachCommandDisplay, type CommandDisplay } from "./commandDisplay";
 import { TerminalCommandCard } from "./TerminalCommandCard";
 import { TerminalCommandHeader } from "./TerminalCommandHeader";
 import { useCommandCard } from "./useCommandCard";
 import { useTerminalPathPreview } from "./useTerminalPathPreview";
-import { isTerminalShown, watchTerminalShown } from "./terminalVisibility";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
 import { isDismissibleLayerOpen, keyboardOwnerProps } from "../ui/useDismissibleLayer";
@@ -72,14 +48,11 @@ import { useTerminalNotices } from "./useTerminalNotices";
 import { savedConnectionOf } from "./terminalPresentation";
 import { useSessionRecovery } from "./useSessionRecovery";
 import { useHostKeyAnswer } from "../shell/useHostKeyAnswer";
-import { createStreamLink, type StreamLink, type StreamLinkController } from "./streamLink";
+import { type StreamLink } from "./streamLink";
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
-import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { TerminalComposer } from "./TerminalComposer";
 import { useTerminalComposer } from "./useTerminalComposer";
-import { textBeforeCursor } from "./cursorLineText";
-import { asksForSecret, secretPromptRowsRead } from "./secretPrompt";
 import { terminalCommandApiFor } from "./commands/commandApi";
 import { forwardApiFor } from "./forwardApi";
 import { useLocalWindowsPaths } from "./useLocalWindowsPaths";
@@ -91,8 +64,7 @@ import { useReducedMotion } from "../theme/motionContext";
 import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
-import { isInNoticeCard, isTypingElsewhere } from "./terminalFocus";
-import { resizeRewritingCursorLine } from "./cursorLineRewrite";
+import { isTypingElsewhere } from "./terminalFocus";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -216,59 +188,42 @@ export function TerminalView({
   commandScrollbarMarks = true,
 }: TerminalViewProps) {
   const t = useTranslate();
-  // ターミナルを組み立てる effect は、セッションごとに1度しか走らない。その中の関数が、あとから変わる値を
-  // 呼ばれた時点で読むための写しである。
-  const latest = useRef({ session, t, onExit });
-  latest.current = { session, t, onExit };
   const { resolved } = useTheme();
   const reducedMotion = useReducedMotion();
   const mobile = useMediaQuery(mobileViewportQuery);
   const touchTerminal = useTouchTerminal();
-  const touchTerminalRef = useRef(touchTerminal);
-  touchTerminalRef.current = touchTerminal;
   const touchLinkUnderlines = useTouchLinkUnderlines();
   const everyLinkUnderlined = touchTerminal && touchLinkUnderlines;
-  const everyLinkUnderlinedRef = useRef(everyLinkUnderlined);
-  everyLinkUnderlinedRef.current = everyLinkUnderlined;
-  const linkUnderlines = useRef<LinkUnderlines | null>(null);
   const resolvedFontSize = fontSize ?? (mobile ? mobileTerminalFontSize : desktopTerminalFontSize);
-  // zoomedFontSize is the size a pinch, or the wheel with Ctrl, gave this terminal over the settings' size
-  // (base). It is this view's alone and is not saved. When the settings' size changes, the view follows it again.
+  // zoomedFontSize は、つまむ操作か Ctrl とホイールが、設定の大きさ（base）の上にこのターミナルへ与えた大きさで
+  // ある。この画面だけのもので、保存しない。設定の大きさが変わったら、また設定に従う。
   const [zoomedFontSize, setZoomedFontSize] = useState<{ base: number; size: number } | null>(null);
   const shownFontSize = zoomedFontSize !== null && zoomedFontSize.base === resolvedFontSize ? zoomedFontSize.size : resolvedFontSize;
-  const shownFontSizeRef = useRef(shownFontSize);
-  shownFontSizeRef.current = shownFontSize;
-  const resolvedFontSizeRef = useRef(resolvedFontSize);
-  resolvedFontSizeRef.current = resolvedFontSize;
   const resolvedFontFamily = useTerminalFont(font ?? "", shownFontSize);
-  const reducedMotionRef = useRef(reducedMotion);
-  reducedMotionRef.current = reducedMotion;
   const host = useRef<HTMLDivElement>(null);
   const statusLineHost = useRef<HTMLDivElement>(null);
-  const statusLine = useRef<StatusLineTerminal | null>(null);
-  // shownStatusLineHeight is the row height of the VT320 status line a program shows (statusLine.ts), or null.
-  // The line is drawn under the screen only with the setting on; it is written to either way.
+  // shownStatusLineHeight は、プログラムが出す VT320 のステータス行（statusLine.ts）の高さである。出ていなければ
+  // null。行を画面の下に描くのは設定がオンのときだけで、行への書き込みはどちらでも受ける。
   const [shownStatusLineHeight, setStatusLineHeight] = useState<number | null>(null);
   const statusLineHeight = statusLineEnabled ? shownStatusLineHeight : null;
   const region = useRef<HTMLElement>(null);
   const backgroundURL = useBackgroundImage(background ?? "");
   const backgroundConfigured = (background ?? "") !== "";
   const hasBackground = backgroundURL !== "";
-  const refit = useRef<(() => void) | null>(null);
+  // assembled は組み立てたターミナル（terminalAssembly.ts）、terminal はその xterm.js である。組み立てる前と
+  // 片付けたあとは null。
+  const assembled = useRef<AssembledTerminal | null>(null);
   const terminal = useRef<Terminal | null>(null);
-  const clipboardSettings = useRef<TerminalClipboardSettings>({ copyOnSelect, rightClickPaste });
-  clipboardSettings.current = { copyOnSelect, rightClickPaste };
   const [problem, setProblem] = useState("");
   const [link, setLink] = useState<StreamLink>({ phase: "connecting", attempt: 1 });
   const recovery = useSessionRecovery({
     onReconnect,
     onStopReconnect,
-    onReconnected: () => streamLinkController.current?.connect(),
+    onReconnected: () => assembled.current?.link.connect(),
   });
-  // reconnectByEnter is how to connect again while the engine's line says Enter does it; null while keys go to the
-  // session. It is read when a key arrives, long after the effect that sets up the terminal ran.
-  const reconnectByEnter = useRef<(() => void) | null>(null);
-  reconnectByEnter.current = reconnectsOnEnter(session) ? recovery.reconnect ?? null : null;
+  // reconnectByEnter は、エンジンの行が Enter でつなぎ直すと言っているあいだの、つなぎ直す操作である。キーが
+  // セッションへ届くあいだは null。
+  const reconnectByEnter = reconnectsOnEnter(session) ? recovery.reconnect ?? null : null;
   const hostKeyAnswer = useHostKeyAnswer(onAnswerHostKey);
   const savedConnection = savedConnectionOf(session);
   const notices = useTerminalNotices({
@@ -279,58 +234,21 @@ export function TerminalView({
     answersHostKey: hostKeyAnswer.answer !== undefined,
     mobile,
   });
-  // drawnLive tells whether the screen is drawn as it is while the link is live, without the banner
-  // above it that says the link is connecting (see the layout effect below).
+  // drawnLive は、リンクがつながっているときの形で画面が描かれているか（上に「接続中」の帯が無いか）である。
+  // 下の layout effect が書く。
   const drawnLive = useRef(false);
-  const activeRef = useRef(active);
-  activeRef.current = active;
-  // askingRef is whether the engine is still connecting: the line holding the cursor is then the engine's own question
-  // (a host key, a password), which nothing draws again at a new width (resizeRewritingCursorLine).
-  const askingRef = useRef(false);
-  askingRef.current = session.state === "connecting" || session.state === "reconnecting";
-  const inPaneRef = useRef(inPane);
-  inPaneRef.current = inPane;
-  const search = useTerminalSearch({
-    shortcutActive: searchShortcutActive,
-    region,
-    // A touch screen would raise its keyboard again for the terminal.
-    returnFocus: () => {
-      if (!touchTerminalRef.current) terminal.current?.focus();
-    },
-  });
-  useAndroidBackStop({ open: search.open && active, close: search.close });
-  const copyContext = useRef<() => void>(() => {});
-  const copyWithColors = useRef<() => void>(() => {});
-  const saveScrollback = useRef<() => void>(() => {});
-  const commandOutput = useRef<{ copy: (block: CommandBlock) => void; save: (block: CommandBlock) => void } | null>(null);
-  const commandDisplay = useRef<CommandDisplay | null>(null);
-  const commandMarksRef = useRef(commandMarks);
-  commandMarksRef.current = commandMarks;
-  const commandScrollbarMarksRef = useRef(commandScrollbarMarks);
-  commandScrollbarMarksRef.current = commandScrollbarMarks;
   const commandCard = useCommandCard();
-  // topCommand is the command whose output fills the top of the view while its prompt is above it.
+  // topCommand は、プロンプトが上に隠れているあいだ、その出力が画面の上を占めているコマンドである。
   const [topCommand, setTopCommand] = useState<CommandBlock | null>(null);
   const [osc52Enabled, setOsc52Enabled] = useState(initialOsc52Enabled);
-  const osc52EnabledRef = useRef(initialOsc52Enabled);
-  osc52EnabledRef.current = osc52Enabled;
-  const intlYenRef = useRef(jisYenBackslash);
-  intlYenRef.current = jisYenBackslash;
   const [terminalNotice, setTerminalNotice] = useState("");
   const [pendingPaste, setPendingPaste] = useState<{
     sessionId: string;
     raw: string;
-    // The text came from the phone's text box: Enter follows it and the box is
-    // cleared once it is sent.
+    // スマホの入力欄から来た文字である。送ったあとに Enter を続け、欄を空にする。
     fromComposer?: boolean;
   } | null>(null);
-  const sendPaste = useRef<(text: string) => void>(() => {});
   const allowWindowsPaths = useLocalWindowsPaths(session.kind, runTarget);
-  const windowsPathsRef = useRef(allowWindowsPaths);
-  windowsPathsRef.current = allowWindowsPaths;
-  const ligaturesRef = useRef(ligatures);
-  ligaturesRef.current = ligatures;
-  const ligatureDrawing = useRef<LigatureDrawing | null>(null);
   const [currentDirectory, setCurrentDirectory] = useState("");
   const {
     progress: programProgress,
@@ -338,14 +256,47 @@ export function TerminalView({
     clear: clearProgramProgress,
   } = useProgramProgress(() => onProgramProgressChanged?.());
 
+  // 組み立てたターミナルが、呼ばれた時点で読む値である（TerminalLiveValues）。描くたびに最新の値を入れる。
+  // ターミナルが読む設定を足すときは、ここと型に足す。
+  const liveValues: TerminalLiveValues = {
+    session,
+    t,
+    active,
+    inPane,
+    touch: touchTerminal,
+    everyLinkUnderlined,
+    allowWindowsPaths,
+    shownFontSize,
+    settingsFontSize: resolvedFontSize,
+    reducedMotion,
+    clipboardSettings: { copyOnSelect, rightClickPaste },
+    osc52Enabled,
+    jisYenBackslash,
+    commandMarks,
+    commandScrollbarMarks,
+    reconnectByEnter,
+    onExit,
+  };
+  const live = useRef(liveValues);
+  live.current = liveValues;
+
+  const search = useTerminalSearch({
+    shortcutActive: searchShortcutActive,
+    region,
+    // タッチの画面では、ターミナルへフォーカスを戻すとキーボードがまた上がる。
+    returnFocus: () => {
+      if (!live.current.touch) terminal.current?.focus();
+    },
+  });
+  useAndroidBackStop({ open: search.open && active, close: search.close });
+
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
   const [quickCommandSelection, setQuickCommandSelection] = useState("");
-  // The panel starts from the text selected when it opens, from the "…" menu or its shortcut.
-  const openQuickCommands = useRef<() => void>(() => undefined);
-  openQuickCommands.current = () => {
+  // パネルは、「…」のメニューかショートカットで開いたときに選んでいた文字から始まる。
+  function openQuickCommands() {
     setQuickCommandSelection(terminal.current?.getSelection() ?? "");
     setQuickCommandsOpen(true);
-  };
+  }
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowTrigger = useRef<HTMLButtonElement>(null);
   const [portForwardsOpen, setPortForwardsOpen] = useState(false);
@@ -361,25 +312,19 @@ export function TerminalView({
     notice: setTerminalNotice,
   });
   const previewLinkedPath = pathPreview.previewLinkedPath;
-  const streamLinkController = useRef<StreamLinkController | null>(null);
 
   const { modifiers, tap: tapModifier, takeModifiers } = useModifierKeys();
   const keyBarLayout = useKeyBarLayout();
-  // Direct input holds only while the key bar offers the key that switches it back: a key bar preset without the
-  // key would otherwise leave the text box hidden with no way to bring it back.
+  // 直接入力が続くのは、キーバーに切り替えのキーがあるあいだだけである。そのキーの無いプリセットでは、
+  // 入力欄が隠れたまま戻せなくなる。
   const directInput = useDirectInput() && offersDirectInput(keyBarLayout);
-  // sendKey sends a key of the key bar.
-  const sendKey = useRef<(key: KeyBarKey) => void>(() => {});
-  const sendInput = useRef<(text: string) => void>(() => {});
-  const promptCursor = useRef<PromptCursor | null>(null);
-  const promptJump = useRef<PromptJump | null>(null);
   const composer = useTerminalComposer({
     session,
     link,
-    reconnect: reconnectByEnter.current,
+    reconnect: reconnectByEnter,
     bracketedPaste: () => terminal.current?.modes.bracketedPasteMode ?? false,
-    sendInput: (text) => sendInput.current(text),
-    sendPaste: (text) => sendPaste.current(text),
+    sendInput: (text) => assembled.current?.send(text),
+    sendPaste: (text) => assembled.current?.paste(text),
     confirmPaste: (text) => setPendingPaste({ sessionId: session.id, raw: text, fromComposer: true }),
     notice: setTerminalNotice,
   });
@@ -397,7 +342,7 @@ export function TerminalView({
   // 新しいシェルの出力を受け取り直す。
   const shownAsEnded = useRef(session.state === "exited");
   useEffect(() => {
-    if (shownAsEnded.current && session.state !== "exited") streamLinkController.current?.attachAfterExit();
+    if (shownAsEnded.current && session.state !== "exited") assembled.current?.link.attachAfterExit();
     shownAsEnded.current = session.state === "exited";
   }, [session.state]);
 
@@ -418,313 +363,53 @@ export function TerminalView({
     setLinkSelection({ link, x: point.clientX + linkPopoverOffsetPx, y: point.clientY + linkPopoverOffsetPx });
   }, [previewLinkedPath]);
 
+  // ターミナルはセッションごとに1度だけ組み立てる（terminalAssembly.ts）。設定・関数・翻訳は live を通して
+  // 読まれるか、下の effect が当て直すので、アドオンと WebSocket を作り直さない。
   useEffect(() => {
     const container = host.current;
     if (container === null) return;
-
-    const translate: Translate = (key, values) => latest.current.t(key, values);
-    const parts = createTerminalView(container, {
-      backgroundImage: backgroundConfigured,
-      cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
-      fontFamily: resolvedFontFamily,
-      fontSize: shownFontSize,
-      theme: terminalTheme(container, hasBackground),
-      scrollback: scrollbackLines,
-      webgl: webglEnabled,
-      webglSettled: () => refit.current?.(),
-      ligatures: ligaturesRef.current,
-      selectLink: selectLinkAt,
-    });
-    const { view, fit, searchAddon, serializeAddon, renderer } = parts;
-    ligatureDrawing.current = parts.ligatureDrawing;
-    const measured = () => container.clientWidth !== 0 && container.clientHeight !== 0;
-    // A pane keeps its WebGL renderer while another section hides it (see inPane).
-    const wantsRenderer = () => measured() || inPaneRef.current;
-    renderer.shown(wantsRenderer());
-    terminal.current = view;
-
-    const unbindSearch = search.bind(view, searchAddon, container);
-    const copyActions = terminalCopyActions({
-      view,
-      serializeAddon,
-      title: () => terminalDisplayTitle(latest.current.session),
-      t: translate,
-      notice: setTerminalNotice,
-      problem: setProblem,
-    });
-    saveScrollback.current = copyActions.saveScrollback;
-    copyWithColors.current = copyActions.copyWithColors;
-    copyContext.current = copyActions.copyContext;
-    commandOutput.current = { copy: copyActions.copyCommandOutput, save: copyActions.saveCommandOutput };
-
-    const statusLineTerminal = createStatusLineTerminal(view);
-    statusLine.current = statusLineTerminal;
-    // replaySizeHeld is true while the history is replayed at the size it was written for (output.ts): the
-    // terminal neither fits its container nor tells the engine those sizes until the history is over.
-    let replaySizeHeld = false;
-    const output = createTerminalOutput(createStatusLineRouter({
-      screen: view,
-      statusLine: () => statusLineTerminal,
-      shownChanged: (shown) => {
-        if (shown) statusLineTerminal.clear();
-        setStatusLineHeight(shown ? cellHeight(view, container) : null);
-      },
-    }), {
-      replayAt: (size) => {
-        replaySizeHeld = true;
-        if (view.cols !== size.cols || view.rows !== size.rows) view.resize(size.cols, size.rows);
-      },
-      replayed: () => {
-        replaySizeHeld = false;
-        fitAndSync();
-      },
-    });
-    const sequences = attachTerminalSequences({
-      view,
-      t: translate,
-      replaying: () => output.isReplaying(),
-      clipboardWritesAllowed: () => osc52EnabledRef.current,
-      reply: (sequence) => sendInput.current(sequence),
-      notice: setTerminalNotice,
-      problem: setProblem,
-      setDirectory: setCurrentDirectory,
-      setProgress: applyProgramProgress,
-    });
-    const { kittyClipboard, prompt, prompts } = sequences;
-    commandDisplay.current = attachCommandDisplay(view, sequences.commandBlocks, {
+    const built = assembleTerminal({
       container,
-      marks: () => commandMarksRef.current,
-      scrollbarMarks: () => commandScrollbarMarksRef.current,
-      point: commandCard.point,
-      leave: commandCard.leave,
-      topChanged: setTopCommand,
-    });
-    promptJump.current = prompts;
-    const detachPromptJumpKeys = attachPromptJumpKeys(container, prompts);
-    promptCursor.current = prompt;
-    const detachPromptClicks = attachPromptCursorClicks({
-      container,
-      prompt,
-      cellAt: (point) => cellAtPoint(view, point),
-      hasSelection: () => view.hasSelection(),
-      enabled: () => !touchTerminalRef.current,
-      send: (keys) => sendInput.current(keys),
-    });
-    const underlines = attachLinkUnderlines(view, {
-      everyLink: () => everyLinkUnderlinedRef.current,
-      allowWindowsPaths: () => windowsPathsRef.current,
-    });
-    linkUnderlines.current = underlines;
-    const terminalLinks = attachLinkProvider(view, {
-      open: openTerminalURL,
-      select: selectLinkAt,
-      point: underlines.point,
-      allowWindowsPaths: () => windowsPathsRef.current,
-    });
-
-    let sent = "";
-    const syncSize = () => {
-      // Restoring a hidden session must preserve its PTY size until this
-      // host can be measured, rather than sending xterm's initial 80x24.
-      if (container.clientWidth === 0 || container.clientHeight === 0) return;
-      // While the WebGL renderer loads, the cells are the DOM renderer's, wider than the whole
-      // pixels WebGL draws them in: the program would get fewer columns, then the right ones.
-      // The view is fitted again once the renderer is settled.
-      if (renderer.attaching()) return;
-      if (!drawnLive.current) return;
-      const stream = linkController.currentStream();
-      const size = `${view.cols}x${view.rows}`;
-      if (stream === null || view.cols === 0 || view.rows === 0 || size === sent) return;
-      sent = size;
-      stream.resize(view.cols, view.rows);
-    };
-
-    const linkController = createStreamLink({
-      sessionId: session.id,
-      api,
-      onLink: setLink,
-      onAttached: () => {
-        sent = "";
-        output.abandonReplay();
-        // A new stream starts as shown to the engine; it is told the truth at once.
-        linkController.currentStream()?.reportShown(isTerminalShown(container));
-        if (activeRef.current && !touchTerminalRef.current && latest.current.session.state !== "exited" && !search.hasFocus() && !isTypingElsewhere(region.current) && !isInNoticeCard()) {
-          view.focus();
-        }
-        fitAndSync();
+      live: () => live.current,
+      start: {
+        api,
+        backgroundImage: backgroundConfigured,
+        backgroundLoaded: hasBackground,
+        fontFamily: resolvedFontFamily,
+        scrollback: scrollbackLines,
+        webgl: webglEnabled,
+        ligatures,
       },
-      onReplay: (replay, resumed) => {
-        output.beginReplay(replay, { sized: !resumed });
-        if (!replay.truncated) return;
-        // Only a link that was offline lost output; a view shown afresh lacks
-        // only the session's oldest output.
-        setTerminalNotice(translate(resumed ? "terminal.replayTruncated" : "terminal.replayTruncatedOldest"));
-      },
-      onSkipped: (screen) => {
-        output.skip(screen);
-        setTerminalNotice(translate("terminal.outputSkipped"));
-      },
-      // Output alone keeps a pending paste: full-screen programs redraw all
-      // the time, and on the focus change that opening the review causes.
-      onOutput: output.write,
-      // The paste was reviewed for the shell that is now gone.
-      onShellReplaced: () => setPendingPaste(null),
-      onExit: (exit) => {
-        view.options.cursorBlink = false;
-        setPendingPaste(null);
-        latest.current.onExit?.(exit);
-      },
-      onClose: () => {
-        output.abandonReplay();
-        setPendingPaste(null);
+      wiring: {
+        link: setLink,
+        notice: setTerminalNotice,
+        problem: setProblem,
+        directory: setCurrentDirectory,
+        progress: applyProgramProgress,
+        statusLineHeight: setStatusLineHeight,
+        topCommand: setTopCommand,
+        pointCommand: commandCard.point,
+        leaveCommand: commandCard.leave,
+        closeCommandCard: commandCard.close,
+        cursorAtSecretPrompt: setCursorAtSecretPrompt,
+        reviewPaste: (text) => setPendingPaste({ sessionId: session.id, raw: text }),
+        dropPasteReview: () => setPendingPaste(null),
+        zoom: setZoomedFontSize,
+        selectLink: selectLinkAt,
+        openQuickCommands,
+        takeModifiers,
+        search,
+        typingElsewhere: () => isTypingElsewhere(region.current),
+        linkDrawnLive: () => drawnLive.current,
       },
     });
-    streamLinkController.current = linkController;
-
-    const fitAndSync = () => {
-      renderer.shown(wantsRenderer());
-      if (!measured() || replaySizeHeld) return;
-      try {
-        if (askingRef.current) resizeRewritingCursorLine(view, () => fit.fit());
-        else fit.fit();
-        if (touchTerminalRef.current) syncTerminalInputPosition(view);
-      } catch {
-        return;
-      }
-      syncSize();
-      view.refresh(0, Math.max(0, view.rows - 1));
-    };
-    // Keyboard/orientation changes must resize the PTY even while text is
-    // selected; the selection overlay releases its handles when its shape changes.
-    // observeTerminalSize makes the first fit, once the rest of the terminal is attached.
-    refit.current = fitAndSync;
-
-    // A finger moves the scrollback by the pixel, as a page moves in a browser; xterm.js alone moves it a row at a time.
-    const scrollbackOffset = createScrollbackOffset(container, view);
-    const detachTouchScroll = attachTouchScroll(container, terminalTouchScrollTarget(view, scrollbackOffset), () => cellHeight(view, container), {
-      selectionHeld: () => selectionHeldIn(container),
-      reducedMotion: () => reducedMotionRef.current,
-    });
-    const zoomTo = (size: number) => setZoomedFontSize({ base: resolvedFontSizeRef.current, size });
-    const detachFontZoom = attachFontZoom(container, {
-      fontSize: () => shownFontSizeRef.current,
-      setFontSize: zoomTo,
-    });
-    // Like a pinch, the text size keys change only this terminal, and are not saved.
-    const shortcutHandlers = {
-      increaseFontSize: () => zoomTo(steppedFontSize(shownFontSizeRef.current, 1)),
-      decreaseFontSize: () => zoomTo(steppedFontSize(shownFontSizeRef.current, -1)),
-      resetFontSize: () => setZoomedFontSize(null),
-      quickCommands: () => openQuickCommands.current(),
-    };
-    const detachShortcuts = attachTerminalShortcuts(container, shortcutHandlers);
-
-    const typed = (data: string) => {
-      // xterm answers the queries in replayed history (DA1, cursor position,
-      // kitty image checks) as if they were new. The program that asked has
-      // long had its answer; this one would land in the shell as typed text.
-      if (output.isReplaying()) return;
-      sendInput.current(withModifiers(data, takeModifiers()));
-    };
-    sendInput.current = (text) => {
-      // The other keys go nowhere: typed into the reconnected shell, they would run as a command.
-      if (reconnectByEnter.current !== null) {
-        if (text === "\r") reconnectByEnter.current();
-        return;
-      }
-      linkController.currentStream()?.send(text);
-    };
-    sendKey.current = (key: KeyBarKey) => {
-      sendInput.current(keyBarInput(key, takeModifiers(), { applicationCursorKeys: view.modes.applicationCursorKeysMode }));
-    };
-    view.onData(typed);
-    // Fires once a frame at most, after what arrived is on the screen; a replayed screen comes through here too.
-    const secretPromptWatch = view.onWriteParsed(() => setCursorAtSecretPrompt(asksForSecret(textBeforeCursor(view, secretPromptRowsRead))));
-    // A program that turns on mouse reports without SGR (1006) gets them in the
-    // default format, which xterm.js hands out here rather than through onData.
-    view.onBinary((data) => linkController.currentStream()?.sendBinary(data));
-
-    linkController.connect();
-
-    sendPaste.current = (text) => linkController.currentStream()?.send(prepareTerminalPaste(text, view.modes.bracketedPasteMode));
-    const terminalClipboard = attachTerminalClipboard({
-      container,
-      terminal: view,
-      paste: (text) => {
-        const inspection = inspectTerminalPaste(text);
-        if (inspection.requiresConfirmation) {
-          setPendingPaste({ sessionId: session.id, raw: text });
-          return;
-        }
-        sendPaste.current(text);
-      },
-      clipboard,
-      coarsePointer: () => touchTerminalRef.current,
-      settings: () => clipboardSettings.current,
-      refuse: () => setProblem(translate("terminal.clipboardRefused")),
-      nothingToPaste: (image) => setTerminalNotice(translate(image ? "terminal.pasteImageUnsupported" : "terminal.pasteEmpty")),
-      takePaste: (items) => kittyClipboard.takePaste(items),
-      copied: () => setTerminalNotice(translate("copy.done")),
-      enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current),
-      sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),
-      selectionIsSearchMatch: search.isSelectingMatch,
-    });
-    const unregisterActions = registerTerminalActions(session.id, {
-      ...shortcutHandlers,
-      terminalSearch: search.show,
-      copy: terminalClipboard.copySelection,
-      paste: terminalClipboard.paste,
-      previousPrompt: () => promptJump.current?.jump(-1),
-      nextPrompt: () => promptJump.current?.jump(1),
-    });
-
-    const stopObservingSize = observeTerminalSize(view, container, fitAndSync);
-    const stopWatchingShown = watchTerminalShown(container, (shown) => linkController.currentStream()?.reportShown(shown));
-
+    assembled.current = built;
+    terminal.current = built.view;
     return () => {
-      linkController.close();
-      streamLinkController.current = null;
-      stopObservingSize();
-      stopWatchingShown();
-      detachTouchScroll();
-      scrollbackOffset.dispose();
-      detachFontZoom();
-      detachShortcuts();
-      unregisterActions();
-      terminalClipboard.detach();
-      output.dispose();
-      statusLineTerminal.dispose();
-      statusLine.current = null;
-      setStatusLineHeight(null);
-      detachPromptClicks();
-      detachPromptJumpKeys();
-      commandDisplay.current?.dispose();
-      commandDisplay.current = null;
-      commandOutput.current = null;
-      commandCard.close();
-      setTopCommand(null);
-      secretPromptWatch.dispose();
-      setCursorAtSecretPrompt(false);
-      sequences.dispose();
-      promptJump.current = null;
-      promptCursor.current = null;
-      terminalLinks.dispose();
-      underlines.dispose();
-      linkUnderlines.current = null;
-      unbindSearch();
-      parts.dispose();
-      ligatureDrawing.current = null;
+      built.dispose();
+      assembled.current = null;
       terminal.current = null;
-      sendInput.current = () => {};
-      sendPaste.current = () => {};
-      copyContext.current = () => {};
-      copyWithColors.current = () => {};
-      saveScrollback.current = () => {};
-      copyActions.release();
     };
-    // The terminal is built once per session; settings, callbacks and
-    // translations it reads are applied by the effects below without
-    // recreating the addon stack and the WebSocket.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, api, backgroundConfigured, webglEnabled]);
 
@@ -738,7 +423,7 @@ export function TerminalView({
     const releaseImeKeys = attachImeKeys({ container, textarea: view.textarea ?? container });
     const detachOverlay = attachSelectionOverlay(container, view, {
       onTap: (point) => {
-        const link = linkAtPoint(view, point, windowsPathsRef.current);
+        const link = linkAtPoint(view, point, live.current.allowWindowsPaths);
         if (link !== null) {
           selectLinkAt(link, point);
           return true;
@@ -746,15 +431,15 @@ export function TerminalView({
         // A tap on the line being typed also moves the cursor there; it still
         // raises the keyboard to type at the new place.
         const cell = cellAtPoint(view, point);
-        const keys = cell === null ? null : promptCursor.current?.arrowsTo(cell) ?? null;
-        if (keys !== null) sendInput.current(keys);
+        const keys = cell === null ? null : assembled.current?.promptCursor.arrowsTo(cell) ?? null;
+        if (keys !== null) assembled.current?.send(keys);
         return false;
       },
       // A phone types into its text box, where Japanese is composed before it is sent; the terminal
       // takes the keys typed with the key bar's Ctrl or Alt (holdModifier below).
       typingTarget: () => composerField.current ?? view,
     });
-    refit.current?.();
+    assembled.current?.fit();
     return () => {
       releaseImeKeys();
       detachOverlay();
@@ -764,7 +449,7 @@ export function TerminalView({
   // Showing a session (opening one, picking one, or the one left after closing another) focuses it. A touch
   // terminal is left alone: focusing it raises the software keyboard, which comes up only for a tap on the terminal.
   useEffect(() => {
-    if (focusRequest !== undefined && activeRef.current && !touchTerminalRef.current && !region.current?.contains(document.activeElement)) terminal.current?.focus();
+    if (focusRequest !== undefined && live.current.active && !live.current.touch && !region.current?.contains(document.activeElement)) terminal.current?.focus();
   }, [focusRequest]);
 
   useEffect(() => {
@@ -775,25 +460,25 @@ export function TerminalView({
   // A touch terminal underlines every link, unless the preset turns it off; Windows paths become links once the
   // engine is known to run on Windows.
   useEffect(() => {
-    linkUnderlines.current?.refresh();
+    assembled.current?.linkUnderlines.refresh();
   }, [everyLinkUnderlined, allowWindowsPaths]);
 
   // The command marks follow their settings and the theme's colours.
   const { pointed: pointedCommand, close: closeCommandCard } = commandCard;
   useEffect(() => {
-    commandDisplay.current?.refresh();
+    assembled.current?.commandDisplay.refresh();
     if (!commandMarks) closeCommandCard();
   }, [commandMarks, commandScrollbarMarks, resolved, palette, closeCommandCard]);
 
   useEffect(() => {
     if (terminal.current === null) return;
     terminal.current.options.fontFamily = resolvedFontFamily;
-    refit.current?.();
+    assembled.current?.fit();
   }, [resolvedFontFamily]);
 
   // A session that leaves the panes (kept behind them) gives its WebGL renderer back, even while the section is hidden.
   useEffect(() => {
-    refit.current?.();
+    assembled.current?.fit();
   }, [inPane]);
 
   // A stream is attached as the link turns live, while the banner that says it is connecting still
@@ -802,15 +487,15 @@ export function TerminalView({
   // runs after React has drawn the screen without the banner.
   useLayoutEffect(() => {
     drawnLive.current = link.phase === "live";
-    if (drawnLive.current) refit.current?.();
+    if (drawnLive.current) assembled.current?.fit();
   }, [link.phase]);
 
   useEffect(() => {
-    ligatureDrawing.current?.set(ligatures);
+    assembled.current?.ligatureDrawing?.set(ligatures);
   }, [ligatures]);
 
   useEffect(() => {
-    if (statusLineHeight !== null && statusLineHost.current !== null) statusLine.current?.open(statusLineHost.current);
+    if (statusLineHeight !== null && statusLineHost.current !== null) assembled.current?.statusLine.open(statusLineHost.current);
   }, [statusLineHeight]);
 
   useEffect(() => {
@@ -820,7 +505,7 @@ export function TerminalView({
       fontSize: shownFontSize,
       scrollback: scrollbackLines,
     });
-    if (changed.refit) refit.current?.();
+    if (changed.refit) assembled.current?.fit();
   }, [shownFontSize, reducedMotion, scrollbackLines, session.state]);
 
   const displayTitle = terminalDisplayTitle(session);
@@ -848,8 +533,8 @@ export function TerminalView({
   }
 
   function resumeProgram(command: string) {
-    sendInput.current(`${command}\r`);
-    if (!touchTerminalRef.current) terminal.current?.focus();
+    assembled.current?.send(`${command}\r`);
+    if (!touchTerminal) terminal.current?.focus();
   }
 
   const statusBanners = (
@@ -857,8 +542,8 @@ export function TerminalView({
       session={session}
       problem={problem}
       link={link}
-      onLinkNow={() => streamLinkController.current?.connect()}
-      onLinkStop={() => streamLinkController.current?.stopRetrying()}
+      onLinkNow={() => assembled.current?.link.connect()}
+      onLinkStop={() => assembled.current?.link.stopRetrying()}
       recovery={recovery}
       hostKeyAnswer={hostKeyAnswer}
       onResumeProgram={resumeProgram}
@@ -898,22 +583,22 @@ export function TerminalView({
           <TerminalOverflowMenu
             {...(mobile ? {
               onSearch: search.toggle,
-              onPreviousPrompt: () => promptJump.current?.jump(-1),
-              onNextPrompt: () => promptJump.current?.jump(1),
+              onPreviousPrompt: () => assembled.current?.prompts.jump(-1),
+              onNextPrompt: () => assembled.current?.prompts.jump(1),
             } : {})}
             onSplit={onSplit}
             onRemoveFromSplit={onRemoveFromSplit}
             splitRefusal={splitRefusal}
             triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}
-            onQuickCommands={() => openQuickCommands.current()}
+            onQuickCommands={openQuickCommands}
             onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
             onOpenRemoteDirectory={runTarget === undefined && savedConnection !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
               ? () => onOpenRemotePath(savedConnection, currentDirectory, "browse")
               : undefined}
-            onCopyContext={() => copyContext.current()}
-            onCopyWithColors={() => copyWithColors.current()}
-            onSaveScrollback={() => saveScrollback.current()}
+            onCopyContext={() => assembled.current?.copy.copyContext()}
+            onCopyWithColors={() => assembled.current?.copy.copyWithColors()}
+            onSaveScrollback={() => assembled.current?.copy.saveScrollback()}
             onToggleOsc52={async () => {
               const next = !osc52Enabled;
               try {
@@ -988,10 +673,10 @@ export function TerminalView({
                 take: () => mobile || (notices.card?.kind !== "resume-program" && active && !isDismissibleLayerOpen()),
                 // A touch screen would raise its keyboard again for the terminal.
                 giveBack: () => {
-                  if (!touchTerminalRef.current) terminal.current?.focus();
+                  if (!live.current.touch) terminal.current?.focus();
                 },
               }}
-              onLinkNow={() => streamLinkController.current?.connect()}
+              onLinkNow={() => assembled.current?.link.connect()}
               onCloseSession={onCloseSession}
               onAnswerPasswordSave={onAnswerPasswordSave}
               onDismiss={notices.dismissCard}
@@ -1028,8 +713,8 @@ export function TerminalView({
         <TerminalCommandCard
           block={pointedCommand.block}
           mark={pointedCommand.mark}
-          onCopy={() => commandOutput.current?.copy(pointedCommand.block)}
-          onSave={() => commandOutput.current?.save(pointedCommand.block)}
+          onCopy={() => assembled.current?.copy.copyCommandOutput(pointedCommand.block)}
+          onSave={() => assembled.current?.copy.saveCommandOutput(pointedCommand.block)}
           onClose={commandCard.close}
           onPointerEnter={commandCard.keep}
           onPointerLeave={commandCard.leave}
@@ -1057,9 +742,9 @@ export function TerminalView({
           onCancel={() => setPendingPaste(null)}
           onPaste={(raw) => {
             setPendingPaste(null);
-            sendPaste.current(raw);
+            assembled.current?.paste(raw);
             if (pendingPaste.fromComposer === true) {
-              sendInput.current("\r");
+              assembled.current?.send("\r");
               composer.setText("");
             }
           }}
@@ -1070,7 +755,7 @@ export function TerminalView({
         onTap={holdModifier}
         layout={keyBarLayout}
         directInput={directInput}
-        onKey={(key) => sendKey.current(key)}
+        onKey={(key) => assembled.current?.sendKey(key)}
         onDirectInput={switchDirectInput}
       />
       {directInput ? null : <TerminalComposer
