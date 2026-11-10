@@ -2,19 +2,17 @@ package terminal
 
 import "strings"
 
-// programStatusRecords are one session's OSC 7501 records by id; "" is the
-// root. They belong to the session, not to a screen, so the alternate screen
-// leaves them alone. Done and error records stay until a report replaces or
-// clears them: the browser decides when it has shown one (see Version).
+// programStatusRecords は、1つのセッションの OSC 7501 の記録を、id ごとに持つ。"" は根である。記録は画面では
+// なくセッションのものなので、代替画面は記録に触れない。done と error の記録は、報告が置き換えるか消すまで
+// 残る。出したと決めるのはブラウザである（Version を参照）。
 type programStatusRecords struct {
 	byID map[string]ProgramStatus
-	// updates numbers the reports. It keeps growing across clears, so a
-	// record's Version never repeats within the session.
+	// updates は、報告に番号を振る。消したあとも増え続けるので、記録の Version がセッションの中で繰り返すことは
+	// 無い。
 	updates uint64
 }
 
-// apply takes one report. A report replaces its record whole, so a key it
-// leaves out is gone.
+// apply は、報告1つを受け取る。報告は記録を丸ごと置き換えるので、報告に無いキーは無くなる。
 func (r *programStatusRecords) apply(report programStatusReport) {
 	if report.clear {
 		r.clear(report.id)
@@ -54,7 +52,7 @@ func (r *programStatusRecords) dropLeastRecentlyUpdated() {
 	delete(r.byID, oldestID)
 }
 
-// drop removes the records in any of states.
+// drop は、states のどれかにある記録を消す。
 func (r *programStatusRecords) drop(states ...ProgramStatusState) {
 	for id, record := range r.byID {
 		for _, state := range states {
@@ -66,8 +64,8 @@ func (r *programStatusRecords) drop(states ...ProgramStatusState) {
 	}
 }
 
-// hasLiveReport reports whether a program is telling what it does right now. A
-// done or failed record does not count: it stays after the program has gone.
+// hasLiveReport は、プログラムが、今していることを伝えているかを返す。done と failed の記録は数えない。
+// プログラムが去ったあとも残るためである。
 func (r *programStatusRecords) hasLiveReport() bool {
 	for id, record := range r.byID {
 		if id == screenPromptRecordID {
@@ -81,9 +79,8 @@ func (r *programStatusRecords) hasLiveReport() bool {
 	return false
 }
 
-// programStatusUrgency orders the states by how much they need the user. A
-// program still working on something is shown working, even when one part of
-// it is done.
+// programStatusUrgency は、状態を、利用者をどれだけ必要としているかで並べる。まだ何かに取り組んでいる
+// プログラムは、その一部が終わっていても、働いているものとして出す。
 var programStatusUrgency = map[ProgramStatusState]int{
 	ProgramStatusIdle:    0,
 	ProgramStatusDone:    1,
@@ -92,9 +89,8 @@ var programStatusUrgency = map[ProgramStatusState]int{
 	ProgramStatusBlocked: 4,
 }
 
-// summary is the record the session list shows: the most urgent one, the
-// latest of those on a tie, with the name of the program it belongs to. nil
-// when there is none.
+// summary は、セッションの一覧に出す記録である。いちばん急ぎのもの、同じならその中でいちばん新しいものを
+// 選び、それが属するプログラムの名前を付ける。無ければ nil。
 func (r *programStatusRecords) summary() *ProgramStatus {
 	chosenID, found := "", false
 	for id, record := range r.byID {
@@ -120,8 +116,7 @@ func (r *programStatusRecords) summary() *ProgramStatus {
 	return &status
 }
 
-// appOf is the name of the record id or of its nearest ancestor that has one.
-// An ancestor counts whether or not a record of its own exists between them.
+// appOf は、記録 id の名前か、名前を持ついちばん近い親の名前である。あいだに記録が無くても、親として数える。
 func (r *programStatusRecords) appOf(id string) string {
 	for {
 		if app := r.byID[id].App; app != "" {
@@ -134,8 +129,8 @@ func (r *programStatusRecords) appOf(id string) string {
 	}
 }
 
-// parentProgramStatusID is the path one segment up. The root record "" is
-// the ancestor of every record, as a clear without an id removes them all.
+// parentProgramStatusID は、区切り1つ上のパスである。根の記録 "" は、すべての記録の親である。id の無い clear が
+// すべてを消すのと同じ扱いである。
 func parentProgramStatusID(id string) string {
 	index := strings.LastIndexByte(id, '/')
 	if index < 0 {
@@ -144,8 +139,7 @@ func parentProgramStatusID(id string) string {
 	return id[:index]
 }
 
-// acceptProgramStatus takes a report or a query from the generation that
-// sent it.
+// acceptProgramStatus は、報告か問い合わせを、送った世代から受け取る。
 func (s *Session) acceptProgramStatus(generation uint64, report programStatusReport) {
 	s.mutex.Lock()
 	if generation != s.generation || s.exited != nil {
@@ -162,9 +156,9 @@ func (s *Session) acceptProgramStatus(generation uint64, report programStatusRep
 	}
 }
 
-// endActiveProgramStatusLocked drops what only holds while a program runs:
-// a new shell prompt (OSC 133;A) means it has returned, as does a new process
-// in place of the old one.
+// endActiveProgramStatusLocked は、プログラムが走っているあいだだけ成り立つものを捨てる。シェルの新しい
+// プロンプト（OSC 133;A）は、プログラムが戻ったことを意味する。古い process に替わる新しい process も
+// 同じである。
 func (s *Session) endActiveProgramStatusLocked() {
 	s.programStatus.drop(ProgramStatusWorking, ProgramStatusBlocked)
 }
@@ -179,7 +173,7 @@ func (s *Session) acceptPromptStarted(generation uint64) {
 	s.reportBlockedProgramLocked()
 }
 
-// acceptTerminalReset follows RIS, which removes every record.
+// acceptTerminalReset は、RIS に従う。RIS はすべての記録を消す。
 func (s *Session) acceptTerminalReset(generation uint64) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

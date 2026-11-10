@@ -92,10 +92,9 @@ type ForegroundProgram struct {
 	Running time.Duration
 }
 
-// Readier reports when an asynchronously opened Process has completed the
-// connection work which makes it usable. A Process without this capability is
-// ready when Open returns; SSH sessions implement it because authentication
-// prompts must be streamed before the handshake has completed.
+// Readier は、非同期に開いた Process が、使えるようになるための接続の作業を終えたことを知らせる。これを
+// 持たない Process は、Open が戻った時点で使える。SSH のセッションがこれを実装するのは、握手が終わる前に
+// 認証の問いを流さなければならないためである。
 //
 // Ready は、準備が終わると閉じる。値は送らないので、何人でも待てる。結果は
 // ReadyErr で読む（nil なら使える状態になった）。Ready が閉じる前の ReadyErr は nil。
@@ -108,10 +107,8 @@ type Readier interface {
 // Processである。これを実装しない非同期Processへの先行入力は捨てる。
 type Prompting interface{ AwaitingPrompt() bool }
 
-// ConnectionProgress reports the current step of an asynchronously opened SSH
-// connection. It is deliberately separate from State: State describes whether
-// the terminal can be used, while this value explains what a connecting SSH
-// transport is doing right now.
+// ConnectionProgress は、非同期に開いた SSH の接続が、今どの段階にいるかを伝える。State とはわざと分けて
+// ある。State はターミナルを使えるかを表し、この値は、接続中の SSH の輸送が今していることを説明する。
 type ConnectionProgress struct {
 	Phase    string
 	Alias    string
@@ -119,20 +116,19 @@ type ConnectionProgress struct {
 	User     string
 	Hop      int
 	Hops     int
-	// HostKey is the key this hop's host offered, while it is checked (Phase is
-	// ConnectionHostKey). An unknown key is asked about with it (HostKeyQuestion).
+	// HostKey は、この経由先のホストが出した鍵である。確かめているあいだ（Phase が ConnectionHostKey）入る。
+	// 知らない鍵は、これを添えて尋ねる（HostKeyQuestion）。
 	HostKey *OfferedHostKey
 }
 
-// OfferedHostKey is a host key as people compare it: its type and SHA256 fingerprint.
+// OfferedHostKey は、人が見比べる形のホスト鍵である。種類と SHA256 の fingerprint を持つ。
 type OfferedHostKey struct {
 	Type        string
 	Fingerprint string
 }
 
-// HostKeyQuestion is the question a connecting SSH session waits on: whether
-// to trust a host key that known_hosts does not have. The terminal asks it in
-// words too; the screen shows it with buttons.
+// HostKeyQuestion は、接続中の SSH のセッションが答えを待っている問いである。known_hosts に無いホスト鍵を
+// 信頼するかを尋ねる。ターミナルは言葉でも尋ね、画面はボタンを添えて出す。
 type HostKeyQuestion struct {
 	Alias       string
 	HostName    string
@@ -140,11 +136,10 @@ type HostKeyQuestion struct {
 	Fingerprint string
 }
 
-// HostKeyQuestionAbout returns the question a connection waits on, when it is
-// checking a host key (this progress) and the yes/no question it waits on
-// (openQuestion, in the words of sshclient.UnknownHostPrompt) is about that
-// key. A question already answered, or one about the key of another hop, is not
-// shown again. The terminal and an SFTP tab both ask this way.
+// HostKeyQuestionAbout は、接続が待っている問いを返す。接続がホスト鍵を確かめていて（この進み具合）、
+// 待っている yes/no の問い（openQuestion。sshclient.UnknownHostPrompt の言葉）がその鍵についてのもので
+// あるときだけ返す。答え終えた問いや、ほかの経由先の鍵についての問いは、もう出さない。ターミナルも SFTP の
+// タブも、この形で尋ねる。
 func (p ConnectionProgress) HostKeyQuestionAbout(openQuestion string) (HostKeyQuestion, bool) {
 	if p.Phase != ConnectionHostKey || p.HostKey == nil || !strings.Contains(openQuestion, p.HostKey.Fingerprint) {
 		return HostKeyQuestion{}, false
@@ -154,13 +149,13 @@ func (p ConnectionProgress) HostKeyQuestionAbout(openQuestion string) (HostKeyQu
 	}, true
 }
 
-// HostKeyQuestioning is implemented by SSH processes that can tell the
-// question they wait on and take its answer from a button rather than typing.
+// HostKeyQuestioning は、待っている問いを伝えられ、打ち込みではなくボタンから答えを受け取れる SSH の
+// process が実装する。
 type HostKeyQuestioning interface {
-	// HostKeyQuestion returns the open question, if any.
+	// HostKeyQuestion は、開いている問いがあれば返す。
 	HostKeyQuestion() (HostKeyQuestion, bool)
-	// AnswerHostKey answers the question about the key of this fingerprint and
-	// reports true, if that question is still open; otherwise it does nothing.
+	// AnswerHostKey は、この fingerprint の鍵についての問いがまだ開いていれば、それに答えて true を返す。
+	// 開いていなければ何もしない。
 	AnswerHostKey(fingerprint string, accept bool) bool
 }
 
@@ -175,12 +170,12 @@ type TypedPassword struct {
 	Password string
 }
 
-// PasswordSaveAsking is implemented by SSH processes that keep a password the
-// person typed until they answer whether to save it.
+// PasswordSaveAsking は、利用者が打ち込んだパスワードを、保存するかの答えが出るまで持つ SSH の process が
+// 実装する。
 type PasswordSaveAsking interface {
-	// TypedPassword returns the password waiting on the answer, if any.
+	// TypedPassword は、答えを待っているパスワードがあれば返す。
 	TypedPassword() (TypedPassword, bool)
-	// ForgetTypedPassword lets go of it.
+	// ForgetTypedPassword は、それを手放す。
 	ForgetTypedPassword()
 }
 
@@ -192,9 +187,8 @@ const (
 	ConnectionOpeningSession = "opening_session"
 )
 
-// Progressing is implemented by SSH processes which can explain their current
-// connection step. Local shells become connected synchronously and do not need
-// this additional state.
+// Progressing は、接続の今の段階を説明できる SSH の process が実装する。ローカルのシェルは同期でつながる
+// ので、この追加の状態は要らない。
 type Progressing interface{ ConnectionProgress() ConnectionProgress }
 
 // Announcer は、接続ログの設定に関係なく出す行（[sshc] で始まる）を、そのセッションの
@@ -202,10 +196,9 @@ type Progressing interface{ ConnectionProgress() ConnectionProgress }
 // そのターミナルで知らせるために使う。
 type Announcer interface{ Announce(message string) }
 
-// ExactInput accepts one complete input frame or returns an error without
-// silently dropping bytes. Interactive SSH implements this separately from
-// Process.Write, whose keystroke-oriented contract intentionally tolerates a
-// full input buffer.
+// ExactInput は、入力のまとまり1つを丸ごと受け取るか、エラーを返す。黙ってバイトを落とすことは無い。対話の
+// SSH は、これを Process.Write とは別に実装する。Process.Write は打鍵のためのもので、入力のバッファが
+// いっぱいのときに落とすことをわざと許している。
 type ExactInput interface {
 	WriteExact(context.Context, []byte) error
 }
@@ -378,8 +371,8 @@ func writeExact(ctx context.Context, writer io.Writer, input []byte) error {
 	return iowrite.WriteAll(writer, input)
 }
 
-// MaxCommandBytes leaves one byte for the carriage return which executes the
-// command. It fits the bounded SSH input queue and a small local PTY frame.
+// MaxCommandBytes は、コマンドを実行する復帰（CR）の1バイトを残した長さである。長さに上限のある SSH の
+// 入力の待ち行列にも、ローカルの PTY の小さなまとまりにも収まる。
 const MaxCommandBytes = (4 << 10) - 1
 
 // MaxTitle は、一覧に出す名前の長さの上限である。

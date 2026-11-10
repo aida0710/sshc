@@ -9,7 +9,7 @@ import (
 	"sshc/internal/testwait"
 )
 
-// blockedProgramLog keeps what Registry.ProgramBlocked heard.
+// blockedProgramLog は、Registry.ProgramBlocked が受け取ったものを持つ。
 type blockedProgramLog struct {
 	mutex   sync.Mutex
 	changes []terminal.BlockedProgramChange
@@ -55,8 +55,8 @@ func TestABlockedProgramIsHeardOnceWithWhatItWaitsFor(t *testing.T) {
 		t.Fatalf("status = %+v, want permission with the message", status)
 	}
 
-	// Reporting again while blocked, with other words or as another record, says nothing new: the next change heard is
-	// the end of the wait.
+	// blocked のあいだにもう一度報告しても、言葉が違っても別の記録としてでも、新しいことは何も伝えない。次に
+	// 伝わる変化は、待ちの終わりである。
 	process.feed("\x1b]7501;state=blocked:kind=permission:msg=YWdhaW4\x1b\\\x1b]7501;state=blocked:kind=question:id=sub\x1b\\")
 	process.feed("\x1b]7501;state=working\x1b\\\x1b]7501;state=working:id=sub\x1b\\")
 	if changes = log.waitForCount(t, 2); changes[1].Status != nil {
@@ -124,8 +124,8 @@ func TestASessionThatNeverWaitedSaysNothingWhenItEnds(t *testing.T) {
 	}
 }
 
-// A dropped connection does not tell whether the program still waits (under tmux it does), so the person keeps the
-// notification until the program, reached again, says otherwise.
+// 切れた接続からは、プログラムがまだ待っているかが分からない（tmux の下では待っている）。そのため通知は、
+// つなぎ直したプログラムが別のことを言うまで残す。
 func TestAReconnectLeavesTheWaitUntilTheNewProcessReports(t *testing.T) {
 	spy := &openSpy{}
 	registry, _ := newFastRegistry()

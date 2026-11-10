@@ -2,21 +2,18 @@ package terminal
 
 import "time"
 
-// The end of a long command counts as a notification, so a session nobody is
-// looking at still gets an unread mark and a desktop notification. The engine
-// times it rather than the browser: a session in another workspace or outside
-// the split view has no terminal drawn in any browser.
+// 長いコマンドの終わりは通知として数える。誰も見ていないセッションにも、未読の印とデスクトップの通知が
+// 付くようにするためである。時間を測るのは、ブラウザではなくエンジンである。別のワークスペースのセッションや、
+// 分割表示の外のセッションは、どのブラウザにもターミナルが描かれていない。
 
-// LongCommand is the shortest command whose end is notified. Below it the
-// user is most likely still watching, and every quick command would mark the
-// session unread.
+// LongCommand は、終わりを通知するコマンドの、いちばん短い長さである。これより短ければ、利用者はまだ見ている
+// はずで、すぐ終わるコマンドのたびにセッションが未読になってしまう。
 const LongCommand = 30 * time.Second
 
-// FinishedCommand is a command of at least LongCommand that the shell
-// reported finished.
+// FinishedCommand は、シェルが終わったと報告した、LongCommand 以上かかったコマンドである。
 type FinishedCommand struct {
 	Duration time.Duration
-	// ExitCode is nil when the shell did not report one.
+	// ExitCode は、シェルが終了コードを報告しなかったとき nil である。
 	ExitCode *int
 }
 
@@ -29,8 +26,8 @@ func (s *Session) acceptCommandStarted(generation uint64, at time.Time) {
 	s.shell.commandStartedAt = at
 }
 
-// acceptCommandFinished notifies the end of a long command. An end without a
-// start, such as the first prompt of a shell, is not a command.
+// acceptCommandFinished は、長いコマンドの終わりを通知する。シェルの最初のプロンプトのような、始まりの無い
+// 終わりは、コマンドではない。
 func (s *Session) acceptCommandFinished(generation uint64, exitCode *int, at time.Time) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

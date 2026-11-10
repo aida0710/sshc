@@ -9,14 +9,14 @@ import (
 
 var ErrInvalidLocalWorkingDirectory = errors.New("local working directory is unavailable")
 
-// ResolveLocalWorkingDirectory resolves a directory on the engine machine.
-// Its result is passed as the process working directory, never shell input.
+// ResolveLocalWorkingDirectory は、エンジンのマシンのフォルダを確かめる。結果は process の作業フォルダとして
+// 渡し、シェルへの入力にはしない。
 func ResolveLocalWorkingDirectory(candidate string) (string, error) {
 	if !isDirectoryText(candidate) {
 		return "", ErrInvalidLocalWorkingDirectory
 	}
 	directory := filepath.FromSlash(candidate)
-	// The checks come before os.Stat, which would open a network volume.
+	// 検査は os.Stat の前に行う。os.Stat はネットワークのボリュームを開いてしまう。
 	if !filepath.IsAbs(directory) || !onLocalDrive(directory) {
 		return "", ErrInvalidLocalWorkingDirectory
 	}

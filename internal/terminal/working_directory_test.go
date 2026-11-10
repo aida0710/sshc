@@ -98,8 +98,8 @@ func TestALocalShellOffersOnlyDirectoriesThisMachineCanStartIn(t *testing.T) {
 }
 
 func TestANetworkPathAShellReportsIsNeverRecorded(t *testing.T) {
-	// On Windows these name a share on another machine, and checking that the
-	// directory exists would connect to it with the user's credentials.
+	// Windows では、これらは別のマシンの共有を指す。フォルダがあるかを確かめると、利用者の資格情報でそこへ
+	// つないでしまう。
 	for _, title := range []string{`aida@edge: //attacker/share`, `aida@edge: //?/C:/Users`} {
 		if directory, ok := workingDirectoryFromTitle(title); ok {
 			t.Errorf("workingDirectoryFromTitle(%q) = %q", title, directory)

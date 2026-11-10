@@ -1,7 +1,7 @@
 package terminal
 
-// Forwarding can wait on a server reply. Keep that wait outside the session
-// lock so closing the process can cancel it and session views remain usable.
+// 転送は、サーバーの返事を待つことがある。その待ちはセッションのロックの外に置く。process を閉じれば待ちを
+// 取り消せ、セッションの View も使い続けられる。
 func (s *Session) StartForward(kind, listenPort, destination string) (Forward, error) {
 	controller, generation, err := s.forwardController()
 	if err != nil {

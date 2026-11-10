@@ -11,8 +11,8 @@ import (
 	"sshc/internal/testwait"
 )
 
-// shellProcess is an SSH process whose shell's own output can be written apart from what sshc writes into the
-// terminal, as sshclient.Session hands it over (terminal.ShellOutput).
+// shellProcess は、シェル自身の出力を、sshc がターミナルへ書くものと分けて書ける、SSH の process である。
+// sshclient.Session が渡すのと同じ形である（terminal.ShellOutput）。
 type shellProcess struct {
 	*readyProcess
 	mutex    sync.Mutex
@@ -31,7 +31,7 @@ func (p *shellProcess) WatchShellOutput(seen func([]byte)) (stop func()) {
 	}
 }
 
-// shell writes text as the remote shell's output: to the terminal, and to whatever watches the shell.
+// shell は、text をリモートのシェルの出力として書く。ターミナルと、シェルを見ているものの両方に届く。
 func (p *shellProcess) shell(text string) {
 	p.mutex.Lock()
 	for _, seen := range p.watchers {
@@ -76,7 +76,8 @@ func (s *shellOpenSpy) at(index int) *shellProcess {
 	return s.processes[index]
 }
 
-// openWithSteps opens an SSH session whose startup types steps, each waiting at most wait, and makes it ready.
+// openWithSteps は、起動時に steps を打ち込む SSH のセッションを開き、使える状態にする。各手順は、長くても
+// wait だけ待つ。
 func openWithSteps(t *testing.T, wait time.Duration, steps ...terminal.StartupStep) (*terminal.Session, *shellOpenSpy) {
 	t.Helper()
 	spy := &shellOpenSpy{}
@@ -111,7 +112,7 @@ func TestAStepWaitsForItsTextInTheShellOutputBeforeItTypes(t *testing.T) {
 	if got := router.keystrokes(); got != "" {
 		t.Fatalf("typed %q before the prompt was complete", got)
 	}
-	// The prompt is matched as the terminal shows it, without its colours.
+	// プロンプトは、色を除いた、ターミナルに出る形で照らし合わせる。
 	router.shell(">")
 	testwait.Until(t, func() bool { return router.keystrokes() == "enable\r" })
 
@@ -165,8 +166,8 @@ func TestAnOptionalStepWhoseTextDoesNotComeIsPassedOver(t *testing.T) {
 	}
 }
 
-// What sshc itself writes into the terminal (an authentication prompt, an [sshc] line) is not the shell's output,
-// so a step never answers it.
+// sshc 自身がターミナルへ書くもの（認証の問い、[sshc] の行）は、シェルの出力ではない。手順がそれに答える
+// ことは無い。
 func TestAStepDoesNotAnswerWhatSshcWritesIntoTheTerminal(t *testing.T) {
 	session, spy := openWithSteps(t, 100*time.Millisecond, terminal.StartupStep{Wait: "Password:", Send: "s3cret", Enter: true})
 	shell := spy.at(0)

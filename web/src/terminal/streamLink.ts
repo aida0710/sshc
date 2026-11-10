@@ -70,6 +70,10 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
   // ended は、プログラムの終了を受け取ってから、次に付け直すまでのあいだ真である。
   let ended = false;
   let attempts = 0;
+  // attachRequests は、付けるよう求められた回数である。チケットが届いたとき、それがいちばん新しい求めの
+  // ものでなければ使わない。求めが重なっても（一覧が「接続中」を伝え、続けて再接続の操作が戻る）、付くのは
+  // 1本になる。
+  let attachRequests = 0;
   let attachedAt = 0;
   let countdown: ReturnType<typeof setInterval> | undefined;
   let cursor: number | undefined;
@@ -86,6 +90,15 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
     stale?.close();
   };
 
+  // releaseEnded は、新しいストリームを付ける前に、まだ持っているストリームを手放す。プログラムが終わった
+  // あとのストリームは、エンジンが閉じるまで残っている。付け直したあとに、そこから出力を受け取らない。
+  const releaseEnded = () => {
+    if (stream === null) return;
+    muted.add(stream);
+    stream.close();
+    stream = null;
+  };
+
   // connect attaches a stream. quiet is for attaching afresh a link that looks live: the screen keeps
   // showing it as live meanwhile.
   const connect = (quiet = false) => {
@@ -94,12 +107,15 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
     stopped = false;
     ended = false;
     attempts += 1;
+    attachRequests += 1;
+    const request = attachRequests;
     if (!quiet) options.onLink({ phase: "connecting", attempt: attempts });
     const resumeFrom = cursor;
     void options.api
       .terminalStreamTicket(options.sessionId, resumeFrom)
       .then((issued) => {
-        if (halted()) return;
+        if (halted() || request !== attachRequests) return;
+        releaseEnded();
         attachedAt = Date.now();
         const attached: TerminalStream = openStream(issued.streamTicket, options.api.streamPath, {
           onReplay: (replay) => {
@@ -140,6 +156,7 @@ export function createStreamLink(options: StreamLinkOptions): StreamLinkControll
         options.onAttached();
       })
       .catch((error: unknown) => {
+        if (request !== attachRequests) return;
         // The stream being replaced could not be attached afresh, so it most likely leads nowhere.
         releaseReplaced();
         if (halted()) return;

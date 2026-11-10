@@ -55,7 +55,7 @@ func TestTitlesAProgramChoseAreKept(t *testing.T) {
 
 func TestOSCObserverReportsNoTitleForAnExecutablePathOfAnyLength(t *testing.T) {
 	observer, seen := newTestObserver()
-	// With the elevation prefix, this is longer than MaxTitle and would be cut in the middle of the path.
+	// 昇格の前置きが付くと MaxTitle より長くなり、パスの途中で切れる。
 	observer.Observe([]byte(`` + "\x1b]0;" + `Administrator: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe` + "\a"))
 	if len(seen.titles) != 1 || seen.titles[0] != "" {
 		t.Fatalf("titles = %q", seen.titles)

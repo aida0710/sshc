@@ -10,7 +10,7 @@ func TestOnlyTheEndOfALongCommandIsNotified(t *testing.T) {
 	at := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
 	failed := 2
 
-	// The first prompt of a shell reports an end with no command before it.
+	// シェルの最初のプロンプトは、前にコマンドの無い終わりを報告する。
 	session.acceptCommandFinished(1, nil, at)
 	session.acceptCommandStarted(1, at)
 	session.acceptCommandFinished(1, nil, at.Add(LongCommand-time.Second))
@@ -30,7 +30,7 @@ func TestOnlyTheEndOfALongCommandIsNotified(t *testing.T) {
 		t.Fatalf("finished command = %+v, notification %+v", finished, view.LastNotification)
 	}
 
-	// The end counts once; the next end has no start of its own.
+	// 終わりは1度だけ数える。次の終わりには、それ自身の始まりが無い。
 	session.acceptCommandFinished(1, nil, at.Add(2*LongCommand))
 	if view := session.View(); view.NotificationVersion != 1 {
 		t.Fatalf("one command was notified twice: version %d", view.NotificationVersion)

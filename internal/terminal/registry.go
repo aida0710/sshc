@@ -16,7 +16,7 @@ import (
 type Spec struct {
 	Kind  Kind
 	Alias string
-	// ShellProfile is the ID of the local shell profile a shell session runs.
+	// ShellProfile は、シェルのセッションが動かす、ローカルのシェルプロファイルの ID である。
 	ShellProfile string
 	// Title は一覧に出す名前である。ssh は alias、shell はシェルのプロファイルの名前。
 	Title string
@@ -26,7 +26,7 @@ type Spec struct {
 	Size      Size
 	// Open は呼び出し側が Process を生成するコールバックである。
 	Open func(ctx context.Context, size Size) (Process, error)
-	// Reopen defaults to Open and is used for transport/manual reconnects.
+	// Reopen の既定は Open である。輸送の再接続と手動の再接続に使う。
 	Reopen func(ctx context.Context, size Size) (Process, error)
 	// ReconnectError は再接続失敗を分類する。retry=false なら即座に停止する。
 	// problem は公開用の固定コードであり、raw error を含めない。
@@ -77,12 +77,12 @@ type Registry struct {
 	// RunningCommandTitle は、ローカルシェルで動いているコマンドの名前をペイン名に出すかを
 	// 返す（running_command_title.go）。nil なら出す。
 	RunningCommandTitle func() bool
-	// ProgramBlocked hears when a session's program starts or stops waiting for
-	// the person (blocked_program.go); nil when nobody listens. It runs under the
-	// session's mutex, so it must return at once and not call the session.
+	// ProgramBlocked は、セッションのプログラムが利用者を待ち始めたとき・待ち終えたときに知らされる
+	// （blocked_program.go）。聞き手がいなければ nil。セッションの mutex の中で走るので、すぐに戻り、セッションを
+	// 呼んではならない。
 	ProgramBlocked func(BlockedProgramChange)
-	// OpenLog opens the log of a session as it opens, or returns nil when the settings keep none for it
-	// (internal/sessionlog). It is asked for each session, so a change of the settings applies to the next one.
+	// OpenLog は、セッションを開くときにそのログを開く。設定がそのセッションのログを残さないなら nil を返す
+	// （internal/sessionlog）。セッションごとに尋ねるので、設定の変更は次のセッションから効く。
 	OpenLog func(LogTarget) (OutputLog, error)
 	// Network は、このマシンの回線について OS が言うことである。nil なら OS は何も言わない。
 	Network *NetworkWatch
@@ -411,8 +411,8 @@ func (r *Registry) Lookup(id string) (*Session, bool) {
 	return nil, false
 }
 
-// CommandTarget resolves only an existing live session. It never treats the ID
-// as an SSH alias and therefore cannot create a new connection as a fallback.
+// CommandTarget は、今ある生きたセッションだけを指す。ID を SSH の別名として扱うことは無いので、代わりに
+// 新しい接続を作ることも無い。
 func (r *Registry) CommandTarget(id string) (CommandTarget, error) {
 	session, ok := r.Lookup(id)
 	if !ok {
@@ -421,7 +421,7 @@ func (r *Registry) CommandTarget(id string) (CommandTarget, error) {
 	return session.CommandTarget()
 }
 
-// WriteCommandInput writes to the exact generation and optionally appends Enter.
+// WriteCommandInput は、指定の世代にだけ書き、求められれば Enter を続ける。
 func (r *Registry) WriteCommandInput(ctx context.Context, target CommandTarget, command string, submit bool) error {
 	session, ok := r.Lookup(target.ID)
 	if !ok {
@@ -430,14 +430,15 @@ func (r *Registry) WriteCommandInput(ctx context.Context, target CommandTarget, 
 	return session.WriteCommandInput(ctx, target.Generation, command, submit)
 }
 
-// HideInLog keeps secrets out of the log of session id (Session.HideInLog). A session that is gone keeps no log.
+// HideInLog は、セッション id のログに秘密の値を出さないようにする（Session.HideInLog）。無くなった
+// セッションはログを残さない。
 func (r *Registry) HideInLog(id string, secrets []string) {
 	if session, ok := r.Lookup(id); ok {
 		session.HideInLog(secrets)
 	}
 }
 
-// StartForward adds one temporary forward to an existing connected SSH session.
+// StartForward は、今あるつながった SSH のセッションに、一時的な転送を1つ足す。
 func (r *Registry) StartForward(id, kind, listenPort, destination string) (Forward, error) {
 	session, ok := r.Lookup(id)
 	if !ok {
@@ -446,7 +447,7 @@ func (r *Registry) StartForward(id, kind, listenPort, destination string) (Forwa
 	return session.StartForward(kind, listenPort, destination)
 }
 
-// StopForward closes one forward without ending its terminal session.
+// StopForward は、ターミナルのセッションを終わらせずに、転送を1つ閉じる。
 func (r *Registry) StopForward(id, forwardID string) error {
 	session, ok := r.Lookup(id)
 	if !ok {
@@ -561,8 +562,7 @@ func (r *Registry) Rename(id, title string) error {
 	return session.Rename(title)
 }
 
-// UnpinTitle lets the terminal's own title or the connection fallback drive
-// the display title again.
+// UnpinTitle は、表示する名前を、ターミナル自身の名前か、接続名による代わりの名前に、また任せる。
 func (r *Registry) UnpinTitle(id string) error {
 	session, ok := r.Lookup(id)
 	if !ok {

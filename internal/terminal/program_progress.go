@@ -12,20 +12,20 @@ const (
 	ProgramProgressError         ProgramProgressState = "error"
 	ProgramProgressIndeterminate ProgramProgressState = "indeterminate"
 	ProgramProgressPaused        ProgramProgressState = "paused"
-	// OSC 9;4 accepts up to three digits and clamps them to a percentage.
+	// OSC 9;4 は3桁までを受け取り、百分率の範囲に丸める。
 	maxProgramProgressDigits  = 3
 	maxProgramProgressPercent = 100
 )
 
-// ProgramProgress is the current OSC 9;4 report. A nil pointer means cleared;
-// Percent has no meaning for an indeterminate report.
+// ProgramProgress は、今の OSC 9;4 の報告である。nil のポインターは、消されたことを表す。どこまで進んだか
+// 分からない報告では、Percent に意味は無い。
 type ProgramProgress struct {
 	State   ProgramProgressState
 	Percent int
 }
 
-// nextProgramProgress follows the browser's nextTerminalProgress rules,
-// including keeping the percentage on an error or pause without a valid value.
+// nextProgramProgress は、ブラウザの nextTerminalProgress と同じ決まりに従う。有効な値の無い error や pause で
+// 百分率を保つことも同じである。
 func nextProgramProgress(previous *ProgramProgress, payload string) *ProgramProgress {
 	parts := strings.SplitN(payload, ";", 4)
 	if len(parts) < 2 || parts[0] != "4" {

@@ -12,8 +12,8 @@ func encodedText(text string) string { return base64.StdEncoding.EncodeToString(
 
 func percentOf(value int) *int { return &value }
 
-// observeProgramStatus feeds sequences one byte at a time, which also covers
-// a report split across reads, and returns what reached the session.
+// observeProgramStatus は、シーケンスを1バイトずつ渡す。読みをまたいで分かれた報告も、これで確かめられる。
+// セッションに届いたものを返す。
 func observeProgramStatus(t *testing.T, output string) []programStatusReport {
 	t.Helper()
 	var reports []programStatusReport
@@ -136,7 +136,7 @@ func TestTheSummaryIsTheRecordThatMostNeedsTheUser(t *testing.T) {
 	if summary.State != ProgramStatusBlocked || summary.Kind != ProgramStatusPermission {
 		t.Fatalf("summary = %+v, want the blocked record", summary)
 	}
-	// The child takes the name of its nearest ancestor that has one, here the root.
+	// 子は、名前を持ついちばん近い親（ここでは根）の名前を受け継ぐ。
 	if summary.App != "claude" {
 		t.Fatalf("summary app = %q, want it from the root", summary.App)
 	}
@@ -175,7 +175,7 @@ func TestAPromptAndAResetReachTheSessionFromTheOutput(t *testing.T) {
 		PromptStarted: func() { prompts++ },
 		Reset:         func() { resets++ },
 	})
-	// The RIS right after an aborted OSC string still counts.
+	// 打ち切られた OSC の文字列のすぐあとの RIS も数える。
 	observer.Observe([]byte("\x1b]133;A\a$ \x1b]0;cut\x1bc"))
 	if prompts != 1 || resets != 1 {
 		t.Fatalf("prompts = %d, resets = %d, want 1 and 1", prompts, resets)

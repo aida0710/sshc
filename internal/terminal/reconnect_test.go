@@ -146,7 +146,7 @@ func TestAReconnectedShellStartsAtTheLatestTerminalSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The browser window grew after the session opened.
+	// セッションを開いたあとに、ブラウザのウィンドウが大きくなった。
 	if err := session.Resize(terminal.Size{Cols: 200, Rows: 50}); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestAReconnectedShellStartsAtTheLatestTerminalSize(t *testing.T) {
 		t.Fatalf("second automatic reconnect opened with %+v, want 200x50", got)
 	}
 
-	// A manual reconnect after an ordinary exit must use it too.
+	// ふつうに終わったあとの手動の再接続も、その大きさを使わなければならない。
 	spy.at(2).exit(terminal.ExitInfo{Code: 0})
 	testwait.Until(t, func() bool { return !session.Live() })
 	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
@@ -177,7 +177,7 @@ func TestAReconnectedShellStartsAtTheLatestTerminalSize(t *testing.T) {
 func TestAResizeWhileWaitingToReconnectShapesTheNextShell(t *testing.T) {
 	spy := &openSpy{}
 	registry, _ := newRegistry(terminal.DefaultLimits())
-	// A long wait keeps the session in the reconnecting state without a PTY.
+	// 待ちが長いと、セッションは PTY の無いまま、再接続中の状態にとどまる。
 	registry.ReconnectDelay = func(int) time.Duration { return 300 * time.Millisecond }
 	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
@@ -189,8 +189,8 @@ func TestAResizeWhileWaitingToReconnectShapesTheNextShell(t *testing.T) {
 	spy.at(0).exit(transportLost)
 	testwait.Until(t, func() bool { return session.View().State == terminal.StateReconnecting })
 
-	// The browser window grows while there is nothing to resize yet. The
-	// request must not be lost: the browser will not send it again.
+	// 大きさを変えるものがまだ無いあいだに、ブラウザのウィンドウが大きくなる。この求めを失ってはならない。
+	// ブラウザは送り直さない。
 	if err := session.Resize(terminal.Size{Cols: 200, Rows: 50}); err != nil {
 		t.Fatalf("resize while reconnecting = %v", err)
 	}
@@ -406,7 +406,7 @@ func TestStoppingTheReconnectWaitLeavesAnExitedPaneToReconnectByHand(t *testing.
 		t.Fatalf("second stop = %v, want ErrNotReconnecting", err)
 	}
 
-	// The pane is still there and can be reconnected by hand afterwards.
+	// ペインは残っていて、あとから手で再接続できる。
 	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
 		t.Fatalf("manual reconnect after stop: %v", err)
 	}
@@ -907,8 +907,8 @@ func TestStopReconnectingDuringTheHandshakeEndsTheSessionInsteadOfDroppingInput(
 	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
 
 	spy.at(0).exit(transportLost)
-	// reopen has returned the replacement process; its handshake (Ready) is
-	// still pending when the user asks to stop.
+	// reopen は代わりの process を返した。利用者が止めるよう求めた時点で、その握手（Ready）はまだ終わって
+	// いない。
 	testwait.Until(t, func() bool { return spy.count() >= 2 })
 	testwait.Until(t, func() bool { return session.View().State == terminal.StateReconnecting })
 	if err := session.StopReconnecting(); err != nil {

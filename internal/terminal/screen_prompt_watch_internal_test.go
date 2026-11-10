@@ -9,7 +9,7 @@ import (
 
 const shownBashQuestion = "\x1b[?1049h\x1b[HDo you want to proceed?\r\n ❯ 1. Yes\r\n   2. No"
 
-// sessionFollowingScreen is a session reading its screen, with the timer never firing, so a test decides when it reads.
+// sessionFollowingScreen は、画面を読んでいるセッションである。タイマーが鳴らないので、いつ読むかは試験が決める。
 func sessionFollowingScreen(t *testing.T, output string) *Session {
 	t.Helper()
 	session := &Session{size: DefaultSize()}
@@ -72,7 +72,7 @@ func TestAQuestionOffTheScreenStaysUntilItHasBeenGoneForAWhile(t *testing.T) {
 		t.Fatal("the record went with the first read that did not find the question")
 	}
 
-	// It came back, as after a redraw that was slow: the wait starts over.
+	// 遅い描き直しのあとのように、問いが戻ってきた。待ちは最初からやり直す。
 	_, _ = session.screenPrompt.emulator.WriteString("\x1b[H" + shownBashQuestion)
 	session.readScreenPrompt()
 	if !session.screenPrompt.goneSince.IsZero() {
@@ -154,7 +154,7 @@ func TestAResizeReachesTheEmulator(t *testing.T) {
 	}
 }
 
-// Only the emulator's alternate screen is of use here, so make sure a fresh one starts on it.
+// ここで役に立つのは、エミュレーターの代替画面だけである。新しいエミュレーターが代替画面で始まることを確かめる。
 func TestEnterAlternateScreenShowsTheAlternateScreen(t *testing.T) {
 	emulator := vt.NewSnapshotEmulator(10, 2)
 	_, _ = emulator.WriteString(enterAlternateScreen)

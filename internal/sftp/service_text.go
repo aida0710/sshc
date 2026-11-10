@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -90,7 +91,7 @@ func readPreviewBytes(ctx context.Context, remote Remote, cleaned string) ([]byt
 	if contentType == "" {
 		return nil, "", ErrPreviewType
 	}
-	rest, err := io.ReadAll(io.LimitReader(reader, MaxPreviewFileBytes+1-int64(read)))
+	rest, err := readRemoteToEnd(reader, MaxPreviewFileBytes+1-int64(read))
 	if err != nil {
 		return nil, "", err
 	}
@@ -99,6 +100,31 @@ func readPreviewBytes(ctx context.Context, remote Remote, cleaned string) ([]byt
 		return nil, "", ErrPreviewTooLarge
 	}
 	return contents, contentType, nil
+}
+
+// remoteReadChunkBytes は、リモートのファイルに1回の Read で頼む大きさ。pkg/sftp は packet（32KiB）より大きい
+// Read を、いっせいに送る複数の要求に分けるので、数百KiB のファイルはほぼ1往復で届く。io.ReadAll の小さな
+// 読み出しは、1回ごとにサーバの返事を待ってから次を頼んでいて、往復 0.1秒のサーバで 200KiB の写真に 2.3秒
+// かかった。
+const remoteReadChunkBytes = 1 << 20
+
+// readRemoteToEnd は、リモートのファイルを終わりまで（limit バイトに達したらそこまで）、remoteReadChunkBytes
+// ずつ読む。Lstat の大きさは信じない。/proc のファイルは、大きさ0と言っても読める行がある。
+func readRemoteToEnd(reader io.Reader, limit int64) ([]byte, error) {
+	var contents []byte
+	for int64(len(contents)) < limit {
+		chunk := int(min(limit-int64(len(contents)), remoteReadChunkBytes))
+		contents = slices.Grow(contents, chunk)
+		read, err := io.ReadFull(reader, contents[len(contents):len(contents)+chunk])
+		contents = contents[:len(contents)+read]
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return contents, nil
 }
 
 func (s Service) SaveText(
@@ -172,7 +198,7 @@ func readText(ctx context.Context, remote Remote, file fileLocation) (TextFile, 
 	if err != nil {
 		return TextFile{}, err
 	}
-	contents, readErr := io.ReadAll(io.LimitReader(&contextReader{ctx: ctx, reader: opened}, MaxEditableFileBytes+1))
+	contents, readErr := readRemoteToEnd(&contextReader{ctx: ctx, reader: opened}, MaxEditableFileBytes+1)
 	closeErr := opened.Close()
 	if readErr != nil {
 		return TextFile{}, readErr

@@ -32,7 +32,7 @@ func TestReopeningsDescribeTheSessionsStillInUseInTheOrderOpened(t *testing.T) {
 	directory := t.TempDir()
 	reported := filepath.ToSlash(directory)
 	if !strings.HasPrefix(reported, "/") {
-		// OSC 7 writes a Windows drive path as file://host/C:/...
+		// OSC 7 は、Windows のドライブのパスを file://host/C:/... と書く。
 		reported = "/" + reported
 	}
 	starter.processes[0].feed("\x1b]7;file://edge" + reported + "\a$ ")

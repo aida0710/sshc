@@ -35,47 +35,42 @@ type Session struct {
 	problem    string
 	generation uint64
 	ready      *processReadiness
-	// screen is the screen as the output the buffer let go left it, for a
-	// replay that cannot start at the cursor it was asked for. See
-	// screen_checkpoint.go.
+	// screen は、バッファが手放した出力が残した画面である。求められたカーソルから流し直せないときに使う。
+	// screen_checkpoint.go。
 	screen screenCheckpoint
 	// shell は、今のシェルが報告してきたことである。シェルが替わったら丸ごと捨てる。shell_reports.go。
 	shell shellReports
-	// runningCommandTitle says whether the settings let the pane title name the
-	// running command; nil means they do. See running_command_title.go.
+	// runningCommandTitle は、ペインの名前に走っているコマンドを出してよいと設定が言っているかを返す。nil なら
+	// 出してよい。running_command_title.go。
 	runningCommandTitle func() bool
-	// workingDirectory is the last directory the shell reported. See
-	// working_directory.go.
+	// workingDirectory は、シェルが最後に報告したフォルダである。working_directory.go。
 	workingDirectory    string
 	notificationVersion uint64
 	lastNotification    *Notification
-	// programStatus holds the OSC 7501 records. See program_status_records.go.
+	// programStatus は、OSC 7501 の記録を持つ。program_status_records.go。
 	programStatus programStatusRecords
-	// programBlocked hears when the session's program starts or stops waiting
-	// for the person; nil when nobody listens. blockedReported is what it heard
-	// last. See blocked_program.go.
+	// programBlocked は、セッションのプログラムが利用者を待ち始めたとき・待ち終えたときに知らされる。聞き手が
+	// いなければ nil。blockedReported は、最後に知らせた内容である。blocked_program.go。
 	programBlocked  func(BlockedProgramChange)
 	blockedReported bool
-	// screenPrompt reads questions off the screen of a program that cannot report
-	// them. See screen_prompt_watch.go.
+	// screenPrompt は、問いを報告できないプログラムの画面から、問いを読み取る。screen_prompt_watch.go。
 	screenPrompt screenPromptWatch
-	// visible is whether any attached browser may show the session. replies holds the answers on their way
-	// to the program. See visibility_reports.go.
+	// visible は、つながっているブラウザのどれかがこのセッションを見せているかもしれないかである。replies は、
+	// プログラムへ向かう途中の返事を持つ。visibility_reports.go。
 	visible bool
 	replies chan []byte
 
 	connectedCallback func()
 	connectedOnce     sync.Once
 
-	// tmuxSession is the name of the tmux session this session's connection opens,
-	// if the connection uses tmux. It never changes. See tmux_session.go.
+	// tmuxSession は、このセッションの接続が開く tmux のセッションの名前である。接続が tmux を使うときだけ入る。
+	// 変わることは無い。tmux_session.go。
 	tmuxSession string
-	// resumeProgram is the program (its OSC 7501 name) that ran in a shell this
-	// session lost, until the person runs something in the new one. See
-	// resume_program.go.
+	// resumeProgram は、このセッションが失ったシェルで走っていたプログラム（OSC 7501 の名前）である。利用者が
+	// 新しいシェルで何かを実行するまで持つ。resume_program.go。
 	resumeProgram   string
 	resumeDirectory string
-	// resumeStartsInDirectory says the new shell starts where the program ran.
+	// resumeStartsInDirectory は、新しいシェルが、そのプログラムの走っていたフォルダで始まることを表す。
 	resumeStartsInDirectory bool
 
 	reopen         func(ctx context.Context, size Size) (Process, error)
@@ -83,14 +78,14 @@ type Session struct {
 	stopNotice     func(problem string) string
 	reopenFailure  func(error) string
 	startup        func() Startup
-	// log keeps what the terminal showed (session_log.go); nil when the session keeps no log.
+	// log は、ターミナルに出たものを残す（session_log.go）。ログを残さないセッションでは nil。
 	log OutputLog
-	// logConnectedBefore tells a reconnect from the first connection in the log.
+	// logConnectedBefore は、ログの中で、再接続と最初の接続を見分ける。
 	logConnectedBefore bool
-	// logPumpGeneration is the generation whose printed output the log follows from the pump, for a process that
-	// cannot hand over its shell's own output; 0 is none.
+	// logPumpGeneration は、シェルの出力そのものを渡せない process について、ログが pump から出力を追っている
+	// 世代である。0 は追っていない。
 	logPumpGeneration uint64
-	// stopLogWatch stops following the shell output of the generation the log watches (ShellOutput).
+	// stopLogWatch は、ログが見ている世代のシェルの出力（ShellOutput）を追うのをやめる。
 	stopLogWatch func()
 	size         Size
 	// reconnection は、自動再接続の進み具合である。reconnection.go。
@@ -133,39 +128,36 @@ type View struct {
 	State     State
 	Problem   string
 	Reconnect *ReconnectView
-	// Progress is present while an SSH process is connecting or reconnecting.
+	// Progress は、SSH の process が接続中か再接続中のあいだ入る。
 	Progress *ConnectionProgress
-	// HostKeyQuestion is present while the connection waits on whether to
-	// trust a host key that known_hosts does not have.
+	// HostKeyQuestion は、known_hosts に無いホスト鍵を信頼するかの答えを、接続が待っているあいだ入る。
 	HostKeyQuestion *HostKeyQuestion
-	// AwaitingPrompt is whether the connection waits on an answer to an
-	// authentication prompt, the only input Write keeps before it is connected.
+	// AwaitingPrompt は、接続が認証の問いへの答えを待っているかである。つながる前に Write が受け取る入力は
+	// これだけである。
 	AwaitingPrompt bool
-	// PasswordSaveQuestion is true while a password typed for this connection
-	// waits on whether to save it. The password itself is never in the view.
+	// PasswordSaveQuestion は、この接続に打ち込んだパスワードが、保存するかの答えを待っているあいだ真である。
+	// パスワードそのものは View に入れない。
 	PasswordSaveQuestion bool
-	// Resume is present while a program that ran in a lost shell can be started again.
+	// Resume は、失ったシェルで走っていたプログラムを起動し直せるあいだ入る。
 	Resume *ResumeHint
-	// ProgramProgress is the current program's OSC 9;4 report, independent of SSH connection progress.
+	// ProgramProgress は、今のプログラムの OSC 9;4 の報告である。SSH の接続の進み具合とは別である。
 	ProgramProgress *ProgramProgress
-	// ProgramStatus is the OSC 7501 record to show, or nil when there is none.
+	// ProgramStatus は、出す OSC 7501 の記録である。無ければ nil。
 	ProgramStatus *ProgramStatus
 	// Forwards は、このセッションが開いている転送である。
 	Forwards     []Forward
 	Presentation Presentation
-	// ShellProfile is the local shell profile of a shell session.
+	// ShellProfile は、シェルのセッションが使うローカルのシェルプロファイルである。
 	ShellProfile string
-	// WorkingDirectory is where the session works now, or "" when unknown.
+	// WorkingDirectory は、セッションが今いるフォルダである。分からなければ ""。
 	WorkingDirectory string
-	// NotificationVersion increases for every notification a program asked
-	// for; LastNotification is the most recent one.
+	// NotificationVersion は、プログラムが通知を求めるたびに増える。LastNotification は、いちばん新しい通知である。
 	NotificationVersion uint64
 	LastNotification    *Notification
 }
 
-// CommandTarget is the server-derived identity of one live terminal at
-// confirmation time. Generation changes whenever a reconnect installs a new
-// Process, even though the public session ID remains the same.
+// CommandTarget は、確認の時点で生きているターミナル1つを、サーバーが決めた形で指す。再接続が新しい Process を
+// 入れるたびに、公開しているセッションの ID が同じままでも Generation は変わる。
 type CommandTarget struct {
 	ID         string
 	Kind       Kind
@@ -176,10 +168,9 @@ type CommandTarget struct {
 
 func (s *Session) ID() string { return s.id }
 
-// WhenConnected registers work which may run once, after an asynchronous SSH
-// Process has actually authenticated and started its remote shell. The caller
-// may register after Ready has fired; this is needed because a stream ticket
-// must be issued before a successful connection may be recorded.
+// WhenConnected は、非同期の SSH の Process が実際に認証を終え、リモートのシェルを始めたあとに、1度だけ走らせる
+// 処理を登録する。Ready のあとに登録してもよい。接続の成功を記録する前に、ストリームのチケットを発行しなければ
+// ならないためである。
 func (s *Session) WhenConnected(callback func()) {
 	if callback == nil {
 		return
@@ -311,11 +302,9 @@ func (s *Session) Write(p []byte) (int, error) {
 	return process.Write(p)
 }
 
-// AnswerHostKey answers the host key question the connection waits on, if it
-// is still about the key of this fingerprint. A button pressed after the person
-// answered by typing, or after the connection moved on, answers nothing: the
-// answer is only ever written into that question, never into a later prompt
-// or the shell.
+// AnswerHostKey は、接続が待っているホスト鍵の問いに答える。問いが、まだこの fingerprint の鍵についてのもので
+// あるときだけ答える。利用者が打ち込んで答えたあとや、接続が先へ進んだあとに押したボタンは、何にも答えない。
+// 答えはその問いにだけ書き、あとの問いやシェルには書かない。
 func (s *Session) AnswerHostKey(fingerprint string, accept bool) error {
 	s.inputMutex.Lock()
 	defer s.inputMutex.Unlock()
@@ -332,9 +321,8 @@ func (s *Session) AnswerHostKey(fingerprint string, accept bool) error {
 	return nil
 }
 
-// AnswerPasswordSave answers whether to save the password typed for this
-// connection: answer stores or declines it. A refused answer (the Vault is
-// locked) keeps the question open, so the person can answer again.
+// AnswerPasswordSave は、この接続に打ち込んだパスワードを保存するかに答える。answer が保存するか断るかを
+// 行う。断られた答え（Vault がロックされている）は問いを残すので、利用者は答え直せる。
 func (s *Session) AnswerPasswordSave(answer func(TypedPassword) error) error {
 	s.mutex.Lock()
 	asking, ok := s.process.(PasswordSaveAsking)
@@ -353,9 +341,8 @@ func (s *Session) AnswerPasswordSave(answer func(TypedPassword) error) error {
 	return nil
 }
 
-// CommandTarget returns a binding only for a connected Process capable of exact
-// input. Broadcast preview uses this instead of a destination name so it can
-// never open a replacement terminal implicitly.
+// CommandTarget は、正確な入力のできる、接続済みの Process についてだけ、指す先を返す。一斉送信のプレビューは
+// 接続先の名前ではなくこれを使うので、代わりのターミナルを黙って開くことが無い。
 func (s *Session) CommandTarget() (CommandTarget, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -372,8 +359,8 @@ func (s *Session) CommandTarget() (CommandTarget, error) {
 	return CommandTarget{ID: s.id, Kind: s.kind, Alias: alias, Title: s.title, Generation: s.generation}, nil
 }
 
-// WriteCommandInput writes to the exact Process generation captured by a
-// preview. submit=false inserts bytes without a carriage return.
+// WriteCommandInput は、プレビューが捉えた世代の Process にだけ書く。submit が false なら、復帰（CR）を
+// 付けずにバイト列を入れる。
 func (s *Session) WriteCommandInput(ctx context.Context, generation uint64, command string, submit bool) error {
 	if len(command) == 0 || len(command) > MaxCommandBytes {
 		return ErrCommandTooLarge
@@ -492,9 +479,8 @@ func (s *Session) forceClose() error {
 	return process.ForceClose()
 }
 
-// observeProcess installs the readiness observation for the current Process.
-// pending is the state exposed until Ready succeeds. Processes without a Ready
-// capability retain the historical synchronous-Open contract.
+// observeProcess は、今の Process が使えるようになるのを見張り始める。pending は、Ready が成功するまで
+// 見せる状態である。Ready を持たない Process は、Open が同期で済むものとして扱う。
 func (s *Session) observeProcess(pending State, successMessage string) {
 	s.mutex.Lock()
 	s.noteProgramToResumeLocked()
@@ -620,7 +606,7 @@ func (s *Session) pump(now func() time.Time) {
 		s.mutex.Lock()
 		process, ready, generation := s.process, s.ready, s.generation
 		s.mutex.Unlock()
-		// commandTimes are the starts and ends of commands seen in the chunk being read (command_times.go).
+		// commandTimes は、読んでいるかたまりの中で見たコマンドの開始と終了である（command_times.go）。
 		var commandTimes []commandTime
 		observer := newOSCObserver(oscReports{
 			Title:         func(title string) { s.acceptTitle(generation, title) },
@@ -757,7 +743,7 @@ func (s *Session) finish(info ExitInfo) {
 	closeLog(log, stopLogWatch)
 }
 
-// finishLocked records how the session ended and lets go of what it held. The caller holds the mutex.
+// finishLocked は、セッションの終わり方を記録し、持っていたものを手放す。呼び出し側が mutex を持つ。
 func (s *Session) finishLocked(info ExitInfo) {
 	s.exited = &info
 	s.state = StateExited
