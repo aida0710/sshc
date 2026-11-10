@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import type { Terminal } from "@xterm/xterm";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
 import { exitedAbnormally, reconnectsOnEnter, sessionStateText, sessionStatusTone } from "./sessionStatus";
@@ -78,8 +77,8 @@ import { createStreamLink, type StreamLink, type StreamLinkController } from "./
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
-import { TerminalComposer, type ComposerField } from "./TerminalComposer";
-import { composerSendBlock, planComposerSend, type ComposerSendBlock } from "./composerSend";
+import { TerminalComposer } from "./TerminalComposer";
+import { useTerminalComposer } from "./useTerminalComposer";
 import { textBeforeCursor } from "./cursorLineText";
 import { asksForSecret, secretPromptRowsRead } from "./secretPrompt";
 import { terminalCommandApiFor } from "./commands/commandApi";
@@ -174,12 +173,6 @@ const linkPopoverOffsetPx = 8;
 // stays legible on its small screen.
 const mobileTerminalFontSize = 15;
 const desktopTerminalFontSize = 13;
-
-const composerSendBlockMessages: Record<ComposerSendBlock, MessageKey> = {
-  "wait-for-connection": "terminal.composerWaitForConnection",
-  "reconnect-first": "terminal.composerReconnectFirst",
-  "session-ended": "terminal.composerSessionEnded",
-};
 
 export function TerminalView({
   session,
@@ -277,7 +270,6 @@ export function TerminalView({
   // session. It is read when a key arrives, long after the effect that sets up the terminal ran.
   const reconnectByEnter = useRef<(() => void) | null>(null);
   reconnectByEnter.current = reconnectsOnEnter(session) ? recovery.reconnect ?? null : null;
-  const composerReconnects = reconnectByEnter.current !== null;
   const hostKeyAnswer = useHostKeyAnswer(onAnswerHostKey);
   const savedConnection = savedConnectionOf(session);
   const notices = useTerminalNotices({
@@ -333,10 +325,6 @@ export function TerminalView({
     // cleared once it is sent.
     fromComposer?: boolean;
   } | null>(null);
-  const [composerText, setComposerText] = useState("");
-  // The answer typed in the phone's password field. It stays in this state and nowhere else, and is sent as it is.
-  const [composerSecret, setComposerSecret] = useState("");
-  const [cursorAtSecretPrompt, setCursorAtSecretPrompt] = useState(false);
   const sendPaste = useRef<(text: string) => void>(() => {});
   const allowWindowsPaths = useLocalWindowsPaths(session.kind, runTarget);
   const windowsPathsRef = useRef(allowWindowsPaths);
@@ -381,13 +369,23 @@ export function TerminalView({
   // Direct input holds only while the key bar offers the key that switches it back: a key bar preset without the
   // key would otherwise leave the text box hidden with no way to bring it back.
   const directInput = useDirectInput() && offersDirectInput(keyBarLayout);
-  // The phone's field that takes the typing, while it is shown (TerminalComposer).
-  const composerField = useRef<ComposerField>(null);
   // sendKey sends a key of the key bar.
   const sendKey = useRef<(key: KeyBarKey) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
   const promptCursor = useRef<PromptCursor | null>(null);
   const promptJump = useRef<PromptJump | null>(null);
+  const composer = useTerminalComposer({
+    session,
+    link,
+    reconnect: reconnectByEnter.current,
+    bracketedPaste: () => terminal.current?.modes.bracketedPasteMode ?? false,
+    sendInput: (text) => sendInput.current(text),
+    sendPaste: (text) => sendPaste.current(text),
+    confirmPaste: (text) => setPendingPaste({ sessionId: session.id, raw: text, fromComposer: true }),
+    notice: setTerminalNotice,
+  });
+  const composerField = composer.fieldRef;
+  const { setCursorAtSecretPrompt } = composer;
 
   useEffect(() => {
     setOsc52Enabled(initialOsc52Enabled);
@@ -762,7 +760,7 @@ export function TerminalView({
       releaseImeKeys();
       detachOverlay();
     };
-  }, [touchTerminal, selectLinkAt, session.id, api, backgroundConfigured, webglEnabled]);
+  }, [touchTerminal, selectLinkAt, composerField, session.id, api, backgroundConfigured, webglEnabled]);
 
   // Showing a session (opening one, picking one, or the one left after closing another) focuses it. A touch
   // terminal is left alone: focusing it raises the software keyboard, which comes up only for a tap on the terminal.
@@ -848,46 +846,12 @@ export function TerminalView({
     if (!directInput) {
       if (document.activeElement === composerField.current) terminal.current?.focus();
       setDirectInput(true);
-      setComposerSecret("");
+      composer.forgetSecret();
       return;
     }
     const typingInTerminal = terminal.current?.textarea !== undefined && document.activeElement === terminal.current.textarea;
     flushSync(() => setDirectInput(false));
     if (typingInTerminal) composerField.current?.focus();
-  }
-
-  const sendBlock = composerSendBlock(session, link);
-  // A question on the screen of a session that has ended waits for nothing. A link that is only trying to connect
-  // keeps the field hidden, with what was typed: the question is still there when it is back.
-  const composerMasked = cursorAtSecretPrompt && sendBlock !== "reconnect-first" && sendBlock !== "session-ended";
-  // What was typed for a question ends with the question, so it never shows in the clear.
-  if (!composerMasked && composerSecret !== "") setComposerSecret("");
-
-  function submitComposer() {
-    // What is typed in the box stays there, to send to the reconnected shell.
-    if (reconnectByEnter.current !== null) {
-      reconnectByEnter.current();
-      return;
-    }
-    if (sendBlock !== null) {
-      setTerminalNotice(t(composerSendBlockMessages[sendBlock]));
-      return;
-    }
-    if (composerMasked) {
-      // As if typed: a paste could be bracketed, which a password prompt would take as part of the password, and the
-      // dialog that confirms a risky paste would show it.
-      sendInput.current(`${composerSecret}\r`);
-      setComposerSecret("");
-      return;
-    }
-    const plan = planComposerSend(composerText, { bracketedPaste: terminal.current?.modes.bracketedPasteMode ?? false });
-    if (plan.kind === "confirm") {
-      setPendingPaste({ sessionId: session.id, raw: plan.text, fromComposer: true });
-      return;
-    }
-    if (plan.kind === "paste") sendPaste.current(plan.text);
-    sendInput.current("\r");
-    setComposerText("");
   }
 
   function resumeProgram(command: string) {
@@ -1146,7 +1110,7 @@ export function TerminalView({
             sendPaste.current(raw);
             if (pendingPaste.fromComposer === true) {
               sendInput.current("\r");
-              setComposerText("");
+              composer.setText("");
             }
           }}
         />
@@ -1160,15 +1124,15 @@ export function TerminalView({
         onDirectInput={switchDirectInput}
       />
       {directInput ? null : <TerminalComposer
-        value={composerText}
-        secret={composerMasked ? composerSecret : null}
-        sendable={sendBlock === null || composerReconnects}
-        placeholder={composerReconnects ? t("terminal.composerReconnectPlaceholder") : undefined}
+        value={composer.text}
+        secret={composer.secret}
+        sendable={composer.sendable}
+        placeholder={composer.placeholder}
         enterSends={composerEnterSends}
-        fieldRef={composerField}
-        onChange={setComposerText}
-        onSecretChange={setComposerSecret}
-        onSubmit={submitComposer}
+        fieldRef={composer.fieldRef}
+        onChange={composer.setText}
+        onSecretChange={composer.setSecret}
+        onSubmit={composer.submit}
       />}
     </section>
   );
