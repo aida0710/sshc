@@ -14,7 +14,7 @@ export const emptyTerminalArts: readonly EmptyTerminalArt[] = ["none", "network"
 
 // The network is drawn until another art is chosen. A preset that chooses none keeps "none", so the choice of no
 // picture (to spare the battery) stays.
-export const defaultEmptyTerminalArt: EmptyTerminalArt = "network";
+const defaultEmptyTerminalArt: EmptyTerminalArt = "network";
 
 export type DrawnArt = Exclude<EmptyTerminalArt, "none">;
 
@@ -28,7 +28,7 @@ export function answersInput(art: DrawnArt): boolean {
   return art === "aquarium";
 }
 
-export function isEmptyTerminalArt(value: unknown): value is EmptyTerminalArt {
+function isEmptyTerminalArt(value: unknown): value is EmptyTerminalArt {
   return typeof value === "string" && (emptyTerminalArts as readonly string[]).includes(value);
 }
 

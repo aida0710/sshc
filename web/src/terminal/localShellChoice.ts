@@ -8,7 +8,7 @@ export function localShellChoice(t: Translate, runTarget: string | null): LocalC
   return { id: localShellChoiceId, label: t("terminal.openShell"), detail: runTarget ?? t("terminal.localhost") };
 }
 
-export const localShellChoiceId = "local-shell";
+const localShellChoiceId = "local-shell";
 
 // shellRequest opens that shell in a workspace.
 export function shellRequest(workspaceId: string) {

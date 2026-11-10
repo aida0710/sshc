@@ -10,8 +10,6 @@ export type ArtInput = {
   taps: GridCell[];
 };
 
-export const noArtInput: ArtInput = { pointer: null, taps: [] };
-
 // A press that moves farther than this (CSS pixels) is a scroll or a drag, not a tap.
 const tapSlop = 8;
 // A press on any of these does its own thing, so the art does not answer it.

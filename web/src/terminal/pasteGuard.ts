@@ -1,4 +1,4 @@
-export const terminalPastePreviewCharacters = 4_096;
+const terminalPastePreviewCharacters = 4_096;
 
 export type TerminalPasteRisk = "line-break" | "control-character";
 

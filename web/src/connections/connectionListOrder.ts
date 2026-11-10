@@ -12,7 +12,7 @@ export type ListSection = {
   items: DecoratedHost[];
 };
 
-export function labelFor(host: HostEntry): string {
+function labelFor(host: HostEntry): string {
   return host.identity.alias === "" ? `Host ${host.patterns.join(" ")}` : host.identity.alias;
 }
 

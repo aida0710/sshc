@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
 
-export async function backgroundImageURL(name: string): Promise<string> {
+async function backgroundImageURL(name: string): Promise<string> {
   const response = await apiClient.send(`/api/v1/terminal/backgrounds/${encodeURIComponent(name)}`, {
     method: "GET",
   });
