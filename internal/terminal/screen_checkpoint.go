@@ -2,22 +2,23 @@ package terminal
 
 import "sshc/third_party/vt"
 
-// The replay buffer (Ring) keeps only the newest output. A browser terminal that starts afresh, or that was away
-// longer than the buffer reaches, can replay only that much: a program that drew its screen before it, such as a
-// full-screen program that redraws only what changes (Claude Code), would be shown without what it drew. Like tmux
-// with a pane, the engine follows the output with a terminal emulator of its own. It reads only what the buffer
-// lets go, so its screen is the one the oldest retained byte was written on: such a browser is sent that screen
-// first and then the retained output as it was (Session.readOutputLocked), which keeps the newest output exactly
-// as the program wrote it.
+// 流し直しのバッファ（Ring）は、いちばん新しい出力しか持たない。新しく始めるブラウザのターミナルや、
+// バッファが届く範囲より長く離れていたターミナルは、その分しか流し直せない。それより前に画面を描いた
+// プログラム、たとえば変わったところだけを描き直す全画面のプログラム（Claude Code）は、描いたものが無い
+// まま出てしまう。そこで、tmux がペインに対してするように、エンジンは自前のターミナルエミュレーターで出力を
+// 追う。読むのはバッファが手放したものだけなので、その画面は、残っているいちばん古いバイトが書かれたときの
+// 画面である。そういうブラウザには、まずその画面を送り、続けて残っている出力をそのまま送る
+// （Session.readOutputLocked）。こうすると、いちばん新しい出力は、プログラムが書いたとおりのままになる。
 type screenCheckpoint struct {
-	// emulator has read the output before position. It is made when the buffer first lets output go: until then,
-	// replaying from the first byte reproduces everything.
+	// emulator は、position より前の出力を読み終えている。バッファが初めて出力を手放したときに作る。それまでは、
+	// 最初のバイトから流し直せば、すべてを再現できる。
 	emulator screenEmulator
 	position uint64
-	// newEmulator makes the emulator; nil makes a vt.SnapshotEmulator.
+	// newEmulator は、エミュレーターを作る。nil なら vt.SnapshotEmulator を作る。
 	newEmulator func(Size) screenEmulator
-	// sizes are the terminal's sizes, each from the output position it was set at, oldest first. The first is the
-	// size the emulator has (or is made with); the emulator takes the next once it reads up to its position.
+	// sizes は、ターミナルの大きさである。それぞれ、決まったときの出力の位置を持ち、古い順に並ぶ。最初のものは、
+	// エミュレーターが今持っている（または作るときに使う）大きさである。エミュレーターは、次の大きさの位置まで
+	// 読んだら、その大きさに変える。
 	sizes []sizeChange
 }
 
@@ -26,13 +27,13 @@ type sizeChange struct {
 	size Size
 }
 
-// screenEmulator follows the output: vt.SnapshotEmulator, or what a test puts in its place.
+// screenEmulator は、出力を追う。vt.SnapshotEmulator か、試験が代わりに入れるものである。
 type screenEmulator interface {
 	Write(output []byte) (int, error)
 	Resize(cols, rows int)
-	// AtGround reports that the output read so far does not end inside an escape sequence or a UTF-8 character.
+	// AtGround は、ここまで読んだ出力が、エスケープシーケンスや UTF-8 の文字の途中で終わっていないことを返す。
 	AtGround() bool
-	// Snapshot returns the sequences that show what the emulator shows.
+	// Snapshot は、エミュレーターが出しているものを出すシーケンスを返す。
 	Snapshot() string
 }
 
@@ -40,9 +41,9 @@ func newScreenCheckpoint(size Size) screenCheckpoint {
 	return screenCheckpoint{sizes: []sizeChange{{at: 0, size: size}}}
 }
 
-// sizesFrom returns the size the output at position start was written for, and each later change: what a browser
-// needs to replay the output at the width it was written for (Replay.Sizes). The sizes reach back to the oldest
-// output the buffer keeps, so start is never older than the first.
+// sizesFrom は、位置 start の出力が書かれたときの大きさと、そのあとの変更を1つずつ返す。ブラウザが、出力を
+// 書かれたときの幅で流し直すのに要るものである（Replay.Sizes）。大きさは、バッファが持ついちばん古い出力まで
+// さかのぼるので、start が最初のものより古いことは無い。
 func (c *screenCheckpoint) sizesFrom(start uint64) []SizeAt {
 	var sizes []SizeAt
 	for _, change := range c.sizes {
@@ -55,7 +56,7 @@ func (c *screenCheckpoint) sizesFrom(start uint64) []SizeAt {
 	return sizes
 }
 
-// resized records that the output from position at on is written for size.
+// resized は、位置 at 以降の出力が size に向けて書かれることを記録する。
 func (c *screenCheckpoint) resized(at uint64, size Size) {
 	if last := len(c.sizes) - 1; last > 0 && c.sizes[last].at == at {
 		c.sizes[last].size = size
@@ -65,7 +66,7 @@ func (c *screenCheckpoint) resized(at uint64, size Size) {
 	c.takeSizes()
 }
 
-// keepUp reads the output that writing chunk is about to push out of buffer. Call it before the write.
+// keepUp は、chunk を書くと buffer から押し出される出力を読む。書く前に呼ぶ。
 func (c *screenCheckpoint) keepUp(buffer *Ring, chunk []byte) {
 	written := buffer.Written()
 	end := written + uint64(len(chunk))
@@ -89,12 +90,13 @@ func (c *screenCheckpoint) keepUp(buffer *Ring, chunk []byte) {
 	}
 }
 
-// settleStep is how much retained output settle reads at a time. Most sequences end within it; an inline image
-// takes several.
+// settleStep は、settle が、残っている出力を1度に読む量である。たいていのシーケンスはその中で終わる。
+// インラインの画像は何度かかかる。
 const settleStep = 256
 
-// settle reads on from the buffer while the emulator is inside an escape sequence or a UTF-8 character, so a
-// replay can start where the checkpoint is: from there the output parses as it did. Call it after the write.
+// settle は、エミュレーターがエスケープシーケンスや UTF-8 の文字の途中にいるあいだ、バッファから先を読む。
+// 流し直しを、チェックポイントの位置から始められるようにするためである。そこからなら、出力は元と同じように
+// 解釈される。書いたあとに呼ぶ。
 func (c *screenCheckpoint) settle(buffer *Ring) {
 	for c.emulator != nil && !c.emulator.AtGround() && c.position < buffer.Written() {
 		retained, _ := buffer.ReadAvailableFrom(c.position, settleStep)
@@ -107,8 +109,8 @@ func (c *screenCheckpoint) settle(buffer *Ring) {
 	}
 }
 
-// snapshot returns the sequences that show the checkpoint's screen and the output position they stand for. There
-// is a checkpoint once the buffer has let output go.
+// snapshot は、チェックポイントの画面を出すシーケンスと、それが表す出力の位置を返す。チェックポイントが
+// あるのは、バッファが出力を手放したあとである。
 func (c *screenCheckpoint) snapshot() (string, uint64) {
 	return c.emulator.Snapshot(), c.position
 }
@@ -124,7 +126,7 @@ func (c *screenCheckpoint) makeEmulator() screenEmulator {
 	return vt.NewSnapshotEmulator(int(size.Cols), int(size.Rows))
 }
 
-// read gives the emulator output from c.position on, taking each size at the position it was set at.
+// read は、c.position 以降の出力をエミュレーターに渡す。大きさは、それぞれ決まった位置で当てる。
 func (c *screenCheckpoint) read(output []byte) {
 	for len(output) > 0 {
 		piece := output

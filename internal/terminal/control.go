@@ -1,7 +1,7 @@
 package terminal
 
-// ControlState is an explicit lifecycle observation suitable for automation.
-// It never derives readiness from terminal text.
+// ControlState は、自動化に向いた、はっきりしたライフサイクルの状態である。使えるかどうかを、ターミナルの
+// 文字から推し量ることは無い。
 type ControlState string
 
 const (
@@ -11,16 +11,16 @@ const (
 	ControlExited       ControlState = "exited"
 )
 
-// ControlSnapshot binds one scrollback read to the exact process generation
-// and explicit lifecycle state observed under the same lock.
+// ControlSnapshot は、スクロールバックの読み1つを、同じロックの中で見た process の世代と、ライフサイクルの
+// 状態に結び付ける。
 type ControlSnapshot struct {
 	Generation uint64
 	State      ControlState
 	Read       RingRead
 }
 
-// ReadControl returns bounded scrollback and machine-readable state. The bool
-// is false only when cursor points beyond this session's current output.
+// ReadControl は、長さに上限のあるスクロールバックと、機械が読める状態を返す。bool が false になるのは、
+// cursor がこのセッションの今の出力より先を指すときだけである。
 func (s *Session) ReadControl(cursor uint64, limit int) (ControlSnapshot, bool) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

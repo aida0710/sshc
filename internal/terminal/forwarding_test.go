@@ -10,7 +10,7 @@ import (
 	"sshc/internal/terminal"
 )
 
-// Allow slow CI scheduling while still catching a session lock held across I/O.
+// CI の遅い割り当てを許しつつ、I/O をまたいでセッションのロックを持ち続ける誤りは捕まえる。
 const forwardReplyTestDeadline = 5 * time.Second
 
 type waitingForwardProcess struct {

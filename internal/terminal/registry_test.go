@@ -415,9 +415,8 @@ func TestAReplayCutInsideAnInlineImageStartsAfterTheImage(t *testing.T) {
 	session := openShell(t, registry)
 	process := starter.last()
 
-	// The image is longer than the scrollback, so the oldest retained byte is
-	// inside its base64. Replaying from there would print the base64 as text.
-	// It stays below the 32 KiB the fake process hands over per read.
+	// 画像はスクロールバックより長いので、残っているいちばん古いバイトは、その base64 の途中にある。そこから
+	// 流し直すと、base64 が文字として出てしまう。偽の process が1度の読みで渡す 32 KiB よりは短い。
 	image := "\x1b]1337;File=inline=1:" + strings.Repeat("QUFB", terminal.MinScrollback*3/8) + "\a"
 	process.feed("before\n" + image + "after\n")
 	testwait.Until(t, func() bool { return strings.HasSuffix(string(snapshotOf(session)), "after\n") })
@@ -465,8 +464,8 @@ func TestAttachFromReplaysOnlyMissingBytesAndReportsARingGap(t *testing.T) {
 	}
 }
 
-// Output read in many small pieces (a macOS PTY returns about 1 KiB at a
-// time) reaches an attachment as one chunk once it is taken.
+// 小さく分かれて何度も読まれた出力（macOS の PTY は1度に約 1 KiB を返す）は、取り出されるときに、1つの
+// かたまりとしてつなぎ先に届く。
 func TestAnAttachmentTakesQueuedOutputTogether(t *testing.T) {
 	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: terminal.MinScrollback})
 	session := openShell(t, registry)
@@ -488,9 +487,8 @@ func TestAnAttachmentTakesQueuedOutputTogether(t *testing.T) {
 	}
 }
 
-// An attachment further behind than the replay buffer holds could not catch up
-// by attaching again either, so it goes on from the oldest output the buffer
-// still holds, says it skipped, and keeps following the live output.
+// 流し直しのバッファが持つ範囲より遅れたつなぎ先は、つなぎ直しても追いつけない。そのため、バッファがまだ
+// 持っているいちばん古い出力から続け、飛ばしたことを伝え、今の出力を追い続ける。
 func TestAnAttachmentThatFallsBehindSkipsToWhatTheBufferStillHolds(t *testing.T) {
 	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: terminal.MinScrollback})
 	session := openShell(t, registry)
@@ -513,7 +511,7 @@ func TestAnAttachmentThatFallsBehindSkipsToWhatTheBufferStillHolds(t *testing.T)
 		t.Fatalf("took %d bytes (open %v, skipped %v), want the %d retained bytes after a skip", len(read.Data), open, read.Skipped, len(retained))
 	}
 
-	// The notice left by the output already taken says nothing new.
+	// すでに取り出した出力が残した知らせは、新しいことを何も伝えない。
 	select {
 	case <-stalled.Ready():
 	default:

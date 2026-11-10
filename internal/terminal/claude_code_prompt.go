@@ -6,56 +6,56 @@ import (
 	"strings"
 )
 
-// claudeCodePromptShape is one kind of question Claude Code asks, as it reads on screen around the option the person
-// has selected. A shape looks at the words above the options or at the footer below them.
+// claudeCodePromptShape は、Claude Code が尋ねる問いの1つの種類である。利用者が選んでいる選択肢のまわりに、
+// 画面でどう読めるかで表す。選択肢の上の言葉か、下のフッターを見る。
 type claudeCodePromptShape struct {
-	// kind is what Claude Code itself reports for this question over OSC 7501.
+	// kind は、この問いについて Claude Code 自身が OSC 7501 で報告する種類である。
 	kind ProgramStatusKind
-	// above is words in the rows above the selected option, up to the rule drawn over the question. The rows are
-	// joined, since a question folds wherever the pane is narrow.
+	// above は、選んでいる選択肢より上の行にある言葉である。問いの上に引かれた線までを見る。問いはペインの狭い
+	// ところで折り返すので、行をつないで見る。
 	above string
-	// footer matches the rows of the footer, joined the same way.
+	// footer は、同じようにつないだフッターの行に合う。
 	footer *regexp.Regexp
 }
 
-// claudeCodePromptShapes are the questions the engine can read, as Claude Code 2.1.318 draws them. The screens they
-// were taken from are in testdata/claude_code_prompts. A later version that rewords one is no longer read, so it goes
-// unnoticed instead of being reported wrongly: add its screen there and its words here.
+// claudeCodePromptShapes は、エンジンが読める問いである。Claude Code 2.1.318 の描き方による。もとにした画面は
+// testdata/claude_code_prompts にある。あとの版が言い回しを変えた問いは読めなくなるので、誤って報告される
+// のではなく、気づかれないままになる。そのときは、画面をそこに足し、言葉をここに足す。
 var claudeCodePromptShapes = []claudeCodePromptShape{
-	// AskUserQuestion. The question and its options come from the model in any language, so this comes first: only the
-	// footer is Claude Code's. Without "to navigate" it would also read Claude Code's own menus, such as /theme, which
-	// the person opened.
+	// AskUserQuestion。問いと選択肢は、モデルがどの言語でも書くので、これを最初に置く。Claude Code のものは
+	// フッターだけである。"to navigate" が無いと、利用者が開いた /theme のような Claude Code 自身のメニューも
+	// 読んでしまう。
 	{kind: ProgramStatusQuestion, footer: regexp.MustCompile(`^Enter to select .*to navigate .*Esc to cancel$`)},
-	// AskUserQuestion's last tab when it asks several questions.
+	// AskUserQuestion がいくつも尋ねるときの、最後のタブ。
 	{kind: ProgramStatusQuestion, above: "Ready to submit your answers?"},
-	// Bash, Write, Edit and WebFetch: "Do you want to proceed?", "Do you want to create hello.txt?".
+	// Bash、Write、Edit、WebFetch。"Do you want to proceed?"、"Do you want to create hello.txt?"。
 	{kind: ProgramStatusPermission, above: "Do you want"},
-	// ExitPlanMode with a plan, and with none.
+	// ExitPlanMode。計画があるときと、無いとき。
 	{kind: ProgramStatusPermission, above: "Would you like to proceed?"},
 	{kind: ProgramStatusPermission, above: "Exit plan mode?"},
 }
 
-// claudeCodeSelectionMarks are the marks by the option a question has selected. tmux draws "_" for "❯" when the server's
-// locale is not UTF-8.
+// claudeCodeSelectionMarks は、問いが選んでいる選択肢の横の印である。サーバーのロケールが UTF-8 でないとき、
+// tmux は "❯" を "_" と描く。
 var claudeCodeSelectionMarks = map[string]bool{"❯": true, "_": true}
 
-// claudeCodeOptionNumber follows a selection mark. It tells an option from the input row, which has the mark too.
+// claudeCodeOptionNumber は、選択の印に続く。同じ印を持つ入力の行と、選択肢を見分ける。
 var claudeCodeOptionNumber = regexp.MustCompile(`^ \d+\. `)
 
-// claudeCodeInputMark starts the row Claude Code takes the person's next message on. That row is not shown while
-// Claude Code asks a question.
+// claudeCodeInputMark は、Claude Code が利用者の次のメッセージを受け取る行の先頭である。Claude Code が
+// 問いを尋ねているあいだ、その行は出ない。
 const claudeCodeInputMark = "❯"
 
-// tmuxPaneBorders are the cells of a vertical pane border, with its junctions: single (tmux's default), heavy and
-// double pane-border-lines.
+// tmuxPaneBorders は、ペインの縦の境と、その交点のマスである。pane-border-lines の single（tmux の既定）、
+// heavy、double を含む。
 var tmuxPaneBorders = map[string]bool{
 	"│": true, "├": true, "┤": true, "┼": true,
 	"┃": true, "┣": true, "┫": true, "╋": true,
 	"║": true, "╠": true, "╣": true, "╬": true,
 }
 
-// claudeCodePromptOnScreen returns what a Claude Code question on screen waits for, and whether one is there. screen
-// is the text of each cell. Any pane of a split window may hold the question.
+// claudeCodePromptOnScreen は、画面にある Claude Code の問いが待っているものと、問いがあるかを返す。screen は
+// 各マスの文字である。分割したウィンドウのどのペインに問いがあってもよい。
 func claudeCodePromptOnScreen(screen [][]string) (ProgramStatusKind, bool) {
 	for rowIndex, row := range screen {
 		for column, cell := range row {
@@ -74,8 +74,8 @@ func claudeCodePromptOnScreen(screen [][]string) (ProgramStatusKind, bool) {
 	return "", false
 }
 
-// tmuxPaneEdge returns the column of the nearest pane border from column in the direction step (-1 or 1), or the
-// column just outside the row.
+// tmuxPaneEdge は、column から step（-1 か 1）の向きで、いちばん近いペインの境の列を返す。無ければ、行の
+// すぐ外の列を返す。
 func tmuxPaneEdge(row []string, column, step int) int {
 	for column += step; column >= 0 && column < len(row); column += step {
 		if tmuxPaneBorders[row[column]] {
@@ -94,12 +94,12 @@ func isBlank(cells []string) bool {
 	return true
 }
 
-// promptPane is the text of one pane's rows around a selected option. A pane that takes the whole width is not told
-// from one above or below it until a rule ends it.
+// promptPane は、選んでいる選択肢のまわりの、1つのペインの行の文字である。幅いっぱいのペインは、線で
+// 終わるまで、上や下のペインと見分けられない。
 type promptPane struct {
-	// above holds the rows above the selected option, nearest first; below the rows under it, nearest first.
+	// above は、選んでいる選択肢より上の行を、近い順に持つ。below は、下の行を、近い順に持つ。
 	above, below []string
-	// reachesScreenBottom says that the last of below is the screen's last row, where tmux keeps its status line.
+	// reachesScreenBottom は、below の最後が画面の最後の行であることを表す。tmux はそこにステータス行を置く。
 	reachesScreenBottom bool
 }
 
@@ -121,7 +121,7 @@ func newPromptPane(screen [][]string, selectedRow, left, right int) promptPane {
 	return pane
 }
 
-// question returns the kind of the shape the pane reads as.
+// question は、このペインが読める形の種類を返す。
 func (p promptPane) question() (ProgramStatusKind, bool) {
 	for _, shape := range claudeCodePromptShapes {
 		switch {
@@ -134,7 +134,7 @@ func (p promptPane) question() (ProgramStatusKind, bool) {
 	return "", false
 }
 
-// textAboveOptions is the rows from the rule over the question down to the selected option, as one line.
+// textAboveOptions は、問いの上の線から、選んでいる選択肢までの行を、1行にしたものである。
 func (p promptPane) textAboveOptions() string {
 	var rows []string
 	for _, row := range p.above {
@@ -147,8 +147,8 @@ func (p promptPane) textAboveOptions() string {
 	return strings.Join(rows, " ")
 }
 
-// endsWithFooter reports whether a footer stands under the options, folded over any number of rows, with nothing
-// else after it.
+// endsWithFooter は、選択肢の下にフッターがあり、そのあとに何も無いかを返す。フッターは何行に折り返して
+// いてもよい。
 func (p promptPane) endsWithFooter(footer *regexp.Regexp) bool {
 	for start := range p.below {
 		text := ""
@@ -162,9 +162,9 @@ func (p promptPane) endsWithFooter(footer *regexp.Regexp) bool {
 	return false
 }
 
-// endsAfter reports whether the rows of below from index on can belong to a question that is still being asked. This
-// is what tells the question from the same words printed by `cat` or quoted in Claude Code's own answer: Claude Code
-// indents what follows its options, and shows no input row, while a shell prompt under the words starts at the edge.
+// endsAfter は、below の index 以降の行が、まだ尋ねている問いのものでありうるかを返す。これで、問いを、`cat` が
+// 出した同じ言葉や、Claude Code 自身の答えに引用された同じ言葉と見分ける。Claude Code は選択肢のあとを
+// 字下げし、入力の行を出さない。言葉の下のシェルのプロンプトは、端から始まる。
 func (p promptPane) endsAfter(index int) bool {
 	for ; index < len(p.below); index++ {
 		row := p.below[index]
@@ -180,7 +180,7 @@ func (p promptPane) endsAfter(index int) bool {
 	return true
 }
 
-// isRuleRow reports whether a row is a line across the pane: one Claude Code draws, or the border between two panes.
+// isRuleRow は、行がペインを横切る線かを返す。Claude Code が描く線か、2つのペインの境である。
 func isRuleRow(row string) bool {
 	row = strings.TrimLeft(row, " ")
 	return strings.HasPrefix(row, "─") || strings.HasPrefix(row, "╌")

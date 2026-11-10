@@ -42,7 +42,7 @@ func TestOSCProgressAppliesTheBrowserStateTransitions(t *testing.T) {
 			})
 			for _, step := range steps {
 				t.Run(step.name, func(t *testing.T) {
-					// Splitting at every byte covers OSC payloads and both terminators.
+					// 1バイトずつに分けると、OSC の本文と、2通りの終端の両方を確かめられる。
 					for _, value := range []byte("\x1b]9;" + step.payload + terminator) {
 						observer.Observe([]byte{value})
 					}

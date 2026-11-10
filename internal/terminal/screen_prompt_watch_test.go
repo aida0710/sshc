@@ -11,8 +11,8 @@ import (
 	"sshc/internal/testwait"
 )
 
-// tmuxOutput is what a tmux client wrote to its terminal while real Claude Code 2.1.318 asked, in a window of the size
-// the file name says, and then what it wrote once the person had answered.
+// tmuxOutput は、本物の Claude Code 2.1.318 が、ファイル名が表す大きさのウィンドウで尋ねているあいだに、tmux の
+// クライアントがターミナルへ書いたものと、利用者が答えたあとに書いたものである。
 func tmuxOutput(t *testing.T, name string) (asking, answered string) {
 	t.Helper()
 	read := func(file string) string {
@@ -70,7 +70,7 @@ func TestASizeChangedOnTheAlternateScreenIsFollowed(t *testing.T) {
 	session, process, log := openWatchedShell(t)
 	enter := "\x1b[?1049h"
 	process.feed(enter)
-	// The output reaches the emulator before the buffer, so the size change comes after that.
+	// 出力はバッファより先にエミュレーターへ届くので、大きさの変更はそのあとに来る。
 	testwait.Until(t, func() bool { return session.CanAttachFrom(uint64(len(enter))) })
 
 	if err := session.Resize(terminal.Size{Cols: 40, Rows: 30}); err != nil {
@@ -112,7 +112,7 @@ func TestReattachingToTmuxKeepsTheWaitWithoutNotifyingAgain(t *testing.T) {
 	spy.at(0).exit(transportLost)
 	testwait.Until(t, func() bool { return spy.count() >= 2 && session.View().State == terminal.StateConnected })
 
-	// tmux draws the same question again for the new client.
+	// tmux は、新しいクライアントのために、同じ問いをもう一度描く。
 	spy.at(1).feed(asking)
 	testwait.Until(t, func() bool { return programStatusOf(session) == terminal.ProgramStatusBlocked })
 	if changes := log.heard(); len(changes) != 1 {

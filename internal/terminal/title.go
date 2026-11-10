@@ -5,8 +5,8 @@ import "time"
 // 一覧とペインに出す名前（利用者が付けた名前、プログラムが OSC で付けた名前、
 // 接続先の名前）と、OSC で届いた通知を扱う。
 
-// TitleSource says where the display title came from so the UI can offer
-// "return to the automatic name" only when a user pinned one.
+// TitleSource は、表示する名前がどこから来たかを表す。画面が「自動の名前に戻す」を、利用者が名前を固定した
+// ときだけ出せるようにする。
 type TitleSource string
 
 const (
@@ -16,7 +16,7 @@ const (
 	TitleFallback   TitleSource = "fallback"
 )
 
-// Presentation is the display-only view of the title state.
+// Presentation は、名前の状態のうち、表示にだけ使う部分である。
 type Presentation struct {
 	DisplayTitle string
 	TitleSource  TitleSource
@@ -37,8 +37,8 @@ func (s *Session) Rename(title string) error {
 	return nil
 }
 
-// UnpinTitle returns the display title to the title the terminal set or the
-// connection fallback without touching the running process.
+// UnpinTitle は、表示する名前を、ターミナルが決めた名前か、接続名による代わりの名前に戻す。走っている
+// process には触れない。
 func (s *Session) UnpinTitle() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -46,12 +46,11 @@ func (s *Session) UnpinTitle() {
 	s.recomputeTitleLocked()
 }
 
-// acceptTitle records an OSC 0/1/2 title. An empty title means the program
-// cleared it, so the pane falls back to its connection name.
+// acceptTitle は、OSC 0/1/2 の名前を記録する。空の名前は、プログラムが名前を消したことを表すので、ペインは
+// 接続名に戻る。
 //
-// It also records which program sent the title. A title the running program
-// sent itself is shown as it is; one the shell sent at its prompt gets the
-// running command's name in front (running_command_title.go).
+// どのプログラムが名前を送ったかも記録する。走っているプログラムが自分で送った名前は、そのまま出す。
+// シェルがプロンプトで送った名前には、走っているコマンドの名前を前に付ける（running_command_title.go）。
 func (s *Session) acceptTitle(generation uint64, title string) {
 	program, running := s.foregroundProgram()
 	s.mutex.Lock()
@@ -70,9 +69,8 @@ func (s *Session) acceptTitle(generation uint64, title string) {
 	s.recomputeTitleLocked()
 }
 
-// acceptNotification records an OSC 9/99/777 notification. Clients compare
-// NotificationVersion between polls, so every request counts even when the
-// text repeats.
+// acceptNotification は、OSC 9/99/777 の通知を記録する。クライアントは、問い合わせのたびに
+// NotificationVersion を比べるので、文が同じでも、求めの1つ1つを数える。
 func (s *Session) acceptNotification(generation uint64, title, body string, occurredAt time.Time) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

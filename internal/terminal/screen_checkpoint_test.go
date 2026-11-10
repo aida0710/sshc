@@ -10,10 +10,10 @@ import (
 	"sshc/third_party/vt"
 )
 
-// recordingEmulator keeps what the checkpoint gives it, so a test can compare that with the output.
+// recordingEmulator は、チェックポイントが渡したものを持つ。試験が、それを出力と比べられる。
 type recordingEmulator struct {
 	read []byte
-	// resizedAt is how much output it had read at each resize.
+	// resizedAt は、大きさが変わるたびに、そこまでに読んでいた出力の量である。
 	resizedAt []int
 	sizes     []Size
 }
@@ -28,14 +28,14 @@ func (r *recordingEmulator) Resize(cols, rows int) {
 	r.sizes = append(r.sizes, Size{Cols: uint16(cols), Rows: uint16(rows)})
 }
 
-// AtGround reads an OSC that has not ended (ESC ] without a BEL after it) as being inside a sequence.
+// AtGround は、終わっていない OSC（あとに BEL の無い ESC ]）を、シーケンスの途中として読む。
 func (r *recordingEmulator) AtGround() bool {
 	return bytes.LastIndex(r.read, []byte("\x1b]")) <= bytes.LastIndexByte(r.read, '\a')
 }
 
 func (r *recordingEmulator) Snapshot() string { return "" }
 
-// publishTo writes chunk the way Session.publish does.
+// publishTo は、Session.publish と同じやり方で chunk を書く。
 func publishTo(checkpoint *screenCheckpoint, buffer *Ring, chunk []byte) {
 	checkpoint.keepUp(buffer, chunk)
 	_, _ = buffer.Write(chunk)
@@ -49,7 +49,7 @@ func TestTheCheckpointAndTheBufferTogetherHoldAllTheOutput(t *testing.T) {
 	random := rand.New(rand.NewPCG(1, 2))
 	var output []byte
 	for step := range 400 {
-		// Mostly small pieces, now and then one larger than the whole buffer.
+		// ほとんどは小さなかたまりで、ときどき、バッファ全体より大きいものが混じる。
 		size := random.IntN(40)
 		if step%37 == 0 {
 			size = 64 + random.IntN(100)
@@ -110,8 +110,8 @@ func TestTheCheckpointTakesEachSizeWhereTheOutputReachedIt(t *testing.T) {
 	}
 }
 
-// A browser that attaches replays the output at the size it was written for: the size in effect where the
-// replay starts, then each later change at the position it was made.
+// つなぐブラウザは、出力を、書かれたときの大きさで流し直す。流し直しが始まるところで効いている大きさと、
+// そのあとの変更を、それぞれ変わった位置で受け取る。
 func TestAReplayCarriesTheSizesItsOutputWasWrittenFor(t *testing.T) {
 	session := &Session{buffer: NewRing(MinScrollback), screen: newScreenCheckpoint(Size{Cols: 80, Rows: 24}), streams: map[*Stream]bool{}}
 	session.publish([]byte("written at 80 columns\r\n"))
@@ -143,8 +143,9 @@ func TestAReplayCarriesTheSizesItsOutputWasWrittenFor(t *testing.T) {
 	}
 }
 
-// A full-screen program draws its screen once and then rewrites only what changes. Once the buffer has let the
-// drawing go, a terminal that replays from the start gets the screen from the checkpoint and the rest as written.
+// 全画面のプログラムは、画面を1度描き、そのあとは変わったところだけを書き直す。バッファがその描画を
+// 手放したあと、最初から流し直すターミナルは、画面をチェックポイントから受け取り、残りを書かれたとおりに
+// 受け取る。
 func TestAReplayFromTheStartShowsWhatTheBufferLetGo(t *testing.T) {
 	size := Size{Cols: 40, Rows: 8}
 	session := &Session{buffer: NewRing(MinScrollback), screen: newScreenCheckpoint(size), streams: map[*Stream]bool{}}
@@ -179,7 +180,7 @@ func TestAReplayFromTheStartShowsWhatTheBufferLetGo(t *testing.T) {
 	}
 }
 
-// piecesOf cuts text into pieces of at most size bytes, the way a PTY hands output over.
+// piecesOf は、PTY が出力を渡すように、text を、多くても size バイトのかたまりに切る。
 func piecesOf(text string, size int) func(func(string) bool) {
 	return func(yield func(string) bool) {
 		for len(text) > 0 {
@@ -192,8 +193,8 @@ func piecesOf(text string, size int) func(func(string) bool) {
 	}
 }
 
-// BenchmarkFollowingOutput is how fast a session takes output once its replay buffer lets output go and the
-// checkpoint follows it: coloured lines that scroll, as a build log does.
+// BenchmarkFollowingOutput は、流し直しのバッファが出力を手放し、チェックポイントがそれを追うようになった
+// あと、セッションが出力を受け取る速さを測る。ビルドのログのように、色の付いた行が流れていく。
 func BenchmarkFollowingOutput(b *testing.B) {
 	var lines strings.Builder
 	for line := range 100 {

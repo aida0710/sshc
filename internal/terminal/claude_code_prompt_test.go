@@ -10,11 +10,12 @@ import (
 	"sshc/third_party/vt"
 )
 
-// claudeCodePromptScreens holds what Claude Code 2.1.318 drew in tmux 3.6, as the engine's emulator read tmux's output,
-// with the user name and the host name replaced. The directory says what a screen should read as.
+// claudeCodePromptScreens は、Claude Code 2.1.318 が tmux 3.6 の中で描いたものを持つ。エンジンのエミュレーターが
+// tmux の出力を読んだ形で、ユーザー名とホスト名は置き換えてある。フォルダの名前が、その画面をどう読むべきかを
+// 表す。
 const claudeCodePromptScreens = "testdata/claude_code_prompts"
 
-// screenWithText is the screen an emulator of that size shows after printing text, a row to a line.
+// screenWithText は、その大きさのエミュレーターが、text を1行ずつ出したあとに見せる画面である。
 func screenWithText(text string, cols, rows int) [][]string {
 	emulator := vt.NewSnapshotEmulator(cols, rows)
 	_, _ = emulator.WriteString(strings.ReplaceAll(strings.TrimRight(text, "\n"), "\n", "\r\n"))
@@ -87,9 +88,9 @@ func TestAFooterFollowedByAShellPromptIsNotAQuestion(t *testing.T) {
 	}
 }
 
-// Text shown by a program that leaves nothing under it reads like the question itself. These are the false positives
-// left, on the alternate screen: the last row of the screen is passed over as tmux's status line, and outside tmux a
-// pager's own last row looks the same.
+// 下に何も残さないプログラムが出した文字は、問いそのもののように読める。代替画面で残っている誤検出はこれで
+// ある。画面の最後の行は tmux のステータス行として飛ばすが、tmux の外では、ページャー自身の最後の行が同じに
+// 見える。
 func TestTheWordsOfAQuestionWithNothingUnderThemReadAsAQuestion(t *testing.T) {
 	tests := map[string]string{
 		"watch":             "Every 2.0s: cat prompt.txt\n\nDo you want to proceed?\n ❯ 1. Yes\n   2. No",

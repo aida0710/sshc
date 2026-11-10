@@ -37,7 +37,7 @@ func TestARealLocalShellStartsInTheSelectedFolderWithoutExecutingItsName(t *test
 		Kind: terminal.KindShell, Title: "sh",
 		Command: terminal.Command{
 			Path: lookProgram(t, "sh"), Dir: resolved,
-			// A non-login shell and an isolated HOME avoid reading user startup files.
+			// ログインでないシェルと、切り離した HOME を使い、利用者の起動時のファイルを読まないようにする。
 			Env:       []string{"HOME=" + base, "PATH=/usr/bin:/bin", "TERM=xterm-256color"},
 			Arguments: []string{"-c", "printf 'START=%s\\n' \"$PWD\"; read ignored"},
 		},

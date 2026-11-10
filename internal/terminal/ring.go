@@ -5,20 +5,18 @@ type Ring struct {
 	data  []byte
 	start int
 	size  int
-	// written is the monotonic byte position immediately after the newest byte.
-	// It deliberately does not wrap with the storage so an observer can ask for
-	// only the bytes written since its previous read.
+	// written は、いちばん新しいバイトのすぐ後ろの、増えるだけのバイトの位置である。見張る側が、前に読んだあとに
+	// 書かれたバイトだけを求められるよう、格納場所と一緒に折り返さないようにしてある。
 	written uint64
 }
 
-// RingRead is a bounded range from the retained scrollback. Start and Next are
-// absolute byte positions. Truncated means the requested cursor had already
-// fallen behind the oldest retained byte.
+// RingRead は、残っているスクロールバックの、長さに上限のある範囲である。Start と Next はバイトの絶対位置で
+// ある。Truncated は、求められたカーソルが、残っているいちばん古いバイトよりすでに後ろにあったことを表す。
 type RingRead struct {
 	Data []byte
-	// Context contains retained bytes from the oldest byte through Next. Emit
-	// is the offset where Data begins. A terminal decoder can therefore carry
-	// escape-sequence state across a cursor which lands inside CSI or OSC.
+	// Context は、いちばん古いバイトから Next までの、残っているバイトを持つ。Emit は、Data が始まる位置である。
+	// そのため、カーソルが CSI や OSC の途中に落ちても、ターミナルのデコーダーはエスケープシーケンスの状態を
+	// 引き継げる。
 	Context   []byte
 	Emit      int
 	Start     uint64
@@ -39,10 +37,10 @@ func (r *Ring) CanReadFrom(cursor uint64) bool { return cursor <= r.written }
 // Capacity は、保持できるバイト数である。
 func (r *Ring) Capacity() int { return len(r.data) }
 
-// Oldest is the absolute position of the oldest retained byte.
+// Oldest は、残っているいちばん古いバイトの絶対位置である。
 func (r *Ring) Oldest() uint64 { return r.written - uint64(r.size) }
 
-// Written is the absolute position just after the newest byte.
+// Written は、いちばん新しいバイトのすぐ後ろの絶対位置である。
 func (r *Ring) Written() uint64 { return r.written }
 
 func (r *Ring) Write(p []byte) (int, error) {
@@ -69,15 +67,14 @@ func (r *Ring) Write(p []byte) (int, error) {
 	return written, nil
 }
 
-// ReadFrom returns at most limit bytes beginning at cursor. A cursor newer than
-// the current end is rejected so a cursor from another session or engine cannot
-// silently skip future output.
+// ReadFrom は、cursor から始まる、多くても limit バイトを返す。今の終わりより新しい cursor は断る。ほかの
+// セッションやエンジンの cursor が、これから出る出力を黙って飛ばさないようにするためである。
 func (r *Ring) ReadFrom(cursor uint64, limit int) (RingRead, bool) {
 	return r.readFrom(cursor, limit, true)
 }
 
-// ReadAvailableFrom returns at most limit retained bytes at or after cursor
-// without allocating the decoder context needed by the plain-text control API.
+// ReadAvailableFrom は、cursor 以降の、残っているバイトを、多くても limit だけ返す。平文の制御 API が要る
+// デコーダーの文脈は確保しない。
 func (r *Ring) ReadAvailableFrom(cursor uint64, limit int) (RingRead, bool) {
 	return r.readFrom(cursor, limit, false)
 }

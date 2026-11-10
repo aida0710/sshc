@@ -1,7 +1,7 @@
 package terminal
 
-// maxControlSequenceBytes bounds what one control sequence may collect. The
-// sequences read here are under 16 bytes; a longer one is something else.
+// maxControlSequenceBytes は、制御シーケンス1つが集めてよい量の上限である。ここで読むシーケンスは16バイトに
+// 満たない。それより長いものは別のものである。
 const maxControlSequenceBytes = 32
 
 type controlSequenceState uint8
@@ -13,19 +13,17 @@ const (
 	sequenceDiscard
 )
 
-// controlSequenceScanner picks the control sequences (CSI) out of the output.
-// Sequences may span chunk boundaries.
+// controlSequenceScanner は、出力から制御シーケンス（CSI）を拾う。シーケンスは、かたまりの境をまたぐことがある。
 type controlSequenceScanner struct {
 	state   controlSequenceState
 	collect []byte
-	// sequence hears each sequence: its parameters and intermediates, and its
-	// final byte.
+	// sequence は、シーケンスを1つずつ受け取る。パラメーターと中間バイト、それに終端バイトを受け取る。
 	sequence func(parameters string, final byte)
-	// reset hears a terminal reset (RIS); nil when it does not matter.
+	// reset は、ターミナルのリセット（RIS）を受け取る。関係が無ければ nil。
 	reset func()
 }
 
-// Observe scans one chunk.
+// Observe は、かたまり1つを調べる。
 func (o *controlSequenceScanner) Observe(chunk []byte) {
 	for _, value := range chunk {
 		switch o.state {
@@ -53,8 +51,7 @@ func (o *controlSequenceScanner) Observe(chunk []byte) {
 	}
 }
 
-// next takes one byte of a control sequence: its parameters and intermediates
-// up to the final byte.
+// next は、制御シーケンスのバイトを1つ受け取る。終端バイトまでの、パラメーターと中間バイトである。
 func (o *controlSequenceScanner) next(value byte) {
 	switch {
 	case value == '\x1b':
@@ -65,7 +62,7 @@ func (o *controlSequenceScanner) next(value byte) {
 		}
 		o.state = sequenceText
 	case value < 0x20 || o.state == sequenceDiscard:
-		// C0 controls inside a sequence act on their own and take no part in it.
+		// シーケンスの中の C0 の制御は、それだけで働き、シーケンスには加わらない。
 	case len(o.collect) >= maxControlSequenceBytes:
 		o.state = sequenceDiscard
 	default:

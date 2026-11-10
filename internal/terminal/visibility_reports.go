@@ -4,30 +4,29 @@ import (
 	"strings"
 )
 
-// Visibility reports (mode 2033, https://rockorager.dev/misc/visibility-reports/)
-// tell a program whether anyone may see its terminal, so it can stop drawing
-// while nobody does. The engine answers, not a browser: a session can be shown
-// in several browsers at once, or in none. It is visible while any attached
-// browser says it shows the terminal; with nothing attached it is not.
+// 可視の報告（モード 2033、https://rockorager.dev/misc/visibility-reports/）は、ターミナルを誰かが見ているかも
+// しれないかをプログラムに伝える。誰も見ていないあいだ、プログラムは描くのをやめられる。答えるのは
+// ブラウザではなくエンジンである。セッションは、いくつものブラウザに同時に出ることも、どこにも出ないことも
+// ある。つながっているブラウザのどれかがターミナルを出していると言うあいだ、見えている。何もつながって
+// いなければ、見えていない。
 
-// visibilityRequest is what a program asked of visibility reports.
+// visibilityRequest は、プログラムが可視の報告について求めたことである。
 type visibilityRequest uint8
 
 const (
-	// enableVisibilityReports is DECSET 2033: report now and on every change.
+	// enableVisibilityReports は DECSET 2033 である。今すぐ報告し、変わるたびに報告する。
 	enableVisibilityReports visibilityRequest = iota + 1
-	// disableVisibilityReports is DECRST 2033, and a terminal reset (RIS).
+	// disableVisibilityReports は DECRST 2033 と、ターミナルのリセット（RIS）である。
 	disableVisibilityReports
-	// queryVisibility is CSI ? 998 n: report once, whatever the mode.
+	// queryVisibility は CSI ? 998 n である。モードにかかわらず、1度だけ報告する。
 	queryVisibility
-	// queryVisibilityMode is DECRQM 2033: whether reports are on.
+	// queryVisibilityMode は DECRQM 2033 である。報告がオンかを尋ねる。
 	queryVisibilityMode
 )
 
-// visibilityRequestObserver picks the visibility-report requests out of the
-// output. Like oscObserver it never removes bytes; xterm.js in the browser
-// ignores these sequences (it is told to for DECRQM 2033, so it does not
-// answer that it does not know the mode).
+// visibilityRequestObserver は、出力から可視の報告の求めを拾う。oscObserver と同じく、バイトは取り除かない。
+// ブラウザの xterm.js はこれらのシーケンスを無視する（DECRQM 2033 は無視するよう指定してあるので、その
+// モードを知らないと答えることも無い）。
 type visibilityRequestObserver struct {
 	controlSequenceScanner
 	request func(visibilityRequest)
@@ -68,7 +67,7 @@ func (o *visibilityRequestObserver) complete(parameters string, final byte) {
 	}
 }
 
-// visibilityReport is CSI ? 999 ; Ps n: 1 when the terminal may be seen, 2 when it is not.
+// visibilityReport は CSI ? 999 ; Ps n である。ターミナルが見えているかもしれなければ 1、見えていなければ 2。
 func visibilityReport(visible bool) []byte {
 	if visible {
 		return []byte("\x1b[?999;1n")
@@ -76,7 +75,7 @@ func visibilityReport(visible bool) []byte {
 	return []byte("\x1b[?999;2n")
 }
 
-// visibilityModeReport is the DECRQM answer for mode 2033: 1 set, 2 reset.
+// visibilityModeReport は、モード 2033 への DECRQM の答えである。オンなら 1、オフなら 2。
 func visibilityModeReport(enabled bool) []byte {
 	if enabled {
 		return []byte("\x1b[?2033;1$y")
@@ -84,13 +83,11 @@ func visibilityModeReport(enabled bool) []byte {
 	return []byte("\x1b[?2033;2$y")
 }
 
-// maxQueuedReplies bounds the answers waiting to be written to a program that
-// does not read its input; past it they are dropped rather than holding up the
-// output (the answers are written apart from the reading of the output).
+// maxQueuedReplies は、入力を読まないプログラムへ書くのを待っている返事の数の上限である。超えた分は、出力を
+// 止めずに捨てる（返事は、出力を読むのとは別に書く）。
 const maxQueuedReplies = 16
 
-// acceptVisibilityRequest answers what the program asked, in the generation
-// that asked it.
+// acceptVisibilityRequest は、プログラムの求めに、求めた世代で答える。
 func (s *Session) acceptVisibilityRequest(generation uint64, request visibilityRequest) {
 	s.mutex.Lock()
 	if generation != s.generation || s.exited != nil {
@@ -100,7 +97,7 @@ func (s *Session) acceptVisibilityRequest(generation uint64, request visibilityR
 	var reply []byte
 	switch request {
 	case enableVisibilityReports:
-		// The spec asks for a report on every DECSET, even when reports were on.
+		// 仕様は、報告がすでにオンでも、DECSET のたびに報告するよう求めている。
 		s.shell.visibilityReports = true
 		reply = visibilityReport(s.visible)
 	case disableVisibilityReports:
@@ -114,9 +111,8 @@ func (s *Session) acceptVisibilityRequest(generation uint64, request visibilityR
 	s.queueReply(reply)
 }
 
-// SetStreamVisible records whether the browser behind stream shows its
-// terminal. A stream that never says is taken to show it: in doubt, the spec
-// counts a terminal as visible.
+// SetStreamVisible は、stream の先のブラウザがターミナルを出しているかを記録する。何も言わない stream は、
+// 出しているものとして扱う。仕様は、分からないときはターミナルを見えているものとして数える。
 func (s *Session) SetStreamVisible(stream *Stream, visible bool) {
 	s.mutex.Lock()
 	stream.visible = visible
@@ -125,8 +121,8 @@ func (s *Session) SetStreamVisible(stream *Stream, visible bool) {
 	s.queueReply(reply)
 }
 
-// visibilityChangedLocked works out again whether anyone may see the session,
-// and returns the report to send when that changed and reports are on.
+// visibilityChangedLocked は、誰かがセッションを見ているかもしれないかを決め直す。それが変わり、報告がオンなら、
+// 送る報告を返す。
 func (s *Session) visibilityChangedLocked() []byte {
 	visible := false
 	for stream := range s.streams {
@@ -142,9 +138,8 @@ func (s *Session) visibilityChangedLocked() []byte {
 	return visibilityReport(visible)
 }
 
-// queueReply hands an answer to the writer of answers. The reading of the
-// output, which finds the questions, must not wait on a program that does not
-// read its input.
+// queueReply は、返事を、返事を書く側に渡す。問いを見つけるのは出力を読む側で、そちらは、入力を読まない
+// プログラムを待ってはならない。
 func (s *Session) queueReply(reply []byte) {
 	if len(reply) == 0 {
 		return
@@ -155,9 +150,8 @@ func (s *Session) queueReply(reply []byte) {
 	}
 }
 
-// writeReplies writes the queued answers to the program, in order, until the
-// pump that started it ends (done). A manual reconnect starts a new pump with
-// a new done, and a new writer with it.
+// writeReplies は、溜まった返事を、順にプログラムへ書く。これを始めた pump が終わる（done）まで続ける。
+// 手動の再接続は、新しい done を持つ新しい pump を始め、それと一緒に新しい書き手も始める。
 func (s *Session) writeReplies(done <-chan struct{}) {
 	for {
 		select {

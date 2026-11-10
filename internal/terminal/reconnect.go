@@ -54,9 +54,8 @@ const (
 	ProblemNoNetwork = "connect_no_network"
 )
 
-// StopReconnecting abandons the automatic reconnect loop while it is waiting
-// or dialing. The pane stays open in the exited state so the user can decide
-// later whether to reconnect by hand or close it.
+// StopReconnecting は、待っているかつなごうとしている自動再接続をやめる。ペインは終了の状態で開いたまま
+// 残るので、利用者は、手で再接続するか閉じるかを、あとで決められる。
 func (s *Session) StopReconnecting() error {
 	s.mutex.Lock()
 	if s.state != StateReconnecting || s.exited != nil {
@@ -267,8 +266,8 @@ func (s *Session) reopenForReconnect() (process Process, stopped bool, err error
 	}
 	s.reconnection.cancel = cancel
 	reopen := s.reopen
-	// The browser may have been resized during the wait; the new shell
-	// must start at that size, so it is read only after waiting.
+	// 待っているあいだに、ブラウザの大きさが変わっているかもしれない。新しいシェルはその大きさで始めなければ
+	// ならないので、待ったあとに読む。
 	size := s.size
 	s.mutex.Unlock()
 	process, err = reopen(attemptCtx, size)

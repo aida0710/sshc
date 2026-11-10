@@ -10,7 +10,7 @@ import (
 	"sshc/internal/testwait"
 )
 
-// recordedLog is a session log that keeps what it was handed, in order.
+// recordedLog は、渡されたものを順に持つ、セッションのログである。
 type recordedLog struct {
 	mutex   sync.Mutex
 	written strings.Builder
@@ -68,8 +68,8 @@ func openLogged(t *testing.T, spec terminal.Spec) (*terminal.Session, *recordedL
 	return session, log
 }
 
-// Only the shell's own output reaches the log of an SSH session: not the authentication prompt and what was typed
-// at it, written before the connection was ready, nor sshc's own lines.
+// SSH のセッションのログに入るのは、シェル自身の出力だけである。接続が使えるようになる前に書かれた、認証の
+// 問いと、そこに打ち込まれたものは入らない。sshc 自身の行も入らない。
 func TestTheLogOfAnSSHSessionKeepsOnlyTheShellsOutputOnceItIsReady(t *testing.T) {
 	spy := &shellOpenSpy{}
 	session, log := openLogged(t, terminal.Spec{Kind: terminal.KindSSH, Alias: "web", Title: "web", Open: spy.open})

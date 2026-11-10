@@ -31,9 +31,9 @@ type ticket struct {
 	expires time.Time
 }
 
-// TicketClaim is the terminal stream position bound to one redeemed ticket.
-// Cursor is kept inside the single-use secret instead of on the WebSocket URL,
-// so a caller cannot change which bytes are replayed after the ticket is issued.
+// TicketClaim は、引き換えたチケット1枚に結び付いた、ターミナルのストリームの位置である。Cursor は、
+// WebSocket の URL ではなく、1度しか使えない秘密の中に持つ。そのため、チケットを発行したあとに、どのバイトを
+// 流し直すかを呼び出し側が変えることはできない。
 type TicketClaim struct {
 	SessionID string
 	Cursor    uint64

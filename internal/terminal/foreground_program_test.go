@@ -20,8 +20,8 @@ func TestTitleNamesTheCommandAnInteractiveShellRuns(t *testing.T) {
 		registry.ForceClose()
 		_ = registry.Wait()
 	})
-	// An interactive shell controls jobs: it puts each command in its own process
-	// group and gives it the terminal, which is what the engine reads.
+	// 対話のシェルはジョブを制御する。コマンドごとに別のプロセスグループに入れ、それにターミナルを渡す。
+	// エンジンが読むのはこれである。
 	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindShell, Title: "sh",
 		Size:    terminal.Size{Cols: 80, Rows: 24},

@@ -22,12 +22,12 @@ func TestRemoteDirectoriesAreChangedIntoWithTheTildeOutsideTheQuotes(t *testing.
 
 func TestADirectoryThatSomeLoginShellWouldReadAsCodeIsNotTyped(t *testing.T) {
 	for _, directory := range []string{
-		"/srv/project's files", // sh, bash, zsh: ends the quotes
-		`/srv/dir\`,            // fish: escapes the closing quote
-		"/srv/a’; calc",        // PowerShell: a typographic quote ends the quotes
-		"/srv/a & calc",        // cmd.exe: runs the next command
-		"/srv/%PATH%",          // cmd.exe: expands
-		"/srv/a`b",             // PowerShell: escapes
+		"/srv/project's files", // sh、bash、zsh: 引用を終える
+		`/srv/dir\`,            // fish: 閉じる引用符をエスケープする
+		"/srv/a’; calc",        // PowerShell: 飾りの引用符が引用を終える
+		"/srv/a & calc",        // cmd.exe: 次のコマンドを走らせる
+		"/srv/%PATH%",          // cmd.exe: 展開する
+		"/srv/a`b",             // PowerShell: エスケープする
 	} {
 		accepted, err := CheckRemoteWorkingDirectory(directory)
 		if err != nil {

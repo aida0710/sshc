@@ -1,24 +1,23 @@
 package terminal
 
-// Reopening is what it takes to open a session again: the same connection or
-// local shell profile, in the same workspace, starting where it last worked.
+// Reopening は、セッションを開き直すのに要るものである。同じ接続かローカルのシェルプロファイルを、同じ
+// ワークスペースで、最後に作業していた場所から始める。
 type Reopening struct {
 	Kind         Kind
 	Alias        string
 	ShellProfile string
 	Workspace    string
-	// PinnedTitle is the name the user gave the session, or "" when it has none.
+	// PinnedTitle は、利用者がセッションに付けた名前である。付けていなければ ""。
 	PinnedTitle string
-	// WorkingDirectory is "" when the session never reported one.
+	// WorkingDirectory は、セッションが1度も報告しなかったとき "" である。
 	WorkingDirectory string
-	// TmuxSession is the name of the tmux session its connection opens, if it uses tmux.
+	// TmuxSession は、接続が tmux を使うときに、その接続が開く tmux のセッションの名前である。
 	TmuxSession string
-	// ResumeProgram is the OSC 7501 name of a program that can be started again
-	// in the new shell, or "".
+	// ResumeProgram は、新しいシェルで起動し直せるプログラムの、OSC 7501 の名前である。無ければ ""。
 	ResumeProgram string
 }
 
-// Reopening describes this session for opening it again.
+// Reopening は、開き直すために、このセッションを書き表す。
 func (s *Session) Reopening() Reopening {
 	directory := s.WorkingDirectory()
 	s.mutex.Lock()
@@ -34,10 +33,9 @@ func (s *Session) Reopening() Reopening {
 	return reopening
 }
 
-// Reopenings describes, in the order they were opened, the sessions still in
-// use. A session the user closed or whose program exited is left out. An SSH
-// session that lost its connection is still in use, whether it is waiting to
-// reconnect or gave up: the user kept it to reconnect by hand.
+// Reopenings は、まだ使っているセッションを、開いた順に書き表す。利用者が閉じたセッションと、プログラムが
+// 終わったセッションは含めない。接続を失った SSH のセッションは、再接続を待っていても、あきらめていても、
+// まだ使っているものとする。利用者が手で再接続するために残したものである。
 func (r *Registry) Reopenings() []Reopening {
 	r.mutex.Lock()
 	sessions := append([]*Session(nil), r.sessions...)

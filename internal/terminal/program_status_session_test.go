@@ -37,7 +37,7 @@ func TestAShellPromptEndsWhatTheProgramWasDoingButKeepsItsResult(t *testing.T) {
 	process.feed("\x1b]133;A\a$ ")
 	testwait.Until(t, func() bool { return programStatusOf(session) == terminal.ProgramStatusDone })
 
-	// A full reset removes every record.
+	// 全体のリセットは、すべての記録を消す。
 	process.feed("\x1bc")
 	testwait.Until(t, func() bool { return programStatusOf(session) == "" })
 }
@@ -57,6 +57,6 @@ func TestANewShellDropsWhatTheOldProcessWasDoingButKeepsItsResult(t *testing.T) 
 	spy.at(0).exit(transportLost)
 	testwait.Until(t, func() bool { return spy.count() >= 2 && session.View().State == terminal.StateConnected })
 	spy.at(1).feed("\x1b]7501;state=clear:id=deploy\x1b\\")
-	// With the failed result cleared by the new shell, nothing of the old process is left.
+	// 新しいシェルが failed の結果を消したので、古い process のものは何も残らない。
 	testwait.Until(t, func() bool { return programStatusOf(session) == "" })
 }
