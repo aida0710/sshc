@@ -167,3 +167,23 @@ func TestANoteComesAfterTheLinesShownBeforeIt(t *testing.T) {
 		t.Fatalf("log = %q, want the lines in %q's order", got, want)
 	}
 }
+
+func TestAFolderInsideTheSynchronizedFolderIsRefused(t *testing.T) {
+	synchronized := filepath.Join(string(filepath.Separator), "home", "me", ".ssh")
+	for folder, refused := range map[string]bool{
+		synchronized:                              true,
+		filepath.Join(synchronized, "logs"):       true,
+		filepath.Join(synchronized, "..", ".ssh"): true,
+		filepath.Join(synchronized, "..", "logs"): false,
+		synchronized + "-logs":                    false,
+		filepath.Join(string(filepath.Separator)): false,
+	} {
+		err := RefuseSynchronized(folder, synchronized, "linux")
+		if refused != (err != nil) {
+			t.Errorf("RefuseSynchronized(%q) = %v, want refused = %v", folder, err, refused)
+		}
+	}
+	if err := RefuseSynchronized(strings.ToUpper(filepath.Join(synchronized, "logs")), synchronized, "darwin"); err == nil {
+		t.Error("a folder that differs only by case was accepted where names do not differ by case")
+	}
+}

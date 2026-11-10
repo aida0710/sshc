@@ -149,3 +149,14 @@ func TestReturningToARunningTmuxSessionTypesNothingIntoIt(t *testing.T) {
 		t.Errorf("the terminal says it is a new shell: %q", snapshotOf(session))
 	}
 }
+
+func TestOnlyANameSshcGivesATmuxSessionIsValid(t *testing.T) {
+	for name, valid := range map[string]bool{
+		"": true, "sshc-web_01": true, "sshc-web-01-2": true,
+		"web-01": false, "sshc-web'; reboot; '": false, "sshc-web 01": false, "sshc-web.01": false,
+	} {
+		if got := terminal.ValidTmuxSessionName(name); got != valid {
+			t.Errorf("ValidTmuxSessionName(%q) = %v, want %v", name, got, valid)
+		}
+	}
+}

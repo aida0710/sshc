@@ -3,6 +3,7 @@ package sessionlog
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 
 	"sshc/internal/platform"
 )
@@ -10,6 +11,9 @@ import (
 // ErrUnsupported is a system where a person could not open the logs: on Android the engine can write only inside the
 // app's own folder.
 var ErrUnsupported = errors.New("session logs are not kept on this system")
+
+// ErrSynchronizedDirectory is a folder for the logs inside the folder that travels to other machines.
+var ErrSynchronizedDirectory = errors.New("session logs cannot be kept in the folder that is synchronized")
 
 // DefaultDirectory is where a machine keeps session logs when its settings name no folder: where its system keeps an
 // application's logs or state. It is outside ~/.ssh on purpose: the files there travel to other machines, and the
@@ -46,4 +50,21 @@ func Directory(configured, goos, home string, environment func(string) string) (
 		return DefaultDirectory(goos, home, environment)
 	}
 	return platform.ResolveUnderHome(configured, home)
+}
+
+// RefuseSynchronized refuses a folder for the logs that is synchronized, or inside it: the terminal output must never
+// travel to other machines, and everything under that folder does unless a rule leaves it out. goos decides whether
+// names differ by case.
+func RefuseSynchronized(directory, synchronized, goos string) error {
+	if goos == "windows" || goos == "darwin" {
+		directory, synchronized = strings.ToLower(directory), strings.ToLower(synchronized)
+	}
+	below, err := filepath.Rel(filepath.Clean(synchronized), filepath.Clean(directory))
+	if err != nil {
+		return nil
+	}
+	if below == ".." || strings.HasPrefix(below, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	return ErrSynchronizedDirectory
 }

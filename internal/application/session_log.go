@@ -8,9 +8,18 @@ import (
 )
 
 // SessionLogDirectory は、このマシンがセッションのログを置くフォルダを返す。マシンの設定に無ければ OS の
-// 決まった場所。ログを保存できないマシン（Android）では sessionlog.ErrUnsupported。
+// 決まった場所。ログを保存できないマシン（Android）では sessionlog.ErrUnsupported。同期するフォルダ（~/.ssh）の
+// 下は sessionlog.ErrSynchronizedDirectory で断る。設定はほかのマシンの画面からも変えられ、保存のときは
+// このマシンのパスの形が分からないので、使うここで確かめる。
 func (s *Service) SessionLogDirectory() (string, error) {
-	return sessionlog.Directory(s.ThisMachineSettings().SessionLogDirectory, goruntime.GOOS, s.workspace.Home(), os.Getenv)
+	directory, err := sessionlog.Directory(s.ThisMachineSettings().SessionLogDirectory, goruntime.GOOS, s.workspace.Home(), os.Getenv)
+	if err != nil {
+		return "", err
+	}
+	if err := sessionlog.RefuseSynchronized(directory, s.workspace.Root(), goruntime.GOOS); err != nil {
+		return "", err
+	}
+	return directory, nil
 }
 
 // DefaultSessionLogDirectory は、このマシンの OS の決まったログの場所である（MachineFacts に書く）。保存

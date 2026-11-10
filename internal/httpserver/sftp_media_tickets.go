@@ -13,6 +13,10 @@ import (
 // closed without revoking theirs.
 const maxMediaTicketsPerSession = 16
 
+// maxMediaTickets bounds what all browser sessions keep together. A session that ended cannot hand its tickets
+// back, so the oldest ones give way once this many are held.
+const maxMediaTickets = 256
+
 // mediaTickets authorize <audio> and <video> to read one file. The elements
 // cannot send the CSRF header the API asks for on every read, so a ticket,
 // issued through a request that did send it, stands in for the header on the
@@ -52,6 +56,9 @@ func (t *mediaTickets) issue(session, alias, path string) (string, error) {
 	}
 	if held >= maxMediaTicketsPerSession {
 		t.dropOldestOf(session)
+	}
+	if len(t.issued) >= maxMediaTickets {
+		t.issued = t.issued[len(t.issued)-maxMediaTickets+1:]
 	}
 	t.issued = append(t.issued, mediaTicket{token: token, session: session, alias: alias, path: path})
 	return token, nil

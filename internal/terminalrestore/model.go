@@ -71,6 +71,9 @@ func (s Session) valid() bool {
 			return false
 		}
 	}
+	if !terminal.ValidTmuxSessionName(s.TmuxSession) {
+		return false
+	}
 	switch s.Kind {
 	case terminal.KindSSH:
 		return validate.SessionTarget(s.Alias) == nil
