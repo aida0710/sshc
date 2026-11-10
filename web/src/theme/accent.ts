@@ -10,7 +10,7 @@ export const presetAccents = ["lavender", "blue", "sky", "pink", "mono"] as cons
 // preset's name or a colour of the user's own (AccentChoice.customColor).
 export type Accent = (typeof presetAccents)[number];
 
-export const defaultAccent: Accent = "lavender";
+const defaultAccent: Accent = "lavender";
 
 export function isAccent(value: unknown): value is Accent {
   return typeof value === "string" && (presetAccents as readonly string[]).includes(value);

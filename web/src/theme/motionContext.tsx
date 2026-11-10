@@ -25,7 +25,7 @@ export function withReduceMotion(preset: SettingsPreset, choice: ReduceMotionCho
   return { ...preset, appearance };
 }
 
-export function isMotionReduced(choice: ReduceMotionChoice, systemReducesMotion: boolean): boolean {
+function isMotionReduced(choice: ReduceMotionChoice, systemReducesMotion: boolean): boolean {
   if (choice === "system") return systemReducesMotion;
   return choice === "on";
 }

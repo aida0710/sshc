@@ -46,7 +46,7 @@ export const claudeCodeKeyBarLayout: KeyBarLayout = {
 
 // sameKey is whether two keys are the same key: the same named key, or a key the person made with the same
 // label and text.
-export function sameKey(first: KeyBarKey, second: KeyBarKey): boolean {
+function sameKey(first: KeyBarKey, second: KeyBarKey): boolean {
   if (first.key !== undefined || second.key !== undefined) return first.key === second.key;
   return first.label === second.label && first.text === second.text && (first.enter ?? false) === (second.enter ?? false);
 }

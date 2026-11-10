@@ -64,10 +64,8 @@ export const sectionHeading = "text-sm font-medium text-ink";
 export const tableHeadRow =
   "border-b border-line text-xs text-ink-faint";
 export const tableHeadCell = "whitespace-nowrap px-2.5 pb-2 text-left font-normal";
-// tableCell is a cell of a list row, spaced as in the design. tableCellOnWide applies the same spacing
-// only where the row is a table row; a phone lays such rows out as stacked label and value pairs.
+// tableCell is a cell of a list row, spaced as in the design.
 export const tableCell = "px-2.5 py-[9px] align-middle";
-export const tableCellOnWide = "sm:table-cell sm:px-2.5 sm:py-[9px] sm:align-middle";
 
 type FieldProps = {
   label: string;

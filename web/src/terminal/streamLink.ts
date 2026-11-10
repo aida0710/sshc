@@ -15,7 +15,7 @@ export type StreamLink =
 // How long to wait before reattaching the browser's WebSocket after the 1st,
 // 2nd, 3rd... drop in a row. This is only the browser-to-engine link; the
 // engine's own SSH reconnect keeps a separate schedule (docs/design.md).
-export const streamReconnectBackoffSeconds = [1, 2, 4, 8, 15];
+const streamReconnectBackoffSeconds = [1, 2, 4, 8, 15];
 
 // A link that stayed up this long counts as healthy, so its next drop starts
 // the backoff from the first step instead of continuing to escalate.
