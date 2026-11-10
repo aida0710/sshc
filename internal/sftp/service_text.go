@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -90,7 +91,7 @@ func readPreviewBytes(ctx context.Context, remote Remote, cleaned string) ([]byt
 	if contentType == "" {
 		return nil, "", ErrPreviewType
 	}
-	rest, err := io.ReadAll(io.LimitReader(reader, MaxPreviewFileBytes+1-int64(read)))
+	rest, err := readRemoteToEnd(reader, MaxPreviewFileBytes+1-int64(read))
 	if err != nil {
 		return nil, "", err
 	}
@@ -99,6 +100,31 @@ func readPreviewBytes(ctx context.Context, remote Remote, cleaned string) ([]byt
 		return nil, "", ErrPreviewTooLarge
 	}
 	return contents, contentType, nil
+}
+
+// remoteReadChunkBytes is how much one Read asks of a remote file. pkg/sftp sends a Read larger than its packet
+// (32 KiB) as requests that are all out at once, so a file of a few hundred KiB comes back in about one round
+// trip. io.ReadAll's small reads each waited for the server's answer before asking for more: a 200 KiB picture
+// took 2.3 seconds from a server 0.1 seconds away.
+const remoteReadChunkBytes = 1 << 20
+
+// readRemoteToEnd reads a remote file to its end, or until it has read limit bytes, remoteReadChunkBytes at a
+// time. It does not trust the size Lstat gave: a file in /proc says it is empty and still has lines to read.
+func readRemoteToEnd(reader io.Reader, limit int64) ([]byte, error) {
+	var contents []byte
+	for int64(len(contents)) < limit {
+		chunk := int(min(limit-int64(len(contents)), remoteReadChunkBytes))
+		contents = slices.Grow(contents, chunk)
+		read, err := io.ReadFull(reader, contents[len(contents):len(contents)+chunk])
+		contents = contents[:len(contents)+read]
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return contents, nil
 }
 
 func (s Service) SaveText(
@@ -172,7 +198,7 @@ func readText(ctx context.Context, remote Remote, file fileLocation) (TextFile, 
 	if err != nil {
 		return TextFile{}, err
 	}
-	contents, readErr := io.ReadAll(io.LimitReader(&contextReader{ctx: ctx, reader: opened}, MaxEditableFileBytes+1))
+	contents, readErr := readRemoteToEnd(&contextReader{ctx: ctx, reader: opened}, MaxEditableFileBytes+1)
 	closeErr := opened.Close()
 	if readErr != nil {
 		return TextFile{}, readErr
