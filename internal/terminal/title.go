@@ -59,10 +59,10 @@ func (s *Session) acceptTitle(generation uint64, title string) {
 	if generation != s.generation || s.exited != nil {
 		return
 	}
-	s.terminalTitle = title
-	s.terminalTitleGroup = 0
+	s.shell.title = title
+	s.shell.titleGroup = 0
 	if running {
-		s.terminalTitleGroup = program.Group
+		s.shell.titleGroup = program.Group
 	}
 	if directory, ok := workingDirectoryFromTitle(title); ok {
 		s.noteWorkingDirectoryLocked(directory)
@@ -83,21 +83,13 @@ func (s *Session) acceptNotification(generation uint64, title, body string, occu
 	s.lastNotification = &Notification{Title: title, Body: body, OccurredAt: occurredAt}
 }
 
-func (s *Session) resetTerminalTitleLocked() {
-	if s.terminalTitle == "" {
-		return
-	}
-	s.terminalTitle = ""
-	s.recomputeTitleLocked()
-}
-
 func (s *Session) recomputeTitleLocked() {
 	if s.titlePinned {
 		s.titleSource = TitleUser
 		return
 	}
-	if s.terminalTitle != "" {
-		s.title = s.terminalTitle
+	if s.shell.title != "" {
+		s.title = s.shell.title
 		s.titleSource = TitleTerminal
 		return
 	}

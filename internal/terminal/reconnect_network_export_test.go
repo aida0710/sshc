@@ -4,5 +4,5 @@ package terminal
 func (s *Session) TransportCheckPending() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return s.transportCheckPending
+	return s.reconnection.transportCheckPending
 }

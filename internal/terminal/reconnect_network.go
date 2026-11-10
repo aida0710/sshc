@@ -49,11 +49,11 @@ func (s *Session) checkTransport() {
 		s.mutex.Unlock()
 		return
 	}
-	s.transportCheckPending = true
+	s.reconnection.transportCheckPending = true
 	s.mutex.Unlock()
 	if checking.CheckTransport(transportCheckLimit) {
 		s.mutex.Lock()
-		s.transportCheckPending = false
+		s.reconnection.transportCheckPending = false
 		s.mutex.Unlock()
 	}
 }
@@ -62,8 +62,8 @@ func (s *Session) checkTransport() {
 func (s *Session) takeTransportCheckPending() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	pending := s.transportCheckPending
-	s.transportCheckPending = false
+	pending := s.reconnection.transportCheckPending
+	s.reconnection.transportCheckPending = false
 	return pending
 }
 
@@ -84,7 +84,7 @@ func (s *Session) skipWaitAfterNetworkChange(attempt, limit int, now func() time
 func (s *Session) lastAttemptHadNoNetwork() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return s.noNetwork
+	return s.reconnection.noNetwork
 }
 
 // waitForNetwork は、回線が戻るまで、再接続の回数を使わずに待つ。止められたら false を返す。
@@ -123,9 +123,9 @@ func (s *Session) waitForNetwork(attempt, limit int, now func() time.Time) bool 
 func (s *Session) announceNetworkWait(attempt, limit int, now func() time.Time) {
 	s.mutex.Lock()
 	s.showReconnectingLocked(ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: now(), WaitingForNetwork: true})
-	announced := s.networkWaitAnnounced
-	s.networkWaitAnnounced = true
-	reasonWritten := s.noNetwork
+	announced := s.reconnection.networkWaitAnnounced
+	s.reconnection.networkWaitAnnounced = true
+	reasonWritten := s.reconnection.noNetwork
 	s.mutex.Unlock()
 	if announced {
 		return
