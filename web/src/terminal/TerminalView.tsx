@@ -4,7 +4,7 @@ import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } f
 import { useTranslate, type Translate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
-import { exitedAbnormally, reconnectsOnEnter, sessionStateText, sessionStatusTone } from "./sessionStatus";
+import { reconnectsOnEnter } from "./sessionStatus";
 import { useTerminalFont } from "./useTerminalFont";
 import { defaultTint } from "./appearance";
 import { useBackgroundImage } from "./backgroundImage";
@@ -32,7 +32,6 @@ import { setDirectInput, useDirectInput } from "./useDirectInput";
 import { useModifierKeys } from "./useModifierKeys";
 import type { ModifierName } from "./modifierLatch";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
-import { useSessionDestination } from "./sessionDestination";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { createTerminalOutput } from "./output";
 import { createStatusLineRouter } from "./statusLine";
@@ -48,6 +47,7 @@ import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 import { useProgramProgress } from "./useProgramProgress";
 import { TerminalProgressBar } from "./TerminalProgressBar";
+import { TerminalHeader } from "./TerminalHeader";
 import type { LigatureDrawing } from "./ligatures";
 import { createTerminalView } from "./createTerminalView";
 import { terminalCopyActions } from "./terminalCopyActions";
@@ -72,7 +72,6 @@ import { useTerminalNotices } from "./useTerminalNotices";
 import { savedConnectionOf } from "./terminalPresentation";
 import { useSessionRecovery } from "./useSessionRecovery";
 import { useHostKeyAnswer } from "../shell/useHostKeyAnswer";
-import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import { createStreamLink, type StreamLink, type StreamLinkController } from "./streamLink";
 import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
@@ -824,14 +823,8 @@ export function TerminalView({
     if (changed.refit) refit.current?.();
   }, [shownFontSize, reducedMotion, scrollbackLines, session.state]);
 
-  const connectionStatus = sessionStateText(t, session);
-  // The header puts the state in words only while it is connecting. Connected, the dot says it; reconnecting,
-  // ended or with the browser's link down, the row under the header says it, and says it once. The words stay
-  // for screen readers either way.
-  const headerSaysState = session.state === "connecting" && link.phase === "live";
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session, t);
-  const destination = useSessionDestination(session);
   // Ctrl and Alt apply to the next key typed into the terminal, so one held while typing in the text box
   // moves the typing there, keeping the keyboard up. A closed keyboard stays closed: the key bar has already
   // let go of the focus then (keepKeyboardAsIs).
@@ -875,50 +868,7 @@ export function TerminalView({
 
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
-      {/* The header follows the design: a 40px row on a desktop, the screen's top bar on a phone
-          (the menu button opens the navigation, the title and destination, and the other actions). */}
-      <div className={`group/header relative flex shrink-0 items-center ${mobile ? "h-[54px] gap-1.5 pl-0.5 pr-1.5" : "h-10 gap-[9px] bg-term-bg pl-3.5 pr-2.5"}`}>
-        {mobile && onOpenNavigation !== undefined ? (
-          <button
-            type="button"
-            aria-label={t("shell.navigationToggle")}
-            title={t("shell.navigationToggle")}
-            onClick={onOpenNavigation}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-muted hover:bg-hover"
-          >
-            {/* The same icon as the menu button of the other sections' header: a ‹ here read as Back. */}
-            <Icon name="menu" className="size-5" />
-          </button>
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-[9px]">
-            <span
-              aria-hidden="true"
-              className={`size-2 shrink-0 rounded-full ${
-                session.state === "exited"
-                  ? exitedAbnormally(session) ? "bg-danger" : "bg-ink-faint"
-                  : session.state === "reconnecting" || session.state === "connecting" || link.phase !== "live"
-                    ? "bg-notice-ink"
-                    : "bg-live"
-              }`}
-            />
-            <p title={displayTitle} className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-[15px]" : "max-w-48 shrink-0 text-[13px]"}`}>{displayTitle}</p>
-            {mobile ? null : <span title={destination} className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{destination}</span>}
-            {/* While connected the dot says it; the words stay for screen readers. A phone has no room for them
-                either way, but they are still read out there. */}
-            <span role="status" className={!headerSaysState || mobile ? "sr-only" : `shrink-0 text-[11.5px] ${sessionStatusTone(session)}`}>{connectionStatus}</span>
-            {mobile ? null : <VPNProfileChip name={vpnProfile} />}
-            {mobile || runTarget === undefined ? null : (
-              <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-[11px] text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>
-            )}
-          </div>
-          {mobile ? (
-            <p className="mt-px flex min-w-0 items-center gap-1 pl-[17px] text-xs text-ink-faint">
-              <span title={destination} className="truncate">{destination}</span>
-              {headerSaysState ? <span className={`shrink-0 ${sessionStatusTone(session)}`}>· {connectionStatus}</span> : null}
-            </p>
-          ) : null}
-        </div>
+      <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} runTarget={runTarget} onOpenNavigation={onOpenNavigation}>
         {mobile ? null : (
           <button
             type="button"
@@ -978,7 +928,7 @@ export function TerminalView({
           />
         ) : null}
         <TerminalProgressBar progress={programProgress} />
-      </div>
+      </TerminalHeader>
       {mobile ? null : statusBanners}
 
       <div className={`relative min-h-0 flex-1 overflow-clip bg-term-bg ${mobile ? "mx-2 rounded-[14px] border border-line" : ""}`}>
