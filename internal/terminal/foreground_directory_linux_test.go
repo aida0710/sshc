@@ -23,7 +23,7 @@ func TestForegroundDirectoryIsWhereTheRunningProgramWorks(t *testing.T) {
 		registry.ForceClose()
 		_ = registry.Wait()
 	})
-	// The shell starts elsewhere and moves, as `cd project && claude` does.
+	// シェルは別の場所で始まり、`cd project && claude` のように移動する。
 	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindShell, Title: "sh",
 		Size: terminal.Size{Cols: 80, Rows: 24},

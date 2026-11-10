@@ -6,8 +6,8 @@ import (
 )
 
 func TestALocalWorkingDirectoryOnANetworkOrDeviceVolumeIsRefusedBeforeItIsOpened(t *testing.T) {
-	// 192.0.2.1 is a documentation address: if the check came after os.Stat,
-	// the test would wait on an SMB connection instead of failing at once.
+	// 192.0.2.1 は文書用のアドレスである。検査が os.Stat のあとにあると、試験はすぐに失敗せず、SMB の接続を
+	// 待つことになる。
 	for _, candidate := range []string{
 		`\\192.0.2.1\share`, "//192.0.2.1/share", `\\?\C:\Windows`, `\\.\C:\Windows`, `\??\C:\Windows`,
 	} {

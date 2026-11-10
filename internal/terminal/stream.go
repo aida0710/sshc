@@ -16,8 +16,8 @@ type Stream struct {
 	// cursor と open は session.mutex で守る。
 	cursor uint64
 	open   bool
-	// visible is whether the browser behind this attachment shows its
-	// terminal, also under session.mutex. See visibility_reports.go.
+	// visible は、このつなぎの先のブラウザがターミナルを出しているかである。これも session.mutex の中で扱う。
+	// visibility_reports.go。
 	visible bool
 	// ready は、取り出せる出力が届いたか、アタッチが外れたことを知らせる。
 	ready chan struct{}
@@ -112,18 +112,17 @@ func (s *Stream) closeLocked() {
 	s.signal()
 }
 
-// CanAttachFrom reports whether cursor belongs to the output range written by
-// this session. An old cursor is valid and will be marked truncated; a cursor
-// ahead of the writer is not.
+// CanAttachFrom は、cursor が、このセッションが書いた出力の範囲にあるかを返す。古い cursor は有効で、
+// 切り詰めたものとして印が付く。書き手より先の cursor は有効でない。
 func (s *Session) CanAttachFrom(cursor uint64) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.buffer.CanReadFrom(cursor)
 }
 
-// AttachFrom atomically returns only output after cursor and then follows live
-// output. The stream starts where the replay ends, under the same lock as the
-// range read, so nothing falls between replay and live delivery.
+// AttachFrom は、cursor より後ろの出力だけを返し、続けて今の出力を追う。この2つは切れ目なく行う。ストリームは、
+// 範囲を読んだのと同じロックの中で、流し直しが終わるところから始まるので、流し直しと今の出力のあいだに
+// 落ちるものが無い。
 func (s *Session) AttachFrom(cursor uint64) (Replay, *Stream, bool) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

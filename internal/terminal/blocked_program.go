@@ -1,28 +1,25 @@
 package terminal
 
-// A program blocked on the person (OSC 7501 state=blocked) needs them even when
-// they are not looking at sshc. Android raises its notification from here, in
-// the engine: the page's JavaScript may be stopped while the app is in the
-// background, but the engine's foreground service keeps reading the output.
+// 利用者を待っているプログラム（OSC 7501 の state=blocked）は、利用者が sshc を見ていないときにも、利用者を
+// 必要とする。Android は、通知をここ（エンジン）から出す。アプリが背後にあるあいだ、ページの JavaScript は
+// 止められることがあるが、エンジンのフォアグラウンドサービスは出力を読み続ける。
 
-// BlockedProgramChange says that a session's program started or stopped waiting
-// for the person. It follows the session as a whole: a second record of the
-// same session going blocked is no news, and neither is a blocked program
-// reporting again.
+// BlockedProgramChange は、セッションのプログラムが利用者を待ち始めたか、待ち終えたことを表す。セッション
+// 全体について伝える。同じセッションの2つめの記録が blocked になっても知らせず、blocked のプログラムが
+// もう一度報告しても知らせない。
 type BlockedProgramChange struct {
 	SessionID string
-	// SessionAlias is the connection the session runs on, "" for a local shell.
+	// SessionAlias は、セッションが動いている接続である。ローカルのシェルでは ""。
 	SessionAlias string
-	// SessionTitle is the session's name as the session list shows it.
+	// SessionTitle は、セッションの一覧に出る形の、セッションの名前である。
 	SessionTitle string
-	// Status is the record the session list shows, or nil once nothing waits.
+	// Status は、セッションの一覧に出す記録である。待っているものが無くなったら nil。
 	Status *ProgramStatus
 }
 
-// reportBlockedProgramLocked tells programBlocked what changed since it last
-// heard. It is not called when a reconnect drops the records: the program may
-// well still wait (under tmux, say), so a notification saying so stays until
-// the new process reports otherwise.
+// reportBlockedProgramLocked は、最後に知らせてから変わったことを programBlocked に伝える。再接続が記録を
+// 捨てるときには呼ばない。プログラムは（たとえば tmux の下で）まだ待っているかもしれないので、そう伝える
+// 通知は、新しい process が別のことを報告するまで残す。
 func (s *Session) reportBlockedProgramLocked() {
 	if s.programBlocked == nil {
 		return

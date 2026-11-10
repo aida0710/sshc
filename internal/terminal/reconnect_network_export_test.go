@@ -1,6 +1,6 @@
 package terminal
 
-// TransportCheckPending says whether the session has not heard an answer to its check of the connection yet.
+// TransportCheckPending は、セッションが、接続の確認への答えをまだ受け取っていないかを返す。
 func (s *Session) TransportCheckPending() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

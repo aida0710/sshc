@@ -10,17 +10,17 @@ import (
 // 接続時の自動実行は、シェルが使える状態になるたびに（再接続を含む）、手順を順に打ち込む。待つ文字列の
 // ある手順は、シェルの出力にそれが出てから打ち込む（sudo や enable の問いを待ってから答えるため）。
 
-// StartupStep is one step typed into a shell once it is ready. When Wait is not empty, the step first waits for it in
-// the shell's own output; then it types Send, and Enter after it when Enter is set.
+// StartupStep は、シェルが使えるようになったら打ち込む手順1つである。Wait が空でなければ、まずシェル自身の
+// 出力にそれが出るのを待つ。それから Send を打ち、Enter が立っていれば続けて Enter を打つ。
 type StartupStep struct {
 	Wait  string
 	Send  string
 	Enter bool
-	// Optional steps are passed over when their text does not come in time. Any other step stops the steps there.
+	// Optional の手順は、待つ文字が時間内に出なければ飛ばす。それ以外の手順では、そこで手順を止める。
 	Optional bool
 }
 
-// payload is what the step types.
+// payload は、この手順が打ち込むものである。
 func (step StartupStep) payload() []byte {
 	if step.Enter {
 		return []byte(step.Send + "\r")
@@ -28,27 +28,28 @@ func (step StartupStep) payload() []byte {
 	return []byte(step.Send)
 }
 
-// ShellOutput is a Process that can hand over its shell's own output apart from what sshc writes into the terminal
-// around it (authentication prompts and [sshc] lines). Startup steps that wait for a text look only at that output, so
-// they never answer an authentication prompt.
+// ShellOutput は、シェル自身の出力を、sshc がそのまわりにターミナルへ書くもの（認証の問いと [sshc] の行）と
+// 分けて渡せる Process である。文字を待つ起動時の手順は、その出力だけを見るので、認証の問いに答えることが
+// 無い。
 type ShellOutput interface {
-	// WatchShellOutput hands seen the end of what the shell wrote before the call, then each piece it writes after, in
-	// order, until stop is called. seen runs while the shell's output waits for it, so it must only take the bytes.
+	// WatchShellOutput は、呼ばれる前にシェルが書いたものの終わりを seen に渡し、そのあとは、stop が呼ばれるまで、
+	// 書かれたものを順に1つずつ渡す。seen が走っているあいだシェルの出力は待たされるので、seen はバイトを
+	// 受け取るだけにする。
 	WatchShellOutput(seen func([]byte)) (stop func())
 }
 
-// startupStepTimedOutNotice tells, in the terminal, that the startup steps stopped because a text did not come.
+// startupStepTimedOutNotice は、待つ文字が出なかったために起動時の手順を止めたことを、ターミナルで伝える。
 const startupStepTimedOutNotice = "接続時の自動実行を止めました。「%s」が%d秒のうちに表示されませんでした。"
 
-// startupStepsUnwatchableNotice tells that the steps could not run, for a process whose shell output cannot be told
-// apart from sshc's own lines.
+// startupStepsUnwatchableNotice は、手順を実行できなかったことを伝える。シェルの出力を sshc 自身の行と
+// 見分けられない process のときに出す。
 const startupStepsUnwatchableNotice = "この接続ではシェルの出力を待てないため、接続時の自動実行の手順を送りませんでした。"
 
-// maxWatchedShellOutput is how much of what the shell wrote since the last step is kept to look for the next step's
-// text in. The text is a prompt, written last.
+// maxWatchedShellOutput は、次の手順の文字を探すために、最後の手順からあとにシェルが書いたものをどれだけ
+// 持つかである。待つ文字はプロンプトで、最後に書かれる。
 const maxWatchedShellOutput = 64 << 10
 
-// startupStepsWait reports whether any step waits for a text.
+// startupStepsWait は、文字を待つ手順が1つでもあるかを返す。
 func startupStepsWait(steps []StartupStep) bool {
 	for _, step := range steps {
 		if step.Wait != "" {
@@ -58,9 +59,9 @@ func startupStepsWait(steps []StartupStep) bool {
 	return false
 }
 
-// runStartupSteps types the steps of startup into process one after another, waiting first for the text of a step
-// that has one. It stops when the steps are done, when a step's text does not come in time, or when process is no
-// longer the session's (a reconnect replaced it, or the session ended).
+// runStartupSteps は、startup の手順を、process へ1つずつ打ち込む。待つ文字のある手順は、まずそれを待つ。
+// 手順が終わったとき、手順の文字が時間内に出なかったとき、process がもうセッションのものでないとき
+// （再接続が入れ替えたか、セッションが終わった）に止まる。
 func (s *Session) runStartupSteps(process Process, generation uint64, startup Startup) {
 	shell, ok := process.(ShellOutput)
 	if !ok {
@@ -87,32 +88,32 @@ func (s *Session) runStartupSteps(process Process, generation uint64, startup St
 		if !s.isGeneration(generation) {
 			return
 		}
-		// What the shell wrote before this step does not answer the next one.
+		// この手順の前にシェルが書いたものは、次の手順の答えにならない。
 		watched.forget()
 		_, _ = process.Write(step.payload())
 	}
 }
 
-// isGeneration reports whether generation is still the session's process, and the session has not stopped.
+// isGeneration は、generation がまだセッションの process で、セッションが止まっていないかを返す。
 func (s *Session) isGeneration(generation uint64) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.generation == generation && !s.stoppedLocked() && s.exited == nil
 }
 
-// announceStartup writes message as an [sshc] line, while generation is still the session's. The shell has usually
-// drawn its prompt by then, so the line starts on a line of its own, as the reconnect lines do.
+// announceStartup は、generation がまだセッションのものであるあいだ、message を [sshc] の行として書く。
+// そのころにはシェルがプロンプトを描いていることが多いので、再接続の行と同じく、行を改めてから書く。
 func (s *Session) announceStartup(generation uint64, message string) {
 	if s.isGeneration(generation) {
 		s.publish([]byte("\r\n[sshc] " + message + "\r\n"))
 	}
 }
 
-// watchedShellOutput holds what the shell wrote since the last step was typed, for the next step to look in.
+// watchedShellOutput は、最後の手順を打ち込んでからシェルが書いたものを持つ。次の手順がその中を探す。
 type watchedShellOutput struct {
 	mutex   sync.Mutex
 	written []byte
-	// changed is signalled after each add; a pending signal is enough for any number of adds.
+	// changed は、足すたびに合図を受ける。何度足しても、待っている合図が1つあれば足りる。
 	changed chan struct{}
 }
 
@@ -139,8 +140,8 @@ func (w *watchedShellOutput) forget() {
 	w.written = w.written[:0]
 }
 
-// shows reports whether text is in what the shell wrote, read as the terminal shows it: without colours and other
-// control sequences.
+// shows は、シェルが書いたものの中に text があるかを返す。ターミナルに出る形（色などの制御シーケンスを
+// 除いた形）で読む。
 func (w *watchedShellOutput) shows(text string) bool {
 	w.mutex.Lock()
 	written := append([]byte(nil), w.written...)
@@ -148,8 +149,8 @@ func (w *watchedShellOutput) shows(text string) bool {
 	return strings.Contains(PlainTextFrom(written, 0), text)
 }
 
-// waitFor waits until the shell has written text, for at most limit, and reports whether it did. A session that
-// stops (stopping) or ends (done) ends the wait at once.
+// waitFor は、シェルが text を書くまで、長くても limit だけ待ち、書いたかを返す。セッションが止まる
+// （stopping）か終わる（done）と、待ちはすぐに終わる。
 func (w *watchedShellOutput) waitFor(text string, limit time.Duration, stopping, done <-chan struct{}) bool {
 	timer := time.NewTimer(limit)
 	defer timer.Stop()

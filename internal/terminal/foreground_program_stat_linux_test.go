@@ -6,7 +6,7 @@ import (
 )
 
 func TestProcessStatGivesTheNameAndStartEvenWhenTheNameHasParentheses(t *testing.T) {
-	// Field 22 (starttime) is 12345 ticks: 123.45 seconds after boot.
+	// 22番目の欄（starttime）は 12345 刻みで、起動から 123.45 秒後である。
 	stat := "4242 (my (odd) cmd) S 1 4242 4242 34816 4242 4194304 100 0 0 0 0 0 0 0 20 0 1 0 12345 2000000 100 0\n"
 	name, started, ok := parseProcessStat(stat)
 	if !ok || name != "my (odd) cmd" || started != 123450*time.Millisecond {

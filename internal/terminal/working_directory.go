@@ -9,22 +9,19 @@ import (
 	"unicode/utf8"
 )
 
-// The working directory is where a session is opened again: a restart of the
-// engine reopens it there, and a duplicate starts there. Shells report it in
-// one of two ways. OSC 7 (`file://host/path`) comes from zsh on macOS, fish
-// and many prompt themes. Bash on Debian and Ubuntu sends none, but its
-// default title is `user@host: dir`, so that title is read as well.
+// 作業フォルダは、セッションを開き直す場所である。エンジンの再起動はそこで開き直し、複製もそこで始まる。
+// シェルは2通りのどちらかで報告する。OSC 7（`file://host/path`）は、macOS の zsh、fish、多くのプロンプトの
+// テーマが送る。Debian と Ubuntu の bash は送らないが、既定のタイトルが `user@host: dir` なので、その
+// タイトルも読む。
 
-// MaxWorkingDirectoryBytes matches the bound the terminal API puts on cwd.
+// MaxWorkingDirectoryBytes は、ターミナルの API が cwd に置く上限に合わせてある。
 const MaxWorkingDirectoryBytes = 4096
 
-// isDirectoryText reports whether a directory, reported by a shell or sent to
-// the API, is text every check below may look at further: not empty, within
-// MaxWorkingDirectoryBytes, without control or format characters, and not a network or
-// device path. A `//host/share` or `\\host\share` value is a UNC path on Windows,
-// and merely checking that it exists connects to that host over SMB and offers
-// the user's Windows credentials to it. A shell's output decides the value, so
-// it is refused before anything opens it.
+// isDirectoryText は、シェルが報告したフォルダか API に送られたフォルダが、下の検査がさらに見てよい文字かを
+// 返す。空でなく、MaxWorkingDirectoryBytes に収まり、制御文字と書式の文字を含まず、ネットワークやデバイスの
+// パスでないことを確かめる。`//host/share` や `\\host\share` は Windows の UNC パスで、あるかを確かめる
+// だけで、そのホストへ SMB でつなぎ、利用者の Windows の資格情報を差し出してしまう。値を決めるのはシェルの
+// 出力なので、何かが開く前に断る。
 func isDirectoryText(directory string) bool {
 	if directory == "" || len(directory) > MaxWorkingDirectoryBytes {
 		return false
@@ -35,17 +32,16 @@ func isDirectoryText(directory string) bool {
 	return strings.IndexFunc(directory, isControlOrFormatCharacter) < 0
 }
 
-// isControlOrFormatCharacter covers C0, DEL and the C1 range U+0080 to U+009F,
-// which xterm.js reads as controls even when written in UTF-8 (U+009B starts a
-// CSI), and format characters such as bidirectional overrides that make a
-// path read differently from what it is. A directory goes back to the terminal
-// in a `cd` line the shell echoes, so none of them may be in it.
+// isControlOrFormatCharacter は、C0、DEL、C1 の範囲 U+0080 から U+009F と、書式の文字を対象にする。C1 は、
+// UTF-8 で書かれていても xterm.js が制御として読む（U+009B は CSI を始める）。双方向の上書きのような書式の
+// 文字は、パスを実際と違うものに読ませる。フォルダは、シェルがそのまま映す `cd` の行でターミナルへ戻るので、
+// どれも含んではならない。
 func isControlOrFormatCharacter(r rune) bool {
 	return unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
 }
 
-// parseOSC7Directory reads the path of `OSC 7 ; file://host/path`. The host is
-// not checked: over SSH it names the remote machine.
+// parseOSC7Directory は、`OSC 7 ; file://host/path` のパスを読む。ホストは確かめない。SSH 越しでは、
+// リモートのマシンの名前である。
 func parseOSC7Directory(payload string) (string, bool) {
 	location, err := url.Parse(payload)
 	if err != nil || location.Scheme != "file" || location.User != nil || location.RawQuery != "" || location.Fragment != "" {
@@ -54,10 +50,10 @@ func parseOSC7Directory(payload string) (string, bool) {
 	return checkedWorkingDirectory(location.Path)
 }
 
-// workingDirectoryFromTitle reads the directory of a `user@host: dir` title.
-// The directory is absolute or under the home directory (`~`, `~/src`).
+// workingDirectoryFromTitle は、`user@host: dir` のタイトルのフォルダを読む。フォルダは絶対パスか、
+// ホームフォルダの下（`~`、`~/src`）である。
 func workingDirectoryFromTitle(title string) (string, bool) {
-	// A title cut at MaxTitle may end in the middle of the path.
+	// MaxTitle で切ったタイトルは、パスの途中で終わっているかもしれない。
 	if utf8.RuneCountInString(title) >= MaxTitle {
 		return "", false
 	}
@@ -85,10 +81,9 @@ func checkedWorkingDirectory(directory string) (string, bool) {
 	return directory, true
 }
 
-// acceptWorkingDirectory records a directory the shell of the current process
-// generation reported. It is kept across reconnects: the next process starts
-// in the home directory, but the last place the user worked is still the one
-// worth reopening.
+// acceptWorkingDirectory は、今の世代の process のシェルが報告したフォルダを記録する。再接続をまたいで
+// 持ち続ける。次の process はホームフォルダで始まるが、開き直す価値があるのは、利用者が最後に作業していた
+// 場所である。
 func (s *Session) acceptWorkingDirectory(generation uint64, directory string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -105,10 +100,9 @@ func (s *Session) noteWorkingDirectoryLocked(directory string) {
 	s.workingDirectory = directory
 }
 
-// WorkingDirectory returns where the session works now, or "" when that is
-// unknown. A local process the engine can inspect is asked directly, since
-// most local shells report nothing; otherwise this is the last directory the
-// shell reported. Over SSH it may begin with `~`.
+// WorkingDirectory は、セッションが今いるフォルダを返す。分からなければ ""。エンジンが調べられるローカルの
+// process には、じかに尋ねる。ローカルのシェルの多くは何も報告しないためである。それ以外は、シェルが最後に
+// 報告したフォルダを返す。SSH 越しでは `~` で始まることがある。
 func (s *Session) WorkingDirectory() string {
 	if directory, err := s.ForegroundDirectory(); err == nil {
 		return directory
@@ -121,9 +115,8 @@ func (s *Session) WorkingDirectory() string {
 	return s.workingDirectory
 }
 
-// localWorkingDirectory turns a reported directory into one this machine can
-// start a process in, or "" when it cannot. OSC 7 writes a Windows drive path
-// as `/C:/Users`; a title's `~` is a shell's notation, not a path.
+// localWorkingDirectory は、報告されたフォルダを、このマシンで process を始められるフォルダに直す。直せなければ
+// ""。OSC 7 は、Windows のドライブのパスを `/C:/Users` と書く。タイトルの `~` はシェルの書き方で、パスではない。
 func localWorkingDirectory(reported string) string {
 	if runtime.GOOS == "windows" && len(reported) >= 3 && reported[0] == '/' && reported[2] == ':' {
 		reported = reported[1:]
@@ -135,9 +128,9 @@ func localWorkingDirectory(reported string) string {
 	return reported
 }
 
-// onLocalDrive reports whether an absolute path names a drive of this machine.
-// On Windows that is a drive letter; a UNC (`\\host\share`) or device
-// (`\\?\`, `\\.\`) volume reaches beyond it. Other systems have no volumes.
+// onLocalDrive は、絶対パスがこのマシンのドライブを指すかを返す。Windows ではドライブ文字である。UNC
+// （`\\host\share`）やデバイス（`\\?\`、`\\.\`）のボリュームは、このマシンの外へ届く。ほかの OS に
+// ボリュームは無い。
 func onLocalDrive(path string) bool {
 	if runtime.GOOS != "windows" {
 		return true

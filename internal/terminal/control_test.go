@@ -14,8 +14,7 @@ func TestControlStateUsesOnlyExplicitLifecycleState(t *testing.T) {
 	if got, _ := session.ReadControl(0, 0); got.State != ControlConnected {
 		t.Fatalf("initial state = %q", got.State)
 	}
-	// Titles and notifications are presentation only; they never change the
-	// machine-readable lifecycle state automation waits on.
+	// 名前と通知は表示だけのものである。自動化が待つ、機械が読めるライフサイクルの状態を変えることは無い。
 	session.acceptTitle(1, "claude — working")
 	session.acceptNotification(1, "", "waiting for input", now)
 	if got, _ := session.ReadControl(0, 0); got.State != ControlConnected {

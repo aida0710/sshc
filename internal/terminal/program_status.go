@@ -8,14 +8,13 @@ import (
 	"unicode/utf8"
 )
 
-// Program status (OSC 7501, https://control-codes.page/proposals/osc-7501/,
-// revision 0.4) lets a program say what it is doing: at rest, working, blocked
-// on the user, done with a result nobody has seen yet, or failed. A program
-// may keep several records, told apart by a slash-separated id. The engine
-// keeps them per session, so every browser and the session list show the same
-// state; xterm.js in the browser ignores the sequence.
+// プログラムの状態（OSC 7501、https://control-codes.page/proposals/osc-7501/、revision 0.4）は、プログラムが
+// 今していることを伝える仕組みである。休んでいる、働いている、利用者を待っている、まだ誰も見ていない結果を
+// 残して終わった、失敗した、のどれかを言える。プログラムは、スラッシュで区切った id で見分ける記録を、
+// いくつも持てる。エンジンは記録をセッションごとに持つので、どのブラウザもセッションの一覧も同じ状態を出す。
+// ブラウザの xterm.js はこのシーケンスを無視する。
 
-// ProgramStatusState is what a program said it is doing.
+// ProgramStatusState は、プログラムが今していると言ったことである。
 type ProgramStatusState string
 
 const (
@@ -26,7 +25,7 @@ const (
 	ProgramStatusError   ProgramStatusState = "error"
 )
 
-// ProgramStatusKind is what a blocked program waits for.
+// ProgramStatusKind は、利用者を待っているプログラムが、何を待っているかである。
 type ProgramStatusKind string
 
 const (
@@ -35,27 +34,27 @@ const (
 	ProgramStatusAuth       ProgramStatusKind = "auth"
 )
 
-// ProgramStatus is one record as the session list shows it.
+// ProgramStatus は、セッションの一覧に出す形の記録1つである。
 type ProgramStatus struct {
 	State ProgramStatusState
-	// Kind is only ever set on a blocked record, and not always then.
+	// Kind が入るのは blocked の記録だけで、そのときも入るとは限らない。
 	Kind ProgramStatusKind
-	// Progress is 0 to 100 on a working or blocked record; nil is indeterminate.
+	// Progress は、working か blocked の記録で 0 から 100 である。nil は、どこまで進んだか分からないことを表す。
 	Progress *int
-	// App is the program's stable name (cargo, make), from the record or from
-	// its nearest ancestor that has one.
+	// App は、プログラムの変わらない名前（cargo、make）である。記録そのものか、名前を持ついちばん近い親の記録から
+	// 取る。
 	App     string
 	Title   string
 	Message string
-	// Version is the update number of the report that set the record. It only
-	// grows within a session, so a browser can tell a record it has not shown.
+	// Version は、記録を入れた報告の更新番号である。セッションの中では増えるだけなので、ブラウザは、まだ
+	// 出していない記録を見分けられる。
 	Version uint64
 }
 
-// The limits are the spec's. A report past one is dropped whole.
+// 上限は仕様のものである。1つでも超えた報告は、丸ごと捨てる。
 const (
-	// maxProgramStatusRecords is the fewest records the spec lets a terminal
-	// keep. Past it the least recently updated one makes way.
+	// maxProgramStatusRecords は、仕様がターミナルに持つよう求める記録の最少の数である。超えたら、更新が
+	// いちばん古い記録を捨てる。
 	maxProgramStatusRecords      = 64
 	maxProgramStatusKeyBytes     = 16
 	maxProgramStatusAppBytes     = 32
@@ -67,25 +66,23 @@ const (
 	maxProgramStatusPercent      = 100
 )
 
-// programStatusAnswer answers OSC 7501 ; ?. Listing no states and no kinds
-// means all five states and all three kinds. It holds nothing from a report.
+// programStatusAnswer は、OSC 7501 ; ? への答えである。状態も種類も挙げないのは、5つの状態と3つの種類を
+// すべて扱うという意味である。報告から来たものは何も含まない。
 const programStatusAnswer = "\x1b]7501;?\x1b\\"
 
-// programStatusReport is one OSC 7501 sequence the observer read.
+// programStatusReport は、見張りが読んだ OSC 7501 のシーケンス1つである。
 type programStatusReport struct {
-	// query asks whether the terminal knows the protocol (OSC 7501 ; ?).
+	// query は、ターミナルがこの仕組みを知っているかを尋ねる（OSC 7501 ; ?）。
 	query bool
-	// clear removes the record id and every record beneath it; with id "",
-	// every record.
+	// clear は、id の記録と、その下のすべての記録を消す。id が "" なら、すべての記録を消す。
 	clear bool
 	id    string
-	// status.App is the record's own name, before any is taken from an ancestor.
+	// status.App は、親から名前を取る前の、その記録自身の名前である。
 	status ProgramStatus
 }
 
-// parseProgramStatus reads the payload after "7501;". ok is false for a report
-// to drop whole: no known state, a limit broken, an id with a byte the spec
-// does not allow, or text that is not base64 of plain UTF-8.
+// parseProgramStatus は、"7501;" のあとの本文を読む。丸ごと捨てる報告では ok が false になる。知らない状態、
+// 上限の超過、仕様が許さないバイトを含む id、平文の UTF-8 の base64 でない文字が、それにあたる。
 func parseProgramStatus(payload string) (report programStatusReport, ok bool) {
 	pairs := strings.Split(payload, ":")
 	if strings.TrimSpace(pairs[0]) == "?" {
@@ -106,7 +103,7 @@ func parseProgramStatus(payload string) (report programStatusReport, ok bool) {
 				return programStatusReport{}, false
 			}
 		} else if !onlyBytesIn(value, isProgramStatusValueByte) {
-			// A malformed pair is skipped; the rest of the report applies.
+			// 形の崩れた組は飛ばす。報告の残りは当てる。
 			continue
 		}
 		values[key] = value
@@ -152,8 +149,8 @@ func isProgramStatusKey(key string) bool {
 	return key != "" && onlyBytesIn(key, func(value byte) bool { return value >= 'a' && value <= 'z' })
 }
 
-// isProgramStatusValueByte is the whole alphabet of a value, so no value
-// needs escaping and base64 fits as it is.
+// isProgramStatusValueByte は、値に使える文字のすべてである。そのため、どの値もエスケープが要らず、base64 も
+// そのまま入る。
 func isProgramStatusValueByte(value byte) bool {
 	return isASCIIAlphanumeric(value) || strings.IndexByte("_.,+/=-", value) >= 0
 }
@@ -175,9 +172,8 @@ func onlyBytesIn(text string, allowed func(byte) bool) bool {
 	return true
 }
 
-// isProgramStatusID reports whether id is a path the spec allows. "" is the
-// root record. A segment may hold any byte of a value but the separator, and
-// an empty segment is taken as a byte out of place.
+// isProgramStatusID は、id が仕様の許すパスかを返す。"" は根の記録である。区切りを除いて、値に使えるバイトは
+// どれも区切りの間に置ける。空の区切りの間は、場違いなバイトとして扱う。
 func isProgramStatusID(id string) bool {
 	if id == "" {
 		return true
@@ -197,10 +193,9 @@ func isProgramStatusID(id string) bool {
 	return true
 }
 
-// decodeProgramStatusText reads a title or msg: base64 of UTF-8, padding
-// optional, with no control character at all (not even a newline or a tab).
-// The text is shown outside the terminal, so format characters such as
-// direction overrides are dropped too.
+// decodeProgramStatusText は、title か msg を読む。UTF-8 の base64 で、パディングは無くてもよく、制御文字は
+// 1つも含まない（改行もタブも含まない）。この文字はターミナルの外に出すので、向きを上書きするような書式の
+// 文字も落とす。
 func decodeProgramStatusText(encoded string, maximum int) (string, bool) {
 	if encoded == "" {
 		return "", true
@@ -219,7 +214,7 @@ func decodeProgramStatusText(encoded string, maximum int) (string, bool) {
 	return cleanDisplayText(text, maximum), true
 }
 
-// programStatusPercent reads progress. Anything but 0 to 100 is indeterminate.
+// programStatusPercent は、進み具合を読む。0 から 100 以外は、どこまで進んだか分からないものとして扱う。
 func programStatusPercent(value string) *int {
 	if len(value) > len("100") || !isDigits(value) {
 		return nil

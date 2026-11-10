@@ -152,7 +152,7 @@ func TestAttemptsWhileWaitingForTheNetworkAreMarked(t *testing.T) {
 	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", ReconnectError: classifyNoNetwork,
 		Open: func(ctx context.Context, size terminal.Size) (terminal.Process, error) {
-			// The attempt is on record before the test hears of it, and goes on to spy.at at once.
+			// 試みは、試験がそれを知る前に記録され、すぐに spy.at へ進む。
 			process, err := spy.open(ctx, size)
 			marks <- terminal.IsWaitingForNetwork(ctx)
 			return process, err

@@ -6,11 +6,10 @@ import (
 	"unicode/utf8"
 )
 
-// PlainTextFrom removes terminal control sequences and control characters from
-// a bounded scrollback fragment, producing a readable transcript rather than a
-// reconstruction of the screen. It decodes terminal state from the beginning of
-// input but emits only characters whose source begins at or after emitFrom;
-// callers pass a cursor that may land inside an escape sequence, or 0 for all.
+// PlainTextFrom は、長さに上限のあるスクロールバックの断片から、ターミナルの制御シーケンスと制御文字を
+// 取り除く。画面を再現するのではなく、読める記録を作る。ターミナルの状態は input の先頭から解釈するが、
+// 出すのは、もとの位置が emitFrom 以降で始まる文字だけである。呼び出し側は、エスケープシーケンスの途中に
+// 落ちるかもしれないカーソルを渡す。すべてを出すなら 0 を渡す。
 func PlainTextFrom(input []byte, emitFrom int) string {
 	if emitFrom < 0 {
 		emitFrom = 0
@@ -88,7 +87,7 @@ func PlainTextFrom(input []byte, emitFrom int) string {
 			}
 			index++
 		case csi:
-			// ECMA-48 CSI ends at its first final byte.
+			// ECMA-48 の CSI は、最初の終端バイトで終わる。
 			if value >= 0x40 && value <= 0x7e {
 				state = plain
 			}

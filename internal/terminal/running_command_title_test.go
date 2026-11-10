@@ -5,9 +5,8 @@ import (
 	"time"
 )
 
-// foregroundStub is a local shell's Process as far as the title needs one: it
-// names the program in the foreground, or none. Other Process methods are not
-// called by these tests.
+// foregroundStub は、名前に要る範囲での、ローカルのシェルの Process である。前面のプログラムの名前を返すか、
+// 無いと返す。これらの試験は、Process のほかのメソッドを呼ばない。
 type foregroundStub struct {
 	Process
 	program ForegroundProgram
@@ -20,7 +19,7 @@ func (p *foregroundStub) runs(group int, name string) {
 	p.program, p.running = ForegroundProgram{Group: group, Name: name}, true
 }
 
-// keepsRunning lets the program in the foreground run for longer.
+// keepsRunning は、前面のプログラムを、さらに長く走らせる。
 func (p *foregroundStub) keepsRunning(duration time.Duration) { p.program.Running += duration }
 
 func (p *foregroundStub) returnsToPrompt() { p.program, p.running = ForegroundProgram{}, false }

@@ -23,7 +23,7 @@ func TestVisibilityReportsFollowTheBrowsersShowingTheSession(t *testing.T) {
 		testwait.Until(t, func() bool { return process.keystrokes() == want })
 	}
 
-	// Nobody is attached, so nobody can see it.
+	// 誰もつないでいないので、誰にも見えない。
 	process.feed("\x1b[?2033h")
 	answered(reportHidden)
 
@@ -31,7 +31,7 @@ func TestVisibilityReportsFollowTheBrowsersShowingTheSession(t *testing.T) {
 	answered(reportHidden + reportVisible)
 	_, second := attach(t, session)
 	session.SetStreamVisible(first, false)
-	// The second browser still shows it; nothing changed, nothing is sent.
+	// 2つめのブラウザがまだ出している。何も変わっていないので、何も送らない。
 	process.feed("\x1b[?2033$p")
 	answered(reportHidden + reportVisible + "\x1b[?2033;1$y")
 	session.SetStreamVisible(second, false)
@@ -52,7 +52,7 @@ func TestAQueryAnswersOnceAndTurnsNoReportsOn(t *testing.T) {
 	process.feed("\x1b[?2033$p")
 	testwait.Until(t, func() bool { return process.keystrokes() == reportVisible+"\x1b[?2033;2$y" })
 
-	// Turned off, a change is not reported. The query after it shows the reports kept quiet.
+	// オフにしたあとは、変化を報告しない。そのあとの問い合わせで、報告が出なかったことが分かる。
 	session.SetStreamVisible(stream, false)
 	process.feed("\x1b[?998n")
 	testwait.Until(t, func() bool { return strings.HasSuffix(process.keystrokes(), reportHidden) })
@@ -61,8 +61,8 @@ func TestAQueryAnswersOnceAndTurnsNoReportsOn(t *testing.T) {
 	}
 }
 
-// A program that turned reports on and was cut off must not have them typed
-// into the next shell, which never asked for them.
+// 報告をオンにしたまま切れたプログラムの報告が、次のシェルに打ち込まれてはならない。次のシェルは報告を
+// 求めていない。
 func TestAProgramsVisibilityReportsEndWithItsShell(t *testing.T) {
 	spy := &openSpy{}
 	registry, _ := newFastRegistry()
@@ -79,8 +79,8 @@ func TestAProgramsVisibilityReportsEndWithItsShell(t *testing.T) {
 	spy.at(0).exit(transportLost)
 	testwait.Until(t, func() bool { return spy.count() >= 2 && session.View().State == terminal.StateConnected })
 	session.SetStreamVisible(stream, false)
-	// Asking whether reports are on shows the new shell is answered at all, and that the change before it
-	// was not reported.
+	// 報告がオンかを尋ねると、新しいシェルが答えを受け取ること自体と、その前の変化が報告されなかったことが
+	// 分かる。
 	spy.at(1).feed("\x1b[?2033$p")
 	testwait.Until(t, func() bool { return strings.HasSuffix(spy.at(1).keystrokes(), "$y") })
 	if got := spy.at(1).keystrokes(); got != "\x1b[?2033;2$y" {

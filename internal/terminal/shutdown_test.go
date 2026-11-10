@@ -208,9 +208,8 @@ func TestAShutdownThatBeginsWhileOpenBuildsTheSessionKeepsItUnpublished(t *testi
 	process := newStubbornProcess(true)
 	var processReturned atomic.Bool
 	var shutdown sync.Once
-	// Open reads the clock while it builds the session, after the Process has
-	// returned. Beginning the shutdown there puts it between the creation and
-	// the publication.
+	// Open は、Process が戻ったあと、セッションを組み立てるあいだに時計を読む。そこで停止を始めると、停止は、
+	// 作成と公開のあいだに入る。
 	registry.Now = func() time.Time {
 		if processReturned.Load() {
 			shutdown.Do(registry.BeginShutdown)

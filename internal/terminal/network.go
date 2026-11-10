@@ -2,26 +2,24 @@ package terminal
 
 import "sync"
 
-// NetworkWatch holds what the operating system says about this machine's
-// network, for a machine that can tell (the Android app, from
-// ConnectivityManager). A machine that cannot has none: a connection attempt
-// that fails for lack of a network says so instead (ProblemNoNetwork).
+// NetworkWatch は、このマシンの回線について OS が言うことを持つ。分かるマシン（Android のアプリ。
+// ConnectivityManager から）のためのものである。分からないマシンは持たない。その場合は、回線が無くて失敗した
+// 接続の試みが、そのことを伝える（ProblemNoNetwork）。
 //
-// A nil *NetworkWatch is a machine that says nothing.
+// nil の *NetworkWatch は、何も言わないマシンである。
 type NetworkWatch struct {
 	mutex       sync.Mutex
 	unavailable bool
 	changed     chan struct{}
 }
 
-// NewNetworkWatch returns a watch that takes the network to be there until told otherwise.
+// NewNetworkWatch は、別のことを言われるまで、回線があるものとして扱う見張りを返す。
 func NewNetworkWatch() *NetworkWatch {
 	return &NetworkWatch{changed: make(chan struct{})}
 }
 
-// SetAvailable records what the operating system said. Saying a network is
-// available wakes the waiters even if there already was one: it may be a new one
-// (Wi-Fi to mobile data), and an attempt that waits for its next turn can go now.
+// SetAvailable は、OS が言ったことを記録する。回線があると言われたら、すでにあったとしても、待っている側を
+// 起こす。新しい回線かもしれず（Wi-Fi からモバイル回線へ）、次の番を待っている試みは今すぐ進める。
 func (w *NetworkWatch) SetAvailable(available bool) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
@@ -33,8 +31,8 @@ func (w *NetworkWatch) SetAvailable(available bool) {
 	w.changed = make(chan struct{})
 }
 
-// State returns whether a network is there, and a channel closed at the next
-// thing the operating system says. The channel of a nil watch never closes.
+// State は、回線があるかと、OS が次に何かを言ったときに閉じるチャネルを返す。nil の見張りのチャネルは
+// 閉じない。
 func (w *NetworkWatch) State() (available bool, changed <-chan struct{}) {
 	if w == nil {
 		return true, nil

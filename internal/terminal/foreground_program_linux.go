@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// userHZ is the unit of the times in /proc: Linux reports them in USER_HZ ticks,
-// which is 100 on every architecture Go builds for.
+// userHZ は、/proc の時間の単位である。Linux は USER_HZ の刻みで報告し、Go がビルドできるどのアーキテクチャでも
+// 100 である。
 const userHZ = 100
 
 // ForegroundProgram は、シェルが前面で動かしているプログラムを /proc から読む。
@@ -36,15 +36,14 @@ func (p *unixProcess) ForegroundProgram() (ForegroundProgram, bool) {
 	return ForegroundProgram{Group: group, Name: name, Running: max(since-started, 0)}, true
 }
 
-// parseProcessStat reads the name and the start time (since boot) of a
-// /proc/<pid>/stat line: `pid (name) state ppid ... starttime ...`. The name may
-// itself hold spaces and parentheses, so it ends at the last `)`.
+// parseProcessStat は、/proc/<pid>/stat の行 `pid (name) state ppid ... starttime ...` から、名前と（起動から
+// 数えた）開始時刻を読む。名前そのものが空白や括弧を含むことがあるので、名前は最後の `)` で終わる。
 func parseProcessStat(stat string) (string, time.Duration, bool) {
 	open, closing := strings.IndexByte(stat, '('), strings.LastIndexByte(stat, ')')
 	if open < 0 || closing < open {
 		return "", 0, false
 	}
-	// After the name come the fields from the third (state) on; starttime is the 22nd.
+	// 名前のあとには、3番目（state）以降の欄が続く。starttime は22番目である。
 	const startTimeField = 22 - 3
 	fields := strings.Fields(stat[closing+1:])
 	if len(fields) <= startTimeField {
@@ -58,7 +57,7 @@ func parseProcessStat(stat string) (string, time.Duration, bool) {
 	return name, time.Duration(ticks) * time.Second / userHZ, true
 }
 
-// parseUptime reads how long the machine has been up from /proc/uptime.
+// parseUptime は、マシンが起動してからの長さを /proc/uptime から読む。
 func parseUptime(uptime string) (time.Duration, bool) {
 	fields := strings.Fields(uptime)
 	if len(fields) == 0 {

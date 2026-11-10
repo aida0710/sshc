@@ -12,19 +12,20 @@ import (
 	"sshc/third_party/vt"
 )
 
-// screenSnapshotFixtures is where the screens written out by the engine are kept for web/src/terminal/screenSnapshot.test.ts,
-// which writes each one into xterm.js with the output after it and compares that terminal with one that read the
-// whole output. Run this test with SSHC_UPDATE_TESTDATA=1 to write the file again after changing the snapshot.
+// screenSnapshotFixtures は、エンジンが書き出した画面を、web/src/terminal/screenSnapshot.test.ts のために置く
+// 場所である。その試験は、画面を1つずつ、あとに続く出力と一緒に xterm.js へ書き、出力のすべてを読んだ
+// ターミナルと比べる。スナップショットを変えたあとは、SSHC_UPDATE_TESTDATA=1 を付けてこの試験を走らせ、
+// ファイルを書き直す。
 var screenSnapshotFixtures = filepath.Join("testdata", "screen-snapshots.json")
 
 type screenSnapshotFixture struct {
 	Name string `json:"name"`
 	Cols int    `json:"cols"`
 	Rows int    `json:"rows"`
-	// Output is everything the program wrote; Tail is what it wrote after the checkpoint.
+	// Output は、プログラムが書いたすべてである。Tail は、チェックポイントのあとに書いたものである。
 	Output string `json:"output"`
 	Tail   string `json:"tail"`
-	// Screen is what the engine sends for the checkpoint.
+	// Screen は、チェックポイントとしてエンジンが送るものである。
 	Screen string `json:"screen"`
 }
 

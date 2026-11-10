@@ -86,12 +86,12 @@ func TestOSCObserverNotifications(t *testing.T) {
 
 func TestOSCObserverIgnoresControlsThatShareNumbers(t *testing.T) {
 	observer, seen := newTestObserver()
-	observer.Observe([]byte("\x1b]9;4;1;50\a"))              // ConEmu progress
-	observer.Observe([]byte("\x1b]777;something-else;x\a"))  // unknown 777 command
+	observer.Observe([]byte("\x1b]9;4;1;50\a"))              // ConEmu の進み具合
+	observer.Observe([]byte("\x1b]777;something-else;x\a"))  // 知らない 777 のコマンド
 	observer.Observe([]byte("\x1b]7;file://host/tmp\a"))     // cwd
-	observer.Observe([]byte("\x1b]133;A\a"))                 // prompt marks
-	observer.Observe([]byte("\x1b]52;c;aGVsbG8=\a"))         // clipboard
-	observer.Observe([]byte("\x1b]9;\a\x1b]777;notify;;\a")) // empty notifications
+	observer.Observe([]byte("\x1b]133;A\a"))                 // プロンプトの印
+	observer.Observe([]byte("\x1b]52;c;aGVsbG8=\a"))         // クリップボード
+	observer.Observe([]byte("\x1b]9;\a\x1b]777;notify;;\a")) // 空の通知
 	observer.Observe([]byte("\x1b]0;still parsing\a"))
 	if len(seen.notifications) != 0 {
 		t.Fatalf("unexpected notifications %q", seen.notifications)
@@ -112,8 +112,8 @@ func TestOSCObserverBoundsPayloads(t *testing.T) {
 	}
 }
 
-// A program that sends a long notification (Claude Code quoting a long
-// message, say) still gets one; only its beginning is shown anyway.
+// 長い通知を送るプログラム（たとえば長いメッセージを引用する Claude Code）にも、通知は出る。出すのは
+// どのみち先頭だけである。
 func TestOSCObserverKeepsTheBeginningOfALongNotification(t *testing.T) {
 	observer, seen := newTestObserver()
 	long := strings.Repeat("長い通知", MaxOSCPayload/3)

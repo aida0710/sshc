@@ -17,7 +17,7 @@ func observedVisibilityRequests(chunks ...string) []visibilityRequest {
 func TestTheVisibilityRequestsAreReadFromTheOutput(t *testing.T) {
 	got := observedVisibilityRequests(
 		"\x1b[?2033h", "\x1b[?2033$p", "\x1b[?998n", "\x1b[?1;2033;1004l",
-		// A reset ends reports as well.
+		// リセットも報告を終わらせる。
 		"\x1b[?2033h\x1bc",
 	)
 	want := []visibilityRequest{
@@ -42,12 +42,12 @@ func TestAVisibilityRequestSplitAcrossReadsIsStillRead(t *testing.T) {
 
 func TestOtherSequencesAreNotTakenForVisibilityRequests(t *testing.T) {
 	got := observedVisibilityRequests(
-		"\x1b[2033h",          // not a private mode
-		"\x1b[?20330h",        // another mode
-		"\x1b[?999;1n",        // a report, not a query
-		"\x1b[?6n\x1b[?1049h", // cursor position, alternate screen
-		"\x1b[?1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;2033h", // past the bound, so something else
-		"\x1b]0;\x1b[?2033h",                        // inside an OSC that the ESC ends, then a real request
+		"\x1b[2033h",          // プライベートモードではない
+		"\x1b[?20330h",        // 別のモード
+		"\x1b[?999;1n",        // 問い合わせではなく報告
+		"\x1b[?6n\x1b[?1049h", // カーソルの位置、代替画面
+		"\x1b[?1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;2033h", // 上限を超えているので別のもの
+		"\x1b]0;\x1b[?2033h",                        // ESC が終わらせる OSC の中。そのあとに本物の求め
 	)
 	want := []visibilityRequest{enableVisibilityReports}
 	if fmt.Sprint(got) != fmt.Sprint(want) {

@@ -9,24 +9,24 @@ import (
 // 接続が使える状態になったあとの出力だけである。SSH のセッションでは、シェル自身の出力だけを書く
 // （ShellOutput）。認証の問いと、そこへ打った答えは書かない。
 
-// OutputLog keeps what a session's terminal showed (internal/sessionlog.Log). Its methods return at once; the log
-// writes on its own.
+// OutputLog は、セッションのターミナルに出たものを残す（internal/sessionlog.Log）。どのメソッドもすぐ戻り、
+// 書き込みはログが自分で行う。
 type OutputLog interface {
 	Write(output []byte)
 	Resize(size Size)
-	// Note writes a line that says when something happened to the session.
+	// Note は、セッションに何かが起きた時刻を伝える行を書く。
 	Note(text string)
-	// Hide keeps secrets out of what the log writes from now on.
+	// Hide は、これからログが書くものに、秘密の値を出さないようにする。
 	Hide(secrets []string)
-	// Close writes what is left and closes the log.
+	// Close は、残りを書いてログを閉じる。
 	Close()
 }
 
-// LogTarget is the session a log is opened for (Registry.OpenLog).
+// LogTarget は、ログを開く対象のセッションである（Registry.OpenLog）。
 type LogTarget struct {
 	ID   string
 	Kind Kind
-	// Alias is the connection name, or the destination a session opened without one; empty for a local shell.
+	// Alias は接続名である。接続名なしで開いたセッションでは行き先が入る。ローカルのシェルでは空。
 	Alias   string
 	Started time.Time
 	Size    Size
@@ -40,10 +40,10 @@ const (
 	logEndedNote        = "セッションが終わりました。"
 )
 
-// logOpenFailedNotice tells, in the terminal, that the session keeps no log because its file could not be made.
+// logOpenFailedNotice は、ファイルを作れなかったので、このセッションのログを残さないことを、ターミナルで伝える。
 const logOpenFailedNotice = "\r\n[sshc] セッションのログを開けませんでした（%v）。このセッションのログは保存しません。\r\n"
 
-// openLog opens the session's log as the session opens, when the settings keep one for it.
+// openLog は、設定がログを残すと決めているセッションについて、セッションを開くときにログを開く。
 func (s *Session) openLog(open func(LogTarget) (OutputLog, error)) {
 	if open == nil {
 		return
@@ -56,10 +56,10 @@ func (s *Session) openLog(open func(LogTarget) (OutputLog, error)) {
 	s.log = log
 }
 
-// startLog follows, in the session's log, the output of process, ready now as the session's generation generation.
-// When process can hand over its shell's own output (an SSH session), only that reaches the log, beginning with what
-// the shell wrote before it was ready; otherwise (a local shell, with no authentication to keep out) everything it
-// prints.
+// startLog は、セッションの世代 generation として使えるようになった process の出力を、セッションのログで
+// 追い始める。process がシェル自身の出力を渡せる（SSH のセッション）なら、ログに入るのはそれだけで、使える
+// ようになる前にシェルが書いたものから始まる。渡せない（ローカルのシェル。除くべき認証が無い）なら、出力した
+// ものすべてが入る。
 func (s *Session) startLog(process Process, generation uint64) {
 	s.mutex.Lock()
 	log := s.log
@@ -95,8 +95,8 @@ func (s *Session) startLog(process Process, generation uint64) {
 	s.mutex.Unlock()
 }
 
-// logPumpOutput writes output that process generation printed to the log, while the log follows that process's
-// output itself (startLog).
+// logPumpOutput は、世代 generation の process の出力をログに書く。ログがその process の出力そのものを
+// 追っているあいだだけ書く（startLog）。
 func (s *Session) logPumpOutput(generation uint64, output []byte) {
 	s.mutex.Lock()
 	log := s.log
@@ -107,8 +107,8 @@ func (s *Session) logPumpOutput(generation uint64, output []byte) {
 	}
 }
 
-// endLogOfProcess stops following a process that ended, and says so in the log when an SSH connection that had
-// connected was lost.
+// endLogOfProcess は、終わった process を追うのをやめる。つながっていた SSH の接続が切れたときは、そのことを
+// ログに書く。
 func (s *Session) endLogOfProcess(connected bool) {
 	s.mutex.Lock()
 	log, stop := s.log, s.stopLogWatch
@@ -124,7 +124,8 @@ func (s *Session) endLogOfProcess(connected bool) {
 	}
 }
 
-// hideInLog keeps secrets that sshc types into the shell out of the session's log, where the shell may echo them.
+// hideInLog は、sshc がシェルに打ち込む秘密の値を、セッションのログに出さないようにする。シェルは打ち込まれた
+// ものを映すことがある。
 func (s *Session) hideInLog(secrets []string) {
 	s.mutex.Lock()
 	log := s.log
@@ -134,19 +135,19 @@ func (s *Session) hideInLog(secrets []string) {
 	}
 }
 
-// HideInLog keeps secrets out of the session's log: a command typed into the terminal (a quick command with a secret
-// variable) is echoed by the shell.
+// HideInLog は、秘密の値をセッションのログに出さないようにする。ターミナルに打ち込むコマンド（秘密の変数を
+// 持つクイックコマンド）は、シェルが映す。
 func (s *Session) HideInLog(secrets []string) { s.hideInLog(secrets) }
 
-// takeLogLocked hands over the session's log to close, once, when the session ends. The caller holds the mutex and
-// closes the log after letting it go: closing writes the rest of the screen to the disk.
+// takeLogLocked は、セッションが終わるときに、閉じるログを1度だけ渡す。呼び出し側が mutex を持ち、mutex を
+// 放してからログを閉じる。閉じるときに、画面の残りをディスクに書くためである。
 func (s *Session) takeLogLocked() (OutputLog, func()) {
 	log, stop := s.log, s.stopLogWatch
 	s.log, s.stopLogWatch = nil, nil
 	return log, stop
 }
 
-// closeLog says the session ended and closes its log.
+// closeLog は、セッションが終わったことをログに書き、ログを閉じる。
 func closeLog(log OutputLog, stop func()) {
 	if stop != nil {
 		stop()
