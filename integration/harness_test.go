@@ -220,10 +220,6 @@ func handoffPath(home string) string {
 	return filepath.Join(stateDir(home), handoff.FileName)
 }
 
-func lockPath(home string) string {
-	return filepath.Join(stateDir(home), "engine.lock")
-}
-
 // waitForFile は、engine が何かを置くまで待つ。
 func waitForFile(t *testing.T, path string, within time.Duration, process *testProcess) {
 	t.Helper()

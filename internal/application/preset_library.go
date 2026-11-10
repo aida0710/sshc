@@ -33,3 +33,45 @@ func replacePresetLibrary[T any](s *Service, operation string, base, presets []T
 		return nil
 	})
 }
+
+// presetLibraryRules は、一覧の種類（ショートカット、キーバー）ごとの決まりである。
+type presetLibraryRules[T any] struct {
+	// limit は、一覧に置けるプリセットの数の上限。
+	limit int
+	id    func(T) string
+	// valid は、1つのプリセットの中身が決まりどおりかを返す。
+	valid func(T) bool
+	// readable は、このビルドが読めない部分を落としたプリセットを返す（readablePresetLibrary）。
+	readable func(T) T
+}
+
+// validPresetLibrary は、一覧が上限に収まり、どのプリセットも決まりどおりで、ID が重ならないかを返す。
+func validPresetLibrary[T any](presets []T, rules presetLibraryRules[T]) bool {
+	if len(presets) > rules.limit {
+		return false
+	}
+	ids := map[string]bool{}
+	for _, preset := range presets {
+		if !rules.valid(preset) || ids[rules.id(preset)] {
+			return false
+		}
+		ids[rules.id(preset)] = true
+	}
+	return true
+}
+
+// readablePresetLibrary は、このビルドが使えるプリセットだけを残す。読めない部分を落としても決まりに合わない
+// プリセットは捨てる。残すと、metadata を保存するたびに検証で断られる。1つも残らなければ nil を返す。
+func readablePresetLibrary[T any](presets []T, rules presetLibraryRules[T]) []T {
+	var kept []T
+	ids := map[string]bool{}
+	for _, preset := range presets {
+		preset = rules.readable(preset)
+		if len(kept) >= rules.limit || !rules.valid(preset) || ids[rules.id(preset)] {
+			continue
+		}
+		ids[rules.id(preset)] = true
+		kept = append(kept, preset)
+	}
+	return kept
+}

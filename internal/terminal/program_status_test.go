@@ -58,7 +58,7 @@ func TestProgramStatusFollowsTheSpecForEachKey(t *testing.T) {
 		{"a malformed pair is skipped", "state=idle:app=make:nonsense:Title=x:msg=a b", programStatusReport{status: ProgramStatus{State: ProgramStatusIdle, App: "make"}}},
 		{"the last of a repeated key wins", "state=working:state=error", programStatusReport{status: ProgramStatus{State: ProgramStatusError}}},
 		{"padding is optional", "state=done:title=" + strings.TrimRight(encodedText("ok!"), "="), programStatusReport{status: ProgramStatus{State: ProgramStatusDone, Title: "ok!"}}},
-		{"direction overrides are dropped from text shown outside the terminal", "state=done:msg=" + encodedText("a‮bc"), programStatusReport{status: ProgramStatus{State: ProgramStatusDone, Message: "abc"}}},
+		{"direction overrides are dropped from text shown outside the terminal", "state=done:msg=" + encodedText("a\u202ebc"), programStatusReport{status: ProgramStatus{State: ProgramStatusDone, Message: "abc"}}},
 		{"clear takes an id", "state=clear:id=build", programStatusReport{clear: true, id: "build"}},
 		{"a query", "?", programStatusReport{query: true}},
 	}

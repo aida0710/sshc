@@ -25,7 +25,7 @@ Paused, reconnecting, confirmation-needed, and failed jobs are counted separatel
 | Desktop | Drag the upper grip of the expanded list to resize it. With the grip focused, the arrow, Home, and End keys do the same |
 | Phone | Tap the bottom bar showing counts and progress to open the queue in a separate sheet |
 
-Height and folded state are saved in the browser.
+Height and folded state are remembered for each machine and travel with Sync.
 
 ## Transfer settings
 

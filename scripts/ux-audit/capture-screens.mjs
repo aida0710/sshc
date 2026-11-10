@@ -449,14 +449,16 @@ const routes = [
   ["vault-passwords", "/vault/passwords"],
   ["vault-key-passphrases", "/vault/key-passphrases"],
   ["vault-otp", "/vault/otp"],
+  ["settings-general", "/settings/general"],
   ["settings-appearance", "/settings/appearance"],
-  ["settings-engine", "/settings/engine"],
   ["settings-terminal", "/settings/terminal"],
   ["settings-sftp", "/settings/sftp"],
   ["settings-shortcuts", "/settings/shortcuts"],
+  ["settings-keybar", "/settings/keybar"],
   ["settings-notifications", "/settings/notifications"],
+  ["settings-vault", "/settings/vault"],
+  ["settings-machines", "/settings/machines"],
   ["settings-connections", "/settings/connections"],
-  ["settings-password", "/settings/password"],
   ["sync", "/sync"],
   ["vpn", "/vpn"],
   ["history", "/history"],
@@ -575,7 +577,8 @@ async function openEntry(page, name, mobileLayout) {
 async function captureConnectionDetail(page, formFactor) {
   await go(page, "/connections");
   await page.waitForTimeout(1000);
-  await page.getByRole("main").getByText("web-01", { exact: true }).first().click({ timeout: 8000 });
+  // 一覧の中には、幅を測るための見えない同じ文字がある。見えている行を押す。
+  await page.getByRole("main").getByText("web-01", { exact: true }).filter({ visible: true }).first().click({ timeout: 8000 });
   await capture(page, formFactor, "connection-detail-basic", { wait: 1200 });
   for (const [key, name] of [["conn.areaAdvanced", "connection-detail-advanced"], ["conn.areaSshc", "connection-detail-terminal"], ["conn.areaAnalysis", "connection-detail-effective"]]) {
     await page.getByRole("tab", { name: ja(key), exact: true }).click({ timeout: 8000 });
@@ -780,7 +783,7 @@ try {
     const csrf = watchCSRF(typing.page);
     await signIn(typing.page);
     await typing.page.getByRole("button", { name: ja("terminal.newSession"), exact: true }).first().click();
-    await typing.page.getByRole("dialog").getByRole("button", { name: /^Local shell/ }).first().click();
+    await typing.page.getByRole("dialog").getByRole("button", { name: new RegExp(`^${ja("terminal.openShell")}`) }).first().click();
     await typing.page.waitForTimeout(2500);
     const listed = JSON.parse((await api(typing.page, csrf, "GET", "/api/v1/terminal/sessions")).text || "{}");
     const fresh = (listed.sessions ?? []).filter((session) => session.kind === "shell").sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];

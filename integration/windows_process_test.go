@@ -4,6 +4,7 @@ package integration
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -84,3 +85,8 @@ func processAlive(t *testing.T, pid int) bool {
 // コンソールを開けるのは画面の側であり、そこへ届くにはアクセス URLが要る。engine は
 // それを出力しないので、この検査からは届かない。実機で確かめる項目として
 // docs/manual-test-matrix.md が持つ。
+
+// lockPath は、engine がこの home で握るロックのファイルである。Windows の試験だけが使う。
+func lockPath(home string) string {
+	return filepath.Join(stateDir(home), "engine.lock")
+}
