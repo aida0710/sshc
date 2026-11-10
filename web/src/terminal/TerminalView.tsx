@@ -70,29 +70,29 @@ type TerminalViewProps = {
   session: TerminalSession;
   searchShortcutActive?: boolean;
   active?: boolean;
-  // inPane is whether this terminal is one of the panes of the Terminal section, not a session kept hidden behind
-  // them. Such a terminal keeps its WebGL renderer while another section is open: building it again on every return
-  // stopped the screen for a moment and drew the text with the DOM renderer's cells first, which wrap differently.
+  // inPane は、このターミナルが Terminal の画面に並ぶペインの1つかである。ペインの後ろに隠して持っている
+  // セッションでは false。ペインは、ほかの画面が開いているあいだも WebGL のレンダラーを持ち続ける。戻るたびに
+  // 作り直すと、画面が一瞬止まり、折り返しの違う DOM のレンダラーのマスで先に文字が描かれた。
   inPane?: boolean;
   focusRequest?: number;
   headerActions?: ReactNode;
   onSplit?: (edge: PaneEdge) => void;
-  // onRemoveFromSplit takes this session out of the split it is shown in.
+  // onRemoveFromSplit は、このセッションを、出ている分割から外す。
   onRemoveFromSplit?: () => void;
-  // splitRefusal says why nothing can go beside this session; undefined when something can.
+  // splitRefusal は、このセッションの横に何も置けない理由である。置けるときは undefined。
   splitRefusal?: string | undefined;
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
-  // onExit hands over how the program ended, as the stream reported it.
+  // onExit は、ストリームが伝えた、プログラムの終わり方を渡す。
   onExit?: (exit: ExitReport) => void;
-  // onProgramProgressChanged says the OSC 9;4 progress under the header changed, as the stream reported it.
+  // onProgramProgressChanged は、見出しの下の OSC 9;4 の進み具合が変わったことを、ストリームが伝えたときに呼ぶ。
   onProgramProgressChanged?: () => void;
   onReconnect?: () => Promise<boolean>;
   onStopReconnect?: () => Promise<boolean>;
-  // onCloseSession closes this session; an ended session's card offers it.
+  // onCloseSession は、このセッションを閉じる。終わったセッションのカードが出す。
   onCloseSession?: () => void;
-  // onAnswerHostKey answers whether to trust the unknown host key the connection asks about (hostKeyQuestion).
+  // onAnswerHostKey は、接続が尋ねている知らないホスト鍵を信頼するかに答える（hostKeyQuestion）。
   onAnswerHostKey?: (fingerprint: string, accept: boolean) => Promise<boolean>;
-  // onAnswerPasswordSave answers whether to save the password typed for this connection (passwordSaveQuestion).
+  // onAnswerPasswordSave は、この接続に打ち込んだパスワードを保存するかに答える（passwordSaveQuestion）。
   onAnswerPasswordSave?: (save: boolean) => Promise<boolean>;
   copyOnSelect?: boolean;
   fontSize?: number;
@@ -103,45 +103,42 @@ type TerminalViewProps = {
   tint?: number;
   font?: string;
   onOpenRemotePath?: (alias: string, path: string, action: RemotePathAction) => void;
-  // onOpenNavigation opens the sidebar from the phone's top bar, which replaces the app header there.
+  // onOpenNavigation は、スマホの上のバーからサイドバーを開く。スマホでは、このバーがアプリの見出しの代わりになる。
   onOpenNavigation?: (() => void) | undefined;
   osc52Enabled?: boolean;
   // vpnProfile は、この接続が通るVPN経路の名前である。空なら通らない。
   vpnProfile?: string;
-  // runTarget is the SSH alias of the engine this session runs on, when it is
-  // not this machine. Quick Commands and port forwarding then go to that
-  // engine; opening a path in SFTP is offered only when this machine reaches
-  // the same destination.
+  // runTarget は、このセッションが動いているエンジンの SSH の別名である。このマシンで動いていれば undefined。
+  // クイックコマンドとポート転送は、そのエンジンへ送る。パスを SFTP で開く操作は、このマシンから同じ行き先に
+  // 届くときだけ出す。
   runTarget?: string;
   scrollbackLines?: number;
   onOsc52Change?: (enabled: boolean) => void | Promise<void>;
   onForwardsChanged?: () => void | Promise<void>;
   jisYenBackslash?: boolean;
-  // composerEnterSends: Enter in the phone's text box sends; otherwise it starts a new line.
+  // composerEnterSends: スマホの入力欄で Enter が送る。そうでなければ Enter は改行する。
   composerEnterSends?: boolean;
-  // ligatures draws sequences such as -> and != with the font's ligatures.
+  // ligatures は、-> や != のような並びを、フォントの合字で描く。
   ligatures?: boolean;
-  // statusLine shows the VT320 status line a program shows (statusLine.ts). When off, what is written
-  // to it stays off the screen too.
+  // statusLine は、プログラムが出す VT320 のステータス行（statusLine.ts）を出す。オフのときは、そこに書かれた
+  // ものも画面に出さない。
   statusLine?: boolean;
-  // With shell integration (OSC 133): the marks left of each command (commandGutter.ts), the command kept
-  // above its output while that is scrolled through, and the marks on the scrollbar.
+  // シェル統合（OSC 133）があるときの、各コマンドの左の印（commandGutter.ts）、出力をスクロールしているあいだ
+  // 上に出しておくコマンド、スクロールバーの印。
   commandMarks?: boolean;
   stickyCommand?: boolean;
   commandScrollbarMarks?: boolean;
 };
 
-// The status line takes exactly one row from the screen. Its padding above and below its row (index.css)
-// lies over the screen's own padding under the last row, which holds no text.
+// ステータス行は、画面からちょうど1行を取る。その行の上下の余白（index.css）は、文字の無い、画面の最後の行の
+// 下の余白に重なる。
 const statusLinePadding = "0.5rem";
 
-// The link popover opens just below and to the right of the pointer so it does
-// not cover the link that was clicked.
+// リンクのポップオーバーは、押したリンクを隠さないよう、ポインターの少し右下に開く。
 const linkPopoverOffsetPx = 8;
 
-// When the settings leave the size unset, a phone (mobileViewportQuery, the
-// same condition as its toolbar and KeyBar) gets a larger size so the text
-// stays legible on its small screen.
+// 設定が大きさを決めていないとき、スマホ（mobileViewportQuery。ツールバーや KeyBar と同じ条件）では、小さい
+// 画面でも読めるよう、大きめにする。
 const mobileTerminalFontSize = 15;
 const desktopTerminalFontSize = 13;
 
@@ -352,8 +349,8 @@ export function TerminalView({
     return () => window.clearTimeout(timer);
   }, [terminalNotice]);
 
-  // A file path opens its preview without a menu first; what else the file offers is in the preview's
-  // "…". A URL, and a path whose file cannot be read here, open the menu.
+  // ファイルのパスは、メニューを挟まずにプレビューを開く。そのファイルにできるほかの操作は、プレビューの「…」に
+  // ある。URL と、ここでは読めないファイルのパスは、メニューを開く。
   const selectLinkAt = useCallback((link: TerminalLinkSelection["link"], point: ScreenPoint) => {
     const preview = previewLinkedPath.current;
     if (link.kind !== "url" && preview !== null) {
@@ -410,12 +407,12 @@ export function TerminalView({
       assembled.current = null;
       terminal.current = null;
     };
+    // セッション・api・背景の有無・WebGL 以外の値が変わっても、組み立て直さない。
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, api, backgroundConfigured, webglEnabled]);
 
-  // Declared after the effect that builds the terminal, and keyed on the same
-  // values, so it attaches to each new terminal. Switching between touch and
-  // mouse changes only these, not the connection.
+  // ターミナルを組み立てる effect のあとに宣言し、同じ値をキーにするので、新しいターミナルごとに付け直す。
+  // タッチとマウスの切り替えで変わるのはここだけで、接続は変わらない。
   useEffect(() => {
     const container = host.current;
     const view = terminal.current;
@@ -428,15 +425,14 @@ export function TerminalView({
           selectLinkAt(link, point);
           return true;
         }
-        // A tap on the line being typed also moves the cursor there; it still
-        // raises the keyboard to type at the new place.
+        // 打っている行を押すと、カーソルもそこへ動く。その場所で打てるよう、キーボードも上げる。
         const cell = cellAtPoint(view, point);
         const keys = cell === null ? null : assembled.current?.promptCursor.arrowsTo(cell) ?? null;
         if (keys !== null) assembled.current?.send(keys);
         return false;
       },
-      // A phone types into its text box, where Japanese is composed before it is sent; the terminal
-      // takes the keys typed with the key bar's Ctrl or Alt (holdModifier below).
+      // スマホは入力欄に打つ。日本語は、送る前にそこで変換する。キーバーの Ctrl や Alt を付けて打つキーは、
+      // ターミナルが受け取る（下の holdModifier）。
       typingTarget: () => composerField.current ?? view,
     });
     assembled.current?.fit();
@@ -446,8 +442,9 @@ export function TerminalView({
     };
   }, [touchTerminal, selectLinkAt, composerField, session.id, api, backgroundConfigured, webglEnabled]);
 
-  // Showing a session (opening one, picking one, or the one left after closing another) focuses it. A touch
-  // terminal is left alone: focusing it raises the software keyboard, which comes up only for a tap on the terminal.
+  // セッションを出す（開く、選ぶ、ほかを閉じて残った）と、そのセッションにフォーカスする。タッチのターミナルは
+  // そのままにする。フォーカスするとソフトウェアキーボードが上がる。キーボードは、ターミナルを押したときだけ
+  // 上がる。
   useEffect(() => {
     if (focusRequest !== undefined && live.current.active && !live.current.touch && !region.current?.contains(document.activeElement)) terminal.current?.focus();
   }, [focusRequest]);
@@ -457,13 +454,13 @@ export function TerminalView({
     terminal.current.options.theme = terminalTheme(host.current, hasBackground);
   }, [resolved, palette, hasBackground]);
 
-  // A touch terminal underlines every link, unless the preset turns it off; Windows paths become links once the
-  // engine is known to run on Windows.
+  // タッチのターミナルは、プリセットがオフにしていなければ、すべてのリンクに下線を引く。Windows のパスは、
+  // エンジンが Windows で動いていると分かったあとにリンクになる。
   useEffect(() => {
     assembled.current?.linkUnderlines.refresh();
   }, [everyLinkUnderlined, allowWindowsPaths]);
 
-  // The command marks follow their settings and the theme's colours.
+  // コマンドの印は、その設定とテーマの色に従う。
   const { pointed: pointedCommand, close: closeCommandCard } = commandCard;
   useEffect(() => {
     assembled.current?.commandDisplay.refresh();
@@ -476,15 +473,14 @@ export function TerminalView({
     assembled.current?.fit();
   }, [resolvedFontFamily]);
 
-  // A session that leaves the panes (kept behind them) gives its WebGL renderer back, even while the section is hidden.
+  // ペインから外れた（後ろに持っている）セッションは、画面が隠れているあいだでも、WebGL のレンダラーを返す。
   useEffect(() => {
     assembled.current?.fit();
   }, [inPane]);
 
-  // A stream is attached as the link turns live, while the banner that says it is connecting still
-  // takes a row or two above the screen. A size measured then would be followed by the right one
-  // once the banner goes, and a shell or a full-screen program would redraw twice. A layout effect
-  // runs after React has drawn the screen without the banner.
+  // ストリームは、リンクがつながると同時に付く。そのとき、「接続中」の帯がまだ画面の上の1〜2行を取っている。
+  // そこで測った大きさのあとに、帯が消えた正しい大きさが続くと、シェルや全画面のプログラムが2度描き直す。
+  // layout effect は、React が帯の無い画面を描いたあとに走る。
   useLayoutEffect(() => {
     drawnLive.current = link.phase === "live";
     if (drawnLive.current) assembled.current?.fit();
@@ -510,16 +506,16 @@ export function TerminalView({
 
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session, t);
-  // Ctrl and Alt apply to the next key typed into the terminal, so one held while typing in the text box
-  // moves the typing there, keeping the keyboard up. A closed keyboard stays closed: the key bar has already
-  // let go of the focus then (keepKeyboardAsIs).
+  // Ctrl と Alt は、ターミナルに打つ次のキーに効く。入力欄に打っている最中に押すと、キーボードを上げたまま、
+  // 打つ先をターミナルへ移す。閉じているキーボードは閉じたままにする。そのとき、キーバーはすでにフォーカスを
+  // 手放している（keepKeyboardAsIs）。
   function holdModifier(name: ModifierName) {
     if (modifiers[name] === "off" && document.activeElement === composerField.current) terminal.current?.focus();
     tapModifier(name);
   }
 
-  // switchDirectInput moves where a phone types, keeping an open keyboard open: the focus goes from the text
-  // box to the terminal, or back to the text box, which comes back first (flushSync) so it can take the focus.
+  // switchDirectInput は、開いているキーボードを開いたまま、スマホの打つ先を切り替える。フォーカスは入力欄から
+  // ターミナルへ移るか、入力欄へ戻る。戻るときは、フォーカスを受け取れるよう、先に入力欄を出す（flushSync）。
   function switchDirectInput() {
     if (!directInput) {
       if (document.activeElement === composerField.current) terminal.current?.focus();
@@ -631,10 +627,10 @@ export function TerminalView({
                   "--ui-term-tint": String(tint ?? defaultTint),
                 } as CSSProperties
               : {}),
-            // The screen gives up a row to the status line; the size observer refits it.
+            // 画面は、ステータス行に1行を譲る。大きさの見張りが合わせ直す。
             ...(statusLineHeight === null ? {} : { bottom: `${statusLineHeight}px` }),
           }}
-          // Two fingers on the screen pinch its text (attachFontZoom), not the page.
+          // 画面に置いた2本の指は、ページではなく、ターミナルの文字をつまむ（attachFontZoom）。
           className="absolute inset-0 bg-term-bg [touch-action:pan-x_pan-y]"
         />
         <div
@@ -649,16 +645,16 @@ export function TerminalView({
         ) : null}
         {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
         {notices.stripShown ? (
-          // Over the top of the terminal, not above it: the terminal keeps its rows, and its program does not draw again.
+          // ターミナルの上に足すのではなく、上の端に重ねる。ターミナルは行数を保ち、プログラムは描き直さない。
           <div ref={notices.stripRef} tabIndex={-1} className="absolute inset-x-0 top-0 z-20 bg-canvas shadow-float outline-none">
             {statusBanners}
           </div>
         ) : null}
         {notices.card === null || !notices.cardShown ? null : (
-          // Low in the terminal, where the person's eyes are after the last line; the strip above keeps saying it.
+          // ターミナルの下のほうに出す。最後の行を読んだあと、利用者の目はそこにある。同じことは、上の帯も伝え続ける。
           <div ref={notices.cardFrameRef} className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center mobile-layout:inset-x-2 mobile-layout:bottom-2">
             <TerminalNoticeCard
-              // A new notice is a new card, which takes the focus again.
+              // 新しい知らせは新しいカードで、フォーカスを取り直す。
               key={notices.card.key}
               notice={notices.card}
               session={session}
@@ -667,11 +663,11 @@ export function TerminalView({
               hostKeyAnswer={hostKeyAnswer}
               notificationPermission={notices.notificationPermission}
               focus={{
-                // Only the terminal the person works in, and not from under a dialog or menu. A phone shows it when the
-                // person asks for the notices, so it always takes the focus there. The hint about the previous shell's
-                // program leaves the focus alone: the new shell is there to type into.
+                // 利用者が作業しているターミナルだけがフォーカスを取り、ダイアログやメニューの下からは取らない。スマホでは、
+                // 利用者が知らせを開いたときに出すので、いつも取る。前のシェルのプログラムについての案内は、フォーカスに
+                // 触れない。新しいシェルが、打ち込めるようにそこにある。
                 take: () => mobile || (notices.card?.kind !== "resume-program" && active && !isDismissibleLayerOpen()),
-                // A touch screen would raise its keyboard again for the terminal.
+                // タッチの画面では、ターミナルへフォーカスを戻すとキーボードがまた上がる。
                 giveBack: () => {
                   if (!live.current.touch) terminal.current?.focus();
                 },
