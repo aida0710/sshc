@@ -11,6 +11,7 @@ import { ActionArea } from "../ui/ActionArea";
 import { PageSection } from "../ui/page";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useLoad } from "../ui/useLoad";
+import { useSettingScopeLabel } from "./SettingScopeTag";
 import { isAcceptedButShort, meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
 
 export type MasterPasswordApi = Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
@@ -25,6 +26,7 @@ export function MasterPasswordSection({ api, onVaultChanged }: {
   onVaultChanged?: ((status: PasswordVaultStatus) => void) | undefined;
 }) {
   const t = useTranslate();
+  const scopeLabel = useSettingScopeLabel();
   const loadVault = useCallback(() => api.passwordVault(), [api]);
   const vaultLoad = useLoad(loadVault);
   // The vault a change reported, which is newer than the one read when the page opened.
@@ -73,7 +75,7 @@ export function MasterPasswordSection({ api, onVaultChanged }: {
   const strong = meetsMasterPasswordMinimum(draft.next, minPassphraseLength) && draft.next === draft.confirm;
   const canChange = passwordless !== null && (draft.withoutPassword || strong);
   return (
-    <PageSection heading={t("secrets.changeHeading")} meta={t("secrets.changeScope")} hint={t("secrets.changeNote")}>
+    <PageSection heading={t("secrets.changeHeading")} meta={scopeLabel("thisMachine")} hint={t("secrets.changeNote")}>
       <div>
         <MoreDetails className="mb-4 mt-1">{t("secrets.changeNoteMore")}</MoreDetails>
         <PasswordlessSwitch checked={draft.withoutPassword} onChange={(checked) => edit({ withoutPassword: checked })} />

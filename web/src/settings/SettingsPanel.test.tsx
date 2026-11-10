@@ -89,6 +89,17 @@ describe("SettingsPanel", () => {
     expect(screen.queryByRole("navigation", { name: "Settings" })).not.toBeInTheDocument();
   });
 
+  it("says beside each page's name how far its settings reach", () => {
+    const { rerender } = render(<SettingsPanel api={buildApi()} page="General" />);
+    expect(screen.getByText("All machines")).toBeVisible();
+
+    rerender(<SettingsPanel api={buildApi()} page="Terminal" />);
+    expect(screen.getByText("Preset: Standard")).toBeVisible();
+
+    rerender(<SettingsPanel api={buildApi()} page="Machines" />);
+    expect(screen.getByText("Each machine")).toBeVisible();
+  });
+
   it("lists the pages in the global settings, the preset being edited and the machines", () => {
     render(<SettingsPanel api={buildApi()} page="Terminal" onNavigatePage={vi.fn()} />);
 

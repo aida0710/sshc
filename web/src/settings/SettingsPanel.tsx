@@ -16,12 +16,13 @@ import { SettingsSection } from "./SettingsSection";
 import { TerminalSettingsSection } from "./TerminalSettingsSection";
 import { VaultAutoLockSection } from "./VaultAutoLockSection";
 import { PresetPicker } from "./PresetPicker";
-import { settingsPageMeta, type SettingsPage } from "./settingsRoute";
+import { settingsPageMeta, type SettingsGroup, type SettingsPage } from "./settingsRoute";
 import { standardPresetId, useSettings } from "./settingsStore";
 import { PageHeader } from "../ui/page";
 import { PageBoard } from "../ui/PageBoard";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useSettingsSaved } from "./SettingsSaved";
+import { SettingScopeTag, type SettingScope } from "./SettingScopeTag";
 import { FieldSavedContext } from "../ui/fieldSaved";
 
 // Settings also change the master password, which belongs to the vault.
@@ -47,6 +48,15 @@ type SettingsPanelProps = {
 // form, load and save. This component decides which of them to show, and
 // which preset the preset pages edit: the one chosen above the list of pages
 // (or, on a phone, above the page), at first the one this machine uses.
+// pageScopes is how far the settings of a page reach, by its group. A part of a page that reaches elsewhere
+// (the master password on the Vault page) says so on its own heading.
+const pageScopes: Record<SettingsGroup, SettingScope> = {
+  global: "allMachines",
+  preset: "preset",
+  machines: "eachMachine",
+  actions: "thisMachine",
+};
+
 export function SettingsPanel({
   api = settingsPanelApi,
   page = "All",
@@ -85,7 +95,15 @@ export function SettingsPanel({
       )}
       className={mobileTouchTargets}
     >
-      <PageHeader title={t(pageTitle)} meta={saved.besidePageName ? saved.text : undefined} description={pageDescription === undefined ? undefined : t(pageDescription)} titleOnPhone />
+      <PageHeader
+        title={t(pageTitle)}
+        meta={all ? (saved.besidePageName ? saved.text : undefined) : (
+          <span className="inline-flex items-center gap-2.5">
+            <SettingScopeTag scope={pageScopes[settingsPageMeta[page].group]} presetId={editingPreset} />
+            {saved.besidePageName ? saved.text : null}
+          </span>
+        )}
+        description={pageDescription === undefined ? undefined : t(pageDescription)} titleOnPhone />
       <p role="status" className="sr-only">{saved.shown ? saved.text : ""}</p>
       {presetPickerOnPage ? <PresetPicker layout="bar" editing={editingPreset} onEdit={setChosenPreset} /> : null}
       {shows("General") ? <GeneralSettingsSection showHeading={all} /> : null}

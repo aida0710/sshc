@@ -179,7 +179,7 @@ test("keeps terminal actions compact and exposes terminal settings", async ({ pa
   const menu = terminal.getByRole("menu", { name: "More terminal actions" });
   await expect(menu.getByRole("menuitem", { name: "Quick Commands" })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "Copy recent terminal context" })).toBeVisible();
-  await expect(menu.getByRole("group", { name: "All terminals" }).getByRole("menuitemcheckbox", { name: "OSC 52" })).toBeVisible();
+  await expect(menu.getByRole("group", { name: "All machines" }).getByRole("menuitemcheckbox", { name: "OSC 52" })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "Port forwarding" })).toHaveCount(0);
 
   if (visualDirectory !== undefined) {

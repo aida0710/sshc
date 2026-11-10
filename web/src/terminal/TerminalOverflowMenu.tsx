@@ -10,6 +10,7 @@ import { menuChoiceItemClass, menuGroupClass, menuGroupHeadingClass, menuItemCla
 import { isScreenWakeLockSupported, saveKeepScreenAwake, useKeepScreenAwake } from "./keepScreenAwake";
 import { saveTouchMode, useDetectedTouchMode, useTouchMode, type FixedTouchMode } from "./touchMode";
 import type { PaneEdge } from "./splitView/layout";
+import { useSettingScopeLabel } from "../settings/SettingScopeTag";
 
 export function TerminalOverflowMenu({
   osc52Enabled,
@@ -51,6 +52,7 @@ export function TerminalOverflowMenu({
   triggerRef: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
+  const scopeLabel = useSettingScopeLabel();
   const panel = useRef<HTMLDivElement>(null);
   const keepScreenAwake = useKeepScreenAwake();
   const touchMode = useTouchMode();
@@ -125,10 +127,14 @@ export function TerminalOverflowMenu({
       <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onSaveScrollback)}>
         {t("terminal.saveScrollback")}
       </button>
-      {/* These apply to every terminal, not only this one, so they sit apart under their own heading. */}
-      <div role="group" aria-label={t("terminal.globalSettings")} className={menuGroupClass}>
-        <p aria-hidden="true" className={menuGroupHeadingClass}>{t("terminal.globalSettings")}</p>
+      {/* These apply to every terminal, not only this one, so they sit apart, each group under how far it
+          reaches: OSC 52 is one value for every machine, the rest belong to the preset this machine uses. */}
+      <div role="group" aria-label={scopeLabel("allMachines")} className={menuGroupClass}>
+        <p aria-hidden="true" className={menuGroupHeadingClass}>{scopeLabel("allMachines")}</p>
         <ChoiceMenuItem role="menuitemcheckbox" label="OSC 52" hint={t("terminal.osc52Hint")} checked={osc52Enabled} onSelect={action(onToggleOsc52)} />
+      </div>
+      <div role="group" aria-label={scopeLabel("preset")} className={menuGroupClass}>
+        <p aria-hidden="true" className={menuGroupHeadingClass}>{scopeLabel("preset")}</p>
         {isScreenWakeLockSupported() ? (
           <ChoiceMenuItem role="menuitemcheckbox" label={t("terminal.keepScreenAwake")} hint={t("terminal.keepScreenAwakeHint")} checked={keepScreenAwake}
             onSelect={action(() => saveKeepScreenAwake(!keepScreenAwake))} />
