@@ -29,7 +29,6 @@ export const settingsPageMeta: Record<
   General: {
     path: "/settings/general",
     label: "settings.generalHeading",
-    description: "settings.generalDescription",
     icon: "global",
     group: "global",
   },

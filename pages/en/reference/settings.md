@@ -15,6 +15,17 @@ Every setting is stored under `~/.ssh/sshc` and synced to your other machines. *
 
 Menu lists each page with a line on what it is for, and links directly to the settings pages. Connection-specific behavior lives in the connection's **Display & terminal** tab.
 
+The tag beside a page's name says how far its settings reach.
+
+| Tag | Reach |
+|---|---|
+| **All machines** | Every machine, the same value whatever the preset |
+| The preset's name, such as **Preset: Standard** | The machines that use that preset |
+| **Each machine** | A separate value for each machine (the list in Machines) |
+| **This machine only** | This machine only; not synced |
+
+The switches in a terminal's "…" menu sit under headings with the same tags. A field left empty in a connection's **Display & terminal** tab follows the preset its machine uses.
+
 ## Presets
 
 To use different values on different machines, such as a larger font on a phone than on a PC, make a preset. A preset holds the appearance, the terminal settings, the SFTP transfer settings, the shortcuts, the notification sound, the Vault auto-lock, keeping the screen on, and touch handling. The navigation and connection-list widths, the Home view and the SFTP split are not part of a preset; each browser remembers its own.

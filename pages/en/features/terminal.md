@@ -240,7 +240,7 @@ Besides the configurable font size, pinching two fingers on a terminal, or turni
 
 ### Keep screen on
 
-**Keep screen on** under **All terminals** in a terminal's "…" menu keeps the screen from turning off while Terminal is shown (Screen Wake Lock API). It applies to every terminal and is saved in the preset this machine uses. It appears only when the browser opened sshc over HTTPS or `localhost`.
+**Keep screen on**, under the heading that names the preset in a terminal's "…" menu, keeps the screen from turning off while Terminal is shown (Screen Wake Lock API). It applies to every terminal and is saved in the preset this machine uses. It appears only when the browser opened sshc over HTTPS or `localhost`.
 
 ### Visibility reports and the status line
 
@@ -278,7 +278,7 @@ Neither the preview nor the original paste is stored. The review stays open whil
 
 OSC 52 lets remote software write to the device clipboard. It is off by default. Turn it on only while you use connections you trust.
 
-Turned on, it applies to every terminal, whatever the connection. Switch it under **Settings → General** or under **All terminals** in a terminal's "…" menu.
+Turned on, it applies to every terminal, whatever the connection. Switch it under **Settings → General** or under **All machines** in a terminal's "…" menu.
 
 - It also lets a program write images and HTML through the Kitty clipboard protocol (OSC 5522).
 - A program that turns on paste events (mode 5522) can also be given what is pasted, images included.

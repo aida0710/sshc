@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,6 +38,9 @@ describe("TerminalOverflowMenu", () => {
     );
 
     expect(screen.getByRole("menuitemcheckbox", { name: /OSC 52/ })).toHaveAttribute("aria-checked", "false");
+    // Each setting sits under how far it reaches: OSC 52 is one value everywhere, touch belongs to the preset.
+    expect(within(screen.getByRole("group", { name: "All machines" })).getByRole("menuitemcheckbox", { name: /OSC 52/ })).toBeVisible();
+    expect(within(screen.getByRole("group", { name: "Preset: Standard" })).getByRole("menuitemcheckbox", { name: /Detect touch automatically/ })).toBeVisible();
     await userEvent.click(screen.getByRole("menuitem", { name: "Copy recent terminal context" }));
     expect(copy).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
