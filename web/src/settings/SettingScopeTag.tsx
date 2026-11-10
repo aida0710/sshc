@@ -34,5 +34,6 @@ export function useSettingScopeLabel(): (scope: SettingScope, presetId?: string)
 
 export function SettingScopeTag({ scope, presetId }: { scope: SettingScope; presetId?: string }) {
   const label = useSettingScopeLabel();
-  return <Tag>{label(scope, presetId)}</Tag>;
+  // プリセットの名前は利用者が付けるので、長さが決まらない。
+  return <Tag truncate={scope === "preset"}>{label(scope, presetId)}</Tag>;
 }

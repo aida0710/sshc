@@ -38,8 +38,9 @@ export function PageHeader({
     <header className={nothingShown ? "sr-only" : `flex flex-wrap items-start justify-between gap-4 ${className}`}>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-baseline gap-2.5">
-          <h2 id={headingId} className={titleHidden ? "sr-only" : "text-xl font-semibold leading-[29px] text-ink"}>{title}</h2>
-          {meta === undefined ? null : <span className={titleHidden ? "sr-only" : "shrink-0 text-[12.5px] text-ink-faint"}>{meta}</span>}
+          <h2 id={headingId} className={titleHidden ? "sr-only" : "shrink-0 text-xl font-semibold leading-[29px] text-ink"}>{title}</h2>
+          {/* 名前は縮めず、横の添え書きが残りの幅に収まる。長さの決まらない添え書きは、自分で縮む（Tag の truncate）。 */}
+          {meta === undefined ? null : <span className={titleHidden ? "sr-only" : "min-w-0 text-[12.5px] text-ink-faint"}>{meta}</span>}
         </div>
         {description === undefined ? null : <p className="mt-0.5 max-w-3xl text-xs leading-[18px] text-ink-faint">{description}</p>}
       </div>

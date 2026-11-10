@@ -98,7 +98,7 @@ export function SettingsPanel({
       <PageHeader
         title={t(pageTitle)}
         meta={all ? (saved.besidePageName ? saved.text : undefined) : (
-          <span className="inline-flex items-center gap-2.5">
+          <span className="inline-flex min-w-0 max-w-full items-center gap-2.5">
             <SettingScopeTag scope={pageScopes[settingsPageMeta[page].group]} presetId={editingPreset} />
             {saved.besidePageName ? saved.text : null}
           </span>
