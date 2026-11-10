@@ -18,7 +18,7 @@ export type NavigateLocationOptions = {
 export type NavigationBlocker = (next: BrowserLocation) => boolean;
 
 // LocationPresenter makes a change of the location shown: it calls change, which publishes the new location,
-// and may wrap it (the phone's fade between pages). replaced is whether the change took the place of the current
+// and may wrap it (the fade after Android's back gesture). replaced is whether the change took the place of the current
 // entry (a page settling its own address, Android's Back opening the top of a section).
 export type LocationPresenter = (
   change: () => void,
@@ -56,8 +56,8 @@ export function useSectionRoute({ present = presentAtOnce }: { present?: Locatio
   // going back would leave sshc (or, in the Android app, do nothing).
   hasEntryBefore: () => boolean;
   // currentLocation is the location last published. location follows it once the page is drawn there, which the
-  // presenter may put off (the phone's fade draws the new page after a picture of the one before), so what acts on
-  // where the page is now, as Android's Back does, reads this.
+  // presenter may put off (the fade after Android's back gesture draws the new page after a picture of the one
+  // before), so what acts on where the page is now, as Android's Back does, reads this.
   currentLocation: () => BrowserLocation;
 } {
   const [location, setLocation] = useState<BrowserLocation>(readLocation);

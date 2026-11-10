@@ -1,6 +1,6 @@
-/* How the screen changes pages on a phone (pageMotion.ts sets data-page-changing while the browser's view
-   transition runs): the page left fades out as the page opened fades in, briefly, with nothing sliding. The
-   bottom bar has its own name, so it stays as it is while the page under it changes. */
+/* How the page Android's back gesture let go of changes on a phone (pageMotion.ts sets data-page-changing while
+   the browser's view transition runs): the small page left fades out as the page before fades in, briefly, with
+   nothing sliding. The bottom bar has its own name, so it stays as it is while the page under it changes. */
 
 .sshc-mobile-navigation {
   view-transition-name: sshc-bottom-bar;
@@ -12,6 +12,11 @@
   animation: none;
 }
 
+/* The browser also moves the whole picture from the place before to the place after, for 0.25s unless told
+   otherwise: the place is the same, and the screen takes no tap until it ends. */
+:root[data-page-changing]::view-transition-group(root) {
+  animation-duration: 150ms;
+}
 :root[data-page-changing]::view-transition-old(root) {
   animation: 150ms linear both sshc-page-fade-out;
 }
