@@ -710,6 +710,73 @@ func TestReadPreviewNamesTheTypeFromTheBytesAndRefusesEverythingElse(t *testing.
 	})
 }
 
+// readSizeRecordingRemote は、開いたファイルの Read が1回ごとに何バイトを頼んだかを記録する。SFTP では Read の
+// 1回ごとにサーバの返事を待つので、Read の回数が往復の回数になる。
+type readSizeRecordingRemote struct {
+	*fakeRemote
+	asked []int
+}
+
+type readSizeRecordingFile struct {
+	io.ReadCloser
+	asked *[]int
+}
+
+func (file readSizeRecordingFile) Read(contents []byte) (int, error) {
+	*file.asked = append(*file.asked, len(contents))
+	return file.ReadCloser.Read(contents)
+}
+
+func (remote *readSizeRecordingRemote) Open(candidate string) (io.ReadCloser, error) {
+	opened, err := remote.fakeRemote.Open(candidate)
+	if err != nil {
+		return nil, err
+	}
+	return readSizeRecordingFile{ReadCloser: opened, asked: &remote.asked}, nil
+}
+
+func TestReadPreviewAsksForTheRestOfAPictureInOneRead(t *testing.T) {
+	picture := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte("d"), 200<<10)...)
+	remote := &readSizeRecordingRemote{fakeRemote: remoteWith(map[string]node{
+		"/photo.png": {name: "photo.png", content: picture, mode: 0o644, modTime: testTime},
+	})}
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+
+	preview, err := service.ReadPreview(context.Background(), "edge", "/photo.png")
+	if err != nil || !bytes.Equal(preview.Contents, picture) {
+		t.Fatalf("ReadPreview() = %d bytes, %v", len(preview.Contents), err)
+	}
+	// 型を見る最初のバイトのあと、残りを1回の Read で頼む。
+	if len(remote.asked) < 2 || remote.asked[1] < len(picture)-remote.asked[0] {
+		t.Fatalf("reads asked for %v bytes, want the rest of %d bytes in the second", remote.asked, len(picture))
+	}
+}
+
+func TestReadTextAsksForAWholeFileInOneRead(t *testing.T) {
+	contents := strings.Repeat("line of a log\n", 20<<10)
+	remote := &readSizeRecordingRemote{fakeRemote: remoteWith(map[string]node{"/app.log": file("app.log", contents, 0o644)})}
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+
+	text, err := service.ReadText(context.Background(), "edge", "/app.log")
+	if err != nil || text.Contents != contents {
+		t.Fatalf("ReadText() = %d bytes, %v", len(text.Contents), err)
+	}
+	if len(remote.asked) == 0 || remote.asked[0] < len(contents) {
+		t.Fatalf("reads asked for %v bytes, want all %d bytes in the first", remote.asked, len(contents))
+	}
+}
+
+// /proc のファイルは、大きさ0と言っても読める行がある。
+func TestReadTextReadsAFileThatSaysItIsEmpty(t *testing.T) {
+	remote := &sizeReportingRemote{fakeRemote: remoteWith(map[string]node{"/cpuinfo": file("cpuinfo", "processor\t: 0\n", 0o444)}), size: 0}
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+
+	text, err := service.ReadText(context.Background(), "edge", "/cpuinfo")
+	if err != nil || text.Contents != "processor\t: 0\n" {
+		t.Fatalf("ReadText() = %q, %v", text.Contents, err)
+	}
+}
+
 func TestSearchMatchesNamesBelowARootWithoutFollowingSymlinks(t *testing.T) {
 	remote := remoteWith(map[string]node{
 		"/srv":                    directory("srv"),
