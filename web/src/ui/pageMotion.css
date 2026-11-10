@@ -1,6 +1,6 @@
-/* How the page Android's back gesture let go of changes on a phone (pageMotion.ts sets data-page-changing while
-   the browser's view transition runs): the small page left fades out as the page before fades in, briefly, with
-   nothing sliding. The bottom bar has its own name, so it stays as it is while the page under it changes. */
+/* 電話で Android の戻るジェスチャーを離したあとの、ページの切り替え（ブラウザの view transition の間、
+   pageMotion.ts が data-page-changing を付ける）。小さくなったページが消えていき、前のページが短く現れる。横には
+   動かさない。下のバーには別の名前を付け、下のページが変わる間もそのままにする。 */
 
 .sshc-mobile-navigation {
   view-transition-name: sshc-bottom-bar;
@@ -12,8 +12,8 @@
   animation: none;
 }
 
-/* The browser also moves the whole picture from the place before to the place after, for 0.25s unless told
-   otherwise: the place is the same, and the screen takes no tap until it ends. */
+/* ブラウザは、絵の全体を前の位置から後の位置へ動かす動きも付け、指定しなければ0.25秒かける。位置は同じなので
+   見た目は変わらないが、その動きが終わるまで画面は押下を受けない。 */
 :root[data-page-changing]::view-transition-group(root) {
   animation-duration: 150ms;
 }
@@ -31,8 +31,8 @@
   from { opacity: 0; }
 }
 
-/* While Android's back gesture is drawn (backGesturePage.ts writes the app's transform), the page shows over a
-   darker ground and clips its rounded corners. */
+/* Android の戻るジェスチャーを描いている間（backGesturePage.ts がアプリの transform を書く）、ページの後ろの地を
+   暗くし、ページの中身を丸めた角で切り取る。 */
 :root[data-back-gesture] body {
   background: color-mix(in srgb, var(--ui-canvas) 55%, black);
 }

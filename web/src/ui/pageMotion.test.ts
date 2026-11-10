@@ -15,7 +15,7 @@ function onScreen({ phone }: { phone: boolean }) {
   return startViewTransition;
 }
 
-// Android's back gesture has drawn the page small and let go of it (backGesturePage.ts).
+// Android の戻るジェスチャーがページを小さく描いたまま、指が離れた（backGesturePage.ts）。
 function letGoOfBackGesture() {
   document.documentElement.dataset.backGesture = "";
 }

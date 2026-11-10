@@ -17,9 +17,9 @@ export type NavigateLocationOptions = {
 
 export type NavigationBlocker = (next: BrowserLocation) => boolean;
 
-// LocationPresenter makes a change of the location shown: it calls change, which publishes the new location,
-// and may wrap it (the fade after Android's back gesture). replaced is whether the change took the place of the current
-// entry (a page settling its own address, Android's Back opening the top of a section).
+// LocationPresenter は、出す場所を切り替える。新しい場所を知らせる change を呼び、それを包むこともある（Android の
+// 戻るジェスチャーのあとのフェード）。replaced は、切り替えが今の履歴の項目を置き換えたかどうか（ページが自分の
+// 場所を整えるとき、Android の戻るで区画の一番上を開くとき）。
 export type LocationPresenter = (
   change: () => void,
   transition: { from: BrowserLocation; to: BrowserLocation; replaced: boolean },
@@ -55,9 +55,9 @@ export function useSectionRoute({ present = presentAtOnce }: { present?: Locatio
   // hasEntryBefore tells whether the page's history has an entry of sshc before this one; on the first entry,
   // going back would leave sshc (or, in the Android app, do nothing).
   hasEntryBefore: () => boolean;
-  // currentLocation is the location last published. location follows it once the page is drawn there, which the
-  // presenter may put off (the fade after Android's back gesture draws the new page after a picture of the one
-  // before), so what acts on where the page is now, as Android's Back does, reads this.
+  // currentLocation は、最後に知らせた場所。location は、ページがそこに描かれてから追いつくが、presenter がそれを
+  // 遅らせることがある（Android の戻るジェスチャーのあとのフェードは、前のページの絵を撮ってから新しいページを
+  // 描く）。今ページがどこにあるかで動くもの（Android の戻るなど）は、こちらを読む。
   currentLocation: () => BrowserLocation;
 } {
   const [location, setLocation] = useState<BrowserLocation>(readLocation);
