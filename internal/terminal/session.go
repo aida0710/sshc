@@ -24,41 +24,31 @@ type Session struct {
 	// mutex の中で読み書きする。
 	workspace string
 
-	mutex         sync.Mutex
-	inputMutex    sync.Mutex
-	buffer        *Ring
-	streams       map[*Stream]bool
-	process       Process
-	exited        *ExitInfo
-	cleanup       func()
-	state         State
-	problem       string
-	reconnectView *ReconnectView
-	generation    uint64
-	ready         *processReadiness
+	mutex      sync.Mutex
+	inputMutex sync.Mutex
+	buffer     *Ring
+	streams    map[*Stream]bool
+	process    Process
+	exited     *ExitInfo
+	cleanup    func()
+	state      State
+	problem    string
+	generation uint64
+	ready      *processReadiness
 	// screen is the screen as the output the buffer let go left it, for a
 	// replay that cannot start at the cursor it was asked for. See
 	// screen_checkpoint.go.
 	screen screenCheckpoint
-	// terminalTitle is the last OSC 0/1/2 title observed for the current
-	// process generation. The browser applies the same sequence itself; the
-	// engine records it so every client shows the same pane name.
-	terminalTitle string
-	// terminalTitleGroup is the foreground process group that was running when
-	// terminalTitle arrived, or 0 when the shell itself, or a program the engine
-	// cannot see, sent it. See running_command_title.go.
-	terminalTitleGroup int
+	// shell は、今のシェルが報告してきたことである。シェルが替わったら丸ごと捨てる。shell_reports.go。
+	shell shellReports
 	// runningCommandTitle says whether the settings let the pane title name the
 	// running command; nil means they do. See running_command_title.go.
 	runningCommandTitle func() bool
 	// workingDirectory is the last directory the shell reported. See
 	// working_directory.go.
-	workingDirectory string
-	// shellStartDirectory is the first directory the current process reported.
-	shellStartDirectory string
+	workingDirectory    string
 	notificationVersion uint64
 	lastNotification    *Notification
-	programProgress     *ProgramProgress
 	// programStatus holds the OSC 7501 records. See program_status_records.go.
 	programStatus programStatusRecords
 	// programBlocked hears when the session's program starts or stops waiting
@@ -69,16 +59,10 @@ type Session struct {
 	// screenPrompt reads questions off the screen of a program that cannot report
 	// them. See screen_prompt_watch.go.
 	screenPrompt screenPromptWatch
-	// visibilityReports is whether the program turned visibility reports
-	// (mode 2033) on; visible is whether any attached browser may show the
-	// session. replies holds the answers on their way to the program. See
-	// visibility_reports.go.
-	visibilityReports bool
-	visible           bool
-	replies           chan []byte
-	// commandStartedAt is when the current shell last reported a command
-	// start (OSC 133;C); zero when no command is running. See command_finished.go.
-	commandStartedAt time.Time
+	// visible is whether any attached browser may show the session. replies holds the answers on their way
+	// to the program. See visibility_reports.go.
+	visible bool
+	replies chan []byte
 
 	connectedCallback func()
 	connectedOnce     sync.Once
@@ -109,21 +93,12 @@ type Session struct {
 	// stopLogWatch stops following the shell output of the generation the log watches (ShellOutput).
 	stopLogWatch func()
 	size         Size
-	// reconnectAttempts は、今の切断から試した自動再接続の回数である。
-	// ReconnectSettled のあいだ安定して繋がったら 0 に戻す。
-	reconnectAttempts int
-	// transportCheckPending は、回線が変わったあとの確認に輸送がまだ応答していない間だけ真である。
-	// この間に輸送が落ちたら、回線の変化で切れたものとして扱う。
-	transportCheckPending bool
-	reconnectCancel       context.CancelFunc
+	// reconnection は、自動再接続の進み具合である。reconnection.go。
+	reconnection reconnection
 	// network は、このマシンの回線について OS が言うことである。nil なら OS は何も言わない。
 	network      *NetworkWatch
 	networkRetry time.Duration
-	// noNetwork は、直前の接続の試みが回線の無さで失敗したことを表す。reconnect_network.go。
-	noNetwork bool
-	// networkWaitAnnounced は、回線を待っていることをターミナルに書いたことを表す。
-	networkWaitAnnounced bool
-	now                  func() time.Time
+	now          func() time.Time
 	// stopping は、繋ぎ直しを待っている最中に閉じられたことを伝える。
 	stopping chan struct{}
 	// discarded は、ユーザーが自分でこのコンソールを閉じたことを表す。
@@ -271,14 +246,14 @@ func (s *Session) View() View {
 		notification := *s.lastNotification
 		view.LastNotification = &notification
 	}
-	if s.programProgress != nil {
-		progress := *s.programProgress
+	if s.shell.programProgress != nil {
+		progress := *s.shell.programProgress
 		view.ProgramProgress = &progress
 	}
 	view.ProgramStatus = s.programStatus.summary()
 	view.Resume = s.resumeHintLocked()
-	if s.reconnectView != nil {
-		status := *s.reconnectView
+	if s.reconnection.view != nil {
+		status := *s.reconnection.view
 		view.Reconnect = &status
 	}
 	if s.exited != nil {
@@ -523,19 +498,13 @@ func (s *Session) forceClose() error {
 func (s *Session) observeProcess(pending State, successMessage string) {
 	s.mutex.Lock()
 	s.noteProgramToResumeLocked()
-	s.shellStartDirectory = ""
-	// A replacement shell announces its own title; the previous one must not
-	// linger on the pane while it starts.
-	s.resetTerminalTitleLocked()
-	s.programProgress = nil
-	// The old process is gone, and so is what it was doing. A result it left
-	// done or failed stays for the browser to show until it has been seen.
+	// 前のシェルはもう無い。それが報告したこと（名前、進み具合、走っているコマンド、可視の報告の求め）は
+	// 新しいシェルのものではない。
+	s.forgetShellReportsLocked()
+	// 前のプロセスがしていたことも終わった。done や failed で残した結果は、ブラウザが見るまで残す。
 	s.endActiveProgramStatusLocked()
 	s.programStatus.drop(ProgramStatusIdle)
 	s.screenPrompt.stop()
-	s.commandStartedAt = time.Time{}
-	// The new shell asked for no reports; the old program's answers are not for it.
-	s.visibilityReports = false
 	s.generation++
 	generation := s.generation
 	// 前のシェルは既に無い。ここから先の入力は新しいシェルへ届く。
@@ -546,7 +515,7 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 		s.ready = nil
 		s.state = StateConnected
 		s.problem = ""
-		s.reconnectView = nil
+		s.reconnection.view = nil
 		s.mutex.Unlock()
 		s.announceConnected(process, generation, successMessage)
 		return
@@ -569,7 +538,7 @@ func (s *Session) observeProcess(pending State, successMessage string) {
 		if current && err == nil {
 			s.state = StateConnected
 			s.problem = ""
-			s.reconnectView = nil
+			s.reconnection.view = nil
 		}
 		s.mutex.Unlock()
 		close(observed.done)
@@ -718,7 +687,7 @@ func (s *Session) pump(now func() time.Time) {
 		// 再接続で予算を戻すと、失敗し続ける接続が永久に回り続ける。
 		if connectionErr == nil && info.At.Sub(settledAt) >= ReconnectSettled {
 			s.mutex.Lock()
-			s.reconnectAttempts = 0
+			s.reconnection.attempts = 0
 			s.mutex.Unlock()
 		}
 
@@ -792,7 +761,7 @@ func (s *Session) finish(info ExitInfo) {
 func (s *Session) finishLocked(info ExitInfo) {
 	s.exited = &info
 	s.state = StateExited
-	s.reconnectView = nil
+	s.reconnection.view = nil
 	s.screenPrompt.stop()
 	s.reportBlockedProgramLocked()
 	s.closeStreamsLocked()

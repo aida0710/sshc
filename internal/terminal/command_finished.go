@@ -26,7 +26,7 @@ func (s *Session) acceptCommandStarted(generation uint64, at time.Time) {
 	if generation != s.generation || s.exited != nil {
 		return
 	}
-	s.commandStartedAt = at
+	s.shell.commandStartedAt = at
 }
 
 // acceptCommandFinished notifies the end of a long command. An end without a
@@ -37,8 +37,8 @@ func (s *Session) acceptCommandFinished(generation uint64, exitCode *int, at tim
 	if generation != s.generation || s.exited != nil {
 		return
 	}
-	started := s.commandStartedAt
-	s.commandStartedAt = time.Time{}
+	started := s.shell.commandStartedAt
+	s.shell.commandStartedAt = time.Time{}
 	if started.IsZero() || at.Sub(started) < LongCommand {
 		return
 	}

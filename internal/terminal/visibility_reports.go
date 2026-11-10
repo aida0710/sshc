@@ -101,14 +101,14 @@ func (s *Session) acceptVisibilityRequest(generation uint64, request visibilityR
 	switch request {
 	case enableVisibilityReports:
 		// The spec asks for a report on every DECSET, even when reports were on.
-		s.visibilityReports = true
+		s.shell.visibilityReports = true
 		reply = visibilityReport(s.visible)
 	case disableVisibilityReports:
-		s.visibilityReports = false
+		s.shell.visibilityReports = false
 	case queryVisibility:
 		reply = visibilityReport(s.visible)
 	case queryVisibilityMode:
-		reply = visibilityModeReport(s.visibilityReports)
+		reply = visibilityModeReport(s.shell.visibilityReports)
 	}
 	s.mutex.Unlock()
 	s.queueReply(reply)
@@ -136,7 +136,7 @@ func (s *Session) visibilityChangedLocked() []byte {
 		return nil
 	}
 	s.visible = visible
-	if !s.visibilityReports {
+	if !s.shell.visibilityReports {
 		return nil
 	}
 	return visibilityReport(visible)

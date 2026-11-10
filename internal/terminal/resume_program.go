@@ -51,7 +51,7 @@ func (s *Session) noteProgramToResumeLocked() {
 		s.resumeProgram = app
 		s.resumeDirectory = ""
 		s.resumeStartsInDirectory = false
-		if s.workingDirectory != s.shellStartDirectory {
+		if s.workingDirectory != s.shell.startDirectory {
 			s.resumeDirectory = s.workingDirectory
 		}
 	}

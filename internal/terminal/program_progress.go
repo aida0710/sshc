@@ -67,5 +67,5 @@ func (s *Session) acceptProgramProgress(generation uint64, progress *ProgramProg
 	if generation != s.generation || s.exited != nil {
 		return
 	}
-	s.programProgress = progress
+	s.shell.programProgress = progress
 }

@@ -94,7 +94,7 @@ func (s *Session) handshakingProcessLocked() Process {
 
 func (s *Session) stopReconnecting() {
 	s.mutex.Lock()
-	cancel := s.reconnectCancel
+	cancel := s.reconnection.cancel
 	select {
 	case <-s.stopping:
 	default:
@@ -123,11 +123,11 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		}
 	} else {
 		s.mutex.Lock()
-		s.noNetwork, s.networkWaitAnnounced = false, false
+		s.reconnection.noNetwork, s.reconnection.networkWaitAnnounced = false, false
 		if lostToNetworkChange {
 			// 回線が変わって切れたのは新しい切断である。機内モードから戻ると、モバイル回線で繋ぎ直した
 			// 数秒後に Wi-Fi へ替わって切れる。その回数を持ち越すと、上限が1回の設定ではここで止まる。
-			s.reconnectAttempts = 0
+			s.reconnection.attempts = 0
 		}
 		s.mutex.Unlock()
 	}
@@ -184,7 +184,7 @@ func (s *Session) nextReconnectAttempt() (attempt, limit int, ok bool) {
 		limit = NormaliseReconnects(s.reconnectLimit())
 	}
 	s.mutex.Lock()
-	canReopen, attempt := s.reopen != nil, s.reconnectAttempts
+	canReopen, attempt := s.reopen != nil, s.reconnection.attempts
 	stopped := s.stoppedLocked() || s.exited != nil
 	s.mutex.Unlock()
 	if canReopen && limit > 0 && attempt >= limit {
@@ -239,7 +239,7 @@ func (s *Session) waitToReconnect(attempt, limit int, now func() time.Time) bool
 func (s *Session) showReconnectingLocked(view ReconnectView) {
 	s.process = nil
 	s.state = StateReconnecting
-	s.reconnectView = &view
+	s.reconnection.view = &view
 }
 
 // reconnectLead は、再接続を待つ行の頭である。切れたことを書くのは最初の待ちだけである。
@@ -262,10 +262,10 @@ func (s *Session) reopenForReconnect() (process Process, stopped bool, err error
 		cancel()
 		return nil, true, nil
 	}
-	if s.noNetwork {
+	if s.reconnection.noNetwork {
 		attemptCtx = WithWaitingForNetwork(attemptCtx)
 	}
-	s.reconnectCancel = cancel
+	s.reconnection.cancel = cancel
 	reopen := s.reopen
 	// The browser may have been resized during the wait; the new shell
 	// must start at that size, so it is read only after waiting.
@@ -273,7 +273,7 @@ func (s *Session) reopenForReconnect() (process Process, stopped bool, err error
 	s.mutex.Unlock()
 	process, err = reopen(attemptCtx, size)
 	s.mutex.Lock()
-	s.reconnectCancel = nil
+	s.reconnection.cancel = nil
 	stopped = s.stoppedLocked()
 	s.mutex.Unlock()
 	cancel()
@@ -291,7 +291,7 @@ func (s *Session) installReconnectedProcess(process Process) bool {
 	stopped := s.stoppedLocked()
 	if !stopped {
 		s.process = process
-		s.reconnectAttempts++
+		s.reconnection.attempts++
 	}
 	s.mutex.Unlock()
 	if stopped {
@@ -309,7 +309,7 @@ func (s *Session) installReconnectedProcess(process Process) bool {
 // 試し直さない失敗なら false を返す。
 func (s *Session) recordReopenFailure(err error) (retry bool) {
 	s.mutex.Lock()
-	s.reconnectAttempts++
+	s.reconnection.attempts++
 	s.mutex.Unlock()
 	retry, _ = s.recordReconnectFailure(err)
 	reason := err.Error()
@@ -342,18 +342,18 @@ func (s *Session) recordReconnectFailure(err error) (retry bool, problem string)
 	retry, problem = s.classifyReconnectFailure(err)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	if s.reconnectView != nil {
-		s.reconnectView.Problem = problem
+	if s.reconnection.view != nil {
+		s.reconnection.view.Problem = problem
 	}
 	if !retry {
 		s.problem = problem
 	}
-	s.noNetwork = problem == ProblemNoNetwork
-	if s.noNetwork && s.reconnectAttempts > 0 {
-		s.reconnectAttempts--
+	s.reconnection.noNetwork = problem == ProblemNoNetwork
+	if s.reconnection.noNetwork && s.reconnection.attempts > 0 {
+		s.reconnection.attempts--
 	}
-	if !s.noNetwork {
-		s.networkWaitAnnounced = false
+	if !s.reconnection.noNetwork {
+		s.reconnection.networkWaitAnnounced = false
 	}
 	return retry, problem
 }
@@ -372,8 +372,8 @@ func (s *Session) prepareManualReconnect() (func(context.Context, Size) (Process
 	s.exited = nil
 	s.state = StateConnecting
 	s.problem = ""
-	s.reconnectView = nil
-	s.reconnectAttempts = 0
+	s.reconnection.view = nil
+	s.reconnection.attempts = 0
 	s.stopping = make(chan struct{})
 	s.done = make(chan struct{})
 	return s.reopen, s.size, previous, nil
@@ -400,7 +400,7 @@ func (s *Session) failManualReconnect(previous ExitInfo, problem string) {
 	s.exited = &previous
 	s.state = StateExited
 	s.problem = problem
-	s.reconnectView = nil
+	s.reconnection.view = nil
 	done := s.done
 	s.closeStreamsLocked()
 	s.mutex.Unlock()
@@ -423,7 +423,7 @@ func (s *Session) completeProcessReplacement(process Process, started time.Time,
 	s.process = process
 	s.started = started
 	s.problem = ""
-	s.reconnectView = nil
+	s.reconnection.view = nil
 	s.mutex.Unlock()
 	s.observeProcess(StateConnecting, successMessage)
 	return true

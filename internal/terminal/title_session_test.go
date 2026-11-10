@@ -49,7 +49,7 @@ func TestTerminalTitleIgnoresStaleGenerations(t *testing.T) {
 	}
 	session.acceptTitle(1, "current")
 	session.mutex.Lock()
-	session.resetTerminalTitleLocked()
+	session.forgetShellReportsLocked()
 	session.mutex.Unlock()
 	if view := session.View(); view.Title != "edge" || view.Presentation.TitleSource != TitleConnection {
 		t.Fatalf("title survived process replacement: %+v", view.Presentation)

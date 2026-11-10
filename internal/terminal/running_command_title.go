@@ -38,12 +38,12 @@ func (s *Session) displayTitleLocked(program ForegroundProgram, running bool) st
 	switch {
 	case !running || program.Running < runningCommandTitleDelay || s.titlePinned:
 		return s.title
-	case s.terminalTitle != "" && s.terminalTitleGroup == program.Group:
+	case s.shell.title != "" && s.shell.titleGroup == program.Group:
 		// 動いているプログラムが自分で付けた名前（Claude Code、vim）は、そのまま出す。
 		return s.title
-	case s.terminalTitle != "" && s.terminalTitleGroup == 0:
+	case s.shell.title != "" && s.shell.titleGroup == 0:
 		// シェルがプロンプトで送った名前は残し、何が動いているかを前に足す。
-		return program.Name + runningCommandTitleSeparator + s.terminalTitle
+		return program.Name + runningCommandTitleSeparator + s.shell.title
 	default:
 		// シェルが名前を送っていないか、前に動いたプログラムの名前が残っているだけなら、
 		// コマンドの名前だけを出す。シェル名（bash）を足しても、分かることは増えない。
