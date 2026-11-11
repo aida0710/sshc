@@ -243,3 +243,19 @@ test("a field in focus is marked by the accent outline alone, as a button is", a
   await expect(field).toHaveCSS("box-shadow", "none");
   await expect(field).toHaveCSS("border-top-color", borderAtRest);
 });
+
+// A row that reaches the edge of a box that hides its overflow would lose one side of the outline, 4px outside it.
+test("a row at the edge of its box draws the outline of focus inside itself", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  await openSection(page, "Connections");
+  const group = page.getByRole("navigation", { name: "Groups" }).getByRole("button", { name: /Ungrouped/ }).first();
+
+  // A press on the keyboard comes first, so the browser shows the outline as it does for someone who tabs.
+  await page.keyboard.press("Shift");
+  await group.focus();
+
+  await expect(group).toHaveCSS("outline-style", "solid");
+  await expect(group).toHaveCSS("outline-width", "2px");
+  await expect(group).toHaveCSS("outline-offset", "-2px");
+});

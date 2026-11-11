@@ -78,7 +78,8 @@ export function CreateConnectionPane({
       onSubmit={(event) => void form.submit(event)}
       className={`${editorContainer} flex min-h-0 flex-1 flex-col`}
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {/* 縦に流れる枠は横のはみ出しも切る。欄のフォーカスの枠（外へ4px）が欠けないよう、左右に同じだけ余白を取る。 */}
+      <div className="-mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1">
         <header className="mb-3.5 flex items-center gap-2.5">
           <span aria-hidden="true" className="flex size-[34px] shrink-0 items-center justify-center rounded-inset bg-select-fill text-accent">
             <Icon name="plus" className="size-[17px]" />

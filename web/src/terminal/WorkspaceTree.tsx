@@ -363,7 +363,7 @@ export function WorkspaceTree({
         type="button"
         disabled={!canOpenSession}
         onClick={() => setPickerWorkspace(newSessionWorkspace)}
-        className="mt-1.5 flex min-h-10 w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left text-ui text-accent hover:bg-hover md:min-h-[30px]"
+        className="sshc-focus-inset mt-1.5 flex min-h-10 w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left text-ui text-accent hover:bg-hover md:min-h-[30px]"
       >
         <Icon name="plus" className="size-3.5" aria-hidden="true" />
         {t("terminal.newSession")}

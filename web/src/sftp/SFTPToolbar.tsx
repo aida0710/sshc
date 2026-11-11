@@ -120,7 +120,7 @@ export function SFTPToolbar({
           {index > 0 && !crumbs[index - 1]!.label.endsWith("/") ? <span aria-hidden="true" className="px-0.5 text-ink-faint">/</span> : null}
           {index === crumbs.length - 1 ? <span aria-current="location" className="max-w-40 truncate px-1 py-1.5 font-medium text-ink" title={crumb.path}>{crumb.label}</span>
             : <button type="button" disabled={navigationDisabled} onClick={() => void browser.load(crumb.path)}
-              className="max-w-28 truncate rounded-md px-1 py-1.5 text-ink-muted hover:bg-hover hover:text-ink" title={crumb.path}>{crumb.label}</button>}
+              className="sshc-focus-inset max-w-28 truncate rounded-md px-1 py-1.5 text-ink-muted hover:bg-hover hover:text-ink" title={crumb.path}>{crumb.label}</button>}
         </span>)}
       </nav>
       <button type="button" aria-label={labels.editPath} title={labels.editPath} disabled={navigationDisabled} onClick={() => setPathEditing(true)}
