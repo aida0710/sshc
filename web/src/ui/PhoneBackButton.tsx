@@ -16,7 +16,7 @@ export function PhoneBackButton({ label, onBack }: { label: string; onBack: () =
         aria-label={label}
         title={label}
         onClick={onBack}
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
       >
         <Icon name="chevronLeft" className="size-5" />
       </button>

@@ -42,7 +42,7 @@ function JobAction({ label, icon, tone = "text-ink-muted", disabled = false, onC
 }) {
   const control = usePendingResult();
   return <button type="button" aria-label={label} title={label} disabled={disabled || control.pending} aria-busy={control.pending || undefined} onClick={() => control.watch(onClick())}
-    className={`flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-select-fill md:size-8 mobile-layout:size-11 ${tone}`}>
+    className={`flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-hover md:size-8 mobile-layout:size-11 ${tone}`}>
     {control.pending ? <Spinner className="size-4" /> : <Icon name={icon} className="size-4" />}
   </button>;
 }
@@ -101,7 +101,7 @@ export function TransferJobRow({ job, waiting, processingStopped, maxReconnectAt
         {job.allowedActions.includes("remove") ? <JobAction label={t("sftp.manager.remove")} icon="minus" onClick={() => runControl(() => sftpTransferManager.remove(job.id))} /> : null}
         <button type="button" aria-label={t(detailsOpen ? "sftp.manager.hideDetails" : "sftp.manager.showDetails", { name: job.name })}
           aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen((value) => !value)}
-          className="flex size-11 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill md:size-8 mobile-layout:size-11">
+          className="flex size-11 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-8 mobile-layout:size-11">
           <Icon name="chevronRight" className={`size-4 ${detailsOpen ? "rotate-90" : ""}`} />
         </button>
       </div>

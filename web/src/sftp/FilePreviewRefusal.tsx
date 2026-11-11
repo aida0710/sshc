@@ -10,7 +10,7 @@ export function FilePreviewRefusal({ reason, onDownload }: { reason: MessageKey;
     <div className="grid justify-items-start gap-3">
       <p className="text-sm text-ink-muted">{t(reason)}</p>
       {onDownload === undefined ? null : (
-        <button type="button" className="min-h-11 rounded-md border border-control-line px-3 text-sm hover:bg-select-fill md:min-h-8" onClick={onDownload}>
+        <button type="button" className="min-h-11 rounded-md border border-control-line px-3 text-sm hover:bg-hover md:min-h-8" onClick={onDownload}>
           {t("sftp.download")}
         </button>
       )}

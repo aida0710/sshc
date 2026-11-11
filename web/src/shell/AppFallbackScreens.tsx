@@ -72,7 +72,7 @@ function CommandBlock({ children }: { children: ReactNode }) {
 export function VaultRecheckMark() {
   const t = useTranslate();
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-14 z-[100] flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-14 z-fallback flex justify-center px-4">
       <p role="status" className="sshc-slow-status flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1.5 text-xs text-ink-muted shadow-card">
         <Spinner />
         {t("shell.vaultChecking")}
@@ -86,7 +86,7 @@ export function VaultRecheckMark() {
 export function VaultRecheckOverlay() {
   const t = useTranslate();
   return (
-    <div className="fixed inset-0 z-[100]">
+    <div className="fixed inset-0 z-fallback">
       <EntryScreen heading={t("shell.title")} description={<p role="status">{t("shell.vaultCheckRetrying")}</p>}>
         <Spinner className="size-5 self-center" />
       </EntryScreen>

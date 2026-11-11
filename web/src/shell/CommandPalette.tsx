@@ -260,7 +260,7 @@ export function CommandPalette({
       initialFocusRef={input}
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       placement="palette"
-      zIndexClassName="z-[70]"
+      zIndexClassName="z-palette"
       panelClassName="flex max-h-[72vh] w-full max-w-2xl flex-col overflow-hidden"
     >
         <h2 id="command-palette-heading" className="sr-only">{t("palette.heading")}</h2>
