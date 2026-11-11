@@ -129,7 +129,7 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
                   return (
                     <label
                       key={candidate.path}
-                      className="flex min-h-10 items-center gap-3 border-t border-hairline px-3 py-2 first:border-t-0 hover:bg-select-fill"
+                      className="flex min-h-10 items-center gap-3 border-t border-hairline px-3 py-2 first:border-t-0 hover:bg-hover"
                     >
                       <input
                         type="checkbox"

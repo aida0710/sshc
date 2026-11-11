@@ -83,7 +83,7 @@ function RowLayout({ row, keyHostUsageComplete, panel, editPanel, actions, code,
         <ActionMenu
           label={t("secrets.actions", { name: row.label })}
           items={menu}
-          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink"
+          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
           iconClassName="size-5"
         />
       </article>

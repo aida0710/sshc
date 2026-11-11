@@ -30,7 +30,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div
         role="status"
-        className="pointer-events-none fixed inset-x-0 bottom-[max(calc(1rem+var(--mobile-navigation-inset)),calc(1rem+env(safe-area-inset-bottom,0px)))] z-[80] flex justify-center px-4"
+        className="pointer-events-none fixed inset-x-0 bottom-[max(calc(1rem+var(--mobile-navigation-inset)),calc(1rem+env(safe-area-inset-bottom,0px)))] z-above-dialog flex justify-center px-4"
       >
         {toast === null ? null : (
           <ToastMessage key={toast.id} tone={toast.tone} className="max-w-md">

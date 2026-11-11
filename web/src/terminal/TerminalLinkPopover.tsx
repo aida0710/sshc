@@ -65,7 +65,7 @@ export function TerminalLinkPopover({
       role="dialog"
       aria-label={t("terminal.linkActions")}
       style={{ left: Math.min(selection.x, Math.max(8, window.innerWidth - 260)), top: Math.min(selection.y, Math.max(8, window.innerHeight - 220)) }}
-      className="fixed z-[80] w-64 rounded-md border border-control-line bg-card p-2 shadow-overlay"
+      className="fixed z-above-dialog w-64 rounded-md border border-control-line bg-card p-2 shadow-overlay"
     >
       <p className="truncate px-2 py-1 font-mono text-xs text-ink-muted" title={selection.link.target}>{selection.link.target}</p>
       <div className="mt-1 grid gap-1">
@@ -74,7 +74,7 @@ export function TerminalLinkPopover({
             key={action.label}
             ref={index === 0 ? firstAction : undefined}
             type="button"
-            className="rounded-md px-2 py-1.5 text-left text-sm hover:bg-select-fill"
+            className="rounded-md px-2 py-1.5 text-left text-sm hover:bg-hover"
             onClick={action.run}
           >
             {action.label}

@@ -75,7 +75,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
               </>}
             </tr></thead>
             <tbody>{changes.map((difference) => (
-              <tr key={difference.relativePath} className="border-t border-line/40 hover:bg-select-fill/40">
+              <tr key={difference.relativePath} className="border-t border-line/40 hover:bg-hover">
                 {readOnly ? null : <td className="px-3 py-2"><input type="checkbox" aria-label={t("sftp.selectEntry", { name: difference.relativePath })} disabled={busy || difference.status === "unverified"} checked={selected.has(difference.relativePath)} onChange={() => toggle(difference.relativePath)} className="size-4 accent-accent" /></td>}
                 <td className="px-2 py-2 font-mono text-ink [overflow-wrap:anywhere]">{difference.relativePath}
                   {compact ? <span className="mt-1 block font-sans text-xs text-ink-muted">{leftLabel}: {sideFact(difference.left, t)} · {rightLabel}: {sideFact(difference.right, t)}</span> : null}

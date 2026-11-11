@@ -49,7 +49,7 @@ export function TerminalCommandCard({ block, mark, onCopy, onSave, onClose, onPo
         top: Math.min(Math.max(mark.top, edgePx), window.innerHeight - 160),
         width: cardWidthPx,
       }}
-      className="fixed z-[80] rounded-inset border border-line bg-surface px-3.5 py-3 text-[12.5px] leading-relaxed text-ink shadow-overlay"
+      className="fixed z-above-dialog rounded-inset border border-line bg-surface px-3.5 py-3 text-[12.5px] leading-relaxed text-ink shadow-overlay"
     >
       <p className="truncate font-mono text-[13px] font-semibold" title={name}>{name}</p>
       <p className="sshc-command-result">{commandResult(block, t, now)}</p>

@@ -27,7 +27,7 @@ function CopyableCode({ code, label, className }: { code: string; label: string;
       aria-label={label}
       title={refused ? t("copy.refused") : label}
       onClick={copy}
-      className={`flex items-center gap-1.5 rounded-md px-1.5 py-0.5 hover:bg-select-fill ${className}`}
+      className={`flex items-center gap-1.5 rounded-md px-1.5 py-0.5 hover:bg-hover ${className}`}
     >
       <span className="whitespace-nowrap font-mono tabular-nums tracking-wider">{readableCode(code)}</span>
       {state === "idle" ? null : <Icon name={state === "copied" ? "check" : "close"} className={`size-4 ${refused ? "text-danger" : "text-ink-muted"}`} />}

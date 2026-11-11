@@ -202,15 +202,15 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
             await setTransfersStopped(!processingStopped);
             await sftpTransferManager.reconcile();
           })}
-          className={`flex size-11 shrink-0 items-center justify-center rounded-md md:size-8 mobile-layout:size-11 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-select-fill focus:bg-select-fill`}
+          className={`flex size-11 shrink-0 items-center justify-center rounded-md md:size-8 mobile-layout:size-11 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-hover focus:bg-select-fill`}
         >
           <Icon name={processingStopped ? "play" : "pause"} className="size-4" />
         </button>
         </>
         )}
-        {onNavigateLocation === undefined ? null : <button type="button" aria-label={t("sftp.manager.settings")} title={t("sftp.manager.settings")} onClick={openSettings} className="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill md:size-8 mobile-layout:size-11"><Icon name="settings" className="size-4" /></button>}
+        {onNavigateLocation === undefined ? null : <button type="button" aria-label={t("sftp.manager.settings")} title={t("sftp.manager.settings")} onClick={openSettings} className="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-8 mobile-layout:size-11"><Icon name="settings" className="size-4" /></button>}
         <div ref={menuRoot} className="relative ml-auto">
-          {hasMenuActions ? <button ref={menuTrigger} type="button" aria-label={t("sftp.manager.actions")} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)} className="flex size-11 items-center justify-center rounded-md md:size-8 mobile-layout:size-11 text-ink-muted hover:bg-select-fill hover:text-ink focus:bg-select-fill">
+          {hasMenuActions ? <button ref={menuTrigger} type="button" aria-label={t("sftp.manager.actions")} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)} className="flex size-11 items-center justify-center rounded-md md:size-8 mobile-layout:size-11 text-ink-muted hover:bg-hover hover:text-ink focus:bg-select-fill">
             <Icon name="moreHorizontal" className="size-4" />
           </button> : null}
           {menuOpen ? (
@@ -223,7 +223,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
             </div>
           ) : null}
         </div>
-        {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill"><Icon name="close" className="size-4" /></button> : null}
+        {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover"><Icon name="close" className="size-4" /></button> : null}
       </div>
       {controlProblem !== "" ? <div className="mx-2.5 mb-2"><Notice tone="danger" compact><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={dismissProblem} className="shrink-0 text-ink-muted hover:text-ink"><Icon name="close" className="size-3.5" /></button></Notice></div> : null}
       {compactViewport && jobs.length === 0 ? <p className="p-6 text-center text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</p> : null}
