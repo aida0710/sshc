@@ -112,12 +112,12 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
         <div className="flex flex-col gap-3">
           {paletteGroups.map((group) => (
             <div key={group.heading} role="group" aria-label={t(group.heading)} className="flex flex-col gap-1.5">
-              <span className="text-[11.5px] text-ink-faint">{t(group.heading)}</span>
+              <span className="text-xs text-ink-faint">{t(group.heading)}</span>
               <div className="flex flex-wrap gap-1.5">
                 {group.keys.map((key) => (
                   <button key={key.key ?? key.text} type="button" disabled={unavailable || isPlaced(layout, key)}
                     aria-label={spokenKeyName(t, key)} onClick={() => place(key)}
-                    className="flex h-9 min-w-10 items-center justify-center rounded-md border border-line bg-card px-2 font-mono text-[12px] text-ink">
+                    className="flex h-9 min-w-10 items-center justify-center rounded-md border border-line bg-card px-2 font-mono text-xs text-ink">
                     <KeyFace barKey={key} iconClassName="size-[15px]" />
                   </button>
                 ))}
@@ -125,10 +125,10 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
             </div>
           ))}
           <div role="group" aria-label={t("keyBar.groupCustom")} className="flex flex-col gap-1.5">
-            <span className="text-[11.5px] text-ink-faint">{t("keyBar.groupCustom")}</span>
+            <span className="text-xs text-ink-faint">{t("keyBar.groupCustom")}</span>
             <div>
               <button type="button" disabled={unavailable} onClick={() => setEditing({ kind: "create" })}
-                className="flex h-9 items-center gap-1.5 rounded-md border border-dashed border-line px-3 text-[12.5px] text-accent">
+                className="flex h-9 items-center gap-1.5 rounded-md border border-dashed border-line px-3 text-xs text-accent">
                 <Icon name="plus" className="size-3.5" />{t("keyBar.createCustom")}
               </button>
             </div>

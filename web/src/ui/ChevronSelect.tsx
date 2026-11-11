@@ -17,7 +17,7 @@ export function ChevronSelect({
       )}
       <select
         {...select}
-        className={`h-[30px] rounded-md border border-line text-[13px] text-ink [field-sizing:content] ${leadingIcon === undefined ? "pl-2.5" : "pl-8"} ${className}`}
+        className={`h-[30px] rounded-md border border-line text-ui text-ink [field-sizing:content] ${leadingIcon === undefined ? "pl-2.5" : "pl-8"} ${className}`}
       >
         {children}
       </select>

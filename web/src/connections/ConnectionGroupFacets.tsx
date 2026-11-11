@@ -30,7 +30,7 @@ function floatingListSide(pointerX: number, listWidth: number): "left" | "right"
 }
 
 function facetLook(active: boolean): string {
-  return `flex min-h-[30px] w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left text-[13px] transition-colors ${
+  return `flex min-h-[30px] w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left text-ui transition-colors ${
     active ? "bg-select-fill font-medium text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
   }`;
 }
@@ -133,8 +133,8 @@ export function ConnectionGroupFacets({
               <Icon name="groups" className="size-[15px]" />
             </span>
             <span className="min-w-0 flex-1 truncate">{node.label}</span>
-            {tucked ? <span className="shrink-0 text-[11px] text-ink-faint">{t("tree.hiddenMark")}</span> : null}
-            <span className={`shrink-0 font-mono text-[11.5px] font-normal text-ink-faint ${items.length === 0 ? "" : hideOnHoverAtPcSize} ${openMenu === menuKey ? "invisible" : ""}`}>
+            {tucked ? <span className="shrink-0 text-2xs text-ink-faint">{t("tree.hiddenMark")}</span> : null}
+            <span className={`shrink-0 font-mono text-xs font-normal text-ink-faint ${items.length === 0 ? "" : hideOnHoverAtPcSize} ${openMenu === menuKey ? "invisible" : ""}`}>
               {node.descendantCount}
             </span>
           </button>
@@ -191,7 +191,7 @@ export function ConnectionGroupFacets({
           {gutter}
           <Icon name="groups" className={`size-[15px] shrink-0 ${allActive ? "text-accent" : ""}`} />
           <span className="min-w-0 flex-1 truncate">{t("tree.allConnections")}</span>
-          <span className="shrink-0 font-mono text-[11.5px] font-normal text-ink-faint">{decorated.length}</span>
+          <span className="shrink-0 font-mono text-xs font-normal text-ink-faint">{decorated.length}</span>
         </button>
         {groupTree.map((node) => renderGroup(node))}
         <div {...drag.dropHandlers("")} className={`rounded-md ${dropTargetLook({ accepts: drag.accepts(""), over: drag.isOver("") })}`}>
@@ -199,7 +199,7 @@ export function ConnectionGroupFacets({
             {gutter}
             <Icon name="groups" className={`size-[15px] shrink-0 ${ungroupedActive ? "text-accent" : ""}`} />
             <span className="min-w-0 flex-1 truncate">{t("tree.ungrouped")}</span>
-            <span className="shrink-0 font-mono text-[11.5px] font-normal text-ink-faint">{ungrouped}</span>
+            <span className="shrink-0 font-mono text-xs font-normal text-ink-faint">{ungrouped}</span>
           </button>
         </div>
         {hiddenCount === 0 ? null : (

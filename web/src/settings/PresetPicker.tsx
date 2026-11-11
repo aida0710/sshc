@@ -85,7 +85,7 @@ export function PresetPicker({ editing, onEdit, layout }: {
     </select>
   );
   const status = edited.id === inUse
-    ? <span className="min-w-0 truncate whitespace-nowrap rounded-full bg-accent/15 px-2 text-[11.5px] leading-5 text-ink">{t("settings.presetInUse")}</span>
+    ? <span className="min-w-0 truncate whitespace-nowrap rounded-full bg-accent/15 px-2 text-xs leading-5 text-ink">{t("settings.presetInUse")}</span>
     : <Button small disabled={unavailable} onClick={useHere}>{t("settings.presetUseHere")}</Button>;
   const menu = <ActionMenu label={t("settings.presetActions", { name: editedName })} items={actions}
     triggerClassName="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-6" />;
@@ -94,7 +94,7 @@ export function PresetPicker({ editing, onEdit, layout }: {
     <div data-preset-picker className={layout === "list"
       ? "mx-0.5 mb-1.5 flex flex-col gap-1.5 rounded-inset border border-hairline bg-surface-subtle p-2"
       : "mt-3 flex flex-col gap-2 rounded-inset border border-hairline bg-surface-subtle px-3 py-2.5"}>
-      <span className="px-0.5 text-[11.5px] text-ink-faint">{t("settings.presetToEdit")}</span>
+      <span className="px-0.5 text-xs text-ink-faint">{t("settings.presetToEdit")}</span>
       {layout === "list" ? select : <div className="flex min-w-0 items-center gap-2">{select}{menu}</div>}
       <div className="flex min-w-0 items-center gap-1.5">
         {status}

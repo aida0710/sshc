@@ -8,7 +8,7 @@ export type Fact = { label: string; value: ReactNode };
 // longest one; on a wide screen the column is as wide as FieldRow's, so a page that mixes the two lines them up.
 export function FactRows({ facts }: { facts: readonly Fact[] }) {
   return (
-    <dl className={`grid grid-cols-[minmax(0,max-content)_minmax(0,1fr)] gap-x-4 text-[13.5px] ${formColumns}`}>
+    <dl className={`grid grid-cols-[minmax(0,max-content)_minmax(0,1fr)] gap-x-4 text-sm ${formColumns}`}>
       {facts.map(({ label, value }) => (
         <div key={label} className="col-span-2 grid grid-cols-subgrid border-t border-line py-2.5 first:border-t-0 first:pt-0.5 last:pb-0.5">
           <dt className="max-w-36 text-ink-muted">{label}</dt>

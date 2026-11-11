@@ -68,7 +68,7 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
         .*
       </Button>
       {/* The one message that does not fit a button's width takes a row of its own under the buttons. */}
-      <span role="status" className={`${statusPlace(mobile, search.invalid)} text-center text-[11px] ${search.invalid ? "text-danger" : "text-ink-muted"}`}>
+      <span role="status" className={`${statusPlace(mobile, search.invalid)} text-center text-2xs ${search.invalid ? "text-danger" : "text-ink-muted"}`}>
         {search.invalid
           ? t("terminal.searchInvalidRegex")
           : search.result.total === 0

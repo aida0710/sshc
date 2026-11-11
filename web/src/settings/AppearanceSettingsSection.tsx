@@ -77,7 +77,7 @@ export function AppearanceSettingsSection({ presetId, showHeading }: { presetId:
       <FieldRow label={t("appearance.theme")} interactiveChildren>
         <div className="grid max-w-[720px] grid-cols-2 gap-3.5 md:grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))]" role="radiogroup" aria-label={t("appearance.theme")}>
           {themes.map((option) => (
-            <label key={option} className={`flex min-w-0 cursor-pointer flex-col gap-2 text-[13px] ${isFirstDarkTheme(option) ? "col-start-1" : ""}`}>
+            <label key={option} className={`flex min-w-0 cursor-pointer flex-col gap-2 text-ui ${isFirstDarkTheme(option) ? "col-start-1" : ""}`}>
               <input
                 type="radio"
                 name="appearance-theme"
@@ -100,7 +100,7 @@ export function AppearanceSettingsSection({ presetId, showHeading }: { presetId:
         <div>
           <div className="flex flex-wrap gap-[18px]" role="radiogroup" aria-label={t("appearance.accent")}>
             {accentOptions.map((option) => (
-              <label key={option} className="flex w-16 cursor-pointer flex-col items-center gap-2 text-[12.5px] text-ink-muted has-[:checked]:text-ink">
+              <label key={option} className="flex w-16 cursor-pointer flex-col items-center gap-2 text-xs text-ink-muted has-[:checked]:text-ink">
                 <input
                   type="radio"
                   name="appearance-accent"

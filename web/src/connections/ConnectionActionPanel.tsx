@@ -105,7 +105,7 @@ export function ConnectionActionPanel({
 
   return (
     <section className="flex shrink-0 flex-col gap-2 rounded-inset bg-surface-subtle p-3">
-      <label htmlFor={fieldId} className="text-[13px] font-medium text-ink">{form.title}</label>
+      <label htmlFor={fieldId} className="text-ui font-medium text-ink">{form.title}</label>
       <fieldset disabled={disabled || pending.running !== null} className="contents">
         {form.body}
         {form.hint === "" ? null : <p className={hintText}>{form.hint}</p>}

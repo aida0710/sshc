@@ -14,8 +14,8 @@ import { noUnrequestedEditOptions, startWithTabIndenting } from "./monacoEditing
 import { registerSSHConfigLanguage, sshConfigLanguageId } from "./sshConfigLanguage";
 import { useModelFollowsValue } from "./useModelFollowsValue";
 
-// The field's text is set as the other monospace fields are (12.5px), with a line a little taller than the text.
-const fontSize = 12.5;
+// The field's text is set as the editors are (13px), with a line a little taller than the text.
+const fontSize = 13;
 const lineHeight = 19;
 // verticalPadding is the room above the first line and below the last.
 const verticalPadding = 8;

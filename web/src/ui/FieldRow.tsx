@@ -20,13 +20,13 @@ type Density = "page" | "editor";
 const looks: Record<Density, { row: string; name: string; pair: string; second: string }> = {
   page: {
     row: `grid grid-cols-[minmax(0,1fr)] gap-y-1.5 border-t border-line py-3.5 first:border-t-0 first:pt-0.5 ${formColumns}`,
-    name: "pt-1.5 text-[13.5px] font-medium text-ink",
+    name: "pt-1.5 text-sm font-medium text-ink",
     pair: "grid gap-2 lg:col-span-2 lg:grid-cols-subgrid lg:gap-x-6",
     second: "lg:col-start-2",
   },
   editor: {
     row: "grid gap-y-1 py-1.5 @sm/editor:grid-cols-[132px_minmax(0,1fr)] @sm/editor:gap-x-3.5",
-    name: "text-[13px] text-ink-muted @sm/editor:pt-1.5",
+    name: "text-ui text-ink-muted @sm/editor:pt-1.5",
     pair: "grid gap-1.5 @sm/editor:col-span-2 @sm/editor:grid-cols-subgrid @sm/editor:gap-x-3.5",
     second: "@sm/editor:col-start-2",
   },

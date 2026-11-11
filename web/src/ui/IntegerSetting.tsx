@@ -58,7 +58,7 @@ export function IntegerSetting({ label, value, min, max, scale = 1, unit, widthC
         }}
         className={`${sizedControl(widthClass)} font-mono tabular-nums`}
       />
-      {unit === undefined ? null : <span aria-hidden="true" className="text-[12.5px] text-ink-muted">{unit}</span>}
+      {unit === undefined ? null : <span aria-hidden="true" className="text-xs text-ink-muted">{unit}</span>}
     </span>
   );
 }

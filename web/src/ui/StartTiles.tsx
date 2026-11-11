@@ -38,13 +38,13 @@ export function StartTiles({ heading, headingLevel: Heading = "h3", brand = fals
     <section className={`flex w-full flex-col gap-3 @2xl:gap-4 ${inPage ? "pb-2 pt-4" : "m-auto max-w-[900px] pb-3 pt-1 @2xl:py-6"}`}>
       <div className="flex items-center gap-3">
         {brand ? <BrandMark className="size-10 shrink-0" /> : null}
-        <Heading className="text-balance text-[17px] font-semibold leading-6 text-ink @2xl:text-xl @2xl:leading-7">{heading}</Heading>
+        <Heading className="text-balance text-lg font-semibold leading-6 text-ink @2xl:text-xl @2xl:leading-7">{heading}</Heading>
       </div>
       <div className={`grid grid-cols-1 gap-2.5 @2xl:gap-3 ${columnsByTileCount[tiles.length] ?? ""}`}>
         {tiles.map((tile) => <Tile key={tile.title} tile={tile} />)}
       </div>
       {alternative === undefined ? null : (
-        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-[13px] text-ink-muted @2xl:justify-start @2xl:border-t @2xl:border-line @2xl:pt-3.5">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-ui text-ink-muted @2xl:justify-start @2xl:border-t @2xl:border-line @2xl:pt-3.5">
           <span>{alternative.lead}</span>
           <Button className="inline-flex items-center gap-1.5" onClick={alternative.onSelect}>
             <Icon name={alternative.icon} className="size-[15px] shrink-0" />
@@ -73,8 +73,8 @@ function Tile({ tile }: { tile: StartTile }) {
         <Icon name={tile.icon} className="size-5" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 @2xl:mt-auto @2xl:flex-none @2xl:gap-1">
-        <span className="text-[15px] font-semibold leading-[22px]">{tile.title}</span>
-        <span className="text-pretty text-[12.5px] leading-[18px] text-ink-muted">{tile.note}</span>
+        <span className="text-base font-semibold leading-[22px]">{tile.title}</span>
+        <span className="text-pretty text-xs leading-[18px] text-ink-muted">{tile.note}</span>
       </span>
       <span className={`shrink-0 @2xl:absolute @2xl:right-4 @2xl:top-[18px] ${primary ? "text-accent" : "text-ink-faint"}`}>
         <Icon name="chevronRight" className="size-4" />

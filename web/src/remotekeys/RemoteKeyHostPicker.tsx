@@ -9,7 +9,7 @@ import { asciiTextEntry } from "../ui/softKeyboard";
 
 // quietAction は、枠も地も無い文字だけのボタンである。行の端の補助の操作に使う。
 const quietAction =
-  "h-8 whitespace-nowrap rounded-md px-2 text-[13px] text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink";
+  "h-8 whitespace-nowrap rounded-md px-2 text-ui text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink";
 
 export function RemoteKeyHostPicker({
   query,
@@ -51,7 +51,7 @@ export function RemoteKeyHostPicker({
         </span>
         {hostOptions.length === 0 ? null : (
           <div className="ml-auto flex flex-wrap items-center gap-1">
-            <span className="mr-1 text-[12.5px] text-ink-muted">
+            <span className="mr-1 text-xs text-ink-muted">
               {t("rk.hostsSelected", { count: selectedAliases.length })}
             </span>
             <button type="button" disabled={busy || matchingHosts.length === 0} onClick={onSelectMatches} className={quietAction}>
@@ -78,7 +78,7 @@ export function RemoteKeyHostPicker({
                 disabled={busy}
                 onChange={() => onToggle(host)}
               />
-              <span title={host} className="min-w-0 truncate font-mono text-[12.5px] text-ink">{host}</span>
+              <span title={host} className="min-w-0 truncate font-mono text-xs text-ink">{host}</span>
             </label>
           ))}
         </div>

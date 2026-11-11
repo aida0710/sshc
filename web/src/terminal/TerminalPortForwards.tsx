@@ -138,7 +138,7 @@ export function TerminalPortForwards({
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`size-2 rounded-full ${forward.problem === "" ? "bg-live" : "bg-danger"}`} aria-hidden="true" />
                         <span className="text-sm font-medium text-ink">{forwardLabel(t, forward)}</span>
-                        <span className="rounded-sm bg-tree px-1.5 py-0.5 text-[10px] text-ink-muted">{t(forward.temporary ? "terminal.forwardTemporary" : "terminal.forwardSaved")}</span>
+                        <span className="rounded-sm bg-tree px-1.5 py-0.5 text-3xs text-ink-muted">{t(forward.temporary ? "terminal.forwardTemporary" : "terminal.forwardSaved")}</span>
                       </div>
                       <p className="mt-1 break-all font-mono text-xs text-ink-muted">{forwardAddress(forward, t)}</p>
                       {forward.temporary || forward.kind === "agent" ? null : <p className={`mt-1 ${hintText}`}>{t("terminal.forwardSavedStopHint")}</p>}

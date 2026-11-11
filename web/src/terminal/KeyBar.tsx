@@ -12,7 +12,7 @@ import { keyBarKeyGap } from "../keybar/keyBarStyles";
 import { playHaptic } from "../android/haptics";
 
 const keyShape =
-  `h-11 min-w-0 rounded-inset font-mono text-[12.5px] active:bg-select-fill ${keyBarKeyGap}`;
+  `h-11 min-w-0 rounded-inset font-mono text-xs active:bg-select-fill ${keyBarKeyGap}`;
 // The row always shown: the keys share the width, each at least 39px, and past that the row scrolls sideways. 39px is
 // the most that shows all ten keys of the default row on a phone 412px wide (1080 pixels at 420dpi); the 44px of a
 // place to press elsewhere would hide a key there, and these are what a person reaches for while a program waits.

@@ -124,7 +124,7 @@ export function SFTPEntryGrid({
                   folderColour={mobileInteraction ? "text-ink-muted" : "text-accent"}
                 />
                 <span title={entry.name} className="line-clamp-2 break-all text-xs leading-4 text-ink"><EntryName entry={entry} /></span>
-                <span title={entryContext === undefined ? entrySize(entry) : entryContext(entry)} className="truncate text-[11px] leading-[14px] text-ink-muted">{entryContext === undefined ? entrySize(entry) : entryContext(entry)}</span>
+                <span title={entryContext === undefined ? entrySize(entry) : entryContext(entry)} className="truncate text-2xs leading-[14px] text-ink-muted">{entryContext === undefined ? entrySize(entry) : entryContext(entry)}</span>
               </button>
               {mobileInteraction ? (
                 choosing ? (

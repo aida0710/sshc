@@ -35,7 +35,7 @@ export function CommandOutput({ output, label, height = "compact" }: {
         const element = event.currentTarget;
         following.current = element.scrollHeight - element.scrollTop - element.clientHeight <= followSlackPx;
       }}
-      className={`${heightClasses[height]} overflow-auto whitespace-pre-wrap break-words rounded-md bg-control p-2 font-mono text-[11px] text-ink-muted`}
+      className={`${heightClasses[height]} overflow-auto whitespace-pre-wrap break-words rounded-md bg-control p-2 font-mono text-2xs text-ink-muted`}
     >
       {output}
     </pre>

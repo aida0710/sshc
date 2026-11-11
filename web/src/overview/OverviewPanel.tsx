@@ -176,7 +176,7 @@ export function OverviewPanel({
 
       {/* Before the answer arrives, no status would read as a status that cannot be read. */}
       {noConnections || loading ? null : (
-        <section aria-label={t("home.sync")} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3.5 text-[12.5px] text-ink-muted">
+        <section aria-label={t("home.sync")} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3.5 text-xs text-ink-muted">
           <Icon name="sync" className="size-3.5 shrink-0" />
           <p className="min-w-0 flex-1">
             {sync === null

@@ -105,7 +105,7 @@ export function SFTPEntryTable({
               <button
                 type="button"
                 {...parentButtonProps()}
-                className="flex w-full items-center gap-2 rounded-sm text-left text-[13px] leading-5"
+                className="flex w-full items-center gap-2 rounded-sm text-left text-ui leading-5"
               >
                 <ParentRowLabel iconBoxClassName={showsThumbnails ? "w-6" : ""} />
               </button>
@@ -136,8 +136,8 @@ export function SFTPEntryTable({
                   ? <EntryThumbnail alias={thumbnailAlias} entry={entry} boxClassName="size-6 rounded-[3px]" iconClassName="size-[15px]" />
                   : <EntryIcon entry={entry} className="size-[15px] shrink-0" />}
                 <span className="min-w-0 grow">
-                  <span title={entry.type === "symlink" ? `${entry.name} → ${entry.linkTarget ?? ""}` : entry.name} className="block truncate text-[13px] leading-5 text-ink"><EntryName entry={entry} /></span>
-                  {entryContext === undefined ? null : <span title={entryContext(entry)} className="block truncate font-mono text-[10px] leading-3 text-ink-muted">{entryContext(entry)}</span>}
+                  <span title={entry.type === "symlink" ? `${entry.name} → ${entry.linkTarget ?? ""}` : entry.name} className="block truncate text-ui leading-5 text-ink"><EntryName entry={entry} /></span>
+                  {entryContext === undefined ? null : <span title={entryContext(entry)} className="block truncate font-mono text-3xs leading-3 text-ink-muted">{entryContext(entry)}</span>}
                 </span>
               </button>
             </td>

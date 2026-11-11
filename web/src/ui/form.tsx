@@ -4,13 +4,15 @@ import { describeControl } from "./describeControl";
 // The border keeps the stronger control line: appearance.spec holds it to a 2.5:1 contrast, so a field
 // is found without its label.
 const controlLook =
-  "rounded-md border border-control-line bg-control px-2.5 py-[5px] text-[13px] leading-5 text-ink " +
+  "rounded-md border border-control-line bg-control px-2.5 py-[5px] text-ui leading-5 text-ink " +
   "placeholder:text-ink-faint " +
   "disabled:border-line disabled:text-ink-faint";
 
 // sizedControl は、共通の入力欄の見た目を、幅のクラス（"w-[110px]" など）とともに返す。control に
 // 幅のクラスを足すと w-full と競り合うので、幅を変える入力欄はこれを使う。Tailwind はクラス名を字面で
 // 拾うので、幅のクラスは呼ぶ側のファイルに書き切る。
+// 文字の大きさは変えられない。text-ui は index.css の定義で Tailwind の text-xs や text-sm より後ろに並ぶので、
+// 後ろに足した大きさは効かない。
 export function sizedControl(widthClass: string): string {
   return `${widthClass} ${controlLook}`;
 }
@@ -25,20 +27,20 @@ export const narrowControl = sizedControl("w-40");
 export const touchLinkTarget = "mobile-layout:inline-flex mobile-layout:min-h-11 mobile-layout:items-center";
 
 export const primaryAction =
-  "whitespace-nowrap rounded-md bg-accent px-3.5 py-1.5 text-[13px] font-medium leading-5 text-accent-ink " +
+  "whitespace-nowrap rounded-md bg-accent px-3.5 py-1.5 text-ui font-medium leading-5 text-accent-ink " +
   "transition-[background-color,box-shadow,filter] duration-150 hover:brightness-110 active:brightness-95";
 
 const secondaryLook =
   "whitespace-nowrap rounded-md border border-line bg-well leading-5 text-ink " +
   "transition-colors duration-150 hover:border-accent/50 hover:bg-hover active:bg-select-fill";
 
-export const secondaryAction = `${secondaryLook} px-3.5 py-[5px] text-[13px]`;
+export const secondaryAction = `${secondaryLook} px-3.5 py-[5px] text-ui`;
 
 // smallSecondaryAction is 26px tall, for a button inside a notice or at the end of a status line.
 export const smallSecondaryAction = `${secondaryLook} px-2.5 py-[2px] text-xs`;
 
 export const dangerAction =
-  "whitespace-nowrap rounded-md border border-line px-3.5 py-[5px] text-[13px] leading-5 text-danger " +
+  "whitespace-nowrap rounded-md border border-line px-3.5 py-[5px] text-ui leading-5 text-danger " +
   "transition-colors duration-150 hover:border-danger/50 hover:bg-danger/10";
 
 // dangerTextAction is a removal offered in a list row: red words only, so a list of rows is not a column
@@ -57,7 +59,7 @@ export const codeBlock = "overflow-auto rounded-md bg-code-bg p-2 text-xs text-c
 // dialogHeading is the heading of every dialog, so a confirmation and a form read as the same kind of window.
 export const dialogHeading = "text-base font-semibold text-ink";
 
-export const fieldLabel = "text-[12.5px] text-ink-muted";
+export const fieldLabel = "text-xs text-ink-muted";
 export const hintText = "text-xs text-ink-muted";
 export const sectionHeading = "text-sm font-medium text-ink";
 
@@ -139,7 +141,7 @@ export function CheckboxField({
   const toneClass = tone === "notice" ? "text-notice-ink" : tone === "danger" ? "text-danger" : disabled ? "text-ink-faint" : "text-ink";
   return (
     <label
-      className={`flex items-start gap-2.5 text-[13.5px] ${hint === undefined ? "mobile-layout:py-3" : ""} ${toneClass} ${className}`}
+      className={`flex items-start gap-2.5 text-sm ${hint === undefined ? "mobile-layout:py-3" : ""} ${toneClass} ${className}`}
     >
       <input
         type="checkbox"

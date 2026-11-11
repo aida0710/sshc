@@ -42,7 +42,7 @@ export function SettingsNavigation({
           <Fragment key={group}>
             {label === null
               ? <div className="mx-2 my-2 border-t border-line" />
-              : <div className="px-2 pb-1 pt-3 text-[11px] font-medium text-ink-faint first-of-type:pt-0">{t(label)}</div>}
+              : <div className="px-2 pb-1 pt-3 text-2xs font-medium text-ink-faint first-of-type:pt-0">{t(label)}</div>}
             {group === "preset" ? <PresetPicker layout="list" editing={editingPreset} onEdit={onEditPreset} /> : null}
             {settingsPages.filter((page) => settingsPageMeta[page].group === group).map((page) => {
               const meta = settingsPageMeta[page];
@@ -57,7 +57,7 @@ export function SettingsNavigation({
                     event.preventDefault();
                     onNavigate(meta.path);
                   }}
-                  className={`flex min-h-[30px] items-center gap-2.5 rounded-md px-2 text-[13px] ${
+                  className={`flex min-h-[30px] items-center gap-2.5 rounded-md px-2 text-ui ${
                     active ? "bg-select-fill font-medium text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
                   }`}
                 >

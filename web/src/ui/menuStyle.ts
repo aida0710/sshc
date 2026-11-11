@@ -22,4 +22,4 @@ export function menuChoiceItemClass({ indent = false }: { indent?: boolean } = {
 
 // menuGroupClass sets a group of items apart from those above it, under menuGroupHeadingClass.
 export const menuGroupClass = "mt-1 border-t border-line pt-1";
-export const menuGroupHeadingClass = "px-3 py-1 text-[11px] text-ink-faint";
+export const menuGroupHeadingClass = "px-3 py-1 text-2xs text-ink-faint";

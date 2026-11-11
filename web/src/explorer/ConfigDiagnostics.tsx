@@ -9,7 +9,7 @@ export function ConfigDiagnostics({ diagnostics }: { diagnostics: Diagnostic[] }
   const t = useTranslate();
   if (diagnostics.length === 0) {
     return (
-      <p className="mx-3 mb-[calc(0.875rem+var(--mobile-navigation-inset))] flex shrink-0 items-center gap-2 border-t border-line px-2.5 pt-2.5 text-[12.5px] text-ink-faint">
+      <p className="mx-3 mb-[calc(0.875rem+var(--mobile-navigation-inset))] flex shrink-0 items-center gap-2 border-t border-line px-2.5 pt-2.5 text-xs text-ink-faint">
         <Icon name="check" className="size-3.5 shrink-0" />
         {t("explorer.noConfigProblem")}
       </p>
@@ -17,7 +17,7 @@ export function ConfigDiagnostics({ diagnostics }: { diagnostics: Diagnostic[] }
   }
   return (
     <section aria-labelledby="config-diagnostics-heading" className="mx-3 mb-[calc(0.875rem+var(--mobile-navigation-inset))] flex max-h-56 shrink-0 flex-col border-t border-line px-2.5 pt-2.5">
-      <h3 id="config-diagnostics-heading" className="flex items-center gap-2 text-[12.5px] font-medium text-notice-ink">
+      <h3 id="config-diagnostics-heading" className="flex items-center gap-2 text-xs font-medium text-notice-ink">
         <Icon name="warning" className="size-3.5 shrink-0" />
         {t("explorer.diagnosticsCount", { count: diagnostics.length })}
       </h3>

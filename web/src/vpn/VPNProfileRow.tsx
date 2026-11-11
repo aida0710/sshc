@@ -122,8 +122,8 @@ export function VPNProfileRow({
       className={`group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-3 hover:bg-hover @2xl:py-[9px] ${profileColumns}`}
     >
       <div className="min-w-0 @2xl:px-2.5">
-        <p className="text-[13.5px] text-ink [overflow-wrap:anywhere]">{name}</p>
-        <p className="text-[11.5px] text-ink-faint [overflow-wrap:anywhere]">{summary.join(" · ")}</p>
+        <p className="text-sm text-ink [overflow-wrap:anywhere]">{name}</p>
+        <p className="text-xs text-ink-faint [overflow-wrap:anywhere]">{summary.join(" · ")}</p>
       </div>
       <div className="col-span-2 row-start-2 flex min-w-0 flex-col items-start gap-1 @2xl:col-span-1 @2xl:row-start-auto @2xl:px-2.5">
         <span className={up ? goodTag : neutralTag}>
@@ -186,7 +186,7 @@ function TunnelDetail({ tunnel }: { tunnel: NonNullable<VPNProfileStatus["tunnel
   ].filter((row) => row.value !== "");
   if (rows.length === 0) return null;
   return (
-    <dl className="flex min-w-0 flex-wrap gap-x-2 font-mono text-[11px] leading-4 text-ink-faint">
+    <dl className="flex min-w-0 flex-wrap gap-x-2 font-mono text-2xs leading-4 text-ink-faint">
       {rows.map((row) => (
         <div key={row.label} title={row.label} className="min-w-0 [overflow-wrap:anywhere]">
           <dt className="sr-only">{row.label}</dt>
@@ -202,7 +202,7 @@ function ProfileConnections({ connections }: { connections: string[] }) {
   const t = useTranslate();
   return (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-      <span className="text-[11.5px] text-ink-faint @2xl:hidden">{t("vpn.connections")}</span>
+      <span className="text-xs text-ink-faint @2xl:hidden">{t("vpn.connections")}</span>
       {connections.length === 0 ? (
         <span className="text-xs text-ink-faint">{t("vpn.noConnections")}</span>
       ) : (

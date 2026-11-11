@@ -24,7 +24,7 @@ export function SyncKeySection({ status, busy, form, onSave }: {
       headingId="sync-key-heading"
       actions={(
         <span
-          className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-medium ${status.keyConfigured ? "bg-select-fill text-accent" : "bg-notice text-notice-ink"}`}
+          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.keyConfigured ? "bg-select-fill text-accent" : "bg-notice text-notice-ink"}`}
         >
           {status.keyConfigured
             ? t("sync.keyReady")

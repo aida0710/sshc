@@ -39,13 +39,13 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
     <section aria-label={t("conn.analysisLabel")} className="flex flex-col">
       <EditorSection title={t("conn.analysisExplained")}>
         <p className={`-mt-1 mb-2 ${hintText} text-ink-faint`}>{t("conn.analysisExplainedHint")}</p>
-        <table className="w-full table-fixed text-[12.5px]">
+        <table className="w-full table-fixed text-xs">
           <tbody>
             {detail.effective.entries.map((entry, index) => (
               <tr key={`${entry.keyword}-${index}`} className="border-t border-line first:border-t-0">
                 <th scope="row" title={entry.keyword} className="w-[36%] truncate py-1.5 pr-2 text-left font-mono text-xs font-normal text-ink-muted">{entry.keyword}</th>
                 <td className="truncate py-1.5 pr-2 font-mono text-xs text-ink" title={entry.values.join(" ")}>{entry.values.join(" ")}</td>
-                <td className="w-[38%] truncate py-1.5 text-right font-mono text-[11.5px] text-ink-faint" title={sourceText(entry.source)}>{sourceText(entry.source)}</td>
+                <td className="w-[38%] truncate py-1.5 text-right font-mono text-xs text-ink-faint" title={sourceText(entry.source)}>{sourceText(entry.source)}</td>
               </tr>
             ))}
           </tbody>
@@ -61,7 +61,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
           {inspection.error === "" ? null : <Notice tone="danger">{inspection.error}</Notice>}
 
           {effective !== null && effective.executableDirectives.length > 0 ? (
-            <div className="rounded-inset bg-notice px-3 py-2.5 text-[12.5px]">
+            <div className="rounded-inset bg-notice px-3 py-2.5 text-xs">
               <h4 className="font-medium text-notice-ink">{t("conn.analysisExecutableHeading")}</h4>
               <p className="text-xs text-notice-ink">{t("conn.analysisTokenWarning")}</p>
               <ul className="mt-2 flex flex-col gap-2">

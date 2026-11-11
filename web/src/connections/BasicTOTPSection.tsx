@@ -19,7 +19,7 @@ export function BasicTOTPSection({ draft, derived, secrets, onEdit }: {
     // The vault is unlocked from the password row above.
     return (
       <FieldRow density="editor" label={label} interactiveChildren>
-        <p className="pt-1.5 text-[13px] text-ink-faint">
+        <p className="pt-1.5 text-ui text-ink-faint">
           {credentialOptionsStatus === "failed"
             ? t("conn.basicCredentialOptionsFailed")
             : secrets.loading || credentialOptionsStatus === "loading"

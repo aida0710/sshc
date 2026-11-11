@@ -286,7 +286,7 @@ export function CommandPalette({
             <button type="button" aria-label={t("palette.close")} title={t("palette.close")} onClick={onClose} className="flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-surface hover:text-ink">
               <Icon name="close" className="size-4" />
             </button>
-          ) : <kbd className="border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">Esc</kbd>}
+          ) : <kbd className="border border-line px-1.5 py-0.5 font-mono text-3xs text-ink-muted">Esc</kbd>}
         </div>
         <div id="command-palette-results" role="listbox" aria-label={t("palette.results")} className="min-h-0 overflow-y-auto p-1.5">
           {visible.map((item, index) => (
@@ -300,12 +300,12 @@ export function CommandPalette({
                 onClick={() => void choose(item)}
                 className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-md px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-hover"}`}
               >
-                <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-faint">{t(kindLabelKeys[item.kind])}</span>
+                <span className="row-span-2 font-mono text-3xs uppercase tracking-wide text-ink-faint">{t(kindLabelKeys[item.kind])}</span>
                 <span title={item.label} className="col-start-2 truncate font-medium text-ink">{item.label}</span>
-                {item.detail === "" ? null : <span title={item.detail} className="col-start-2 truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>}
+                {item.detail === "" ? null : <span title={item.detail} className="col-start-2 truncate font-mono text-2xs text-ink-muted">{item.detail}</span>}
                 {/* A phone has no keys to press, and its width goes to the name. */}
                 {item.keys?.[0] === undefined ? null : (
-                  <kbd title={item.keys.map(shortcutLabel).join(" / ")} className="col-start-3 row-span-2 row-start-1 hidden border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted desktop-layout:block">{shortcutLabel(item.keys[0])}</kbd>
+                  <kbd title={item.keys.map(shortcutLabel).join(" / ")} className="col-start-3 row-span-2 row-start-1 hidden border border-line px-1.5 py-0.5 font-mono text-3xs text-ink-muted desktop-layout:block">{shortcutLabel(item.keys[0])}</kbd>
                 )}
               </button>
               {item.host === undefined ? null : (
@@ -331,7 +331,7 @@ export function CommandPalette({
             <PanelState tone={loading ? "loading" : "empty"} title={loading ? t("palette.loading") : t("palette.empty")} />
           ) : null}
         </div>
-        <p className="shrink-0 border-t border-line px-3 py-2 text-[11px] text-ink-faint">{t(compact ? "palette.hintCompact" : "palette.hint")}</p>
+        <p className="shrink-0 border-t border-line px-3 py-2 text-2xs text-ink-faint">{t(compact ? "palette.hintCompact" : "palette.hint")}</p>
     </ModalShell>
   );
 }

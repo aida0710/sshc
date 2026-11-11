@@ -165,17 +165,17 @@ export function QuickConnectBrowser({
           <OperatingSystemIcon os={server.os} colour={server.colour} look="accentTile" />
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-[13.5px] font-semibold text-ink" title={alias}>{alias}</span>
+              <span className="truncate text-sm font-semibold text-ink" title={alias}>{alias}</span>
               {lastConnectedAt === null || opening ? null : (
                 <span title={lastConnectedLabel} aria-label={lastConnectedLabel}
-                  className="shrink-0 whitespace-nowrap rounded-full bg-select-fill px-2 text-[11px] leading-[18px] text-accent">{lastConnectedAt}</span>
+                  className="shrink-0 whitespace-nowrap rounded-full bg-select-fill px-2 text-2xs leading-[18px] text-accent">{lastConnectedAt}</span>
               )}
               {server.duplicateAlias ? <span role="img" aria-label={t("browser.duplicateAlias")} className="text-notice-ink"><Icon name="warning" className="size-3.5" /></span> : null}
             </span>
-            <span className="mt-0.5 block truncate font-mono text-[11.5px] text-ink-faint" title={target}>{target}</span>
+            <span className="mt-0.5 block truncate font-mono text-xs text-ink-faint" title={target}>{target}</span>
             <span aria-live="polite">
               {opening ? (
-                <span className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted">
+                <span className="mt-1 flex items-center gap-1.5 text-2xs text-ink-muted">
                   <Spinner className="size-3" />
                   {t("home.opening")}
                 </span>
@@ -186,7 +186,7 @@ export function QuickConnectBrowser({
               card keeps room for it. A connection in no group shows no name: "no group" would only fill the room. */}
           {server.group === "" ? null : (
             <span
-              className="max-w-[30%] shrink-0 truncate text-[11px] text-ink-faint transition-opacity duration-150 hover-reveal:group-hover/row:opacity-0 hover-reveal:group-focus-within/row:opacity-0"
+              className="max-w-[30%] shrink-0 truncate text-2xs text-ink-faint transition-opacity duration-150 hover-reveal:group-hover/row:opacity-0 hover-reveal:group-focus-within/row:opacity-0"
               title={server.group}
             >
               {server.group}

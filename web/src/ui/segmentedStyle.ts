@@ -4,7 +4,7 @@
 export const segmentedStrip = "inline-flex gap-0.5 rounded-md border border-line bg-well p-0.5";
 
 export function segmentClass(selected: boolean): string {
-  return `h-[26px] rounded-sm px-2.5 text-[12.5px] transition-colors ${
+  return `h-[26px] rounded-sm px-2.5 text-xs transition-colors ${
     selected ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
   }`;
 }

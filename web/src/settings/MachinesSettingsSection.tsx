@@ -68,7 +68,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
           <div className="flex flex-col gap-3">
             {failure === "" ? null : <Notice tone="danger" compact>{failure}</Notice>}
             <div className="@container/machines overflow-hidden rounded-inset border border-line">
-              <div className={`hidden border-b border-line px-3 py-2 text-[11.5px] text-ink-faint @2xl/machines:grid ${columns}`} aria-hidden="true">
+              <div className={`hidden border-b border-line px-3 py-2 text-xs text-ink-faint @2xl/machines:grid ${columns}`} aria-hidden="true">
                 <span>{t("settings.machineColumnName")}</span>
                 <span>{t("settings.machineColumnPreset")}</span>
                 <span>{portsOffered ? t("settings.machineColumnPort") : null}</span>
@@ -170,9 +170,9 @@ function MachineRow({ machine, document, onChange, onRename, onChooseLogFolder, 
   return (
     <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 border-t border-line px-3 py-2.5 first-of-type:border-t-0 ${columns} ${self ? "bg-select-fill" : ""}`}>
       <div className="min-w-0">
-        <div className="flex items-center gap-1.5 text-[13.5px] font-medium text-ink">
+        <div className="flex items-center gap-1.5 text-sm font-medium text-ink">
           <span title={name} className="truncate">{name}</span>
-          {self ? <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 text-[11.5px] font-normal leading-5 text-ink">{t("settings.thisMachine")}</span> : null}
+          {self ? <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 text-xs font-normal leading-5 text-ink">{t("settings.thisMachine")}</span> : null}
         </div>
         {facts === "" ? null : <div className="text-xs text-ink-faint">{facts}</div>}
       </div>
@@ -229,7 +229,7 @@ function folderPathFor(os: string | undefined, value: string): boolean {
 function StackedNamedCell({ name, children }: { name: string; children: ReactNode }) {
   return (
     <div className={`min-w-0 ${whenStackedFullWidth}`}>
-      <div aria-hidden="true" className="mb-1 text-[11.5px] text-ink-faint @2xl/machines:hidden">{name}</div>
+      <div aria-hidden="true" className="mb-1 text-xs text-ink-faint @2xl/machines:hidden">{name}</div>
       {children}
     </div>
   );

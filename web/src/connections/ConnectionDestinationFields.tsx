@@ -69,10 +69,10 @@ function DestinationInput({ name, entry, numeric = false }: { name: DestinationN
           aria-invalid={warning === "" ? undefined : true}
           aria-describedby={descriptions === "" ? undefined : descriptions}
           onChange={(event) => onChange(typedValue(field, event.target.value))}
-          className={`${tail === "" ? control : inputWithTail} ${canReset ? resetButtonRoom : ""} font-mono text-[12.5px]`}
+          className={`${tail === "" ? control : inputWithTail} ${canReset ? resetButtonRoom : ""} font-mono`}
         />
         {tail === "" ? null : (
-          <span title={sourceTitle(field.state, t)} className="absolute inset-y-0 right-2.5 flex items-center text-[11.5px] text-ink-faint">
+          <span title={sourceTitle(field.state, t)} className="absolute inset-y-0 right-2.5 flex items-center text-xs text-ink-faint">
             <span aria-hidden="true">{tail}</span>
             <span id={sourceId} className="sr-only">{sourceTitle(field.state, t)}</span>
           </span>

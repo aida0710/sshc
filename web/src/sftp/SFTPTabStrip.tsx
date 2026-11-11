@@ -211,8 +211,8 @@ export function SFTPTabStrip({
                 className={`flex min-w-0 flex-1 rounded-md py-0.5 text-left ${compact ? "px-2" : "pl-3 pr-1"} ${tabLayout[size]} ${selected ? "text-ink" : "text-ink-muted"}`}
               >
                 {compact || tab.alias === "" ? null : <Icon name={tab.alias === localHostAlias ? "files" : "connections"} className="size-[13px] shrink-0" />}
-                <span className={`block min-w-0 truncate leading-4 ${compact ? "w-full text-sm font-medium" : "text-[12.5px]"}`}>{hostOnly ? labels.host : labels.folder}</span>
-                {labels.host === "" || hostOnly ? null : <span className={`block min-w-0 truncate text-[11px] leading-3.5 text-ink-muted ${compact ? "mt-0.5 w-full" : "max-w-[50%] shrink-0"}`}>{labels.host}</span>}
+                <span className={`block min-w-0 truncate leading-4 ${compact ? "w-full text-sm font-medium" : "text-xs"}`}>{hostOnly ? labels.host : labels.folder}</span>
+                {labels.host === "" || hostOnly ? null : <span className={`block min-w-0 truncate text-2xs leading-3.5 text-ink-muted ${compact ? "mt-0.5 w-full" : "max-w-[50%] shrink-0"}`}>{labels.host}</span>}
               </button>
               {selected && onChangeHost !== undefined ? (
                 <button
