@@ -56,7 +56,7 @@ export function SavePreviewPanel({
   return (
     <section aria-labelledby="preview-heading" className="flex flex-col gap-3 border-t border-line pt-5">
       <div className="flex items-center justify-between gap-3">
-        <h3 id="preview-heading" className="text-sm font-medium text-ink">{t("preview.heading")}</h3>
+        <h3 id="preview-heading" className="text-sm font-semibold text-ink">{t("preview.heading")}</h3>
         {preview === null ? null : (
           <span className={tagClass("neutral")}>
             {preview.diffs.length}

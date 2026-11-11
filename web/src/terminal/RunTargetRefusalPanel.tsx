@@ -90,7 +90,7 @@ export function RunTargetRefusalPanel({
             <Icon name={refusalIcon(refusal.code)} className="size-[18px]" />
           </span>
           <div className="flex min-w-0 flex-col gap-1">
-            <h2 id={headingId} className="break-words text-sm font-medium text-ink">{heading}</h2>
+            <h2 id={headingId} className="break-words text-sm font-semibold text-ink">{heading}</h2>
             {reason === "" ? null : <p className="break-words text-sm leading-6 text-ink-muted">{reason}</p>}
           </div>
         </div>

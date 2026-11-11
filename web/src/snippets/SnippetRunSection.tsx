@@ -58,7 +58,7 @@ export function SnippetRunSection({
       </Button>
       {preview === null ? null : (
         <section className="mt-4 min-w-0 rounded-inset bg-notice p-4">
-          <h4 className="text-sm font-medium">{t("snippets.confirm")}</h4>
+          <h4 className="text-sm font-semibold">{t("snippets.confirm")}</h4>
           {preview.targets.map((target) => (
             <div key={target.targetId} className="mt-2">
               <p className="text-xs font-medium">
@@ -81,7 +81,7 @@ export function SnippetRunSection({
       {job === null ? null : (
         <section className="mt-4 border-t border-line pt-4">
           <div className="flex items-center">
-            <h4 className="grow text-sm font-medium">
+            <h4 className="grow text-sm font-semibold">
               {t("snippets.results")} · {t(snippetStatusLabelKey(job.status))}
             </h4>
             {job.status === "running" ? (
