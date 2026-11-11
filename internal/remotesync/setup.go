@@ -30,6 +30,8 @@ const (
 var (
 	ErrSetupTargetChanged    = errors.New("the synchronization target changed after connection check")
 	ErrSetupTargetIncomplete = errors.New("the synchronization target has history but no live snapshot")
+	// ErrSetupTargetEmpty は、書き出した設定の指す同期先にスナップショットが無いことを報告する。
+	ErrSetupTargetEmpty = errors.New("the synchronization target named by the exported settings holds no snapshot")
 )
 
 type SetupInspection struct {
@@ -127,6 +129,26 @@ func (s *Service) CompleteSetup(ctx context.Context, config Config, credentials 
 	}
 	s.configure(config, credentials, client)
 	return nil
+}
+
+// JoinSetup は、書き出した設定（SettingsExport）の同期先に、それを開いた syncKey で参加する。
+//
+// 書き出したマシンは設定のときにスナップショットを置いているので、同期先は既存のはずである。
+// 空なら、書き出したあとで同期先が消されたか別の場所を指している。ここで新しい同期先として
+// 始めると、書き出したマシンと別々の同期先になるので断る。
+func (s *Service) JoinSetup(ctx context.Context, config Config, credentials objectstore.Credentials,
+	client *objectstore.Client, syncKey string, persist func() error) error {
+	inspection, err := InspectSetupTarget(ctx, client, normalizeConfig(config))
+	if err != nil {
+		return err
+	}
+	switch inspection.State {
+	case SetupTargetEmpty:
+		return ErrSetupTargetEmpty
+	case SetupTargetIncomplete:
+		return ErrSetupTargetIncomplete
+	}
+	return s.CompleteSetup(ctx, config, credentials, client, inspection, syncKey, persist)
 }
 
 // placeSetupSnapshot は、空の同期先へファイルを含まないスナップショットを置き、その世代を

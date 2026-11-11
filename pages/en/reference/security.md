@@ -91,6 +91,14 @@ Sync is end-to-end encrypted (E2EE): only devices configured with the same encry
 
 Anyone with the ciphertext can try guessing the encryption key offline. Use the random key sshc generates rather than a short typed string.
 
+### Exported sync settings
+
+The file and QR code made by Export settings hold the endpoint, bucket, path in the bucket, region, and the S3 access key ID and secret access key. They are encrypted with the encryption key in the same way as a snapshot (AES-256-GCM and Argon2id). The encryption key is not in them. This encrypted form is the only way the S3 credentials leave the sshc engine.
+
+Anyone who obtains the file or the QR code can try guessing the encryption key offline, as with a snapshot's ciphertext, and a guessed key also reveals the S3 credentials. When you chose the encryption key yourself, the export screen shows a warning. Delete the exported file once the new device has it.
+
+The Android app uses the camera only while it is scanning a QR code. The video is neither stored nor sent anywhere.
+
 ### What remains after replacing the sync key
 
 Replacing the sync key re-encrypts only the latest snapshot with the new key. The history already in the bucket stays encrypted with the previous key: sshc can no longer read it, but anyone who knows the previous key still can. Snapshots pushed after the replacement are encrypted with the new key.

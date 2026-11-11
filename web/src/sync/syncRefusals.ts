@@ -44,6 +44,8 @@ export const syncRefusals: Record<string, MessageKey> = {
   sync_ignore_invalid: "sync.exclusions.invalid",
   sync_setup_target_changed: "sync.setup.changed",
   sync_setup_target_incomplete: "sync.setup.incomplete",
+  sync_setup_target_empty: "sync.import.targetEmpty",
+  sync_settings_export_rejected: "sync.import.rejected",
   sync_local_changed: "sync.localChanged",
   sync_workspace_busy: "sync.workspaceBusy",
   sync_pending_transaction: "sync.pendingTransaction",

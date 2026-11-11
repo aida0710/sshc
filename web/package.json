@@ -22,6 +22,7 @@
     "@xterm/addon-serialize": "0.15.0-beta.330",
     "@xterm/addon-webgl": "0.20.0-beta.329",
     "@xterm/xterm": "6.1.0-beta.336",
+    "jsqr": "1.4.0",
     "lucide-react": "1.48.0",
     "monaco-editor": "0.56.0",
     "react": "19.2.8",

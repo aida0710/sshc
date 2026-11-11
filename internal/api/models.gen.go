@@ -2034,6 +2034,20 @@ type SyncSetupCheckResponse struct {
 	State          SyncSetupTargetState `json:"state"`
 }
 
+// SyncSetupExport defines model for SyncSetupExport.
+type SyncSetupExport struct {
+	Document     string    `json:"document"`
+	KeyGenerated bool      `json:"keyGenerated"`
+	QrRows       *[]string `json:"qrRows,omitempty"`
+}
+
+// SyncSetupImportRequest defines model for SyncSetupImportRequest.
+type SyncSetupImportRequest struct {
+	Direction SyncDirection `json:"direction"`
+	Document  string        `json:"document"`
+	Key       string        `json:"key"`
+}
+
 // SyncSetupRequest defines model for SyncSetupRequest.
 type SyncSetupRequest struct {
 	AccessKeyId      *string              `json:"accessKeyId,omitempty"`

@@ -22,6 +22,7 @@ import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ServiceWorkerClient;
 import android.webkit.ServiceWorkerController;
 import android.webkit.ValueCallback;
+import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -56,6 +57,7 @@ public final class MainActivity extends ComponentActivity {
     private static final int SAVE_DESTINATION_REQUEST = 21;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 22;
     private static final int FOLDER_CHOOSER_REQUEST = 23;
+    private static final int CAMERA_PERMISSION_REQUEST = 24;
     private static final String NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked";
     /** ページの帯の夜と昼の色。web/src/index.css の --ui-toolbar と同期し、ページ読込前の色差を防ぐ。 */
     private static final int CHROME_NIGHT = 0xFF161616;
@@ -166,6 +168,8 @@ public final class MainActivity extends ComponentActivity {
     private ChosenFolder chosenFolder;
     private final TerminalNotifications terminalNotifications = new TerminalNotifications(this);
     private boolean notificationPermissionRequestedByWeb;
+    // カメラの権限の答えを待っている、Web 画面からの要求。答えが出たら許すか断る。
+    private PermissionRequest pendingCameraRequest;
     // 押された通知の tag。Web 画面が takeOpenedNotification で受け取るまで持つ。bridge の呼び出しは
     // UI スレッドの外から来るので、読み書きは openedNotificationLock の中で行う。
     private final Object openedNotificationLock = new Object();
@@ -351,10 +355,7 @@ public final class MainActivity extends ComponentActivity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri target = request.getUrl();
-                if (engineOrigin != null
-                        && engineOrigin.getScheme().equals(target.getScheme())
-                        && engineOrigin.getHost().equals(target.getHost())
-                        && engineOrigin.getPort() == target.getPort()) return false;
+                if (isEngineOrigin(target)) return false;
                 if (request.isForMainFrame()
                         && !"127.0.0.1".equals(target.getHost())
                         && ("https".equals(target.getScheme()) || "http".equals(target.getScheme()))) {
@@ -416,6 +417,16 @@ public final class MainActivity extends ComponentActivity {
                     Toast.makeText(MainActivity.this, R.string.file_picker_unavailable, Toast.LENGTH_SHORT).show();
                 }
                 return true;
+            }
+
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                answerCameraRequest(request);
+            }
+
+            @Override
+            public void onPermissionRequestCanceled(PermissionRequest request) {
+                if (pendingCameraRequest == request) pendingCameraRequest = null;
             }
         });
 
@@ -636,9 +647,50 @@ public final class MainActivity extends ComponentActivity {
         new TransferNotifications(this).show(status);
     }
 
+    /** url が、表示中の engine と同じ origin（scheme・host・port）か。 */
+    private boolean isEngineOrigin(Uri url) {
+        return engineOrigin != null
+                && engineOrigin.getScheme().equals(url.getScheme())
+                && engineOrigin.getHost().equals(url.getHost())
+                && engineOrigin.getPort() == url.getPort();
+    }
+
+    /**
+     * Web 画面（QR コードの読み取り）がカメラを求めたときに答える。engine の画面からの、映像だけの要求に限って
+     * 許す。Android のカメラの権限がまだ無ければ先に尋ね、答えが出るまで要求を持っておく。
+     */
+    private void answerCameraRequest(PermissionRequest request) {
+        if (!isEngineOrigin(request.getOrigin()) || !CameraRequest.asksOnlyForVideo(request.getResources())) {
+            request.deny();
+            return;
+        }
+        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            request.grant(request.getResources());
+            return;
+        }
+        if (pendingCameraRequest != null) pendingCameraRequest.deny();
+        pendingCameraRequest = request;
+        requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
+    }
+
+    private void finishCameraRequest(boolean granted) {
+        PermissionRequest request = pendingCameraRequest;
+        pendingCameraRequest = null;
+        if (request == null) return;
+        if (granted) {
+            request.grant(request.getResources());
+        } else {
+            request.deny();
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == CAMERA_PERMISSION_REQUEST) {
+            finishCameraRequest(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED);
+            return;
+        }
         if (requestCode != NOTIFICATION_PERMISSION_REQUEST) return;
         if (notificationPermissionRequestedByWeb) {
             notificationPermissionRequestedByWeb = false;

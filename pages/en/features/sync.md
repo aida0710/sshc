@@ -35,6 +35,17 @@ Saving places one snapshot without files in the target. Devices added later are 
 
 Enter the same bucket path and encryption key. When a remote snapshot already exists, sshc saves the configuration only after the key can decrypt it. Use another path if you intend to create a separate dataset.
 
+A device that is already set up can also hand its settings over, so the endpoint, bucket, and access keys are not typed again.
+
+1. On the device that is set up, open Manage sync settings and choose Export under Export settings. Nothing is typed
+2. Scan the QR code with the new device, or choose Save to file and move the file to the new device
+3. On the new device, open Sync and choose Scan QR code or Choose file
+4. Enter the encryption key and choose Import
+
+The exported file and QR code hold the bucket connection details and the S3 credentials, encrypted with the encryption key. The encryption key itself is not in them. The new device decrypts the settings with the key you enter, and saves them only after the same key also decrypts the snapshot at the target.
+
+Scanning a QR code uses the camera. The Android app asks for the camera permission the first time you scan. Where no camera is available, hand the settings over as a file.
+
 Choose bidirectional, send-only, or receive-only sync.
 
 - Bidirectional sync receives remote updates and sends local changes.

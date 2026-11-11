@@ -1,25 +1,29 @@
+import type { ReactNode } from "react";
 import { tagClass } from "../ui/Tag";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
-import type { SyncDirection, SyncStatus } from "../api/sync";
+import type { SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
 import { CheckboxField, control } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { PageSection } from "../ui/page";
 import { PasswordInput } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
+import { SyncDirectionField } from "./SyncDirectionField";
 import { SyncKeySection } from "./SyncKeySection";
 import { SyncWarning } from "./SyncWarning";
-import { syncDirectionHintKeys, syncSetupStateKeys } from "./syncMessageKeys";
+import { syncSetupStateKeys } from "./syncMessageKeys";
 import type { SyncSetupForm } from "./useSyncSetupForm";
 import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
 
 // Bucket settings and the shared key. Until sync is configured this is the
 // whole screen; afterwards it folds away behind "manage settings". Only then is it a <details>: one
 // without a summary gets the browser's own "Details" toggle, which would hide the whole setup.
-export function SyncSettingsSection({ status, busy, form, onCheckSetup, onCompleteSetup, onSaveKey }: {
+export function SyncSettingsSection({ status, busy, form, exportSection, onCheckSetup, onCompleteSetup, onSaveKey }: {
   status: SyncStatus;
   busy: boolean;
   form: SyncSetupForm;
+  // Exporting these settings for another machine; shown with the settings it exports, once sync is set up.
+  exportSection: ReactNode;
   // Asks the engine what the bucket path holds before anything is saved.
   onCheckSetup: () => void;
   onCompleteSetup: () => void;
@@ -141,24 +145,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                   />
                 </FieldRow>
 
-                <FieldRow
-                  label={t("sync.direction")}
-                  hint={t(syncDirectionHintKeys[direction])}
-                >
-                  <select
-                    value={direction}
-                    onChange={(event) =>
-                      setDirection(event.target.value as SyncDirection)
-                    }
-                    className={control}
-                  >
-                    <option value="both">{t("sync.role.main")}</option>
-                    <option value="pull">{t("sync.role.receive")}</option>
-                    <optgroup label={t("sync.role.advanced")}>
-                      <option value="push">{t("sync.role.send")}</option>
-                    </optgroup>
-                  </select>
-                </FieldRow>
+                <SyncDirectionField direction={direction} onChange={setDirection} />
               </div>
               <div className="mt-1 flex flex-col gap-3 border-t border-line pt-4">
                 {setupCheck === null ? null : (
@@ -234,6 +221,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
         {status.configured ? (
           <SyncKeySection status={status} busy={busy} form={form} onSave={onSaveKey} />
         ) : null}
+        {status.configured ? exportSection : null}
       </div>
   );
   if (!status.configured) return body;
