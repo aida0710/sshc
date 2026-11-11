@@ -19,7 +19,7 @@ import { useLoad } from "../ui/useLoad";
 function Property({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="border-t border-hairline py-1.5 first:border-t-0">
-      <dt className="text-2xs uppercase tracking-wide text-ink-faint">{label}</dt>
+      <dt className="text-2xs text-ink-faint">{label}</dt>
       <dd className="break-all font-mono text-xs text-ink">{children}</dd>
     </div>
   );

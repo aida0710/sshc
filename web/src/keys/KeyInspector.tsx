@@ -90,7 +90,7 @@ export function KeyInspector({ item, related, now }: { item: KeyItem; related: K
 function Fact({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="grid gap-0.5 border-b border-hairline pb-3 last:border-b-0 last:pb-0">
-      <dt className="text-2xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
+      <dt className="text-2xs font-medium text-ink-muted">{label}</dt>
       <dd className="min-w-0 break-words text-ink">{value}</dd>
     </div>
   );
