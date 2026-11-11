@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { ProgramProgress } from "./programProgress";
 import type { ShownProgramStatus } from "./programStatus";
+import { useSharedTurn } from "../ui/useSharedTurn";
 import { sessionMarkerClass } from "./sessionStatus";
 
 // The connection dot takes the size of the program status marks, an 11px circle,
@@ -54,8 +55,14 @@ export function SessionMarker({ session, unread, programStatus, programProgress 
       style={{ "--sshc-progress": `${programProgress.percent}%` } as CSSProperties} />;
   }
   if (programStatus !== null || programProgress !== null) {
-    const source = programStatus === null ? { "data-program-progress": "indeterminate" } : { "data-program-status": "working" };
-    return <span aria-hidden="true" {...source} className={`${markerCircle} animate-spin border-2 border-accent/25 border-t-accent`} />;
+    return <TurningRing source={programStatus === null ? { "data-program-progress": "indeterminate" } : { "data-program-status": "working" }} />;
   }
   return <span aria-hidden="true" className={`${markerCircle} ${sessionMarkerClass(session, unread)}`} />;
+}
+
+// TurningRing is the ring that turns while a program works without saying how far. It is a component of its own so
+// that it is set in step with the other rows' rings when it appears, whenever its program began.
+function TurningRing({ source }: { source: { "data-program-progress": "indeterminate" } | { "data-program-status": "working" } }) {
+  const ring = useSharedTurn<HTMLSpanElement>();
+  return <span ref={ring} aria-hidden="true" {...source} className={`${markerCircle} animate-spin border-2 border-accent/25 border-t-accent`} />;
 }
