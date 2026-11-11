@@ -51,7 +51,7 @@ export function CodeField(props: CodeFieldProps) {
 }
 
 // codeFieldFrame is the field's border, as the other form controls draw theirs.
-export const codeFieldFrame = "overflow-hidden rounded-md border border-control-line bg-control focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent/20";
+export const codeFieldFrame = "overflow-hidden rounded-md border border-control-line bg-control focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent";
 
 // PlainCodeField is the field while Monaco loads.
 function PlainCodeField({ label, value, onChange, onBlur, disabled, placeholder, minLines = 3, fill, typingBeforeLoad, ...description }: LoadedCodeFieldProps) {
@@ -73,7 +73,7 @@ function PlainCodeField({ label, value, onChange, onBlur, disabled, placeholder,
         if (typingBeforeLoad !== undefined) typingBeforeLoad.current = false;
         onBlur?.();
       }}
-      className={`${codeFieldFrame} block w-full resize-none px-3 py-2 font-mono text-[12.5px] leading-[19px] text-ink focus:outline-none ${fill ? "h-full min-h-64" : ""}`}
+      className={`${codeFieldFrame} block w-full resize-none px-3 py-2 font-mono text-[12.5px] leading-[19px] text-ink ${fill ? "h-full min-h-64" : ""}`}
     />
   );
 }

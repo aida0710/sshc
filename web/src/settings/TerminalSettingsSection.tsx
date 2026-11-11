@@ -191,7 +191,7 @@ export function TerminalSettingsSection({ api, presetId, showHeading }: {
         />
       )}
       {/* The fields stay open while a change saves: the next key may come while the last one is on its way. */}
-      <fieldset ref={fields} disabled={!ready} className="min-w-0 border-0 p-0 disabled:opacity-70">
+      <fieldset ref={fields} disabled={!ready} className="min-w-0 border-0 p-0">
         {compact ? (
           <div className="flex flex-col gap-3.5">
             {/* Each card's rows sit in their own box so the first row, right under the heading, has no line above it. */}

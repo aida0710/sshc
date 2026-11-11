@@ -2,7 +2,7 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { maxPreviewScale } from "./previewZoom";
 
-const button = "flex size-8 items-center justify-center rounded-full text-ink-muted hover:bg-hover hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent";
+const button = "flex size-8 items-center justify-center rounded-full text-ink-muted hover:bg-hover hover:text-ink disabled:hover:bg-transparent";
 
 // PreviewZoomBar floats over a picture in a file preview: zoom out, how far it is zoomed (pressing it fits
 // the picture again), and zoom in. It sits at the top of a video, whose own controls take the bottom; on a phone

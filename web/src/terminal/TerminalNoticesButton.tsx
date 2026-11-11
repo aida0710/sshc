@@ -21,7 +21,7 @@ export function TerminalNoticesButton({ severity, expanded, onToggle, buttonRef 
       aria-expanded={expanded}
       data-terminal-notices={severity}
       onClick={onToggle}
-      className={`flex size-11 shrink-0 items-center justify-center rounded-lg hover:bg-hover focus:outline-none focus-visible:bg-hover ${expanded ? "bg-hover" : ""} ${severity === "danger" ? "text-danger" : "text-notice-ink"}`}
+      className={`flex size-11 shrink-0 items-center justify-center rounded-lg hover:bg-hover focus-visible:bg-hover ${expanded ? "bg-hover" : ""} ${severity === "danger" ? "text-danger" : "text-notice-ink"}`}
     >
       <Icon name="warning" className="size-5" />
     </button>

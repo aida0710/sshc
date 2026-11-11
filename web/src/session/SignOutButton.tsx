@@ -12,7 +12,7 @@ export function SignOutButton() {
   return (
     <>
       <button type="button" disabled={busy} onClick={requestSignOut}
-        className="rounded-md text-xs text-ink-faint hover:text-ink hover:underline disabled:opacity-60">
+        className="rounded-md text-xs text-ink-faint hover:text-ink hover:underline">
         {t("menu.signOut")}
       </button>
       {error === "" ? null : <div className="mt-2"><Notice tone="danger" compact>{error}</Notice></div>}

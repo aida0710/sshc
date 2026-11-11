@@ -331,7 +331,7 @@ export function SessionList({
                         }
                         setMenuFor(session.id);
                       }}
-                      className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-5"
+                      className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill md:size-5"
                     >
                       <Icon name="moreHorizontal" className="size-3.5" />
                     </button>
@@ -346,7 +346,7 @@ export function SessionList({
                         }
                         setClosing(session);
                       }}
-                      className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-5"
+                      className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill md:size-5"
                     >
                       <Icon name="close" className="size-3.5" />
                     </button>

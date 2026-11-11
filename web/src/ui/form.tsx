@@ -5,7 +5,7 @@ import { describeControl } from "./describeControl";
 // is found without its label.
 const controlLook =
   "rounded-md border border-control-line bg-control px-2.5 py-[5px] text-[13px] leading-5 text-ink " +
-  "placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/20 " +
+  "placeholder:text-ink-faint " +
   "disabled:border-line disabled:text-ink-faint";
 
 // sizedControl は、共通の入力欄の見た目を、幅のクラス（"w-[110px]" など）とともに返す。control に

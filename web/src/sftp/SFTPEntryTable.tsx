@@ -105,7 +105,7 @@ export function SFTPEntryTable({
               <button
                 type="button"
                 {...parentButtonProps()}
-                className="flex w-full items-center gap-2 rounded-sm text-left text-[13px] leading-5 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                className="flex w-full items-center gap-2 rounded-sm text-left text-[13px] leading-5"
               >
                 <ParentRowLabel iconBoxClassName={showsThumbnails ? "w-6" : ""} />
               </button>
@@ -130,7 +130,7 @@ export function SFTPEntryTable({
               <button
                 type="button"
                 {...entryButtonProps(entry)}
-                className={`flex w-full min-w-0 items-center gap-2 rounded-sm text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${rowCursor(entry)}`}
+                className={`flex w-full min-w-0 items-center gap-2 rounded-sm text-left ${rowCursor(entry)}`}
               >
                 {showsThumbnails
                   ? <EntryThumbnail alias={thumbnailAlias} entry={entry} boxClassName="size-6 rounded-[3px]" iconClassName="size-[15px]" />

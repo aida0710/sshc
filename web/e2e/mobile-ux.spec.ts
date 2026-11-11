@@ -822,6 +822,8 @@ test("keeps what was written in the phone's text box once the session has ended,
   await textBox.fill("a long request to Claude Code");
   const send = page.getByRole("button", { name: "Send", exact: true });
   await expect(send).toHaveAttribute("aria-disabled", "true");
+  // It is as faint as a button that is disabled outright.
+  await expect(send).toHaveCSS("opacity", "0.5");
   // A person can still press it, to learn why it does not send; Playwright would wait for it to be enabled.
   await send.tap({ force: true });
 

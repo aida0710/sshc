@@ -13,7 +13,7 @@ import { playHaptic } from "../android/haptics";
 // terminal above keeps most of the screen.
 const maximumComposerLines = 4;
 
-const fieldLook = "min-h-11 min-w-0 grow rounded-composer bg-card px-3.5 py-2.5 text-base leading-6 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-accent";
+const fieldLook = "min-h-11 min-w-0 grow rounded-composer bg-card px-3.5 py-2.5 text-base leading-6 text-ink placeholder:text-ink-faint";
 
 function keepFocus(event: { preventDefault(): void }) {
   event.preventDefault();
@@ -152,7 +152,7 @@ export function TerminalComposer({
           playHaptic("keyPress");
         }}
         onMouseDown={keepFocus}
-        className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-disabled:opacity-60"
+        className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink"
       >
         <Icon name={pressesEnter ? "cornerDownLeft" : "arrowUp"} className="size-5" />
       </button>

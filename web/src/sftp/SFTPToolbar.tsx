@@ -99,7 +99,7 @@ export function SFTPToolbar({
       <input {...literalTextEntry} ref={pathInput} aria-label={labels.input} value={pathDraft}
         onChange={(event) => setPathDraft(event.target.value)}
         onKeyDown={(event) => { if (!isImeComposing(event) && event.key === "Escape") cancelEdit(); }}
-        className={`min-w-0 flex-1 rounded-md border border-control-line bg-control px-2 font-mono outline-none focus:border-accent ${mobile ? "h-12 text-base" : "h-9 text-sm"}`} />
+        className={`min-w-0 flex-1 rounded-md border border-control-line bg-control px-2 font-mono ${mobile ? "h-12 text-base" : "h-9 text-sm"}`} />
       <Button type="submit" disabled={navigationDisabled}>{t("sftp.go")}</Button>
       <button type="button" aria-label={t("sftp.cancel")} onClick={cancelEdit}
         className={`${iconAction} min-h-11 min-w-11`}><Icon name="close" className="size-4" /></button>

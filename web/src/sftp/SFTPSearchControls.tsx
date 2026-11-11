@@ -13,6 +13,6 @@ export function SFTPSearchControls({ search, disabled, mobile = false }: { searc
         <option value="content">{t("sftp.search.content")}</option>
       </select>
     </label>
-    {search.mode === "content" ? <details className="min-w-0 flex-1"><DisclosureSummary className={`${mobile ? "min-h-12 px-2" : "min-h-8"} focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}>{t("sftp.search.contentScope")}</DisclosureSummary><p className="pb-2 leading-5">{t("sftp.search.contentHint")}</p></details> : null}
+    {search.mode === "content" ? <details className="min-w-0 flex-1"><DisclosureSummary className={mobile ? "min-h-12 px-2" : "min-h-8"}>{t("sftp.search.contentScope")}</DisclosureSummary><p className="pb-2 leading-5">{t("sftp.search.contentHint")}</p></details> : null}
   </div>;
 }

@@ -2,7 +2,7 @@ import type { DragEvent } from "react";
 import { useTranslate } from "../../i18n/context";
 import { Icon } from "../../ui/icons";
 
-const buttonClass = "flex size-7 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-ink focus-visible:outline-accent";
+const buttonClass = "flex size-7 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-ink";
 
 // Moving and focusing a pane are shown with the pointer on its header (or while in use), so the
 // header keeps the design's three actions: search, more, close.
