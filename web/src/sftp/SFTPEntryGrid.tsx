@@ -12,7 +12,7 @@ import { sortColumnLabelKeys } from "./sftpMessageKeys";
 import { useEntryRowProps } from "./useEntryRowProps";
 import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
 
-const cellButton = "flex w-full min-w-0 cursor-[inherit] flex-col gap-1 rounded-lg p-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+const cellButton = "flex w-full min-w-0 cursor-[inherit] flex-col gap-1 rounded-lg p-1.5 text-left";
 const pictureBox = "aspect-square w-full rounded-md bg-surface-subtle";
 
 // The head of the grid on a pointer's screen: what the table's header offers, with no columns under it. A phone has its

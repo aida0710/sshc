@@ -14,6 +14,7 @@ describe("button state CSS", () => {
   it("fades every disabled button the same way, except one that is working on a press", () => {
     expect(css).toMatch(/:where\(button\):disabled \{\s*cursor: not-allowed;\s*opacity: 0\.5;/);
     expect(css).toMatch(/:where\(button\[aria-busy="true"\]\):disabled \{\s*opacity: 1;/);
+    expect(css).toMatch(/:where\(button\[aria-disabled="true"\]\) \{\s*opacity: 0\.5;/);
     // 無効の fieldset で止めたボタン（下書きがあるときの Connections の管理など）も薄くする。
     expect(css).not.toMatch(/fieldset:disabled\)[^{]*\{\s*opacity: 1;/);
   });

@@ -226,3 +226,20 @@ test("the connections controls are legible in light", async ({ page, installatio
     expect(control.background, `${control.where} background`).not.toBe("rgb(28, 28, 30)");
   }
 });
+
+test("a field in focus is marked by the accent outline alone, as a button is", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Connections");
+  await page.getByRole("button", { name: "bastion", exact: true }).click();
+  const field = page.locator("[data-connection-editor] input").first();
+  const borderAtRest = await field.evaluate((element) => getComputedStyle(element).borderTopColor);
+
+  await field.focus();
+
+  await expect(field).toHaveCSS("outline-style", "solid");
+  await expect(field).toHaveCSS("outline-width", "2px");
+  await expect(field).toHaveCSS("outline-offset", "2px");
+  // Neither a ring nor a second line in the accent is drawn inside the outline.
+  await expect(field).toHaveCSS("box-shadow", "none");
+  await expect(field).toHaveCSS("border-top-color", borderAtRest);
+});

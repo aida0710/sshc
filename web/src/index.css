@@ -871,9 +871,15 @@ select:not([multiple]):not([size]) {
   animation: sshc-popover-enter 120ms ease-out;
 }
 /* 押せないボタンは、どの画面でも同じ濃さにする。理由はボタンの title や近くの文で伝える。
-   無効の fieldset の中のボタンも同じにする（fieldset 自身はたいてい薄くならない）。 */
+   無効の fieldset の中のボタンも同じにする（fieldset 自身は薄くしない。中のボタンと掛け合わさるため）。
+   フォーカスを保つために disabled にせず aria-disabled で伝えるボタンも同じ濃さにする（押すと理由を
+   知らせるので、カーソルは変えない）。
+   この決まりは layer の外にあり、ボタンに付けた disabled:opacity-* には負けない。 */
 :where(button):disabled {
   cursor: not-allowed;
+  opacity: 0.5;
+}
+:where(button[aria-disabled="true"]) {
   opacity: 0.5;
 }
 /* 押したあと処理を待っているボタン（aria-busy）は、使えないのではなく働いている最中なので
@@ -907,8 +913,14 @@ select:not([multiple]):not([size]) {
 :root[data-motion="reduce"] .sshc-modal-panel { animation: none; }
 
 /* Keyboard focus uses the same accent as the current page and selection.
-   Terminal and editor surfaces keep their own focus/selection rendering. */
+   Terminal and editor surfaces keep their own focus/selection rendering.
+   フォーカスの枠はこの1つの形だけにする。layer の外にあるので、要素に付けた focus:outline-none や
+   outline の太さ・間隔のクラスには負けない。リングや枠線の色を重ねない。 */
 :where(button, a, [role="button"], [role="menuitem"], summary, input, select, textarea):not(.monaco-editor *):not(.xterm *):focus-visible {
   outline: 2px solid var(--ui-accent);
   outline-offset: 2px;
+  /* 親がはみ出しを切っていて外側の枠が欠ける要素は、枠を内側に描く。 */
+  &:where(.sshc-focus-inset) {
+    outline-offset: -2px;
+  }
 }

@@ -158,7 +158,7 @@ function SignOutRow({ compact }: { compact: boolean }) {
     <li className={compact ? "" : "mt-2.5"}>
       {/* The row is already a large target, so it opts out of the phone's 44px minimum (index.css). */}
       <button type="button" data-touch-compact aria-label={t("menu.signOut")} aria-describedby={hintId} disabled={busy} onClick={requestSignOut}
-        className={`${rowClassName(compact)} w-full text-left transition-colors hover:bg-danger/10 disabled:opacity-60`}>
+        className={`${rowClassName(compact)} w-full text-left transition-colors hover:bg-danger/10`}>
         <RowIcon name="signOut" compact={compact} tone="danger" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] leading-[18px] text-danger">{t("menu.signOut")}</span>

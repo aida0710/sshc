@@ -63,7 +63,7 @@ function Tile({ tile }: { tile: StartTile }) {
     <button
       type="button"
       onClick={tile.onSelect}
-      className={`flex items-center gap-3 rounded-card border p-3.5 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent @2xl:relative @2xl:min-h-[172px]! @2xl:flex-col @2xl:items-start @2xl:gap-1 @2xl:px-[18px] @2xl:pb-5 @2xl:pt-[18px] ${
+      className={`flex items-center gap-3 rounded-card border p-3.5 text-left text-ink @2xl:relative @2xl:min-h-[172px]! @2xl:flex-col @2xl:items-start @2xl:gap-1 @2xl:px-[18px] @2xl:pb-5 @2xl:pt-[18px] ${
         primary
           ? "border-[color-mix(in_srgb,var(--ui-accent)_60%,transparent)] bg-[color-mix(in_srgb,var(--ui-accent)_9%,var(--ui-card))] hover:bg-[color-mix(in_srgb,var(--ui-accent)_15%,var(--ui-card))]"
           : "border-line bg-card hover:bg-hover"

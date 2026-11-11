@@ -81,7 +81,7 @@ export function NoticeFrame({ tone, kicker, title, body, detail, focus, onDismis
         event.stopPropagation();
         onDismiss();
       }}
-      className={`pointer-events-auto relative w-full max-w-[560px] rounded-lg border p-4 shadow-float outline-none focus-visible:ring-2 focus-visible:ring-accent ${onDismiss === undefined ? "" : "pr-12"} ${colours.frame}`}
+      className={`pointer-events-auto relative w-full max-w-[560px] rounded-lg border p-4 shadow-float focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${onDismiss === undefined ? "" : "pr-12"} ${colours.frame}`}
     >
       {kicker === undefined ? null : <p className={`mb-1 flex items-center gap-2 text-xs font-semibold ${colours.kicker}`}>{kicker}</p>}
       <h2 id={titleId} className="break-words text-sm font-semibold text-ink mobile-layout:text-[15px]">{title}</h2>

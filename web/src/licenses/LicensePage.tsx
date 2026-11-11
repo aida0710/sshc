@@ -23,7 +23,7 @@ export function LicensePage() {
         {entries.map((entry) => (
           <li key={`${entry.category}:${entry.name}`}>
             <details className="group">
-              <DisclosureSummary className="flex-wrap py-3 focus-visible:outline-2 focus-visible:outline-accent">
+              <DisclosureSummary className="flex-wrap py-3">
                 <span className="ml-0.5 min-w-0 text-sm font-medium text-ink [overflow-wrap:anywhere]">{entry.name}</span>
                 <span className="ml-0.5 text-xs text-ink-muted">{entry.version}</span>
                 <span className="ml-1.5 text-xs text-ink-muted">{entry.license}</span>

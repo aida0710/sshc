@@ -8,7 +8,7 @@ export type SFTPMenuAction = {
   run: () => void;
 };
 
-export const phoneMenuItemClass = "block min-h-12 w-full rounded-md px-3 py-3 text-left text-base hover:bg-hover focus:bg-select-fill focus:outline-none";
+export const phoneMenuItemClass = "block min-h-12 w-full rounded-md px-3 py-3 text-left text-base hover:bg-hover focus:bg-select-fill";
 
 export function SFTPMenuActionList({ actions, mobile = false }: { actions: SFTPMenuAction[]; mobile?: boolean }) {
   return (

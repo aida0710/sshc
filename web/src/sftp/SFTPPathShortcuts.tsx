@@ -5,7 +5,7 @@ import type { SFTPBrowserModel } from "./useSFTPBrowser";
 function Shortcut({ icon, label, disabled, onClick }: { icon: IconName; label: string; disabled: boolean; onClick: () => void }) {
   return (
     <button type="button" disabled={disabled} onClick={onClick}
-      className="flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 rounded-md text-xs text-ink-muted active:bg-select-fill disabled:opacity-40">
+      className="flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 rounded-md text-xs text-ink-muted active:bg-select-fill">
       <Icon name={icon} className="size-4 shrink-0" />
       <span className="truncate">{label}</span>
     </button>

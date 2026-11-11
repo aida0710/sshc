@@ -7,7 +7,7 @@ export const menuSurface = "rounded-lg border border-line bg-card p-1 shadow-flo
 
 // Every item's size, hover and focus. Items are taller on touch layouts, where they are tapped. The
 // horizontal padding is left to each kind of item. A disabled item takes index.css's look for :disabled.
-const itemBase = "min-h-10 w-full rounded-md py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none desktop-layout:min-h-0";
+const itemBase = "min-h-10 w-full rounded-md py-2 text-left text-sm hover:bg-hover focus:bg-select-fill desktop-layout:min-h-0";
 
 // menuItemClass is one item.
 export function menuItemClass(tone?: "danger"): string {

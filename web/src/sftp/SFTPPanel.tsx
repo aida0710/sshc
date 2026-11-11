@@ -482,7 +482,7 @@ export function SFTPPanel({
         void search.runSearch();
       }}
       placeholder={t(search.mode === "content" ? "sftp.search.contentPlaceholder" : "sftp.filterPlaceholder")}
-      className="h-8 w-full rounded-md border border-control-line bg-well py-1 pl-7 pr-2 text-xs outline-none focus:border-accent md:h-7"
+      className="h-8 w-full rounded-md border border-control-line bg-well py-1 pl-7 pr-2 text-xs md:h-7"
     />
   );
   const selectionLabel = selectedEntry === null
@@ -606,7 +606,7 @@ export function SFTPPanel({
                   aria-haspopup="menu"
                   aria-expanded={!mobileInteraction && menu?.kind === "selected"}
                   onClick={(event) => toggleMenu("selected", event.currentTarget)}
-                  className={`${iconAction} focus:bg-select-fill focus:outline-none ${mobileInteraction ? "size-12" : "size-11 md:size-7"}`}
+                  className={`${iconAction} focus:bg-select-fill ${mobileInteraction ? "size-12" : "size-11 md:size-7"}`}
                 >
                   <Icon name="moreHorizontal" className={mobileInteraction ? "size-5" : "size-4"} />
                 </button>
@@ -621,7 +621,7 @@ export function SFTPPanel({
                 aria-expanded={!mobileInteraction && menu?.kind === "create"}
                 disabled={busy || !connected}
                 onClick={(event) => toggleMenu("create", event.currentTarget)}
-                className={`${iconAction} size-10 focus:bg-select-fill focus:outline-none md:size-7`}
+                className={`${iconAction} size-10 focus:bg-select-fill md:size-7`}
               >
                 <Icon name="plus" className="size-4" />
               </button>
@@ -639,7 +639,7 @@ export function SFTPPanel({
                 title={t(search.searching ? "sftp.search.stop" : "sftp.searchBelow")}
                 disabled={!search.searching && (busy || !connected || search.filter.trim() === "")}
                 onClick={() => { if (search.searching) search.cancelSearch(); else void search.runSearch(); }}
-                className={`${iconAction} size-10 focus:bg-select-fill focus:outline-none md:size-7`}
+                className={`${iconAction} size-10 focus:bg-select-fill md:size-7`}
               >
                 <Icon name="search" className="size-4" />
               </button>

@@ -123,7 +123,7 @@ export function HostPickerDialog({
   const row = ({ key, name, detail, icon, current, label, choose }: RowProps) => (
     <button key={key} type="button" onClick={() => { choose(); setQuery(""); }}
       aria-label={label}
-      className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-select-fill focus:bg-select-fill focus:outline-none ${current ? "bg-select-fill" : ""}`}>
+      className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-select-fill focus:bg-select-fill ${current ? "bg-select-fill" : ""}`}>
       <Icon name={icon} className="size-4 shrink-0 text-accent" />
       <span className="min-w-0 grow">
         <span title={name} className="block truncate font-medium text-ink">{name}</span>
