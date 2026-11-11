@@ -164,8 +164,9 @@ export function HostDetailPanel({
           role="tablist"
           aria-label={t("conn.editorLabel")}
           data-more-to-the-right={tabsGoOn || undefined}
-          className={`flex gap-5 overflow-x-auto border-b border-line [scrollbar-width:none] ${tabsGoOn ? fadeAtTheRight : ""}`}
+          className={`-ml-1 flex gap-3 overflow-x-auto border-b border-line [scrollbar-width:none] ${tabsGoOn ? fadeAtTheRight : ""}`}
         >
+          {/* タブは左右に4pxずつ余白を持ち、内側に描くフォーカスの枠が文字に触れない。列は同じだけ左へ寄せて、文字の位置を保つ。 */}
           {areas.map((item, index) => (
             <button
               key={item.area}
@@ -177,7 +178,7 @@ export function HostDetailPanel({
               tabIndex={panel === item.area ? 0 : -1}
               onClick={() => selectArea(item.area)}
               onKeyDown={(event) => activateTabFromKeyboard(event, index, areaNames, selectArea)}
-              className={`sshc-focus-inset -mb-px shrink-0 whitespace-nowrap border-b-2 pb-[8px] text-ui transition-colors ${panel === item.area ? "border-accent text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
+              className={`sshc-focus-inset -mb-px shrink-0 whitespace-nowrap border-b-2 px-1 pb-[8px] text-ui transition-colors ${panel === item.area ? "border-accent text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
             >
               {t(item.label)}
             </button>
