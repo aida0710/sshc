@@ -419,8 +419,14 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
     });
   }
   await page.getByText("Details and history").click();
-  await expect(page.getByText("Dated history · 1")).toBeVisible();
-  await expect(page.getByText("The remote generation differs")).toBeVisible();
+  const datedHistory = page.getByText("Dated history · 1");
+  await expect(datedHistory).toBeVisible();
+  // A label reads as it is written, as on the other pages, and is not set in capitals.
+  await expect(datedHistory).toHaveCSS("text-transform", "none");
+  const differs = page.getByText("The remote generation differs");
+  await expect(differs).toBeVisible();
+  // The warning is as large as the facts around it; its colour and weight set it apart.
+  await expect(differs).toHaveCSS("font-size", await page.getByText("Showing the latest 1 of 1 entries.").evaluate((fact) => getComputedStyle(fact).fontSize));
   await expect(
     page.getByRole("heading", { name: "Encrypted revision history" }),
   ).toBeVisible();

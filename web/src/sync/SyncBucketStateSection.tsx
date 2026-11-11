@@ -44,13 +44,13 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
       ) : bucketState.phase === "error" ? (
         <PanelState tone="failed" title={bucketState.message} action={<Button onClick={onRefresh}>{t("sync.bucketRefresh")}</Button>} />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <div className="rounded-inset border border-line bg-surface p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+        <div className="grid gap-3 lg:grid-cols-2 lg:gap-6">
+          <div className="min-w-0 border-t border-hairline pt-3 first:border-t-0 first:pt-0 lg:border-t-0 lg:pt-0">
+            <p className="text-xs font-medium text-ink-muted">
               {t("sync.bucketLive")}
             </p>
             {bucketState.value.live === undefined ? (
-              <p className="mt-2 text-sm text-ink-muted">
+              <p className={`mt-2 ${hintText}`}>
                 {t("sync.bucketLiveEmpty")}
               </p>
             ) : (
@@ -65,7 +65,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
                   })}
                 </p>
                 <p
-                  className={`text-sm font-medium ${bucketState.value.localIsLive ? "text-success" : "text-notice-ink"}`}
+                  className={`text-xs font-medium ${bucketState.value.localIsLive ? "text-success" : "text-notice-ink"}`}
                 >
                   {t(
                     bucketState.value.localIsLive
@@ -85,8 +85,8 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
             )}
           </div>
 
-          <div className="rounded-inset border border-line bg-surface p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+          <div className="min-w-0 border-t border-hairline pt-3 first:border-t-0 first:pt-0 lg:border-t-0 lg:pt-0">
+            <p className="text-xs font-medium text-ink-muted">
               {t("sync.bucketHistory", {
                 count: bucketState.value.history.length,
               })}
@@ -97,7 +97,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
               </p>
             ) : null}
             {bucketState.value.history.length === 0 ? (
-              <p className="mt-2 text-sm text-ink-muted">
+              <p className={`mt-2 ${hintText}`}>
                 {t("sync.bucketHistoryEmpty")}
               </p>
             ) : (

@@ -143,7 +143,7 @@ export function SyncHistorySection({
               ) : (
                 <div className="flex flex-col gap-3">
                   <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    <p className="text-xs font-medium text-ink-muted">
                       {t("sync.historySelected")}
                     </p>
                     <p className="mt-1 break-all font-mono text-xs text-ink">

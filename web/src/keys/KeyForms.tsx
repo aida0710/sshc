@@ -398,7 +398,7 @@ export function RelocateResult({
       )}
       {result.files.length > 0 && (
         <>
-          <h4 className="text-xs uppercase tracking-wide text-ink-muted">
+          <h4 className="text-xs text-ink-muted">
             {t("keys.relocateMoved")}
           </h4>
           <ul className="font-mono text-xs text-ink-muted">
@@ -412,7 +412,7 @@ export function RelocateResult({
       )}
       {result.references.length > 0 && (
         <>
-          <h4 className="text-xs uppercase tracking-wide text-ink-muted">
+          <h4 className="text-xs text-ink-muted">
             {t("keys.relocateRewritten")}
           </h4>
           <ul className="text-xs text-ink-muted">

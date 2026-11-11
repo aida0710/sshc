@@ -237,13 +237,13 @@ export function HostPickerDialog({
           ) : matches.map((host) => hostRow(host, host.group || host.hostName))
         ) : view === "recent" && recentChoices.length > 0 ? (
           <section aria-labelledby="host-picker-recent-heading">
-            <h3 id="host-picker-recent-heading" className="px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted">{t("sftp.recentHosts")}</h3>
+            <h3 id="host-picker-recent-heading" className="px-3 py-2 text-xs font-medium text-ink-muted">{t("sftp.recentHosts")}</h3>
             {recentChoices.map((host) => hostRow(host, t("connection.lastConnected", { at: formatDateTime(host.lastConnectedAt, locale) })))}
           </section>
         ) : (
           [...grouped.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([group, groupHosts]) => (
             <section key={group || "ungrouped"} aria-label={group || t("sftp.ungroupedHosts")} className="mb-2">
-              <h3 className="px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted">{group || t("sftp.ungroupedHosts")}</h3>
+              <h3 className="px-3 py-2 text-xs font-medium text-ink-muted">{group || t("sftp.ungroupedHosts")}</h3>
               {groupHosts.map((host) => hostRow(host, host.hostName))}
             </section>
           ))

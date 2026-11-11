@@ -300,7 +300,7 @@ export function CommandPalette({
                 onClick={() => void choose(item)}
                 className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-md px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-hover"}`}
               >
-                <span className="row-span-2 font-mono text-3xs uppercase tracking-wide text-ink-faint">{t(kindLabelKeys[item.kind])}</span>
+                <span className="row-span-2 font-mono text-3xs text-ink-faint">{t(kindLabelKeys[item.kind])}</span>
                 <span title={item.label} className="col-start-2 truncate font-medium text-ink">{item.label}</span>
                 {item.detail === "" ? null : <span title={item.detail} className="col-start-2 truncate font-mono text-2xs text-ink-muted">{item.detail}</span>}
                 {/* A phone has no keys to press, and its width goes to the name. */}
