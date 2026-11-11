@@ -6,8 +6,8 @@ import { panoramaPNG, portraitPNG, portraitWebM, samplePNG } from "./support/ima
 import { openLocalSFTPDirectory } from "./support/sftp";
 
 const screens = [
-  { name: "a PC window", width: 1280, height: 800, open: "dblclick" },
-  { name: "a phone", width: 412, height: 842, open: "click" },
+  { name: "a PC window", width: 1280, height: 800, open: "dblclick", corners: "a dialog's rounded corners", cornerRadius: "12px" },
+  { name: "a phone", width: 412, height: 842, open: "click", corners: "square corners, filling the screen,", cornerRadius: "0px" },
 ] as const;
 const pictures = [
   { shape: "tall", file: "portrait.png", bytes: portraitPNG, ratio: 1080 / 2400 },
@@ -52,6 +52,12 @@ function expectInside(margins: { top: number; left: number; bottom: number; righ
 }
 
 for (const screen of screens) {
+  test(`gives the preview ${screen.corners} on ${screen.name}`, async ({ page, installation }) => {
+    const preview = await openPreview({ page, installation, screen, file: "small.png", bytes: samplePNG() });
+
+    await expect(preview).toHaveCSS("border-radius", screen.cornerRadius);
+  });
+
   for (const picture of pictures) {
     test(`shows the whole of a ${picture.shape} picture in the preview on ${screen.name}`, async ({ page, installation }) => {
       const preview = await openPreview({ page, installation, screen, file: picture.file, bytes: picture.bytes() });
