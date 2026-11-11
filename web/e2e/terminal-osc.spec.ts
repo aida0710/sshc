@@ -245,6 +245,39 @@ test("a session's row follows a program that works for less than the time betwee
   await expect(sessions.locator("[data-program-status]")).toHaveCount(0);
 });
 
+// Two programs that began working at different moments turn their rings together. Left to start when each appears,
+// one ring points up while the other points down.
+test("the rings of two working programs turn in step, whenever each began", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "printf escape sequences are POSIX shell syntax");
+  await openApplication(page, installation);
+  const sessions = page.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Open sessions" });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  // Both sessions are open before either program works, so a ring appears in a list that is already drawn.
+  await openLocalShell(page);
+  await openLocalShell(page);
+  await expect(sessions.getByRole("listitem")).toHaveCount(2);
+  const rings = sessions.locator('[data-program-status="working"]');
+  for (const row of [1, 0]) {
+    await sessions.getByRole("listitem").nth(row).getByRole("button").first().click();
+    await expect(screen).not.toContainText("read -r");
+    await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+    await terminalKeyboard(page).focus();
+    await page.keyboard.type(`${reportProgramStatus("state=working")}; read -r _`);
+    await page.keyboard.press("Enter");
+    await expect(rings).toHaveCount(2 - row, { timeout: 15_000 });
+    // The second program begins a part of a turn after the first.
+    await page.waitForTimeout(370);
+  }
+
+  // Both angles are read in one step, so the rings have no time to turn between the two readings.
+  const degrees = await rings.evaluateAll((marks) => marks.map((mark) => {
+    const turn = new DOMMatrixReadOnly(getComputedStyle(mark).transform);
+    return (Math.atan2(turn.b, turn.a) * 180) / Math.PI;
+  }));
+  const apart = Math.abs(((degrees[0]! - degrees[1]! + 540) % 360) - 180);
+  expect(apart, `the rings stand at ${degrees.map((angle) => angle.toFixed(0)).join("° and ")}°`).toBeLessThan(2);
+});
+
 // Programs say what they are doing with OSC 7501. The session's row shows it in
 // place of its dot and destination: working and blocked while they last, a done
 // result until the session has been on screen since it came.
