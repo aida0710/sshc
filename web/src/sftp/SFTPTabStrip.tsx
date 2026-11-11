@@ -208,7 +208,7 @@ export function SFTPTabStrip({
                 title={labels.title || labels.name}
                 onClick={() => onSelect(tab.id)}
                 onKeyDown={(event) => keyDown(event, tab, index)}
-                className={`flex min-w-0 flex-1 rounded-md py-0.5 text-left ${compact ? "px-2" : "pl-3 pr-1"} ${tabLayout[size]} ${selected ? "text-ink" : "text-ink-muted"}`}
+                className={`sshc-focus-inset flex min-w-0 flex-1 rounded-md py-0.5 text-left ${compact ? "px-2" : "pl-3 pr-1"} ${tabLayout[size]} ${selected ? "text-ink" : "text-ink-muted"}`}
               >
                 {compact || tab.alias === "" ? null : <Icon name={tab.alias === localHostAlias ? "files" : "connections"} className="size-[13px] shrink-0" />}
                 <span className={`block min-w-0 truncate leading-4 ${compact ? "w-full text-sm font-medium" : "text-xs"}`}>{hostOnly ? labels.host : labels.folder}</span>
@@ -223,7 +223,7 @@ export function SFTPTabStrip({
                   title={t("sftp.chooseHostHeading")}
                   disabled={!canChangeHost(tab)}
                   onClick={() => onChangeHost(tab)}
-                  className={`flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink ${controlSize[size]}`}
+                  className={`sshc-focus-inset flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink ${controlSize[size]}`}
                 >
                   <Icon name="chevronRight" className="size-3.5 rotate-90" />
                 </button>
@@ -243,7 +243,7 @@ export function SFTPTabStrip({
                   type="button"
                   aria-label={t("sftp.closeTab", { name: labels.name })}
                   onClick={(event) => onClose(tab, { skipConfirmation: event.shiftKey })}
-                  className={`flex shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-danger ${controlSize[size]}`}
+                  className={`sshc-focus-inset flex shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-danger ${controlSize[size]}`}
                 >
                   <Icon name="close" className={compact ? "size-4" : "size-3"} />
                 </button>

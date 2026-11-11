@@ -20,7 +20,9 @@ export type LayoutDefectKind =
   // An icon or a dot beside a line of text, higher or lower than the middle of the line.
   | "off-centre-mark"
   // Rows of one list built alike whose leading marks differ in size, or whose text starts at different places.
-  | "uneven-rows";
+  | "uneven-rows"
+  // The outline that marks the control in focus is cut away on one side by a box that hides its overflow.
+  | "cut-focus-outline";
 
 export type LayoutDefect = {
   kind: LayoutDefectKind;
@@ -372,6 +374,38 @@ function listLayoutDefects({ ignored }: ListingOptions): LayoutDefect[] {
     return Math.round(bottom - top) + 1;
   };
 
+  // The outline of a control in focus is 2px wide and 2px away from it (index.css). A control marked
+  // sshc-focus-inset draws it inside itself, where nothing cuts it.
+  const outlineReachPx = 4;
+  // sideWhereFocusOutlineIsCut names the side on which a box that hides its overflow leaves no room for the whole
+  // outline, with the box. A control used by touch alone shows no outline, so a phone's layout is not judged.
+  const sideWhereFocusOutlineIsCut = (control: Element, box: DOMRect): { toString(): string; by: string } | null => {
+    if (laidOutAsPhone || control.classList.contains("sshc-focus-inset")) return null;
+    // A field that is hidden and drawn by the element after it (a switch, a swatch) shows the outline on that one.
+    if (getComputedStyle(control).opacity === "0") return null;
+    for (let holder = control.parentElement; holder !== null; holder = holder.parentElement) {
+      const style = getComputedStyle(holder);
+      const cutsSideways = style.overflowX !== "visible";
+      const cutsDown = style.overflowY !== "visible";
+      if (!cutsSideways && !cutsDown) continue;
+      const outer = holder.getBoundingClientRect();
+      // What the holder shows is inside its border.
+      const shown = { left: outer.left + holder.clientLeft, top: outer.top + holder.clientTop, right: outer.left + holder.clientLeft + holder.clientWidth, bottom: outer.top + holder.clientTop + holder.clientHeight };
+      const sides: Array<[string, boolean]> = [
+        ["left", cutsSideways && holder.scrollLeft === 0 && box.left - outlineReachPx < shown.left - sidewaysTolerancePx],
+        ["right", cutsSideways && holder.scrollLeft + holder.clientWidth >= holder.scrollWidth - 1 && box.right + outlineReachPx > shown.right + sidewaysTolerancePx],
+        ["top", cutsDown && holder.scrollTop === 0 && box.top - outlineReachPx < shown.top - sidewaysTolerancePx],
+        ["bottom", cutsDown && holder.scrollTop + holder.clientHeight >= holder.scrollHeight - 1 && box.bottom + outlineReachPx > shown.bottom + sidewaysTolerancePx],
+      ];
+      const cut = sides.find(([, isCut]) => isCut);
+      if (cut !== undefined) {
+        const by = `${holder.tagName.toLowerCase()}${holder.getAttribute("aria-label") === null ? "" : ` "${holder.getAttribute("aria-label")}"`}`;
+        return { toString: () => cut[0], by };
+      }
+    }
+    return null;
+  };
+
   for (const control of controls) {
     control.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
     const box = control.getBoundingClientRect();
@@ -386,6 +420,8 @@ function listLayoutDefects({ ignored }: ListingOptions): LayoutDefect[] {
       note("covered-control", control, `a press at its middle lands on ${hit === null ? "nothing" : `<${hit.tagName.toLowerCase()}> "${nameOf(hit)}"`}`);
       continue;
     }
+    const cutSide = sideWhereFocusOutlineIsCut(control, box);
+    if (cutSide !== null) note("cut-focus-outline", control, `the outline around it is cut away on the ${cutSide} by <${cutSide.by}>`);
     if (!laidOutAsPhone || control.hasAttribute("data-touch-compact")) continue;
     // A link in a line of text is the height of the line. It is pressed as a part of what is being read.
     if (control.tagName === "A" && getComputedStyle(control).display === "inline") continue;

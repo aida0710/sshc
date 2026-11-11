@@ -30,7 +30,7 @@ function floatingListSide(pointerX: number, listWidth: number): "left" | "right"
 }
 
 function facetLook(active: boolean): string {
-  return `flex min-h-[30px] w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left text-ui transition-colors ${
+  return `sshc-focus-inset flex min-h-[30px] w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left text-ui transition-colors ${
     active ? "bg-select-fill font-medium text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
   }`;
 }

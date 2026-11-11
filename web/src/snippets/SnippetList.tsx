@@ -77,7 +77,7 @@ export function SnippetList({
                   type="button"
                   aria-current={opened ? "true" : undefined}
                   onClick={() => onOpen(snippet)}
-                  className={`w-full min-w-0 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 ${columns ? "grid grid-cols-[minmax(0,16rem)_minmax(0,28rem)_minmax(0,1fr)] items-center gap-4" : "flex flex-col gap-0.5"} ${opened ? "bg-select-fill" : "hover:bg-hover"}`}
+                  className={`sshc-focus-inset w-full min-w-0 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 ${columns ? "grid grid-cols-[minmax(0,16rem)_minmax(0,28rem)_minmax(0,1fr)] items-center gap-4" : "flex flex-col gap-0.5"} ${opened ? "bg-select-fill" : "hover:bg-hover"}`}
                 >
                   <span title={snippet.name} className="truncate text-sm text-ink">{snippet.name}</span>
                   <code title={snippet.command} className="truncate font-mono text-xs text-ink-faint">{snippetSummary(t, snippet)}</code>
