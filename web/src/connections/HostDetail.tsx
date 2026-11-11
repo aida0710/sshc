@@ -177,7 +177,7 @@ export function HostDetailPanel({
               tabIndex={panel === item.area ? 0 : -1}
               onClick={() => selectArea(item.area)}
               onKeyDown={(event) => activateTabFromKeyboard(event, index, areaNames, selectArea)}
-              className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-[8px] text-[13px] transition-colors ${panel === item.area ? "border-accent text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
+              className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-[8px] text-ui transition-colors ${panel === item.area ? "border-accent text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}
             >
               {t(item.label)}
             </button>

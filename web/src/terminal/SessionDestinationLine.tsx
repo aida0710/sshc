@@ -16,17 +16,17 @@ export function SessionDestinationLine({ session, programStatus = null, id }: {
   const t = useTranslate();
   const destination = useSessionDestination(session);
   if (programStatus !== null) {
-    return <span id={id} data-program-status-text title={programStatusText(t, programStatus)} className={`block truncate text-[10.5px] leading-[14px] ${programStatusTone(programStatus)}`}>{programStatusText(t, programStatus)}</span>;
+    return <span id={id} data-program-status-text title={programStatusText(t, programStatus)} className={`block truncate text-2xs leading-[14px] ${programStatusTone(programStatus)}`}>{programStatusText(t, programStatus)}</span>;
   }
   if (sessionShowsDestination(session)) {
-    return <span id={id} data-session-destination title={destination} className="block truncate font-mono text-[10.5px] leading-[14px] text-ink-faint">{destination}</span>;
+    return <span id={id} data-session-destination title={destination} className="block truncate font-mono text-2xs leading-[14px] text-ink-faint">{destination}</span>;
   }
   // A problem is explained in sentences where the session is shown. The row has one short line under the name,
   // so it says the reason in a few words, and keeps the sentences for the tooltip.
   const status = sessionStatusText(t, session);
   const shown = session.problem === "" ? status : rowProblemText(t, session.problem);
   return (
-    <span id={id} data-session-status-text title={status} className={`block truncate text-[10.5px] leading-[14px] ${sessionStatusTone(session)}`}>
+    <span id={id} data-session-status-text title={status} className={`block truncate text-2xs leading-[14px] ${sessionStatusTone(session)}`}>
       {shown}
     </span>
   );

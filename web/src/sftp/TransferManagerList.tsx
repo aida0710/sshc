@@ -158,7 +158,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
   });
   useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
   const content = (
-    <section className={compactViewport ? "flex min-h-0 flex-1 flex-col text-sm" : `relative shrink-0 overflow-visible text-[12.5px] ${divided ? "border-t border-line" : ""}`} aria-labelledby={headingId}>
+    <section className={compactViewport ? "flex min-h-0 flex-1 flex-col text-sm" : `relative shrink-0 overflow-visible text-xs ${divided ? "border-t border-line" : ""}`} aria-labelledby={headingId}>
       {compactViewport || collapsed || jobs.length === 0 ? null : (
         <div
           role="separator"

@@ -39,7 +39,7 @@ function fieldKey(field: FormField): string {
 const proxyJumpKeyword = "ProxyJump";
 
 // 1行の追加欄と表の行の、小さな文字の入力欄。
-const compactControl = `${control} h-[30px] py-0 text-[12.5px]`;
+const compactControl = `${control} h-[30px] py-0`;
 
 // Where a forward goes is the one part of its row that gets long, and a finger cannot hover over a title, so it wraps.
 const forwardTargetCell = "py-1.5 pr-2 font-mono [overflow-wrap:anywhere]";
@@ -235,10 +235,10 @@ export function AdvancedSettings({
       </EditorSection>
 
       <EditorSection title={t("conn.portForwarding")}>
-        {forwardFields.length === 0 && pendingForwards.length === 0 ? <p className="pb-1 text-[12.5px] text-ink-faint">{t("conn.forwardNoneSaved")}</p> : (
-          <table className="w-full table-fixed text-[12.5px]">
+        {forwardFields.length === 0 && pendingForwards.length === 0 ? <p className="pb-1 text-xs text-ink-faint">{t("conn.forwardNoneSaved")}</p> : (
+          <table className="w-full table-fixed text-xs">
             <thead>
-              <tr className="text-left text-[11.5px] text-ink-faint">
+              <tr className="text-left text-xs text-ink-faint">
                 <th scope="col" className="w-[6.5rem] pb-1.5 pr-2 font-normal">{t("conn.forwardType")}</th>
                 <th scope="col" className="w-[5rem] pb-1.5 pr-2 font-normal">{t("advanced.forwardListen")}</th>
                 <th scope="col" className="pb-1.5 pr-2 font-normal">{t("conn.forwardDestination")}</th>
@@ -264,7 +264,7 @@ export function AdvancedSettings({
                   <tr key={`new-forward-${index}`} className="border-t border-line text-ink">
                     <td className="truncate py-1.5 pr-2">{t(forwardLabelKeys[forwardKindForKeyword(addition.keyword ?? "") ?? "local"])}</td>
                     <td title={ends.listen} className="truncate py-1.5 pr-2 font-mono">{ends.listen}</td>
-                    <td className={forwardTargetCell}>{ends.target}<span className="ml-2 font-sans text-[11px] text-notice-ink">{t("advanced.pending")}</span></td>
+                    <td className={forwardTargetCell}>{ends.target}<span className="ml-2 font-sans text-2xs text-notice-ink">{t("advanced.pending")}</span></td>
                     <td className="py-1.5 text-right"><RemoveToggle removed={false} disabled={fieldsDisabled} label={addition.keyword ?? ""} onToggle={() => setAdditions(additions.filter((candidate) => candidate !== addition))} /></td>
                   </tr>
                 );
@@ -314,7 +314,7 @@ export function AdvancedSettings({
           {pendingOthers.map((addition, index) => (
             <li key={`new-directive-${index}`} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] items-center gap-2 border-t border-line py-1.5 first:border-t-0">
               <span title={addition.keyword} className="truncate font-mono text-xs text-ink-muted">{addition.keyword}</span>
-              <span title={(addition.values ?? []).join(" ")} className="truncate font-mono text-xs text-ink">{(addition.values ?? []).join(" ")}<span className="ml-2 font-sans text-[11px] text-notice-ink">{t("advanced.pending")}</span></span>
+              <span title={(addition.values ?? []).join(" ")} className="truncate font-mono text-xs text-ink">{(addition.values ?? []).join(" ")}<span className="ml-2 font-sans text-2xs text-notice-ink">{t("advanced.pending")}</span></span>
               <RemoveToggle removed={false} disabled={fieldsDisabled} label={addition.keyword ?? ""} onToggle={() => setAdditions(additions.filter((candidate) => candidate !== addition))} />
             </li>
           ))}

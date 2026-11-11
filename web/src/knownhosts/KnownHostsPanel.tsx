@@ -278,14 +278,14 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
           {scanButton("")}
         </div>
 
-        {scanned ? <p className="mt-3 rounded-inset bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}
+        {scanned ? <p className="mt-3 rounded-inset bg-notice px-3 py-2.5 text-xs leading-[19px] text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}
         {candidates.length > 0 ? (
           narrowList ? (
             <ul aria-label={t("kh.scanCandidates")} className="mt-3 flex flex-col">
               {displayedCandidates.map((candidate) => (
                 <li key={`${candidate.host}-${candidate.fingerprint}`} className="flex items-center gap-3 border-b border-line py-2 last:border-b-0">
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] [overflow-wrap:anywhere]">{candidate.host}</span>
+                    <span className="block text-sm [overflow-wrap:anywhere]">{candidate.host}</span>
                     <span className="mt-0.5 block font-mono text-xs text-ink-muted">{candidate.keyType}</span>
                     <span className="mt-0.5 block break-all font-mono text-xs text-ink-muted">{candidate.fingerprint}</span>
                     <span className="mt-1 block"><Tag tone="warn">{candidateTrustText}</Tag></span>
@@ -296,7 +296,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
             </ul>
           ) : (
             <div className="mt-3">
-              <table className="w-full text-[13px]">
+              <table className="w-full text-ui">
                 <caption className="mb-2 text-left text-xs text-ink-faint">{t("kh.scanCandidates")}</caption>
                 <thead>
                   <tr className={tableHeadRow}>
@@ -399,7 +399,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                     className="min-w-0 flex-1 py-2 text-left"
                   >
                     <span className="flex items-baseline gap-2">
-                      <span title={host} className={`min-w-0 flex-1 text-[14px] ${opened ? "[overflow-wrap:anywhere]" : "truncate"}`}>{host}</span>
+                      <span title={host} className={`min-w-0 flex-1 text-sm ${opened ? "[overflow-wrap:anywhere]" : "truncate"}`}>{host}</span>
                       <span className="shrink-0 font-mono text-xs text-ink-muted">{item.keyType}</span>
                     </span>
                     <span title={item.fingerprint} className={`mt-0.5 block font-mono text-xs text-ink-muted ${opened ? "break-all" : "truncate"}`}>{item.fingerprint}</span>
@@ -421,7 +421,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
             })}
           </ul>
         ) : (
-          <table className="w-full text-[13px]">
+          <table className="w-full text-ui">
             <caption className="sr-only">{knownHostsShownPath}</caption>
             <thead>
               <tr className={tableHeadRow}>

@@ -263,7 +263,7 @@ export function WorkspaceTree({
             data-touch-dense
             title={t("terminal.openNextUnread")}
             onClick={openNextUnread}
-            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-notice px-1.5 text-[11px] text-notice-ink hover:brightness-110 md:min-h-5"
+            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-notice px-1.5 text-2xs text-notice-ink hover:brightness-110 md:min-h-5"
           >
             <span aria-hidden="true" className="size-1.5 rounded-full bg-notice-ink" />
             {t("terminal.unreadCount", { count: String(unreadInOrder.length) })}
@@ -363,7 +363,7 @@ export function WorkspaceTree({
         type="button"
         disabled={!canOpenSession}
         onClick={() => setPickerWorkspace(newSessionWorkspace)}
-        className="mt-1.5 flex min-h-10 w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left text-[13px] text-accent hover:bg-hover md:min-h-[30px]"
+        className="mt-1.5 flex min-h-10 w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left text-ui text-accent hover:bg-hover md:min-h-[30px]"
       >
         <Icon name="plus" className="size-3.5" aria-hidden="true" />
         {t("terminal.newSession")}

@@ -166,6 +166,15 @@
   --radius-card: 14px;
   /* スマホの入力欄（1行のとき両端が半円になる高さ44pxの半分）。 */
   --radius-composer: 22px;
+  /* 文字の大きさは、Tailwind の xs（12px）・sm（14px）・base（16px）・lg・xl・2xl と、ここの3つだけを使う。
+     0.5px 刻みや直書きの大きさを足さない（src/ui/fontSize.test.ts が検査する）。
+     ここの3つは行の高さを持たない。行の高さは置く場所の leading-* か、親から受け継ぐ。 */
+  /* 札、キーの印、数字の印。 */
+  --text-3xs: 10px;
+  /* 小さなラベル、セッションの行の2行目。 */
+  --text-2xs: 11px;
+  /* 入力欄、ボタン、エディタの文字。 */
+  --text-ui: 13px;
   /* 影は4つだけ。カード（shadow-card）、板（shadow-pane）、メニューや知らせのように浮かぶもの
      （shadow-float）、モーダルと引き出しのように画面を覆うもの（shadow-overlay）。 */
   --shadow-card: var(--ui-card-shadow);
@@ -852,7 +861,7 @@ select:not([multiple]):not([size]) {
     touch-action: manipulation;
     padding-inline: 10px;
     gap: 4px;
-    font-size: 12.5px;
+    font-size: 12px;
   }
   [data-page-actions] :where(button, a)::after {
     content: "";

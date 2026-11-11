@@ -8,7 +8,7 @@ export function VPNProfileChip({ name, className = "" }: { name: string; classNa
   return (
     <span
       title={t("vpn.profileChipHint", { name })}
-      className={`shrink-0 rounded-sm border border-line px-1.5 py-0.5 text-[10px] font-medium text-ink-muted ${className}`}
+      className={`shrink-0 rounded-sm border border-line px-1.5 py-0.5 text-3xs font-medium text-ink-muted ${className}`}
     >
       {t("vpn.profileChip", { name })}
     </span>

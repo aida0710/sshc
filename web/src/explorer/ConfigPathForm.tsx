@@ -51,7 +51,7 @@ export function ConfigPathForm({
         if (!unchanged && !busy) onSubmit();
       }}
     >
-      <label htmlFor="config-path" className="text-[13px] font-medium text-ink">{t(texts.label)}</label>
+      <label htmlFor="config-path" className="text-ui font-medium text-ink">{t(texts.label)}</label>
       <div className="flex flex-wrap gap-2">
         <input {...literalTextEntry}
           id="config-path"
@@ -61,7 +61,7 @@ export function ConfigPathForm({
           placeholder={task === "rename" ? currentPath : "conf.d/30-lab.conf"}
           aria-invalid={problem === "" ? undefined : true}
           aria-describedby={problem === "" ? "config-path-note" : "config-path-problem config-path-note"}
-          className={`${control} min-h-10 basis-full font-mono text-xs sm:min-w-48 sm:flex-1 sm:basis-0 md:min-h-0`}
+          className={`${control} min-h-10 basis-full font-mono sm:min-w-48 sm:flex-1 sm:basis-0 md:min-h-0`}
         />
         <Button type="submit" kind={task === "deleteDirectory" ? "danger" : "primary"} className="min-h-10 md:min-h-0" busy={submitting} disabled={unchanged || busy}>
           {t(texts.submit)}

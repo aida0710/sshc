@@ -67,7 +67,7 @@ export function ConnectionSummary({
             <h3 id="connection-summary-heading" className="min-w-0 max-w-full truncate text-base font-semibold text-ink" title={summary.alias}>{summary.alias}</h3>
             {dirty ? <span className="shrink-0 rounded-sm bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("conn.summaryUnsaved")}</span> : null}
           </div>
-          <p className="truncate font-mono text-[11.5px] text-ink-faint" title={summary.endpoint}>{summary.endpoint}</p>
+          <p className="truncate font-mono text-xs text-ink-faint" title={summary.endpoint}>{summary.endpoint}</p>
         </div>
         {phoneActionsSlot === null ? headerActions : <PageChromePortal slot={phoneActionsSlot}>{headerActions}</PageChromePortal>}
       </header>

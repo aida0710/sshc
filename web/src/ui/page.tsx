@@ -40,7 +40,7 @@ export function PageHeader({
         <div className="flex min-w-0 items-baseline gap-2.5">
           <h2 id={headingId} className={titleHidden ? "sr-only" : "shrink-0 text-xl font-semibold leading-[29px] text-ink"}>{title}</h2>
           {/* 名前は縮めず、横の添え書きが残りの幅に収まる。長さの決まらない添え書きは、自分で縮む（Tag の truncate）。 */}
-          {meta === undefined ? null : <span className={titleHidden ? "sr-only" : "min-w-0 text-[12.5px] text-ink-faint"}>{meta}</span>}
+          {meta === undefined ? null : <span className={titleHidden ? "sr-only" : "min-w-0 text-xs text-ink-faint"}>{meta}</span>}
         </div>
         {description === undefined ? null : <p className="mt-0.5 max-w-3xl text-xs leading-[18px] text-ink-faint">{description}</p>}
       </div>
@@ -78,9 +78,9 @@ export function SummaryStats({ children, className = "", ...rest }: ComponentPro
 // such a count out at 0, since nothing asks for a look then.
 export function SummaryStat({ label, value, attention = false }: { label: string; value: string | number; attention?: boolean }) {
   return (
-    <div className={`inline-flex h-[30px] items-center gap-2 rounded-md px-3 text-[12.5px] ${attention ? "bg-notice text-notice-ink" : "bg-well text-ink-muted"}`}>
+    <div className={`inline-flex h-[30px] items-center gap-2 rounded-md px-3 text-xs ${attention ? "bg-notice text-notice-ink" : "bg-well text-ink-muted"}`}>
       <dt>{label}</dt>
-      <dd className={`font-mono text-[13px] font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</dd>
+      <dd className={`font-mono text-ui font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</dd>
     </div>
   );
 }
@@ -122,7 +122,7 @@ export function PageSection({
     <section aria-labelledby={id} className={frameClass}>
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h3 id={id} className="text-sm font-semibold text-ink">{heading}</h3>
-        {meta === undefined ? null : <span title={typeof meta === "string" ? meta : undefined} className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{meta}</span>}
+        {meta === undefined ? null : <span title={typeof meta === "string" ? meta : undefined} className="min-w-0 truncate font-mono text-xs text-ink-faint">{meta}</span>}
         {/* It takes the room left on its line and keeps its controls at the end of it, so a field marked w-full fills a phone. */}
         {actions === undefined ? null : <div className="flex min-w-0 grow flex-wrap items-center justify-end gap-2">{actions}</div>}
       </div>

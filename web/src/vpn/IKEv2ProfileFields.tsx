@@ -56,7 +56,7 @@ export function IKEv2ProfileFields({
       {psk ? null : (
         <FieldRow label={t("vpn.caCertificate")} hint={t("vpn.caCertificateHint")} warning={errorFor("ikev2.caCertificate")}>
           <textarea
-            className={`${control} font-mono text-xs leading-5`}
+            className={`${control} font-mono`}
             rows={4}
             spellCheck={false}
             placeholder="-----BEGIN CERTIFICATE-----"

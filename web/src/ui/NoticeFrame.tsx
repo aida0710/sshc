@@ -84,8 +84,8 @@ export function NoticeFrame({ tone, kicker, title, body, detail, focus, onDismis
       className={`pointer-events-auto relative w-full max-w-[560px] rounded-lg border p-4 shadow-float focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${onDismiss === undefined ? "" : "pr-12"} ${colours.frame}`}
     >
       {kicker === undefined ? null : <p className={`mb-1 flex items-center gap-2 text-xs font-semibold ${colours.kicker}`}>{kicker}</p>}
-      <h2 id={titleId} className="break-words text-sm font-semibold text-ink mobile-layout:text-[15px]">{title}</h2>
-      {body === undefined ? null : <p className="mt-1 break-words text-[13px] leading-5 text-ink-muted">{body}</p>}
+      <h2 id={titleId} className="break-words text-sm font-semibold text-ink mobile-layout:text-base">{title}</h2>
+      {body === undefined ? null : <p className="mt-1 break-words text-ui leading-5 text-ink-muted">{body}</p>}
       {detail}
       <div className="mt-3 flex flex-wrap gap-2">{children}</div>
       {onDismiss === undefined ? null : (

@@ -54,13 +54,13 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
                   : "bg-live"
             }`}
           />
-          <p title={displayTitle} className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-[15px]" : "max-w-48 shrink-0 text-[13px]"}`}>{displayTitle}</p>
-          {mobile ? null : <span title={destination} className="min-w-0 truncate font-mono text-[11.5px] text-ink-faint">{destination}</span>}
+          <p title={displayTitle} className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-base" : "max-w-48 shrink-0 text-ui"}`}>{displayTitle}</p>
+          {mobile ? null : <span title={destination} className="min-w-0 truncate font-mono text-xs text-ink-faint">{destination}</span>}
           {/* スマホには言葉を置く幅が無いが、読み上げには残す。 */}
-          <span role="status" className={!saysState || mobile ? "sr-only" : `shrink-0 text-[11.5px] ${sessionStatusTone(session)}`}>{connectionStatus}</span>
+          <span role="status" className={!saysState || mobile ? "sr-only" : `shrink-0 text-xs ${sessionStatusTone(session)}`}>{connectionStatus}</span>
           {mobile ? null : <VPNProfileChip name={vpnProfile} />}
           {mobile || runTarget === undefined ? null : (
-            <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-[11px] text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>
+            <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-2xs text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>
           )}
         </div>
         {mobile ? (

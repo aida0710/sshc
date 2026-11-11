@@ -18,7 +18,7 @@ export function EmptyState({ icon, title, detail, action }: EmptyStateProps) {
         <Icon name={icon} className="size-[22px]" />
       </span>
       <h3 className="text-balance text-lg font-semibold text-ink">{title}</h3>
-      {detail === undefined ? null : <p className="mt-1.5 text-[13px] leading-5 text-ink-muted">{detail}</p>}
+      {detail === undefined ? null : <p className="mt-1.5 text-ui leading-5 text-ink-muted">{detail}</p>}
       {action === undefined ? null : <div className="mt-3.5">{action}</div>}
     </section>
   );

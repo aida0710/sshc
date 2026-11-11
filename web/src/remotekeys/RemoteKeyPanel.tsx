@@ -306,7 +306,7 @@ export function RemoteKeyPanel({
               onChange={(event) => editKey(setPublicKey)(event.target.value)}
               rows={2}
               spellCheck={false}
-              className={`${control} break-all font-mono leading-5 text-ink-muted max-sm:h-24 sm:text-[12.5px]`}
+              className={`${control} break-all font-mono leading-5 text-ink-muted max-sm:h-24 sm:text-xs`}
             />
           </FieldRow>
         </div>

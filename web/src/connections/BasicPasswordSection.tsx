@@ -62,7 +62,7 @@ export function BasicPasswordSection({
             onOpen={onOpenVault}
           />
         ) : (
-          <p className="pt-1.5 text-[13px] text-ink-faint">
+          <p className="pt-1.5 text-ui text-ink-faint">
             {credentialOptionsStatus === "failed" ? t("conn.basicCredentialOptionsFailed") : t("conn.createLoadingOptions")}
           </p>
         )}

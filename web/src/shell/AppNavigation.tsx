@@ -176,11 +176,11 @@ export function AppNavigation({
         type="button"
         onClick={onOpenCommandPalette}
         title={`${t("palette.open")} (${shortcuts.palette.map(shortcutLabel).join(" / ")})`}
-        className="mb-2.5 flex h-10 shrink-0 items-center gap-2 rounded-lg bg-well px-2 text-[13px] text-ink-faint transition-colors hover:text-ink md:h-8"
+        className="mb-2.5 flex h-10 shrink-0 items-center gap-2 rounded-lg bg-well px-2 text-ui text-ink-faint transition-colors hover:text-ink md:h-8"
       >
         <Icon name="search" className="size-[15px] shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">{t("palette.open")}</span>
-        <kbd aria-hidden="true" className="hidden shrink-0 font-mono text-[11px] text-ink-faint desktop-layout:block">{shortcuts.palette.slice(0, 1).map(shortcutLabel)}</kbd>
+        <kbd aria-hidden="true" className="hidden shrink-0 font-mono text-2xs text-ink-faint desktop-layout:block">{shortcuts.palette.slice(0, 1).map(shortcutLabel)}</kbd>
       </button>
 
       <div className="shrink-0">
@@ -287,7 +287,7 @@ function NavigationLink({
       onClick={(event) => {
         onNavigate(event, name);
       }}
-      className={`group relative flex min-h-10 w-full items-center gap-2.5 overflow-hidden rounded-md px-2 text-left text-[13px] transition-colors md:min-h-[30px] ${
+      className={`group relative flex min-h-10 w-full items-center gap-2.5 overflow-hidden rounded-md px-2 text-left text-ui transition-colors md:min-h-[30px] ${
         active
           ? "bg-select-fill text-ink"
           : "text-ink-muted hover:bg-hover hover:text-ink"

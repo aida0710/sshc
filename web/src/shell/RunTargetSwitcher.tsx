@@ -86,7 +86,7 @@ export function RunTargetSwitcher({
           <LinkMark mark={chosen ? chosenMark(link) : alias === null || connected ? "live" : "idle"} />
           <span title={name} className={`min-w-0 grow truncate font-mono ${chosen ? "font-semibold text-accent" : "text-ink"}`}>{name}</span>
           {alias !== null && targets.unread.has(alias) ? <UnreadMark label={t("runTarget.unread")} /> : null}
-          <span className={`shrink-0 text-[11px] ${chosen && link.phase === "refused" ? "text-danger" : "text-ink-faint"}`}>{note}</span>
+          <span className={`shrink-0 text-2xs ${chosen && link.phase === "refused" ? "text-danger" : "text-ink-faint"}`}>{note}</span>
         </button>
         {alias === null ? null : (
           <button
@@ -100,7 +100,7 @@ export function RunTargetSwitcher({
           </button>
         )}
         {refusalReason === "" ? null : (
-          <p className="basis-full break-words px-2 pb-1 text-[11px] leading-4 text-danger">{refusalReason}</p>
+          <p className="basis-full break-words px-2 pb-1 text-2xs leading-4 text-danger">{refusalReason}</p>
         )}
         {alias === null || actionsFor !== alias ? null : (
           <div className="basis-full pb-1 pl-5">
@@ -123,7 +123,7 @@ export function RunTargetSwitcher({
     <div ref={rootRef} className="relative pt-2">
       {open ? (
         <div className="absolute bottom-full left-1 right-1 z-20 mb-1 rounded-lg border border-line bg-card p-1.5 shadow-float">
-          <p className="px-2 pb-1 pt-0.5 text-[11px] font-semibold text-ink-faint">{t("runTarget.heading")}</p>
+          <p className="px-2 pb-1 pt-0.5 text-2xs font-semibold text-ink-faint">{t("runTarget.heading")}</p>
           <ul aria-label={t("runTarget.heading")} className="flex flex-col gap-0.5">
             {row(null)}
             {targets.engines.map((alias) => row(alias))}
@@ -151,8 +151,8 @@ export function RunTargetSwitcher({
       >
         <LinkMark mark={chosenMark(link)} />
         <span className="flex min-w-0 grow flex-col text-left">
-          <span className={`truncate text-[11px] leading-[15px] ${link.phase === "refused" ? "text-danger" : "text-ink-muted"}`}>{chosenState ?? t("runTarget.label")}</span>
-          <span title={current} className="truncate font-mono text-[12.5px] font-semibold leading-4 text-ink">{current}</span>
+          <span className={`truncate text-2xs leading-[15px] ${link.phase === "refused" ? "text-danger" : "text-ink-muted"}`}>{chosenState ?? t("runTarget.label")}</span>
+          <span title={current} className="truncate font-mono text-xs font-semibold leading-4 text-ink">{current}</span>
         </span>
         {targets.unread.size > 0 ? <UnreadMark label={t("runTarget.unreadElsewhere")} /> : null}
         <Icon name="chevronRight" className={`size-3.5 shrink-0 text-ink-faint transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />

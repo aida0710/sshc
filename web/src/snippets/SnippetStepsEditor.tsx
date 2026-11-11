@@ -55,7 +55,7 @@ export function SnippetStepsEditor({ steps, onChange }: { steps: SnippetStep[]; 
                   value={step.send}
                   aria-label={t("snippets.stepSendOf", { number })}
                   onChange={(event) => change(index, { send: event.target.value })}
-                  className={`${control} font-mono text-[12.5px]`}
+                  className={`${control} font-mono`}
                 />
               </label>
               <div className="flex items-center gap-3 text-sm text-ink">

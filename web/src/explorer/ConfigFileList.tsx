@@ -99,7 +99,7 @@ export function ConfigFileList({
               <span data-config-node-icon aria-hidden="true" className={`shrink-0 ${current ? "text-ink" : "text-ink-muted"}`}>
                 <Icon name="config" className="size-[15px]" />
               </span>
-              <span title={path} className={`min-w-0 truncate font-mono text-[13px] text-ink ${current ? "font-semibold" : ""}`}>{fileName(path)}</span>
+              <span title={path} className={`min-w-0 truncate font-mono text-ui text-ink ${current ? "font-semibold" : ""}`}>{fileName(path)}</span>
             </button>
             {notes === "" ? null : <p className="-mt-1 pb-2 pl-[35px] pr-2.5 text-xs text-ink-faint">{notes}</p>}
           </li>

@@ -49,7 +49,7 @@ export function GroupFolders({ group, hosts, keys }: GroupFoldersProps) {
             <p key={file.name} className="flex min-w-0 items-baseline gap-1.5">
               <span title={file.name} className="min-w-0 truncate font-mono text-xs text-ink-muted">{file.name}</span>
               {file.companions.length === 0 ? null : (
-                <span className="shrink-0 font-mono text-[11.5px] text-ink-faint">{file.companions.join(" ")}</span>
+                <span className="shrink-0 font-mono text-xs text-ink-faint">{file.companions.join(" ")}</span>
               )}
             </p>
           ))}
@@ -57,7 +57,7 @@ export function GroupFolders({ group, hosts, keys }: GroupFoldersProps) {
       </div>
       <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-ink-faint">
         {t("groupFolders.includeLine")}
-        <code className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-[11.5px] text-ink-muted">{`Include ${group.directory}/*.conf`}</code>
+        <code className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-xs text-ink-muted">{`Include ${group.directory}/*.conf`}</code>
       </p>
     </section>
   );

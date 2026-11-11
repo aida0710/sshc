@@ -87,13 +87,13 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
                         }
                   }
                   style={{ paddingLeft: `${0.625 + row.depth * 0.75}rem` }}
-                  className={`flex min-h-[30px] w-full items-center gap-2 rounded-md pr-2.5 text-left text-[13px] ${
+                  className={`flex min-h-[30px] w-full items-center gap-2 rounded-md pr-2.5 text-left text-ui ${
                     current ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
                   } ${dropTargetLook({ accepts: dragging && target !== null, over: over === key })}`}
                 >
                   {trash ? <Icon name="delete" className="size-3.5 shrink-0" /> : null}
                   <span title={labelOf(row.folder, t)} className="min-w-0 flex-1 truncate">{labelOf(row.folder, t)}</span>
-                  <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-ink-faint">{row.count}</span>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-ink-faint">{row.count}</span>
                 </button>
               </li>
             );

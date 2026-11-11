@@ -65,7 +65,7 @@ export function MenuPanel({
         <button
           type="button"
           onClick={onOpenSearch}
-          className="flex h-11 w-full items-center gap-2 rounded-card border border-line bg-sidebar px-3.5 text-left text-[15px] text-ink-faint"
+          className="flex h-11 w-full items-center gap-2 rounded-card border border-line bg-sidebar px-3.5 text-left text-base text-ink-faint"
         >
           <Icon name="search" className="size-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{t("menu.search")}</span>
@@ -124,7 +124,7 @@ function MenuLink({ item, description, compact, onNavigate }: {
         className={`${rowClassName(compact)} transition-colors ${compact ? "active:bg-hover" : "hover:bg-hover"}`}>
         <RowIcon name={item.icon} compact={compact} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] leading-[18px] text-ink">{label}</span>
+          <span className="block truncate text-sm leading-[18px] text-ink">{label}</span>
           <span id={descriptionId} className={`block truncate text-xs leading-4 ${description.notice ? "text-accent" : "text-ink-faint"}`}>{description.text}</span>
         </span>
         <Icon name="chevronRight" className="size-[15px] text-ink-faint" />
@@ -140,7 +140,7 @@ function LanguageRow({ compact }: { compact: boolean }) {
     <li>
       <div className={rowClassName(compact, "py-1.5")}>
         <RowIcon name="language" compact={compact} />
-        <label htmlFor={selectId} className="min-w-0 flex-1 text-[13.5px] text-ink">{t("menu.language")}</label>
+        <label htmlFor={selectId} className="min-w-0 flex-1 text-sm text-ink">{t("menu.language")}</label>
         <ChevronSelect id={selectId} value={locale} onChange={(event) => setLocale(event.target.value as Locale)} className="bg-well">
           {locales.map((candidate) => <option key={candidate} value={candidate}>{t(localeLabelKeys[candidate])}</option>)}
         </ChevronSelect>
@@ -161,7 +161,7 @@ function SignOutRow({ compact }: { compact: boolean }) {
         className={`${rowClassName(compact)} w-full text-left transition-colors hover:bg-danger/10`}>
         <RowIcon name="signOut" compact={compact} tone="danger" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] leading-[18px] text-danger">{t("menu.signOut")}</span>
+          <span className="block truncate text-sm leading-[18px] text-danger">{t("menu.signOut")}</span>
           <span id={hintId} className="block truncate text-xs leading-4 text-ink-faint">{t("menu.signOutRowHint")}</span>
         </span>
       </button>

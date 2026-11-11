@@ -84,7 +84,7 @@ export function KeyTable({
   ]);
 
   return (
-    <table className="block w-full text-left text-[13px] @xl/keytable:table @xl/keytable:table-fixed">
+    <table className="block w-full text-left text-ui @xl/keytable:table @xl/keytable:table-fixed">
       <caption className="sr-only">{t("keys.tableCaption")}</caption>
       <thead className={`hidden @xl/keytable:table-header-group`}>
         <tr className={tableHeadRow}>
@@ -137,17 +137,17 @@ export function KeyTable({
                     type="button"
                     aria-pressed={isSelected}
                     onClick={() => actions.onSelect(item)}
-                    className="block min-h-0! max-w-full text-left text-[13.5px] text-ink [overflow-wrap:anywhere] before:absolute before:inset-0 before:content-[''] mobile-layout:before:-inset-y-2 hover:underline"
+                    className="block min-h-0! max-w-full text-left text-sm text-ink [overflow-wrap:anywhere] before:absolute before:inset-0 before:content-[''] mobile-layout:before:-inset-y-2 hover:underline"
                   >
                     {keyListPath(item.relativePath)}
                   </button>
-                  <span className={`block font-mono text-[11.5px] text-ink-faint @xl/keytable:hidden`}>{kindText(item, t)}</span>
-                  <span title={whereText(item, t)} className={`hidden truncate text-[11.5px] text-ink-faint @xl/keytable:block`}>{whereText(item, t)}</span>
+                  <span className={`block font-mono text-xs text-ink-faint @xl/keytable:hidden`}>{kindText(item, t)}</span>
+                  <span title={whereText(item, t)} className={`hidden truncate text-xs text-ink-faint @xl/keytable:block`}>{whereText(item, t)}</span>
                 </td>
                 <td className={`hidden whitespace-nowrap border-line align-middle font-mono text-xs text-ink-muted @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:px-2.5 @xl/keytable:py-[9px]`}>
                   {kindText(item, t)}
                   {item.certificate === undefined ? null : (
-                    <span className="block font-sans text-[11.5px]">{certificateValidity(item.certificate, now, t)}</span>
+                    <span className="block font-sans text-xs">{certificateValidity(item.certificate, now, t)}</span>
                   )}
                 </td>
                 <td className={`border-line align-middle @xl/keytable:table-cell @xl/keytable:border-t @xl/keytable:px-2.5 @xl/keytable:py-[9px]`}>

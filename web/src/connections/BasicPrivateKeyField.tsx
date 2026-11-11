@@ -85,7 +85,7 @@ export function BasicPrivateKeyField({
           open={passphraseOpen}
           onToggle={(event) => onPassphraseOpenChange(event.currentTarget.open)}
         >
-          <DisclosureSummary className="py-1.5 text-[13px] text-ink-muted">
+          <DisclosureSummary className="py-1.5 text-ui text-ink-muted">
             {t("conn.basicManageKeyPassphrase")}
           </DisclosureSummary>
           {derived.namedKeyPassphrase === undefined ? null : (

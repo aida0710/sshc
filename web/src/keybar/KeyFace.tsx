@@ -13,7 +13,7 @@ export function KeyFace({ barKey, iconClassName }: { barKey: KeyBarKey; iconClas
       return (
         <span className="flex flex-col items-center leading-none">
           <Icon name={face.icon} className="size-3" />
-          <span className="text-[10.5px]">{face.text}</span>
+          <span className="text-2xs">{face.text}</span>
         </span>
       );
     default:

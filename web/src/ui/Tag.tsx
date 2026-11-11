@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 
 export type TagTone = "neutral" | "ok" | "warn" | "accent";
 
-// A tag is a short state or count beside a name, as in the design's .tag: 20px tall, fully rounded, 11.5px.
+// A tag is a short state or count beside a name, as in the design's .tag: 20px tall, fully rounded, 12px.
 // neutral says a fact, ok that something works, warn that it needs a look, accent that it is the one chosen.
-const tagBase = "inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-full px-[7px] text-[11.5px]";
+const tagBase = "inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-full px-[7px] text-xs";
 
 const tagTones: Record<TagTone, string> = {
   neutral: "bg-well text-ink-muted",

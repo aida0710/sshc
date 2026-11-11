@@ -143,7 +143,7 @@ export function SnippetEditor({
           </FieldRow>
         )}
         {variables.map((variable) => (
-          <FieldRow key={variable.name} label={<code className="font-mono text-[12.5px]">{`{{${variable.name}}}`}</code>} interactiveChildren>
+          <FieldRow key={variable.name} label={<code className="font-mono text-xs">{`{{${variable.name}}}`}</code>} interactiveChildren>
             {/* The type and the value share a line while the value keeps 13rem; past that each takes a line of
                 its own and the whole width. The value grows far faster, so on a shared line the type stays 9rem. */}
             <div className="flex min-w-0 flex-wrap gap-2">

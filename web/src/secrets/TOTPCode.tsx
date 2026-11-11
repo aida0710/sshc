@@ -62,7 +62,7 @@ function CountdownRing({ remaining, period, label }: { remaining: number; period
           className="stroke-accent transition-[stroke-dashoffset] duration-1000 ease-linear motion-reduce:transition-none"
         />
       </svg>
-      <span aria-hidden="true" className="font-mono text-[10px] font-semibold tabular-nums text-ink-muted">{remaining}</span>
+      <span aria-hidden="true" className="font-mono text-3xs font-semibold tabular-nums text-ink-muted">{remaining}</span>
     </span>
   );
 }
@@ -74,7 +74,7 @@ export function TOTPCurrentCode({ name, codes }: { name: string; codes: TOTPCode
   if (codes.state === "loading") return <p className={hintText}>{t("secrets.totpLoading")}</p>;
   return (
     <span className="flex items-center gap-2">
-      <CopyableCode code={codes.codes.current} label={t("secrets.totpCopyCurrent", { name })} className="text-[22px] font-semibold leading-7 text-ink" />
+      <CopyableCode code={codes.codes.current} label={t("secrets.totpCopyCurrent", { name })} className="text-2xl font-semibold leading-7 text-ink" />
       <CountdownRing
         remaining={codes.remainingSeconds}
         period={codes.codes.periodSeconds}
@@ -92,11 +92,11 @@ export function TOTPNeighbourCodes({ name, codes }: { name: string; codes: TOTPC
     <div className="flex gap-6 rounded-inset bg-well px-3 py-2 text-xs text-ink-faint">
       <div>
         <p>{t("secrets.totpPrevious")}</p>
-        <CopyableCode code={codes.previous} label={t("secrets.totpCopyPrevious", { name })} className="-ml-1.5 mt-0.5 text-[15px] font-semibold text-ink-muted" />
+        <CopyableCode code={codes.previous} label={t("secrets.totpCopyPrevious", { name })} className="-ml-1.5 mt-0.5 text-base font-semibold text-ink-muted" />
       </div>
       <div>
         <p>{t("secrets.totpNext")}</p>
-        <CopyableCode code={codes.next} label={t("secrets.totpCopyNext", { name })} className="-ml-1.5 mt-0.5 text-[15px] font-semibold text-ink-muted" />
+        <CopyableCode code={codes.next} label={t("secrets.totpCopyNext", { name })} className="-ml-1.5 mt-0.5 text-base font-semibold text-ink-muted" />
       </div>
     </div>
   );

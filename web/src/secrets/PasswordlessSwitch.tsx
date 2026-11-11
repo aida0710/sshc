@@ -9,7 +9,7 @@ export function PasswordlessSwitch({ checked, onChange }: { checked: boolean; on
   const hintId = useId();
   return (
     <div className="rounded-inset bg-well px-3 py-2.5">
-      <label className="flex cursor-pointer items-center gap-2.5 text-[13px] text-ink">
+      <label className="flex cursor-pointer items-center gap-2.5 text-ui text-ink">
         {/* The checkbox lies transparent over the drawn switch, so pressing the switch presses the checkbox. */}
         <span className="relative h-[18px] w-[30px] shrink-0">
           <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)}
@@ -18,7 +18,7 @@ export function PasswordlessSwitch({ checked, onChange }: { checked: boolean; on
         </span>
         {t("lock.withoutPassword")}
       </label>
-      {checked ? <p id={hintId} className="mt-1 pl-10 text-[11.5px] leading-[17px] text-ink-faint">{t("lock.withoutPasswordHint")}</p> : null}
+      {checked ? <p id={hintId} className="mt-1 pl-10 text-xs leading-[17px] text-ink-faint">{t("lock.withoutPasswordHint")}</p> : null}
     </div>
   );
 }

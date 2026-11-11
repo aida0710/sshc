@@ -71,9 +71,9 @@ function SplitGroupRow({ group, members, selected, unreadBySession, seenProgramS
         <button type="button" aria-label={name} aria-current={selected ? "true" : undefined} onClick={onSelect}
           className="flex min-h-10 min-w-0 grow items-center gap-2.5 pl-2 text-left md:min-h-[30px]">
           <SplitLayoutMap root={group.view.root} className="h-[18px] w-[26px]" />
-          <span title={name} className="min-w-0 grow truncate text-[13px]">{name}</span>
+          <span title={name} className="min-w-0 grow truncate text-ui">{name}</span>
           {/* Only the number: the rows below say what they are. */}
-          <span aria-hidden="true" className="shrink-0 text-[11px] text-ink-faint">{members.length}</span>
+          <span aria-hidden="true" className="shrink-0 text-2xs text-ink-faint">{members.length}</span>
         </button>
         <ActionMenu
           label={t("splitView.groupActions", { name })}
@@ -104,7 +104,7 @@ function SplitGroupRow({ group, members, selected, unreadBySession, seenProgramS
                 <SessionMarker session={session} unread={unreadBySession.has(session.id)} programStatus={programStatus} programProgress={programProgress} />
                 {/* As in the workspace rows, the name gets the whole line and the destination is under it. */}
                 <span className="min-w-0 flex-1">
-                  <span title={title} className="block truncate text-[12.5px] leading-[18px] text-ink">{title}</span>
+                  <span title={title} className="block truncate text-xs leading-[18px] text-ink">{title}</span>
                   <SessionDestinationLine session={session} programStatus={programStatus} id={destinationId} />
                   {programProgress === null ? null : <span id={progressId} className="sr-only">{programProgressText(t, programProgress)}</span>}
                 </span>

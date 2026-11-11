@@ -28,8 +28,8 @@ export function EntryScreen({
   const intro = (
     <>
       <BrandMark className="mb-[18px] size-10" />
-      <h1 className="text-[22px] font-semibold leading-8 text-ink">{heading}</h1>
-      <div className="mt-2 text-[13px] leading-5 text-ink-muted">{description}</div>
+      <h1 className="text-2xl font-semibold leading-8 text-ink">{heading}</h1>
+      <div className="mt-2 text-ui leading-5 text-ink-muted">{description}</div>
     </>
   );
   const footerArea = footer === undefined ? null : <div className="mt-5 border-t border-line pt-3.5">{footer}</div>;

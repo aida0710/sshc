@@ -47,7 +47,7 @@ export function TerminalPreview({
       style={style}
       className="overflow-hidden rounded-inset border border-line bg-term-bg px-3.5 py-2.5 font-mono leading-[1.7]"
     >
-      <div className="mb-1.5 flex items-center gap-1.5 text-[11px]" style={{ color: "var(--ui-term-bright-black)" }}>
+      <div className="mb-1.5 flex items-center gap-1.5 text-2xs" style={{ color: "var(--ui-term-bright-black)" }}>
         <span className="size-2 rounded-full bg-danger" />
         <span className="size-2 rounded-full bg-notice-ink" />
         <span className="size-2 rounded-full bg-live" />

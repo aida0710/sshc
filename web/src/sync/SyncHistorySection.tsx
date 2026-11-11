@@ -126,7 +126,7 @@ export function SyncHistorySection({
                       {revision.message}
                     </span>
                     {revision.parentRevision === undefined ? null : (
-                      <span className="mt-1 block font-mono text-[11px] text-ink-muted">
+                      <span className="mt-1 block font-mono text-2xs text-ink-muted">
                         {t("sync.historyParent", {
                           revision: revision.parentRevision.slice(0, 12),
                         })}
@@ -174,7 +174,7 @@ export function SyncHistorySection({
                               count: paths.length,
                             })}
                           </p>
-                          <ul className="mt-1 max-h-24 space-y-0.5 overflow-auto font-mono text-[11px] text-ink-muted">
+                          <ul className="mt-1 max-h-24 space-y-0.5 overflow-auto font-mono text-2xs text-ink-muted">
                             {paths.map((path) => (
                               <li key={path} className="[overflow-wrap:anywhere]">
                                 {path}

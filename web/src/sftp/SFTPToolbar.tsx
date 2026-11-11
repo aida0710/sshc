@@ -114,7 +114,7 @@ export function SFTPToolbar({
   ) : (
     <div className="flex min-w-0 flex-1 items-center" data-testid="sftp-current-path" data-path={path}>
       <nav aria-label={labels.path} title={path} onClick={(event) => { if (event.target === event.currentTarget && !navigationDisabled) setPathEditing(true); }}
-        className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap font-mono text-[12.5px]">
+        className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap font-mono text-xs">
         {crumbs.map((crumb, index) => <span key={crumb.path} className="flex shrink-0 items-center">
           {/* A root such as "/" or "C:/" already ends in a slash, so the next name follows it directly. */}
           {index > 0 && !crumbs[index - 1]!.label.endsWith("/") ? <span aria-hidden="true" className="px-0.5 text-ink-faint">/</span> : null}

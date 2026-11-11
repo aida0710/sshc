@@ -44,7 +44,7 @@ export function EmptyTerminalArtField({ presetId }: { presetId: string }) {
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-2 gap-3.5 md:grid-cols-[repeat(5,minmax(0,132px))]" role="radiogroup" aria-label={t("appearance.emptyTerminalArt")}>
           {emptyTerminalArts.map((art) => (
-            <label key={art} className="flex min-w-0 cursor-pointer flex-col gap-2 text-[13px]">
+            <label key={art} className="flex min-w-0 cursor-pointer flex-col gap-2 text-ui">
               <input type="radio" name="appearance-empty-terminal-art" value={art} checked={chosen === art} disabled={saving.busy}
                 onChange={() => choose(art)} className="peer sr-only" />
               <span aria-hidden="true" className="relative block aspect-[16/10] overflow-hidden rounded-inset border border-line bg-[color-mix(in_srgb,var(--ui-ink)_3%,var(--ui-card))] peer-checked:outline-2 peer-checked:outline-offset-2 peer-checked:outline-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">

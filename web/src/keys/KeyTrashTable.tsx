@@ -50,7 +50,7 @@ export function KeyTrashTable({ trash, onRestore, onPurge }: {
   return (
     <>
       <p className="mb-3 text-xs leading-[18px] text-ink-faint">{t("keys.trashNote")}</p>
-      <table className="block w-full text-left text-[13px] @xl/keytable:table @xl/keytable:table-fixed">
+      <table className="block w-full text-left text-ui @xl/keytable:table @xl/keytable:table-fixed">
         <caption className="sr-only">{t("keys.trashCaption")}</caption>
         <thead className="hidden @xl/keytable:table-header-group">
           <tr className={tableHeadRow}>

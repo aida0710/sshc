@@ -25,7 +25,7 @@ export function RecentConnectionsPanel({
     <OverviewPanel
       icon="history"
       title={t("terminal.overview.recent")}
-      action={<button type="button" className="text-[12.5px] font-normal text-accent hover:underline" onClick={onShowConnections}>{t("terminal.overview.showAllConnections")}</button>}
+      action={<button type="button" className="text-xs font-normal text-accent hover:underline" onClick={onShowConnections}>{t("terminal.overview.showAllConnections")}</button>}
       {...(more > 0 ? { footer: <span>{t("terminal.overview.moreRecent", { count: more })}</span> } : {})}
     >
       <ul>
@@ -37,7 +37,7 @@ export function RecentConnectionsPanel({
                 <Icon name="connections" className="size-[15px]" />
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[13.5px] font-semibold text-ink">{connection.alias}</span>
+                <span className="truncate text-sm font-semibold text-ink">{connection.alias}</span>
                 <span className="truncate text-xs text-ink-muted">{connection.user === "" ? connection.hostName : `${connection.user}@${connection.hostName}`} · {formatDateTime(connection.lastConnectedAt, locale)}</span>
               </span>
               <Icon name="chevronRight" className="size-4 shrink-0 text-ink-faint" />

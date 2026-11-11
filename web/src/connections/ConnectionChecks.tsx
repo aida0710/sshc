@@ -143,7 +143,7 @@ function CheckLine({ passed, text, detail = "" }: { passed: boolean; text: strin
         <Icon name={passed ? "check" : "warning"} className="size-3.5 shrink-0 translate-y-0.5" />
         {text}
       </span>
-      {detail === "" ? null : <span className="font-mono text-[11.5px] text-ink-faint">{detail}</span>}
+      {detail === "" ? null : <span className="font-mono text-xs text-ink-faint">{detail}</span>}
     </p>
   );
 }

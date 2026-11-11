@@ -59,7 +59,7 @@ export function SessionEndedScreen() {
 // CommandBlock shows a command or a raw failure in the monospace well of the design.
 function CommandBlock({ children }: { children: ReactNode }) {
   return (
-    <code className="block max-w-full overflow-x-auto rounded-md border border-line bg-well px-3 py-2 font-mono text-[12.5px] text-ink">
+    <code className="block max-w-full overflow-x-auto rounded-md border border-line bg-well px-3 py-2 font-mono text-xs text-ink">
       {children}
     </code>
   );
@@ -107,8 +107,8 @@ export function NotFoundSection({ pathname, onGoHome }: {
             <Icon name="pageNotFound" className="size-[22px]" />
           </span>
           <h2 id="not-found-heading" className="text-lg font-semibold text-ink">{t("shell.pageNotFound")}</h2>
-          <p className="text-[13px] text-ink-muted">{t("shell.pageNotFoundDescription")}</p>
-          <code className="mt-2.5 rounded-md border border-line bg-well px-3 py-2 font-mono text-[12.5px] text-ink">{pathname}</code>
+          <p className="text-ui text-ink-muted">{t("shell.pageNotFoundDescription")}</p>
+          <code className="mt-2.5 rounded-md border border-line bg-well px-3 py-2 font-mono text-xs text-ink">{pathname}</code>
           <a href={sectionPath("Home")} onClick={onGoHome} className={`${secondaryAction} mt-2.5 inline-flex min-h-11 items-center gap-1.5 md:min-h-0`}>
             <Icon name="home" className="size-[15px]" />
             {t("shell.goHome")}

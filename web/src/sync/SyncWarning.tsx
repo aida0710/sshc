@@ -10,10 +10,10 @@ export function SyncWarning() {
   const detailId = useId();
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-[13px] leading-5 text-ink-muted">
+      <div className="flex items-center gap-2 text-ui leading-5 text-ink-muted">
         <p className="min-w-0 flex-1">{t("sync.warningSummary")}</p>
         <button type="button" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((value) => !value)}
-          className="shrink-0 rounded-md text-[13px] text-accent hover:underline">
+          className="shrink-0 rounded-md text-ui text-accent hover:underline">
           {t(open ? "sync.warningLess" : "sync.warningMore")}
         </button>
       </div>

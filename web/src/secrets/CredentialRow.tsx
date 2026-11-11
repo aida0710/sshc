@@ -75,7 +75,7 @@ function RowLayout({ row, keyHostUsageComplete, panel, editPanel, actions, code,
     <li className="border-t border-line first:border-t-0">
       <article aria-label={row.label} className={`grid min-h-16 items-center gap-x-3 py-2.5 ${code === null ? plainColumns : totpColumns}`}>
         <div className="min-w-0">
-          <h4 className="font-mono text-[13.5px] font-semibold leading-[19px] text-ink [overflow-wrap:anywhere]">{row.name}</h4>
+          <h4 className="font-mono text-sm font-semibold leading-[19px] text-ink [overflow-wrap:anywhere]">{row.name}</h4>
           <p className="mt-0.5 text-xs leading-[17px] text-ink-faint [overflow-wrap:anywhere] @2xl:hidden">{assignment}</p>
         </div>
         <p className="hidden min-w-0 font-mono text-xs text-ink-muted [overflow-wrap:anywhere] @2xl:block">{assignment}</p>
@@ -130,7 +130,7 @@ function AssignedHosts({ hosts, onUnassign }: { hosts: string[]; onUnassign: (ho
         <ul aria-label={t("secrets.assignedHosts")} className="flex flex-col">
           {hosts.map((host) => (
             <li key={host} className="flex min-h-9 items-center gap-2 border-t border-line first:border-t-0">
-              <span title={host} className="min-w-0 flex-1 truncate font-mono text-[13px] text-ink">{host}</span>
+              <span title={host} className="min-w-0 flex-1 truncate font-mono text-ui text-ink">{host}</span>
               <Button small aria-label={t("secrets.unassignTOTP", { host })} onClick={() => onUnassign(host)}>
                 {t("secrets.unassign")}
               </Button>

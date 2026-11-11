@@ -27,7 +27,7 @@ type GroupProps = {
   type: (patch: Partial<TerminalDraft>) => void;
 };
 
-const unitText = "text-[12.5px] text-ink-muted";
+const unitText = "text-xs text-ink-muted";
 
 // The colour scheme, font, size and background image.
 export function TerminalLookFields({ draft, edit, type }: GroupProps) {

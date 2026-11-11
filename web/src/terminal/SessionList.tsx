@@ -204,7 +204,7 @@ export function SessionList({
             const details = (
               <>
                 {unread && session.lastNotification !== undefined ? (
-                  <span title={notificationText(t, session.lastNotification)} className="block truncate text-[11.5px] leading-4 text-notice-ink">
+                  <span title={notificationText(t, session.lastNotification)} className="block truncate text-xs leading-4 text-notice-ink">
                     {notificationText(t, session.lastNotification)}
                   </span>
                 ) : null}
@@ -212,7 +212,7 @@ export function SessionList({
                   <p
                     key={`${forward.kind}:${forward.listen}:${forward.to}`}
                     title={forward.problem === "" ? describeForward(t, forward) : describeForwardProblem(t, forward.problem)}
-                    className={`truncate text-[11px] ${forward.problem === "" ? "text-ink-faint" : "text-notice-ink"}`}
+                    className={`truncate text-2xs ${forward.problem === "" ? "text-ink-faint" : "text-notice-ink"}`}
                   >
                     {forward.problem === "" ? describeForward(t, forward) : describeForwardProblem(t, forward.problem)}
                   </p>
@@ -294,7 +294,7 @@ export function SessionList({
                       {marker}
                       <span className="min-w-0 grow">
                         {/* The name gets the whole first line; the destination (or the state) is the second. */}
-                        <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px]">
+                        <span className="flex min-w-0 items-center gap-1.5 text-ui leading-[18px]">
                           <span title={displayTitle} className={`min-w-0 truncate ${isSelected ? "font-medium text-ink" : "text-ink"}`}>{displayTitle}</span>
                           {splitGroup === undefined ? null : (
                             // Where this session sits in its split, drawn small; the name is for screen readers.

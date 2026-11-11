@@ -21,10 +21,10 @@ export function ValueSourceTable({ sources, label, captionShown = false, showCon
   const t = useTranslate();
   return (
     <div className="@container/sources">
-      <table className="w-full text-[12.5px]">
+      <table className="w-full text-xs">
         <caption className={captionShown ? `mb-2 text-left ${hintText}` : "sr-only"}>{label}</caption>
         <thead>
-          <tr className="text-left text-[11.5px] text-ink-faint">
+          <tr className="text-left text-xs text-ink-faint">
             <th scope="col" className="pb-1.5 pr-3 font-normal">{t("diag.columnKeyword")}</th>
             <th scope="col" className="pb-1.5 pr-3 font-normal">{t("diag.columnValue")}</th>
             <th scope="col" className={`${onlyWhenWide} pb-1.5 pr-3 font-normal`}>{t("diag.columnWhere")}</th>
@@ -41,14 +41,14 @@ export function ValueSourceTable({ sources, label, captionShown = false, showCon
                 <th scope="row" className="py-1.5 pr-3 text-left align-top font-mono text-xs font-normal text-ink-muted">{source.keyword}</th>
                 <td className="py-1.5 pr-3 align-top font-mono text-xs text-ink">
                   <span className="[overflow-wrap:anywhere]">{source.value}</span>
-                  <span className="mt-0.5 block text-[11.5px] text-ink-faint [overflow-wrap:anywhere] @2xl/sources:hidden">
+                  <span className="mt-0.5 block text-xs text-ink-faint [overflow-wrap:anywhere] @2xl/sources:hidden">
                     {where}
                     {showCondition && source.condition !== "" ? ` · ${source.condition}` : ""}
                     {` · ${state}`}
                   </span>
                 </td>
-                <td className={`${onlyWhenWide} py-1.5 pr-3 align-top font-mono text-[11.5px] text-ink-faint [overflow-wrap:anywhere]`}>{where}</td>
-                {showCondition ? <td className={`${onlyWhenWide} py-1.5 pr-3 align-top font-mono text-[11.5px] text-ink-faint [overflow-wrap:anywhere]`}>{source.condition}</td> : null}
+                <td className={`${onlyWhenWide} py-1.5 pr-3 align-top font-mono text-xs text-ink-faint [overflow-wrap:anywhere]`}>{where}</td>
+                {showCondition ? <td className={`${onlyWhenWide} py-1.5 pr-3 align-top font-mono text-xs text-ink-faint [overflow-wrap:anywhere]`}>{source.condition}</td> : null}
                 <td className={`${onlyWhenWide} whitespace-nowrap py-1.5 align-top text-xs text-ink-faint`}>{state}</td>
               </tr>
             );

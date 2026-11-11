@@ -382,7 +382,7 @@ export function TerminalQuickCommands({
               <pre className={`max-h-32 whitespace-pre-wrap ${codeBlock}`}>
                 {prepared.command}
               </pre>
-              <p className="text-[11px] leading-4 text-ink-muted">
+              <p className="text-2xs leading-4 text-ink-muted">
                 {t("terminal.quickCommandContextWarning")}
               </p>
               <div className="flex flex-wrap gap-2">

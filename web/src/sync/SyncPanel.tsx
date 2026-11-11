@@ -40,9 +40,9 @@ function SyncFlowSteps() {
           <li
             key={key}
             aria-current={index === 0 ? "step" : undefined}
-            className={`flex min-h-11 items-center gap-2.5 rounded-inset px-3 text-[13px] ${index === 0 ? "bg-select-fill text-ink" : "bg-well text-ink-muted"}`}
+            className={`flex min-h-11 items-center gap-2.5 rounded-inset px-3 text-ui ${index === 0 ? "bg-select-fill text-ink" : "bg-well text-ink-muted"}`}
           >
-            <span className={`flex size-[22px] shrink-0 items-center justify-center rounded-full font-mono text-[11.5px] font-semibold ${index === 0 ? "bg-accent text-accent-ink" : "bg-ink/10 text-ink"}`}>
+            <span className={`flex size-[22px] shrink-0 items-center justify-center rounded-full font-mono text-xs font-semibold ${index === 0 ? "bg-accent text-accent-ink" : "bg-ink/10 text-ink"}`}>
               {index + 1}
             </span>
             {t(key as MessageKey)}
