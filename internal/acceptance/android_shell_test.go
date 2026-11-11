@@ -245,7 +245,7 @@ func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T
 }
 
 // WebViewの既定実装ではfile inputをキャンセルするため、Android shellが
-// 選択・保存・renderer異常・通知permissionを明示的に仲介する形を固定する。
+// 選択・保存・renderer異常・通知permission・カメラの要求を明示的に仲介する形を固定する。
 func TestTheAndroidShellBridgesDeviceSpecificWebFeatures(t *testing.T) {
 	t.Parallel()
 	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
@@ -269,7 +269,11 @@ func TestTheAndroidShellBridgesDeviceSpecificWebFeatures(t *testing.T) {
 		"POST_NOTIFICATIONS",
 		"requestPermissions(",
 		"Intent.ACTION_VIEW",
-		"engineOrigin.getPort() == target.getPort()",
+		"engineOrigin.getPort() == url.getPort()",
+		"if (isEngineOrigin(target)) return false;",
+		"onPermissionRequest(PermissionRequest request)",
+		"!isEngineOrigin(request.getOrigin()) || !CameraRequest.asksOnlyForVideo(request.getResources())",
+		"Manifest.permission.CAMERA",
 		"setSystemBarsAppearance(",
 		"saveWithAndroid(",
 		"notifyAndroidTransfer(",

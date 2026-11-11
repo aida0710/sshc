@@ -120,6 +120,8 @@ Sync failures show a cause, and **More details** shows a stable code.
 | `unsafe_bucket_name`, `unsafe_object_path` | The bucket name or the path in the bucket uses characters other than letters, digits, hyphens, periods and underscores |
 | `sync_push_refused`, `sync_apply_refused` | The machine's direction is Receive only or Send only. Change the direction to send or apply |
 | `wrong_passphrase` | The encryption key does not match the data at that target |
+| `sync_settings_export_rejected` | The imported file or QR code cannot be read as sync settings exported by sshc. Export the settings again on a device that is set up |
+| `sync_setup_target_empty` | The target in the exported settings has no sync data: it was emptied or changed after the export. Export the settings again on a device that is set up |
 | `passphrase_too_short` | A typed key is shorter than 12 characters |
 | `snapshot_schema_unsupported` | The remote snapshot is in a format this sshc cannot read (older than v6, or newer). If it is newer, update every device that shares the target. If it is older, overwrite it with Force Push from a device allowed to send |
 | `snapshot_rejected` | The snapshot decrypted but failed validation (corrupt or tampered). Restore another generation from History or push again from a sending device. It also appears when an earlier sshc release pushed, from Linux or macOS, a file whose name contains a character Windows does not allow in file names, such as `:` or `?`. Update sshc on the sending device, push, rename the file that `sync_local_path_unportable` shows, and push again |

@@ -109,6 +109,7 @@ export function useSyncSetupForm() {
     setState((form) => ({
       ...form,
       ownKey: "",
+      chooseOwn: false,
       accessKeyId: "",
       secretAccessKey: "",
       setupCheck: null,

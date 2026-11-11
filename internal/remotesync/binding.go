@@ -126,7 +126,7 @@ func (s *Service) Direction() Direction {
 }
 
 // Target は、この実行が指しているエンドポイントとバケットを、表示のために返す。
-// アクセスキーと秘密が何かによって返されることは決してない。
+// アクセスキーと秘密は返さない。
 func (s *Service) Target() (endpoint, bucket, path, region string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -135,7 +135,8 @@ func (s *Service) Target() (endpoint, bucket, path, region string) {
 
 // AccessKeySuffix returns only the final five characters needed to identify
 // the configured account in setup and status output. The complete identifier
-// and secret access key never leave the engine.
+// and secret access key leave the engine only sealed with the sync key, in
+// exported settings (SealSettingsExport).
 func (s *Service) AccessKeySuffix() string {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

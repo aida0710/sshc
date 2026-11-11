@@ -9,6 +9,8 @@ export type SyncSetupCheckRequest = components["schemas"]["SyncSetupCheckRequest
 export type SyncSetupCheckResponse = components["schemas"]["SyncSetupCheckResponse"];
 export type SyncSetupRequest = components["schemas"]["SyncSetupRequest"];
 export type SyncSetupResponse = components["schemas"]["SyncSetupResponse"];
+export type SyncSetupExport = components["schemas"]["SyncSetupExport"];
+export type SyncSetupImportRequest = components["schemas"]["SyncSetupImportRequest"];
 export type SyncDirection = components["schemas"]["SyncDirection"];
 export type SnapshotSummary = components["schemas"]["SnapshotSummary"];
 export type SyncOperation = components["schemas"]["SyncOperation"];
@@ -50,6 +52,8 @@ export type SyncApi = {
     settings: SyncSetupCheckRequest,
   ): Promise<SyncSetupCheckResponse>;
   completeSyncSetup(settings: SyncSetupRequest): Promise<SyncSetupResponse>;
+  exportSyncSetup(): Promise<SyncSetupExport>;
+  importSyncSetup(request: SyncSetupImportRequest): Promise<SyncSetupResponse>;
   syncExclusions(): Promise<SyncExclusions>;
   saveSyncExclusions(document: string): Promise<SyncExclusions>;
   syncPushDraft(): Promise<SyncPushDraft>;
@@ -98,6 +102,10 @@ function validateSyncPushDraft(value: unknown): SyncPushDraft {
   return validateOpenAPISchema<SyncPushDraft>("SyncPushDraft", value);
 }
 
+function validateSyncSetupExport(value: unknown): SyncSetupExport {
+  return validateOpenAPISchema<SyncSetupExport>("SyncSetupExport", value);
+}
+
 function validateSyncExclusions(value: unknown): SyncExclusions {
   return validateOpenAPISchema<SyncExclusions>("SyncExclusions", value);
 }
@@ -132,6 +140,16 @@ export const syncApi: SyncApi = {
   async completeSyncSetup(settings) {
     return validateSyncSetup(
       await putJSON<unknown>("/api/v1/sync/setup", settings, locallyExplainedSyncFailures),
+    );
+  },
+  async exportSyncSetup() {
+    return validateSyncSetupExport(
+      await postJSON<unknown>("/api/v1/sync/setup/export", undefined, undefined, locallyExplainedSyncFailures),
+    );
+  },
+  async importSyncSetup(request) {
+    return validateSyncSetup(
+      await postJSON<unknown>("/api/v1/sync/setup/import", request, undefined, locallyExplainedSyncFailures),
     );
   },
   async syncExclusions() {

@@ -1,7 +1,7 @@
 {
-  "go.mod": "9b0473b444d6e42555afdcbb279e074b88575576eb1e539e48424b71ed40cc6b",
-  "go.sum": "2d13e0c2b2ae169f7c9e80e23e665fc7352278f804de6006b8549f6670e27247",
-  "web/package-lock.json": "7a6a6778b4ada9af7ab18e56853e8588eed887fa7c92b50fecbe0aa9ea95f0af",
+  "go.mod": "f3aa4d006a3bdb90a1ddcb50aa8e2f81e98c30d3b1281cb4a594e100433616bc",
+  "go.sum": "f06771752d3a1fce19cfe6f7dbdd77530ea95ab05acb71fb9134efa2a3be0f8a",
+  "web/package-lock.json": "e0a603c304031dd0bc8500ec75912497a7e54d6d089c866896ec463d76f2aaff",
   "android/app/build.gradle.kts": "f747f5a1fda19249935f7de57aa819c24603ed5adb5d482f0527165690b45eb2",
   "LICENSE": "2175ad85766892504697fa1d2e92ab5c9515ae39a852798c0d9b377b600eb581",
   "web/public/fonts/OFL.txt": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad",

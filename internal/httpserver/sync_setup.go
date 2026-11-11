@@ -171,25 +171,42 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 		expected.ETag = *request.ExpectedETag
 	}
 	client := h.objectStoreClient(config, credentials)
-	err = h.Service.CompleteSetup(c.Request().Context(), config, credentials, client, expected, syncKey, func() error {
-		return h.Vault.SetSyncSettings(secret.SyncSettings{
-			Endpoint: config.Endpoint, Bucket: config.Bucket, Path: config.Path, Region: config.Region,
-			AccessKeyID: credentials.AccessKeyID, SecretAccessKey: credentials.SecretAccessKey,
-			Direction: string(direction), Key: syncKey,
-		})
-	})
+	err = h.Service.CompleteSetup(c.Request().Context(), config, credentials, client, expected, syncKey,
+		h.persistSyncSetup(config, credentials, syncKey))
 	if err != nil {
-		if vaultUnavailable(err) {
-			return problem(c, http.StatusConflict, "vault_locked")
-		}
-		return syncProblem(c, err)
+		return setupFailureProblem(c, err)
 	}
-	if h.Auto != nil {
-		h.Auto.ResetRemoteCache()
-	}
-	response := api.SyncSetupResponse{Status: h.statusResponse()}
+	response := h.savedSetupResponse()
 	if generated {
 		response.GeneratedKey = &syncKey
 	}
 	return c.JSON(http.StatusOK, response)
+}
+
+// persistSyncSetup は、確かめ終えた設定を Vault に保存する関数を返す。config.Direction は
+// 決め終えた向きである。
+func (h SyncHandlers) persistSyncSetup(config remotesync.Config, credentials remotesync.Credentials, syncKey string) func() error {
+	return func() error {
+		return h.Vault.SetSyncSettings(secret.SyncSettings{
+			Endpoint: config.Endpoint, Bucket: config.Bucket, Path: config.Path, Region: config.Region,
+			AccessKeyID: credentials.AccessKeyID, SecretAccessKey: credentials.SecretAccessKey,
+			Direction: string(config.Direction), Key: syncKey,
+		})
+	}
+}
+
+func setupFailureProblem(c *echo.Context, err error) error {
+	if vaultUnavailable(err) {
+		return problem(c, http.StatusConflict, "vault_locked")
+	}
+	return syncProblem(c, err)
+}
+
+// savedSetupResponse は、設定を保存し終えたあとの状態を返す。同期先が変わったので、
+// 自動同期が覚えているリモートの様子は捨てる。
+func (h SyncHandlers) savedSetupResponse() api.SyncSetupResponse {
+	if h.Auto != nil {
+		h.Auto.ResetRemoteCache()
+	}
+	return api.SyncSetupResponse{Status: h.statusResponse()}
 }

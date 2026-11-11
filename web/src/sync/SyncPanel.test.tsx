@@ -52,6 +52,8 @@ const bucketStatus = {
   ],
 };
 
+const exportedDocument = '{"sshcSyncSettings":1,"sealed":"c3NoYw=="}';
+
 const historyRevision = "a".repeat(64);
 const historyStatus = {
   checkedAt: "2026-08-25T01:55:00Z",
@@ -89,6 +91,14 @@ function buildApi(
     completeSyncSetup: vi.fn().mockResolvedValue({
       status: { ...status, configured: true, keyConfigured: true },
       generatedKey: "ABCD-EFGH-JKMP-QRST-VWXY-Z012",
+    }),
+    exportSyncSetup: vi.fn().mockResolvedValue({
+      document: exportedDocument,
+      keyGenerated: true,
+      qrRows: Array.from({ length: 21 }, () => "101010101010101010101"),
+    }),
+    importSyncSetup: vi.fn().mockResolvedValue({
+      status: { ...status, configured: true, keyConfigured: true },
     }),
     syncPushDraft: vi.fn().mockResolvedValue({
       message: "Update config",
@@ -477,6 +487,61 @@ describe("SyncPanel", () => {
       screen.getByRole("button", { name: "Edit bucket settings" }),
     ).toBeInTheDocument();
     expect(document.body.textContent ?? "").not.toContain("the-secret");
+  });
+
+  it("sets the machine up from an exported file and the encryption key, without the bucket form", async () => {
+    const api = buildApi(unconfigured, nothingToDo);
+    const { container } = render(<SyncPanel api={api} />);
+
+    await screen.findByRole("heading", { name: "Import exported settings" });
+    const chooser = container.querySelector<HTMLInputElement>('input[type="file"]');
+    await userEvent.upload(chooser!, new File([exportedDocument], "sshc-sync-settings.json", { type: "application/json" }));
+    await userEvent.type(await screen.findByLabelText("Encryption key"), "AB12-CD34-EF56-GH78-JK90-MN12");
+    // The bucket form steps aside, so there is one direction to choose and one way forward.
+    expect(screen.queryByLabelText("Endpoint")).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Direction"), "pull");
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    await waitFor(() =>
+      expect(api.importSyncSetup).toHaveBeenCalledWith({
+        document: exportedDocument,
+        key: "AB12-CD34-EF56-GH78-JK90-MN12",
+        direction: "pull",
+      }),
+    );
+    expect(await screen.findByText("Settings imported.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Import exported settings" })).not.toBeInTheDocument();
+    expect(document.body.textContent ?? "").not.toContain("AB12-CD34");
+  });
+
+  it("says the typed key is wrong when it does not open the exported settings", async () => {
+    const api = buildApi(unconfigured, nothingToDo, {
+      importSyncSetup: vi.fn().mockRejectedValue(new ApiError("wrong_passphrase", 403, null)),
+    });
+    const { container } = render(<SyncPanel api={api} />);
+
+    await screen.findByRole("heading", { name: "Import exported settings" });
+    await userEvent.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, new File([exportedDocument], "sshc-sync-settings.json"));
+    await userEvent.type(await screen.findByLabelText("Encryption key"), "ZZ12-CD34-EF56-GH78-JK90-MN12");
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(await screen.findByText("This encryption key cannot open the exported settings.")).toBeInTheDocument();
+    // The document and the key stay, so the key can be corrected and sent again.
+    expect(screen.getByLabelText("Encryption key")).toHaveValue("ZZ12-CD34-EF56-GH78-JK90-MN12");
+  });
+
+  it("exports the settings as a QR code only when asked, and puts it away on close", async () => {
+    const api = buildApi(configured, nothingToDo);
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByText("Manage sync settings"));
+    expect(screen.queryByRole("img", { name: "QR code of the sync settings" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Export" }));
+
+    expect(await screen.findByRole("img", { name: "QR code of the sync settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save to file" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("img", { name: "QR code of the sync settings" })).not.toBeInTheDocument();
   });
 
   it("offers the first push as soon as setup finishes", async () => {

@@ -54,3 +54,21 @@ func NewKey() (string, error) {
 	}
 	return out.String(), nil
 }
+
+// KeyLooksGenerated は、syncKey が NewKey の作る形（120 ビット）かを報告する。
+//
+// 同期の設定を書き出すと、その文書を手に入れた人は同期鍵を手元で好きなだけ試せる。
+// 生成した鍵なら総当たりは現実的でないが、利用者が決めた鍵はそうとは限らないので、
+// 書き出しの画面はこの答えが false のときに注意を出す。
+func KeyLooksGenerated(syncKey string) bool {
+	groups := strings.Split(syncKey, "-")
+	if len(groups) != KeyBytes*8/5/keyGroup {
+		return false
+	}
+	for _, group := range groups {
+		if len(group) != keyGroup || strings.Trim(group, keyAlphabet) != "" {
+			return false
+		}
+	}
+	return true
+}

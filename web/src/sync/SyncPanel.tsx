@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { vaultApi, type VaultApi } from "../api/vault";
-import { syncApi, type SyncApi, type PushResponse, type SyncHistoryDiff } from "../api/sync";
+import { syncApi, type SyncApi, type PushResponse, type SyncHistoryDiff, type SyncSetupExport } from "../api/sync";
 import { useLanguage, useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button, Notice } from "../ui/surface";
@@ -11,6 +11,7 @@ import { SyncDetailsSection } from "./SyncDetailsSection";
 import { useSyncStatus } from "./useSyncStatus";
 import { SyncExclusionsPanel } from "./SyncExclusionsPanel";
 import { useSyncSetupForm } from "./useSyncSetupForm";
+import { useSyncSetupImport } from "./useSyncSetupImport";
 import { useSyncRemoteState } from "./useSyncRemoteState";
 import { useSyncOperation, type SyncRunOptions } from "./useSyncOperation";
 import { useSyncPullPreview } from "./useSyncPullPreview";
@@ -19,6 +20,8 @@ import { SyncPullPreviewDialog } from "./SyncPullPreviewDialog";
 import { SyncErrorNotice } from "./SyncErrorNotice";
 import { SyncOverviewCard } from "./SyncOverviewCard";
 import { SyncSettingsSection } from "./SyncSettingsSection";
+import { SyncSetupExportSection } from "./SyncSetupExportSection";
+import { SyncSetupImportSection } from "./SyncSetupImportSection";
 import { SyncTransferCard } from "./SyncTransferCard";
 import { SyncUnlockCard } from "./SyncUnlockCard";
 import { syncPathRefusals, syncRefusals } from "./syncRefusals";
@@ -56,6 +59,9 @@ function SyncFlowSteps() {
 export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   const { locale, t } = useLanguage();
   const form = useSyncSetupForm();
+  const importForm = useSyncSetupImport();
+  // The settings sealed for another machine, while their QR code is on the screen.
+  const [exported, setExported] = useState<SyncSetupExport | null>(null);
   const [master, setMaster] = useState("");
   // A freshly generated key, shown once and never stored in the browser.
   const [revealed, setRevealed] = useState("");
@@ -285,10 +291,45 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
         />
       ) : null}
 
+      {status.configured ? null : (
+        <SyncSetupImportSection
+          busy={busy}
+          form={importForm}
+          onImport={() =>
+            void run(() => api.importSyncSetup(importForm.request), {
+              apply: (next) => {
+                adoptAndRefresh(next.status);
+                importForm.reset();
+                setNotice(t("sync.import.saved"));
+              },
+              failure: t("sync.import.failed"),
+              // The shared wording for a wrong key speaks of the key saved on this machine; here it is the one just typed.
+              explain: (code) => (code === "wrong_passphrase" ? t("sync.import.wrongKey") : ""),
+            })
+          }
+        />
+      )}
+
+      {/* 書き出した設定を読み込んだあとは、手で入力する欄を出さない。同じ「同期の方向」が2つ並び、
+          どちらを埋めるのか分からなくなる。［別の設定を選ぶ］で戻せる。 */}
+      {!status.configured && importForm.document !== "" ? null : (
       <SyncSettingsSection
         status={status}
         busy={busy}
         form={form}
+        exportSection={(
+          <SyncSetupExportSection
+            busy={busy}
+            exported={exported}
+            onExport={() =>
+              void run(() => api.exportSyncSetup(), {
+                apply: setExported,
+                failure: t("sync.export.failed"),
+              })
+            }
+            onClose={() => setExported(null)}
+          />
+        )}
         onCheckSetup={() =>
           void run(() => api.checkSyncSetup(form.setupInput), {
             apply: form.acceptSetupCheck,
@@ -303,6 +344,8 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
               adoptAndRefresh(next.status);
               setRevealed(next.generatedKey ?? "");
               form.finishSetup();
+              // An export on the screen was sealed from the settings just replaced.
+              setExported(null);
               setNotice(t("sync.setup.saved"));
             },
             failure: t("sync.configureFailed"),
@@ -321,6 +364,8 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
             {
               apply: (next) => {
                 setRevealed(chooseOwn ? "" : next.key);
+                // An export on the screen was sealed with the key just replaced.
+                setExported(null);
                 form.setOwnKey("");
                 form.setConfirmHistoryLoss(false);
                 setNotice(t("sync.keySaved"));
@@ -331,6 +376,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           );
         }}
       />
+      )}
 
       {status.configured && status.direction !== "pull" ? (
         <SyncTransferCard

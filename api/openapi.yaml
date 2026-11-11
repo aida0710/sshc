@@ -2443,6 +2443,39 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/setup/export:
+    post:
+      operationId: exportSyncSetup
+      responses:
+        "200":
+          description: The configured target and its credentials sealed with the shared key
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncSetupExport" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/setup/import:
+    post:
+      operationId: importSyncSetup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SyncSetupImportRequest" }
+      responses:
+        "200":
+          description: Exported settings opened with the shared key, verified against the target, and saved atomically
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncSetupResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/exclusions:
     get:
       operationId: getSyncExclusions
@@ -6274,6 +6307,33 @@ components:
         status: { $ref: "#/components/schemas/SyncStatus" }
         # Returned once only when the server generated the key.
         generatedKey: { type: string, minLength: 1 }
+    SyncSetupExport:
+      type: object
+      additionalProperties: false
+      required: [document, keyGenerated]
+      properties:
+        # 同期先と認証情報を同期鍵で封じた文書。同期鍵が無いと開けないので、ファイルにも
+        # QRコードにもしてよい。
+        document: { type: string, minLength: 1, maxLength: 16384 }
+        # 同期鍵がengineの生成した形か。falseなら、文書を手に入れた人が鍵を手元で
+        # 試せることを画面が注意する。
+        keyGenerated: { type: boolean }
+        # documentのQRコードのマス目。上の行から、各行は "1"（黒）と "0"（白）の並びで、
+        # 周りの余白は含まない。QRコードに入り切らない長さのときは無い。
+        qrRows:
+          type: array
+          minItems: 21
+          maxItems: 177
+          items: { type: string, minLength: 21, maxLength: 177, pattern: "^[01]+$" }
+    SyncSetupImportRequest:
+      type: object
+      additionalProperties: false
+      required: [document, key, direction]
+      properties:
+        document: { type: string, minLength: 1, maxLength: 16384 }
+        # 文書を開く鍵であり、そのままこのマシンの同期鍵になる。
+        key: { type: string, minLength: 1, maxLength: 1024 }
+        direction: { $ref: "#/components/schemas/SyncDirection" }
     AutoSync:
       type: object
       additionalProperties: false

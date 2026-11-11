@@ -46,6 +46,8 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.GET("/api/v1/sync", handlers.Status)
 	engine.POST("/api/v1/sync/setup/check", handlers.CheckSetup)
 	engine.PUT("/api/v1/sync/setup", handlers.CompleteSetup)
+	engine.POST("/api/v1/sync/setup/export", handlers.ExportSetup)
+	engine.POST("/api/v1/sync/setup/import", handlers.ImportSetup)
 	engine.GET("/api/v1/sync/exclusions", handlers.Exclusions)
 	engine.PUT("/api/v1/sync/exclusions", handlers.SaveExclusions)
 	engine.PUT("/api/v1/sync/key", handlers.SetKey)

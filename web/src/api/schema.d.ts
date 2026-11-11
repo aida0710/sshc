@@ -1328,6 +1328,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/setup/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["exportSyncSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/setup/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["importSyncSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/exclusions": {
         parameters: {
             query?: never;
@@ -4108,6 +4140,16 @@ export interface components {
         SyncSetupResponse: {
             status: components["schemas"]["SyncStatus"];
             generatedKey?: string;
+        };
+        SyncSetupExport: {
+            document: string;
+            keyGenerated: boolean;
+            qrRows?: string[];
+        };
+        SyncSetupImportRequest: {
+            document: string;
+            key: string;
+            direction: components["schemas"]["SyncDirection"];
         };
         AutoSync: {
             enabled: boolean;
@@ -8303,6 +8345,60 @@ export interface operations {
         };
         responses: {
             /** @description Verified settings and shared key saved atomically */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSetupResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    exportSyncSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The configured target and its credentials sealed with the shared key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSetupExport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    importSyncSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncSetupImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Exported settings opened with the shared key, verified against the target, and saved atomically */
             200: {
                 headers: {
                     [name: string]: unknown;
