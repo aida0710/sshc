@@ -61,9 +61,10 @@ export type TerminalSessionsState = {
   // markExited records how a session ended as soon as its stream says so,
   // before the next list shows it.
   markExited: (id: string, exit: ExitReport) => void;
-  // programProgressChanged reads the list again as soon as a session's stream shows its OSC 9;4 progress changed, so
-  // the ring in its row changes with the bar under its pane header instead of on the next poll.
-  programProgressChanged: () => void;
+  // programStateChanged reads the list again as soon as a session's stream shows that its OSC 9;4 progress changed
+  // or that its program said what it is doing (OSC 7501), so the mark in its row changes with the pane beside it
+  // instead of on the next poll.
+  programStateChanged: () => void;
   moveToWorkspace: (id: string, workspaceId: string) => Promise<boolean>;
 };
 
@@ -422,9 +423,9 @@ export function useTerminalSessions(
   // stream showed the change has it. One read at a time: each read drops the answer of the one before it, so a program
   // that reports many times a second would otherwise leave no read to answer. A change seen while a read is out is
   // read once more after it.
-  const programProgressRead = useRef({ reading: false, changedSince: false });
-  const programProgressChanged = useCallback(() => {
-    const read = programProgressRead.current;
+  const programStateRead = useRef({ reading: false, changedSince: false });
+  const programStateChanged = useCallback(() => {
+    const read = programStateRead.current;
     if (read.reading) {
       read.changedSince = true;
       return;
@@ -443,7 +444,7 @@ export function useTerminalSessions(
     sessions: loaded ? sessions : noSessions,
     maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
     rename, unpinTitle, open, openEach, reconnect, stopReconnect, answerHostKey, answerPasswordSave, close, closeAll, refresh, markExited,
-    programProgressChanged, moveToWorkspace,
+    programStateChanged, moveToWorkspace,
   };
 }
 

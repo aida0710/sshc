@@ -211,6 +211,40 @@ test("a browser asks once for permission to notify when a program first says wha
   await expect.poll(() => page.evaluate(() => Notification.permission)).toBe("granted");
 });
 
+// The list of sessions is read every two seconds. A program's row follows what the program says sooner than that:
+// the ring turns as soon as the program works and stops as soon as it does, as the program's own screen shows it.
+test("a session's row follows a program that works for less than the time between two reads of the list", async ({ page, installation }) => {
+  test.skip(process.platform === "win32", "printf escape sequences are POSIX shell syntax");
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const sessions = page.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Open sessions" });
+  // The rows are watched from before the program starts, so no ring that came and went is missed.
+  await sessions.evaluate((list) => {
+    const counted = window as unknown as { ringsShown: number };
+    counted.ringsShown = 0;
+    new MutationObserver((changes) => {
+      for (const change of changes) {
+        const mark = change.target as Element;
+        if (change.type === "attributes" && mark.getAttribute("data-program-status") === "working") counted.ringsShown += 1;
+        for (const added of change.addedNodes) {
+          if (added instanceof Element && added.matches('[data-program-status="working"]')) counted.ringsShown += 1;
+        }
+      }
+    }).observe(list, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-program-status"] });
+  });
+  const timesWorked = 4;
+  await terminalKeyboard(page).focus();
+  // Each spell of work and each rest is 0.7s. Read every 2s, the list would catch three spells at most.
+  await page.keyboard.type(`for spell in 1 2 3 4; do ${reportProgramStatus("state=working")}; sleep 0.7; ${reportProgramStatus("state=idle")}; sleep 0.7; done; echo spells-$((2+2))-over`);
+  await page.keyboard.press("Enter");
+  await expect(screen).toContainText("spells-4-over", { timeout: 20_000 });
+
+  await expect.poll(() => page.evaluate(() => (window as unknown as { ringsShown: number }).ringsShown)).toBe(timesWorked);
+  await expect(sessions.locator("[data-program-status]")).toHaveCount(0);
+});
+
 // Programs say what they are doing with OSC 7501. The session's row shows it in
 // place of its dot and destination: working and blocked while they last, a done
 // result until the session has been on screen since it came.

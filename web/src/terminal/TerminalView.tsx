@@ -84,8 +84,9 @@ type TerminalViewProps = {
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   // onExit は、ストリームが伝えた、プログラムの終わり方を渡す。
   onExit?: (exit: ExitReport) => void;
-  // onProgramProgressChanged は、見出しの下の OSC 9;4 の進み具合が変わったことを、ストリームが伝えたときに呼ぶ。
-  onProgramProgressChanged?: () => void;
+  // onProgramStateChanged は、プログラムの進み具合（OSC 9;4）が変わったか、プログラムが何をしているか
+  // （OSC 7501）を知らせたことを、ストリームが伝えたときに呼ぶ。
+  onProgramStateChanged?: () => void;
   onReconnect?: () => Promise<boolean>;
   onStopReconnect?: () => Promise<boolean>;
   // onCloseSession は、このセッションを閉じる。終わったセッションのカードが出す。
@@ -154,7 +155,7 @@ export function TerminalView({
   splitRefusal,
   api = terminalSessionsApi,
   onExit,
-  onProgramProgressChanged,
+  onProgramStateChanged,
   onReconnect,
   onStopReconnect,
   onCloseSession,
@@ -251,7 +252,7 @@ export function TerminalView({
     progress: programProgress,
     apply: applyProgramProgress,
     clear: clearProgramProgress,
-  } = useProgramProgress(() => onProgramProgressChanged?.());
+  } = useProgramProgress(() => onProgramStateChanged?.());
 
   // 組み立てたターミナルが、呼ばれた時点で読む値である（TerminalLiveValues）。描くたびに最新の値を入れる。
   // ターミナルが読む設定を足すときは、ここと型に足す。
@@ -273,6 +274,7 @@ export function TerminalView({
     commandScrollbarMarks,
     reconnectByEnter,
     onExit,
+    onProgramStateChanged,
   };
   const live = useRef(liveValues);
   live.current = liveValues;
