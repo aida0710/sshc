@@ -257,7 +257,7 @@ export function SFTPTabStrip({
         aria-label={t("sftp.newTab")}
         disabled={addDisabled}
         onClick={onAdd}
-        className={`flex shrink-0 items-center justify-center text-ink-muted hover:text-ink ${compact ? "rounded-md hover:bg-card/50 min-h-11 w-11" : "min-h-[30px] w-7 rounded-row hover:bg-hover mobile-layout:min-h-10 mobile-layout:w-10"}`}
+        className={`flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:text-ink ${compact ? "hover:bg-card/50 min-h-11 w-11" : "min-h-[30px] w-7 hover:bg-hover mobile-layout:min-h-10 mobile-layout:w-10"}`}
       >
         <Icon name="plus" className={compact ? "size-5" : "size-4"} />
       </button>

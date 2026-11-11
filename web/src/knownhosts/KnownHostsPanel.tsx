@@ -278,7 +278,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
           {scanButton("")}
         </div>
 
-        {scanned ? <p className="mt-3 rounded-notice bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}
+        {scanned ? <p className="mt-3 rounded-inset bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}
         {candidates.length > 0 ? (
           narrowList ? (
             <ul aria-label={t("kh.scanCandidates")} className="mt-3 flex flex-col">
@@ -326,7 +326,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
         ) : null}
 
         {adding ? (
-          <div className="mt-3 flex flex-col gap-3 rounded-notice bg-notice p-4 text-sm">
+          <div className="mt-3 flex flex-col gap-3 rounded-inset bg-notice p-4 text-sm">
             <div>
               <h4 className="font-medium text-notice-ink">{t("kh.addHeading")}</h4>
               <p className="text-ink-muted">{t("kh.addExplain", { host: adding.host })}</p>

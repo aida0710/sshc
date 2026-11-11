@@ -104,7 +104,7 @@ export function HistoryPanel() {
       {message === "" ? null : <Notice tone="success">{message}</Notice>}
 
       {pending.length === 0 ? null : (
-        <section aria-labelledby="pending-heading" className="rounded-notice bg-notice">
+        <section aria-labelledby="pending-heading" className="rounded-inset bg-notice">
           <header className="flex items-center gap-2 border-b border-notice-line px-4 py-3">
             <span className="flex size-[30px] items-center justify-center rounded-md bg-card text-notice-ink">
               <Icon name="history" className="size-4" />

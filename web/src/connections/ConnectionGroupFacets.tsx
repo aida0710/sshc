@@ -30,7 +30,7 @@ function floatingListSide(pointerX: number, listWidth: number): "left" | "right"
 }
 
 function facetLook(active: boolean): string {
-  return `flex min-h-[30px] w-full min-w-0 items-center gap-2.5 rounded-row px-2 text-left text-[13px] transition-colors ${
+  return `flex min-h-[30px] w-full min-w-0 items-center gap-2.5 rounded-md px-2 text-left text-[13px] transition-colors ${
     active ? "bg-select-fill font-medium text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
   }`;
 }
@@ -95,7 +95,7 @@ export function ConnectionGroupFacets({
     return (
       <div key={node.name}>
         <div
-          className={`group/row relative flex items-center rounded-row ${dropTargetLook({ accepts: drag.accepts(node.name), over: drag.isOver(node.name) })}`}
+          className={`group/row relative flex items-center rounded-md ${dropTargetLook({ accepts: drag.accepts(node.name), over: drag.isOver(node.name) })}`}
           style={{ paddingInlineStart: `calc(${depth} * ${depthIndent})` }}
           onContextMenu={items.length === 0 ? undefined : (event) => {
             event.preventDefault();
@@ -194,7 +194,7 @@ export function ConnectionGroupFacets({
           <span className="shrink-0 font-mono text-[11.5px] font-normal text-ink-faint">{decorated.length}</span>
         </button>
         {groupTree.map((node) => renderGroup(node))}
-        <div {...drag.dropHandlers("")} className={`rounded-row ${dropTargetLook({ accepts: drag.accepts(""), over: drag.isOver("") })}`}>
+        <div {...drag.dropHandlers("")} className={`rounded-md ${dropTargetLook({ accepts: drag.accepts(""), over: drag.isOver("") })}`}>
           <button type="button" aria-label={t("tree.ungrouped")} aria-pressed={ungroupedActive} onClick={() => onScopeChange({ kind: "ungrouped" })} className={facetLook(ungroupedActive)}>
             {gutter}
             <Icon name="groups" className={`size-[15px] shrink-0 ${ungroupedActive ? "text-accent" : ""}`} />

@@ -18,7 +18,7 @@ export function GroupFolderNotices({ notices, onDeclare }: { notices: readonly N
   const t = useTranslate();
   if (notices.length === 0) return null;
   return (
-    <details className="rounded-notice border border-notice-line bg-notice px-2.5 py-1.5">
+    <details className="rounded-inset border border-notice-line bg-notice px-2.5 py-1.5">
       <DisclosureSummary className="text-xs font-medium text-notice-ink">{t("groupNotices.summary", { count: notices.length })}</DisclosureSummary>
       <ul className="mt-2 flex flex-col gap-2.5 pb-1">
         {notices.map((notice, index) => (

@@ -69,7 +69,7 @@ export function NoticeList({ notices, collapsible = false }: { notices: Notice[]
   );
   if (!collapsible) return list;
   return (
-    <details className="rounded-notice border border-notice-line bg-notice px-3 py-2">
+    <details className="rounded-inset border border-notice-line bg-notice px-3 py-2">
       <DisclosureSummary className="text-xs font-medium text-notice-ink">{t("notice.summary", { count: notices.length })}</DisclosureSummary>
       <div className="mt-2">{list}</div>
     </details>

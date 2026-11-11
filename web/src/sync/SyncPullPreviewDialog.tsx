@@ -141,7 +141,7 @@ export function SyncPullPreviewDialog({
                 checked={acceptedRemovals}
                 onChange={onAcceptRemovals}
                 tone="notice"
-                className="rounded-notice border border-notice-line bg-notice p-3"
+                className="rounded-inset border border-notice-line bg-notice p-3"
               />
             </>
           )}

@@ -287,7 +287,7 @@ function NavigationLink({
       onClick={(event) => {
         onNavigate(event, name);
       }}
-      className={`group relative flex min-h-10 w-full items-center gap-2.5 overflow-hidden rounded-row px-2 text-left text-[13px] transition-colors md:min-h-[30px] ${
+      className={`group relative flex min-h-10 w-full items-center gap-2.5 overflow-hidden rounded-md px-2 text-left text-[13px] transition-colors md:min-h-[30px] ${
         active
           ? "bg-select-fill text-ink"
           : "text-ink-muted hover:bg-hover hover:text-ink"

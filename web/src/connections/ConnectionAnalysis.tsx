@@ -61,7 +61,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
           {inspection.error === "" ? null : <Notice tone="danger">{inspection.error}</Notice>}
 
           {effective !== null && effective.executableDirectives.length > 0 ? (
-            <div className="rounded-notice bg-notice px-3 py-2.5 text-[12.5px]">
+            <div className="rounded-inset bg-notice px-3 py-2.5 text-[12.5px]">
               <h4 className="font-medium text-notice-ink">{t("conn.analysisExecutableHeading")}</h4>
               <p className="text-xs text-notice-ink">{t("conn.analysisTokenWarning")}</p>
               <ul className="mt-2 flex flex-col gap-2">

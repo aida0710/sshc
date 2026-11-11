@@ -246,7 +246,7 @@ export function SessionList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded-full bg-accent" />
                 ) : null}
                 <div
-                  className={`group/row relative flex items-start gap-2.5 rounded-row pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[3px] ${
+                  className={`group/row relative flex items-start gap-2.5 rounded-md pl-3 pr-2 transition-colors md:min-h-[30px] md:py-[3px] ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : isSelected ? "bg-select-fill" : "hover:bg-hover"
@@ -289,7 +289,7 @@ export function SessionList({
                       aria-describedby={statusId}
                       aria-current={isSelected ? "true" : undefined}
                       onClick={() => onSelect(session.id)}
-                      className={`flex min-w-0 grow items-start gap-2.5 py-0.5 text-left after:absolute after:inset-0 after:rounded-row md:py-0 ${rowCursor}`}
+                      className={`flex min-w-0 grow items-start gap-2.5 py-0.5 text-left after:absolute after:inset-0 after:rounded-md md:py-0 ${rowCursor}`}
                     >
                       {marker}
                       <span className="min-w-0 grow">

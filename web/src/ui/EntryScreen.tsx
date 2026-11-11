@@ -41,8 +41,8 @@ export function EntryScreen({
         <div className={compact ? "flex justify-end gap-2" : "absolute right-4 top-4 flex gap-2"}>{corner}</div>
       )}
       <section className={compact
-        ? "rounded-2xl border border-line bg-sidebar px-5 pb-[18px] pt-6 shadow-pane"
-        : "grid w-full max-w-[760px] grid-cols-[300px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-line bg-sidebar shadow-pane"}>
+        ? "rounded-card border border-line bg-sidebar px-5 pb-[18px] pt-6 shadow-pane"
+        : "grid w-full max-w-[760px] grid-cols-[300px_minmax(0,1fr)] overflow-hidden rounded-card border border-line bg-sidebar shadow-pane"}>
         <div className={compact ? "flex flex-col" : "flex flex-col border-r border-line bg-[color-mix(in_srgb,var(--ui-accent)_9%,var(--ui-sidebar))] p-8"}>
           {intro}
           {asideNote === undefined ? null : <div className={compact ? "mt-4" : "mt-auto pt-6"}>{asideNote}</div>}

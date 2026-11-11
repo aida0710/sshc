@@ -89,7 +89,7 @@ export function ConnectionRow({
         onPointerCancel={onPointerEnd}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        className={`w-full select-none rounded-row py-[7px] pl-3.5 text-left text-[13px] text-ink transition-colors ${menuItems.length === 0 ? "pr-3.5" : "pr-11 hover-reveal:pr-3.5"} ${draggable ? draggableCursor : ""} ${highlighted ? "bg-select-fill" : "hover:bg-hover"}`}
+        className={`w-full select-none rounded-md py-[7px] pl-3.5 text-left text-[13px] text-ink transition-colors ${menuItems.length === 0 ? "pr-3.5" : "pr-11 hover-reveal:pr-3.5"} ${draggable ? draggableCursor : ""} ${highlighted ? "bg-select-fill" : "hover:bg-hover"}`}
       >
         <span className="flex min-w-0 items-center gap-2.5">
           {showCheckbox ? (
