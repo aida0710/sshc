@@ -320,7 +320,7 @@ export function WorkspaceCommandCenter({
         </div>
         {prepared === null ? null : (
           <section className="rounded-inset border border-notice-line bg-notice p-3">
-            <h3 className="text-sm font-medium">
+            <h3 className="text-sm font-semibold">
               {t("workspace.previewHeading")}
             </h3>
             <div className="mt-2 grid max-h-48 gap-2 overflow-auto md:grid-cols-2">
@@ -349,7 +349,7 @@ export function WorkspaceCommandCenter({
         )}
         {dispatch === null ? null : (
           <section className="rounded-lg border border-line bg-card p-3">
-            <h3 className="text-sm font-medium">
+            <h3 className="text-sm font-semibold">
               {t("workspace.deliveryResults")}
             </h3>
             <p className="mt-1 text-xs text-ink-muted">

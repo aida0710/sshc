@@ -61,7 +61,9 @@ export const dialogHeading = "text-base font-semibold text-ink";
 
 export const fieldLabel = "text-xs text-ink-muted";
 export const hintText = "text-xs text-ink-muted";
-export const sectionHeading = "text-sm font-medium text-ink";
+// sectionHeading is the heading of a section inside a page, a pane or a dialog: as heavy as the headings of
+// PageSection and the settings, so that every section of the application is headed alike.
+export const sectionHeading = "text-sm font-semibold text-ink";
 
 export const tableHeadRow =
   "border-b border-line text-xs text-ink-faint";

@@ -31,7 +31,7 @@ export function RunTargetConnectingPanel({ alias, awaitingEngine, onUseThisMachi
         <Spinner className="mt-0.5 size-[18px] shrink-0 text-ink-muted" />
         <div className="flex min-w-0 grow flex-col gap-1">
           <div role="status" className="flex min-w-0 flex-col gap-1">
-            <h2 className="break-words text-sm font-medium text-ink">{text.heading}</h2>
+            <h2 className="break-words text-sm font-semibold text-ink">{text.heading}</h2>
             {text.detail === "" ? null : <p className="break-words text-sm leading-6 text-ink-muted">{text.detail}</p>}
           </div>
           {/* Outside the status: a screen reader would otherwise read it out every second. */}
