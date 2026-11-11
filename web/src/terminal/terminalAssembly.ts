@@ -70,6 +70,8 @@ export type TerminalLiveValues = {
   // キーがセッションへ届くあいだは null。
   reconnectByEnter: (() => void) | null;
   onExit: ((exit: ExitReport) => void) | undefined;
+  // onProgramStateChanged は、プログラムが何をしているかを知らせた（OSC 7501）ときに呼ぶ。
+  onProgramStateChanged: (() => void) | undefined;
 };
 
 // TerminalStartOptions は、組み立てるときに1度だけ読む値である。変わったら組み立て直すか、画面が
@@ -214,6 +216,7 @@ export function assembleTerminal({ container, live, start, wiring }: {
     problem: wiring.problem,
     setDirectory: wiring.directory,
     setProgress: wiring.progress,
+    programStatusReported: () => live().onProgramStateChanged?.(),
   });
   const { kittyClipboard, prompt: promptCursor, prompts } = sequences;
   const commandDisplay = attachCommandDisplay(view, sequences.commandBlocks, {

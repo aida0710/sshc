@@ -901,7 +901,7 @@ describe("a session's stream showing its program progress change", () => {
     await waitFor(() => expect(result.current.sessions).toHaveLength(1));
     terminalSessions.mockResolvedValue({ sessions: [reporting], maxSessions: 50 });
 
-    act(() => result.current.programProgressChanged());
+    act(() => result.current.programStateChanged());
 
     // waitFor gives up after a second, before the two-second poll would have read it.
     await waitFor(() => expect(result.current.sessions[0]?.programProgress).toEqual({ state: "normal", percent: 40 }));
@@ -917,9 +917,9 @@ describe("a session's stream showing its program progress change", () => {
     await waitFor(() => expect(result.current.sessions).toHaveLength(1));
 
     act(() => {
-      result.current.programProgressChanged();
-      result.current.programProgressChanged();
-      result.current.programProgressChanged();
+      result.current.programStateChanged();
+      result.current.programStateChanged();
+      result.current.programStateChanged();
     });
     expect(terminalSessions).toHaveBeenCalledTimes(2);
 

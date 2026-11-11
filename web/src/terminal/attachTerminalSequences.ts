@@ -10,6 +10,7 @@ import { attachOsc52Clipboard } from "./osc52";
 import { attachOSC9Directory } from "./osc9Directory";
 import { attachOSC133Commands } from "./osc133";
 import { attachOSC9Progress, noTerminalProgress, type TerminalProgress } from "./osc9Progress";
+import { attachProgramStatusReports } from "./osc7501Reports";
 import { trackPromptCursor, type PromptCursor } from "./promptCursor";
 import { trackPromptJumps, type PromptJump } from "./promptJump";
 import { attachVisibilityReportQuestions } from "./visibilityReports";
@@ -27,7 +28,7 @@ export type TerminalSequences = {
 // drawing: clipboard writes, the working directory, progress, command marks, prompts and the modes the
 // engine or this view answer. Handlers registered later see a sequence first (xterm.js), so the order of
 // this list matters where two read the same sequence.
-export function attachTerminalSequences({ view, t, replaying, clipboardWritesAllowed, reply, notice, problem, setDirectory, setProgress }: {
+export function attachTerminalSequences({ view, t, replaying, clipboardWritesAllowed, reply, notice, problem, setDirectory, setProgress, programStatusReported }: {
   view: Terminal;
   t: Translate;
   // replaying is true while history is being redrawn; what it asked for was answered long ago.
@@ -40,6 +41,8 @@ export function attachTerminalSequences({ view, t, replaying, clipboardWritesAll
   problem: (message: string) => void;
   setDirectory: (directory: string) => void;
   setProgress: Dispatch<SetStateAction<TerminalProgress>>;
+  // programStatusReported is called when the program says what it is doing (OSC 7501).
+  programStatusReported: () => void;
 }): TerminalSequences {
   const detachOsc52 = attachOsc52Clipboard({
     parser: view.parser,
@@ -67,6 +70,8 @@ export function attachTerminalSequences({ view, t, replaying, clipboardWritesAll
   const osc7Directory = attachOSC7Directory(view.parser, directoryChanged);
   const osc9Directory = attachOSC9Directory(view.parser, directoryChanged);
   const osc9Progress = attachOSC9Progress(view.parser, setProgress);
+  // What history said was told to the list long ago.
+  const programStatus = attachProgramStatusReports(view.parser, () => { if (!replaying()) programStatusReported(); });
   // A program that quit without clearing its OSC 9;4 progress leaves no bar
   // behind once the shell reports the command finished. The engine notifies
   // the end of a long command (internal/terminal/command_finished.go).
@@ -89,6 +94,7 @@ export function attachTerminalSequences({ view, t, replaying, clipboardWritesAll
       osc7Directory.dispose();
       osc9Directory.dispose();
       osc9Progress.dispose();
+      programStatus.dispose();
       commands.dispose();
       commandBlocks.dispose();
       visibilityQuestions.dispose();
