@@ -133,7 +133,7 @@ export function Notice({
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
-      className={`rounded-notice border ${spacing} ${noticeToneClasses[tone]}`}
+      className={`rounded-inset border ${spacing} ${noticeToneClasses[tone]}`}
     >
       <div className="flex items-center gap-2">{children}</div>
       {actions === undefined ? null : <div className={`flex flex-wrap items-center gap-2 ${compact ? "mt-1.5" : "mt-2"}`}>{actions}</div>}

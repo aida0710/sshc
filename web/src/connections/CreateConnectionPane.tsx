@@ -80,7 +80,7 @@ export function CreateConnectionPane({
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <header className="mb-3.5 flex items-center gap-2.5">
-          <span aria-hidden="true" className="flex size-[34px] shrink-0 items-center justify-center rounded-notice bg-select-fill text-accent">
+          <span aria-hidden="true" className="flex size-[34px] shrink-0 items-center justify-center rounded-inset bg-select-fill text-accent">
             <Icon name="plus" className="size-[17px]" />
           </span>
           <div className="min-w-0">

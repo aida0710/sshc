@@ -17,7 +17,7 @@ export function SyncWarning() {
           {t(open ? "sync.warningLess" : "sync.warningMore")}
         </button>
       </div>
-      {open ? <p id={detailId} className="rounded-notice bg-well px-3 py-2.5 text-xs leading-[18px] text-ink-muted">{t("sync.warning")}</p> : null}
+      {open ? <p id={detailId} className="rounded-inset bg-well px-3 py-2.5 text-xs leading-[18px] text-ink-muted">{t("sync.warning")}</p> : null}
     </div>
   );
 }

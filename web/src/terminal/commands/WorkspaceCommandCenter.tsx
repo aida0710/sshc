@@ -319,7 +319,7 @@ export function WorkspaceCommandCenter({
           </div>
         </div>
         {prepared === null ? null : (
-          <section className="rounded-notice border border-notice-line bg-notice p-3">
+          <section className="rounded-inset border border-notice-line bg-notice p-3">
             <h3 className="text-sm font-medium">
               {t("workspace.previewHeading")}
             </h3>

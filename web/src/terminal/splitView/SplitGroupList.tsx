@@ -67,7 +67,7 @@ function SplitGroupRow({ group, members, selected, unreadBySession, seenProgramS
   const activeSessionId = selected ? group.view.activeSessionId : null;
   return (
     <li data-split-group={group.number}>
-      <div className={`flex items-center rounded-row pr-1 ${selected ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-hover"}`}>
+      <div className={`flex items-center rounded-md pr-1 ${selected ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-hover"}`}>
         <button type="button" aria-label={name} aria-current={selected ? "true" : undefined} onClick={onSelect}
           className="flex min-h-10 min-w-0 grow items-center gap-2.5 pl-2 text-left md:min-h-[30px]">
           <SplitLayoutMap root={group.view.root} className="h-[18px] w-[26px]" />
@@ -100,7 +100,7 @@ function SplitGroupRow({ group, members, selected, unreadBySession, seenProgramS
               }}>
               {/* The dot sits where the dots of the workspace rows below sit. */}
               <button type="button" aria-label={t("splitView.groupSession", { name, title })} aria-describedby={programProgress === null ? destinationId : `${destinationId} ${progressId}`} aria-current={active ? "true" : undefined} onClick={() => onSelectSession(session.id)}
-                className={`flex min-h-10 w-full min-w-0 items-start gap-2.5 rounded-row py-1 pl-4 pr-2 text-left hover:bg-hover md:min-h-0 md:py-[3px] ${draggableCursor} ${active ? "ring-1 ring-inset ring-accent/45" : ""}`}>
+                className={`flex min-h-10 w-full min-w-0 items-start gap-2.5 rounded-md py-1 pl-4 pr-2 text-left hover:bg-hover md:min-h-0 md:py-[3px] ${draggableCursor} ${active ? "ring-1 ring-inset ring-accent/45" : ""}`}>
                 <SessionMarker session={session} unread={unreadBySession.has(session.id)} programStatus={programStatus} programProgress={programProgress} />
                 {/* As in the workspace rows, the name gets the whole line and the destination is under it. */}
                 <span className="min-w-0 flex-1">

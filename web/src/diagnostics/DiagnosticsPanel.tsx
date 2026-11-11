@@ -191,7 +191,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
       {hasResults ? <div className="flex flex-col border-t border-line">
       {directives.length > 0 ? (
-        <section className="mt-5 rounded-notice bg-notice px-4 py-4 text-sm">
+        <section className="mt-5 rounded-inset bg-notice px-4 py-4 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.canRunCommand")}</h3>
           <p className="text-ink-muted">{t("conn.analysisTokenWarning")}</p>
           <ul className="mt-2 flex flex-col gap-1">
@@ -251,7 +251,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
 
       {effective && effective.complexities.length > 0 ? (
-        <section className="my-3 rounded-notice bg-notice px-4 py-4 text-sm">
+        <section className="my-3 rounded-inset bg-notice px-4 py-4 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.notSimple")}</h3>
           <p className="text-ink-muted">{t("diag.notSimpleDetail")}</p>
           <ul className="mt-2 flex flex-col gap-1">
@@ -310,7 +310,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
             ))}
           </ul>
           {config.diagnostics.length > 0 ? (
-            <ConfigDiagnosticList diagnostics={config.diagnostics} className="mt-2 rounded-notice bg-well px-3 py-2" />
+            <ConfigDiagnosticList diagnostics={config.diagnostics} className="mt-2 rounded-inset bg-well px-3 py-2" />
           ) : null}
         </PageSection>
       ) : null}

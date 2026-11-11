@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // index.css の @theme にある角丸の名前。
-const scale = ["sm", "row", "md", "notice", "inset", "lg", "card", "2xl", "composer"];
+const scale = ["sm", "md", "inset", "lg", "card", "composer"];
 // 図の細い棒や升目に付ける 3px 以下の角丸は、部品の角丸の段階に入れない。
 const hairline = String.raw`\[[123]px\]`;
 const corner = "(?:-(?:t|b|l|r|s|e|tl|tr|bl|br|ss|se|es|ee))?";

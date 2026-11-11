@@ -360,7 +360,7 @@ export function RemoteKeyPanel({
             ))}
           </div>
           {unavoidable.length > 0 ? (
-            <div className="mt-3 rounded-notice bg-notice p-4 text-sm">
+            <div className="mt-3 rounded-inset bg-notice p-4 text-sm">
               <h4 className="font-medium text-notice-ink">{t("rk.connectingRuns")}</h4>
               <ul className="mt-2 flex flex-col gap-2">
                 {unavoidable.map(({ alias, directive }) => (

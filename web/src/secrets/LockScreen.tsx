@@ -206,7 +206,7 @@ export function LockScreen({
   }
 
   const noRecovery = exists || noPassword ? undefined : (
-    <p className="flex gap-2.5 rounded-notice bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">
+    <p className="flex gap-2.5 rounded-inset bg-notice px-3 py-2.5 text-[12.5px] leading-[19px] text-notice-ink">
       <Icon name="warning" className="mt-0.5 size-[15px]" />
       {t("lock.noRecovery")}
     </p>

@@ -124,7 +124,7 @@ export function SFTPToolbar({
         </span>)}
       </nav>
       <button type="button" aria-label={labels.editPath} title={labels.editPath} disabled={navigationDisabled} onClick={() => setPathEditing(true)}
-        className="flex size-7 shrink-0 items-center justify-center rounded-row text-ink-faint hover:bg-hover hover:text-ink"><Icon name="edit" className="size-3.5" /></button>
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-ink"><Icon name="edit" className="size-3.5" /></button>
     </div>
   );
 
@@ -148,17 +148,17 @@ export function SFTPToolbar({
         {content ?? <>
           <button type="button" aria-label={t(mobile ? "sftp.parentDirectory" : "sftp.back")} title={t(mobile ? "sftp.parentDirectory" : "sftp.back")}
             disabled={busy || locked || (mobile ? !canParent : !browser.canBack)} onClick={() => { if (mobile) onParent?.(); else void browser.back(); }}
-            className={`flex shrink-0 items-center justify-center text-ink-muted hover:bg-hover ${mobile ? "size-12 rounded-md" : "size-7 rounded-row"}`}>
+            className={`flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover ${mobile ? "size-12" : "size-7"}`}>
             <Icon name={mobile ? "arrowUp" : "arrowLeft"} className={mobile ? "size-4" : "size-[15px]"} />
           </button>
           {mobile ? null : <button type="button" aria-label={t("sftp.forward")} title={t("sftp.forward")}
             disabled={busy || locked || !browser.canForward} onClick={() => void browser.forward()}
-            className="flex size-7 shrink-0 items-center justify-center rounded-row text-ink-muted hover:bg-hover"><Icon name="arrowRight" className="size-[15px]" /></button>}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover"><Icon name="arrowRight" className="size-[15px]" /></button>}
           {pathField}
           <VPNProfileChip name={vpnProfile} className="max-w-24 truncate" />
           {mobile || pathEditing ? null : <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")}
             disabled={navigationDisabled} onClick={refresh}
-            className="flex size-7 shrink-0 items-center justify-center rounded-row text-ink-muted hover:bg-hover"><Icon name="sync" className="size-[15px]" /></button>}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover"><Icon name="sync" className="size-[15px]" /></button>}
           {pathEditing ? null : <>{leading}<div className="flex shrink-0 items-center gap-1">{actions}</div></>}
         </>}
       </div>

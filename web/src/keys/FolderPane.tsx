@@ -87,7 +87,7 @@ export function FolderPane({ rows, selected, dragging, onSelect, onDropInto }: F
                         }
                   }
                   style={{ paddingLeft: `${0.625 + row.depth * 0.75}rem` }}
-                  className={`flex min-h-[30px] w-full items-center gap-2 rounded-row pr-2.5 text-left text-[13px] ${
+                  className={`flex min-h-[30px] w-full items-center gap-2 rounded-md pr-2.5 text-left text-[13px] ${
                     current ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
                   } ${dropTargetLook({ accepts: dragging && target !== null, over: over === key })}`}
                 >

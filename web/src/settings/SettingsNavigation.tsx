@@ -57,7 +57,7 @@ export function SettingsNavigation({
                     event.preventDefault();
                     onNavigate(meta.path);
                   }}
-                  className={`flex min-h-[30px] items-center gap-2.5 rounded-row px-2 text-[13px] ${
+                  className={`flex min-h-[30px] items-center gap-2.5 rounded-md px-2 text-[13px] ${
                     active ? "bg-select-fill font-medium text-ink" : "text-ink-muted hover:bg-hover hover:text-ink"
                   }`}
                 >
