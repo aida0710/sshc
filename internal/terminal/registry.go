@@ -6,6 +6,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"io"
+	"slices"
 	"sync"
 	"time"
 
@@ -366,28 +367,38 @@ func (r *Registry) mintID() (string, error) {
 	return randomid.UnusedID(r.random(), func(id string) (bool, error) { return taken[id], nil })
 }
 
-// prune は、残す終了済みセッションを新しい方から RetainedExited 本までにする。
+// prune は、利用者が捨てた終了済みセッションを一覧から除き、残す終了済みセッションを終わった時刻の
+// 新しい方から RetainedExited 本までにする。一覧の順は利用者が並べ替えるので、位置では新しさが
+// 分からない。終わった時刻が同じなら、一覧の後ろにある方を新しいとみなす。
 func (r *Registry) prune() {
-	exited := 0
-	for index := len(r.sessions) - 1; index >= 0; index-- {
-		if r.sessions[index].Live() {
-			continue
-		}
-		if r.sessions[index].Discarded() {
-			r.sessions = append(r.sessions[:index], r.sessions[index+1:]...)
-			continue
-		}
-		exited++
-		if exited <= RetainedExited {
-			continue
-		}
-		r.sessions = append(r.sessions[:index], r.sessions[index+1:]...)
+	type endedSession struct {
+		session *Session
+		at      time.Time
 	}
+	var ended []endedSession
+	for index := len(r.sessions) - 1; index >= 0; index-- {
+		session := r.sessions[index]
+		// 自動の再接続はこのロックの外で終了を取り消すので、終わった時刻はここで一度だけ読む。
+		if exit := session.Exit(); exit != nil && !session.Discarded() {
+			ended = append(ended, endedSession{session: session, at: exit.At})
+		}
+	}
+	dropped := make(map[*Session]bool)
+	if len(ended) > RetainedExited {
+		slices.SortStableFunc(ended, func(left, right endedSession) int { return right.at.Compare(left.at) })
+		for _, old := range ended[RetainedExited:] {
+			dropped[old.session] = true
+		}
+	}
+	r.sessions = slices.DeleteFunc(r.sessions, func(session *Session) bool {
+		return !session.Live() && (session.Discarded() || dropped[session])
+	})
 }
 
 func (r *Registry) MaxSessions() int { return r.limits().MaxSessions }
 
-// Sessions は、生存と終了済みの両方を、開いた順に返す。
+// Sessions は、生存と終了済みの両方を、一覧の順に返す。一覧は開いた順に足され、利用者が
+// MoveToWorkspace で並べ替える。
 func (r *Registry) Sessions() []View {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -403,12 +414,11 @@ func (r *Registry) Sessions() []View {
 func (r *Registry) Lookup(id string) (*Session, bool) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	for _, session := range r.sessions {
-		if session.id == id {
-			return session, true
-		}
+	index := r.indexOf(id)
+	if index < 0 {
+		return nil, false
 	}
-	return nil, false
+	return r.sessions[index], true
 }
 
 // CommandTarget は、今ある生きたセッションだけを指す。ID を SSH の別名として扱うことは無いので、代わりに
@@ -503,17 +513,12 @@ func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {
 		r.mutex.Unlock()
 		return nil, ErrShuttingDown
 	}
-	var session *Session
-	for _, candidate := range r.sessions {
-		if candidate.id == id {
-			session = candidate
-			break
-		}
-	}
-	if session == nil {
+	index := r.indexOf(id)
+	if index < 0 {
 		r.mutex.Unlock()
 		return nil, ErrNotFound
 	}
+	session := r.sessions[index]
 	if r.liveCount() >= limits.MaxSessions {
 		r.mutex.Unlock()
 		return nil, ErrSessionLimit
@@ -587,11 +592,8 @@ func (r *Registry) Close(id string) error {
 	}
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	for index, candidate := range r.sessions {
-		if candidate.id == id {
-			r.sessions = append(r.sessions[:index], r.sessions[index+1:]...)
-			break
-		}
+	if index := r.indexOf(id); index >= 0 {
+		r.sessions = slices.Delete(r.sessions, index, index+1)
 	}
 	return nil
 }

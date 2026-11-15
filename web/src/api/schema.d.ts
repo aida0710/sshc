@@ -349,6 +349,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /** @description Moves the session into the workspace, before beforeId or to the end of that workspace without it. The others keep their order. A beforeId that is not a session of that workspace is not found. */
         put: operations["moveTerminalSession"];
         post?: never;
         delete?: never;
@@ -3899,6 +3900,7 @@ export interface components {
         };
         MoveTerminalSessionRequest: {
             workspaceId: string;
+            beforeId?: string;
         };
         TerminalHostKeyQuestion: {
             alias: string;

@@ -2,7 +2,7 @@ import type { PaneEdge } from "./splitView/layout";
 import type { SplitGroup } from "./splitView/splitGroups";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
-import type { TerminalSession } from "../api/terminalSessions";
+import type { TerminalSession, TerminalSessionPlace } from "../api/terminalSessions";
 import { defaultWorkspaceId, type TerminalWorkspace } from "../api/terminalWorkspaces";
 import { useTranslate } from "../i18n/context";
 import { HostPickerDialog } from "../shell/HostPickerDialog";
@@ -28,8 +28,6 @@ import { WorkspaceRow } from "./WorkspaceRow";
 import {
   beforeIdForWorkspaceMove,
   groupSessionsByWorkspace,
-  orderWithGroupReordered,
-  orderWithSessionMovedInto,
   workspaceDisplayName,
   type WorkspacePlace,
 } from "./workspaceGrouping";
@@ -38,7 +36,7 @@ import { useWorkspaceReorderDrag } from "./useWorkspaceReorderDrag";
 type WorkspaceTreeProps = {
   workspaces: TerminalWorkspacesState;
   terminalSessions: TerminalSessionsState;
-  // sessions are every session in list order.
+  // sessions are every session in the engine's list order.
   sessions: TerminalSession[];
   selected: string | null;
   splitGroupBySession?: ReadonlyMap<string, SplitGroup>;
@@ -49,7 +47,6 @@ type WorkspaceTreeProps = {
   onSplitSession?: (id: string, edge: PaneEdge) => void;
   onRemoveSessionFromSplit?: (id: string) => void;
   onDuplicate: (id: string) => void;
-  onReorder: (order: string[]) => void;
   // aliases/hosts feed the same picker SFTP uses, so a new session starts
   // from one dialog whether it is a local shell or an SSH host.
   aliases?: string[];
@@ -91,7 +88,6 @@ export function WorkspaceTree({
   onSplitSession,
   onRemoveSessionFromSplit,
   onDuplicate,
-  onReorder,
   runTarget = null,
   loading = false,
   aliases = [],
@@ -180,14 +176,9 @@ export function WorkspaceTree({
   }
   const workspaceDrag = useWorkspaceReorderDrag(moveWorkspace);
 
-  function moveSessionInto(workspaceId: string, members: readonly TerminalSession[], sessionId: string, beforeId: string | null) {
+  function moveSession(sessionId: string, place: TerminalSessionPlace) {
     setHeldSession(null);
-    onReorder(orderWithSessionMovedInto(sessions.map((session) => session.id), {
-      sessionId,
-      members: members.map((session) => session.id),
-      beforeId,
-    }));
-    void terminalSessions.moveToWorkspace(sessionId, workspaceId);
+    void terminalSessions.moveSession(sessionId, place);
   }
 
   const localChoices = useMemo(() => [localShellChoice(t, runTarget)], [runTarget, t]);
@@ -322,7 +313,7 @@ export function WorkspaceTree({
                 onToggle={() => toggleCollapsed(workspace.id)}
                 onNewSession={() => setPickerWorkspace(workspace.id)}
                 acceptsSession={heldSessionWorkspace !== null && heldSessionWorkspace !== workspace.id}
-                onDropSession={(id) => moveSessionInto(workspace.id, members, id, null)}
+                onDropSession={(id) => moveSession(id, { workspaceId: workspace.id, beforeId: null })}
                 dragSourceProps={workspaceDrag.dragSourceProps(workspace.id)}
               />
               </div>
@@ -344,12 +335,11 @@ export function WorkspaceTree({
                     onRename={terminalSessions.rename}
                     onUnpinTitle={(id) => terminalSessions.unpinTitle?.(id) ?? Promise.resolve(false)}
                     onDuplicate={onDuplicate}
-                    onReorder={(order) => onReorder(orderWithGroupReordered(sessions.map((session) => session.id), order))}
                     moveTargets={moveTargets}
-                    onMoveToWorkspace={(id, target) => void terminalSessions.moveToWorkspace(id, target)}
+                    onMoveToWorkspace={(id, target) => moveSession(id, { workspaceId: target, beforeId: null })}
                     heldSessionId={heldSession}
                     onHoldSession={setHeldSession}
-                    onMoveIn={(id, beforeId) => moveSessionInto(workspace.id, members, id, beforeId)}
+                    onMove={(id, beforeId) => moveSession(id, { workspaceId: workspace.id, beforeId })}
                   />
                 </div>
               ) : null}

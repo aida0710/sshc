@@ -41,7 +41,6 @@ type SessionListProps = {
   onRename: (id: string, title: string) => Promise<boolean>;
   onUnpinTitle: (id: string) => Promise<boolean>;
   onDuplicate: (id: string) => void;
-  onReorder: (order: string[]) => void;
   // moveTargets are every workspace a session can be moved to; a row leaves out
   // the one it is already in.
   moveTargets: readonly WorkspaceMoveTarget[];
@@ -50,9 +49,9 @@ type SessionListProps = {
   // list can take a session dragged out of another workspace.
   heldSessionId: string | null;
   onHoldSession: (id: string | null) => void;
-  // onMoveIn takes a session from another workspace into this one, before
-  // beforeId or after the last session when it is null.
-  onMoveIn: (sessionId: string, beforeId: string | null) => void;
+  // onMove は、セッションをこのワークスペースの beforeId の前へ、null なら最後へ移す。並べ替えも、
+  // 別のワークスペースからドラッグしてきたセッションを入れるのも、これで行う。
+  onMove: (sessionId: string, beforeId: string | null) => void;
 };
 
 function describeForward(t: Translate, forward: TerminalForward): string {
@@ -84,12 +83,11 @@ export function SessionList({
   onRename,
   onUnpinTitle,
   onDuplicate,
-  onReorder,
   moveTargets,
   onMoveToWorkspace,
   heldSessionId,
   onHoldSession,
-  onMoveIn,
+  onMove,
 }: SessionListProps) {
   const t = useTranslate();
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -124,13 +122,14 @@ export function SessionList({
     onClose: () => setMenuFor(null),
   });
 
+  // 動かした先のすぐ後ろのセッションの前へ置く。最後まで下げたら、後ろが無いので最後へ置く。
   function move(id: string, delta: number) {
     const order = sessions.map((session) => session.id);
     const from = order.indexOf(id);
     const to = from + delta;
     if (from < 0 || to < 0 || to >= order.length) return;
     order.splice(to, 0, ...order.splice(from, 1));
-    onReorder(order);
+    onMove(id, order[to + 1] ?? null);
   }
 
   function acceptSessionDrag(event: DragEvent) {
@@ -148,14 +147,7 @@ export function SessionList({
     onHoldSession(null);
     setDropBefore(null);
     if (held === null || held === targetId) return;
-    if (!sessions.some((session) => session.id === held)) {
-      onMoveIn(held, targetId);
-      return;
-    }
-    const order = sessions.map((session) => session.id).filter((id) => id !== held);
-    const at = targetId === null ? order.length : order.indexOf(targetId);
-    order.splice(at < 0 ? order.length : at, 0, held);
-    onReorder(order);
+    onMove(held, targetId);
   }
 
   const rowsDraggable = renaming === null;

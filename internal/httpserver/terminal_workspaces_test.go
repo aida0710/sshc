@@ -143,3 +143,71 @@ func TestAMovedWorkspaceIsListedInItsNewPlace(t *testing.T) {
 		t.Fatalf("listed order = %v, want %v", got, want)
 	}
 }
+
+func (f *terminalFixture) sessionOrder(t *testing.T) []string {
+	t.Helper()
+	_, body := f.do(t, http.MethodGet, "/api/v1/terminal/sessions", "")
+	return sessionIDs(decodeAs[api.TerminalSessionList](t, body))
+}
+
+func sessionIDs(list api.TerminalSessionList) []string {
+	ids := make([]string, 0, len(list.Sessions))
+	for _, session := range list.Sessions {
+		ids = append(ids, session.Id)
+	}
+	return ids
+}
+
+// 並びはエンジンが持つので、移した画面の答えにも、あとから一覧を読む別の画面にも同じ順で出る。
+func TestAMovedSessionIsListedInItsNewPlaceForEveryScreen(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.DefaultLimits())
+	first, _ := fixture.openShell(t)
+	second, _ := fixture.openShell(t)
+	third, _ := fixture.openShell(t)
+
+	response, body := fixture.do(t, http.MethodPut, "/api/v1/terminal/sessions/"+third+"/workspace", `{"workspaceId":"default","beforeId":"`+first+`"}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("move before the first = %d %s", response.StatusCode, body)
+	}
+	want := []string{third, first, second}
+	if got := sessionIDs(decodeAs[api.TerminalSessionList](t, body)); !slices.Equal(got, want) {
+		t.Fatalf("answered order = %v, want %v", got, want)
+	}
+	if got := fixture.sessionOrder(t); !slices.Equal(got, want) {
+		t.Fatalf("listed order = %v, want %v", got, want)
+	}
+
+	response, body = fixture.do(t, http.MethodPut, "/api/v1/terminal/sessions/"+third+"/workspace", `{"workspaceId":"default"}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("move to the end = %d %s", response.StatusCode, body)
+	}
+	if got, want := fixture.sessionOrder(t), []string{first, second, third}; !slices.Equal(got, want) {
+		t.Fatalf("order after moving to the end = %v, want %v", got, want)
+	}
+}
+
+// 前に置くセッションが無い（別の画面が閉じた）か、別のワークスペースにある（別の画面が移した）ときは断り、
+// 並びもワークスペースも変えない。画面は一覧を読み直して今の並びを出す。
+func TestAMoveBeforeASessionThatIsNotInTheWorkspaceIsRefusedAndChangesNothing(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.DefaultLimits())
+	first, _ := fixture.openShell(t)
+	second, _ := fixture.openShell(t)
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/workspaces", `{"name":"sshc開発"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("create = %d %s", response.StatusCode, body)
+	}
+	created := decodeAs[api.TerminalWorkspace](t, body)
+
+	for _, beforeID := range []string{"missing", first} {
+		response, body := fixture.do(t, http.MethodPut, "/api/v1/terminal/sessions/"+second+"/workspace", `{"workspaceId":"`+created.Id+`","beforeId":"`+beforeID+`"}`)
+		if response.StatusCode != http.StatusNotFound || decodeAs[api.Problem](t, body).Code != "terminal_session_not_found" {
+			t.Errorf("move before %s = %d %s, want 404 terminal_session_not_found", beforeID, response.StatusCode, body)
+		}
+	}
+	if got, want := fixture.sessionOrder(t), []string{first, second}; !slices.Equal(got, want) {
+		t.Fatalf("order after the refusals = %v, want %v", got, want)
+	}
+	if got := fixture.sessionWorkspace(t, second); got != terminalworkspace.DefaultID {
+		t.Fatalf("workspace after the refusals = %q, want default", got)
+	}
+}

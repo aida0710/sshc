@@ -208,14 +208,12 @@ export function App({
     splitView,
     activeSessionId,
     terminalScreenMounted,
-    orderedSessions,
     showSession,
     openLocalShell,
     openSSHSession,
     openSSHSessions,
     duplicateSession,
     openSessionInSplit,
-    reorderSessions: setSessionOrder,
   } = terminalWorkspace;
   const directDestination = useDirectDestinationActions({
     aliases: declared.knownAliases,
@@ -324,7 +322,7 @@ export function App({
 
   const appActionContext: AppActionContext = {
     terminalFace,
-    orderedSessions,
+    orderedSessions: terminalSessions.sessions,
     activeSessionId,
     panes,
     splitBesideActive,
@@ -513,7 +511,6 @@ export function App({
             terminalWorkspaces={terminalWorkspaces}
             runTargets={runTargets}
             runTargetLink={runTargetLink}
-            orderedSessions={orderedSessions}
             activeSessionId={activeSessionId}
             unreadBySession={unreadSessions}
             seenProgramStatus={seenProgramStatus}
@@ -541,7 +538,6 @@ export function App({
               navigate("Terminal");
             }}
             onDuplicateSession={(id) => void duplicateSession(id)}
-            onReorderSessions={setSessionOrder}
             onOpenShell={(workspaceId) => void openLocalShell(undefined, undefined, workspaceId)}
             aliases={declared.knownAliases}
             hosts={declared.hosts}
@@ -678,7 +674,7 @@ export function App({
             returnFocusRef={commandPaletteReturnFocusRef}
             hosts={declared.hosts}
             files={declared.files}
-            sessions={orderedSessions}
+            sessions={terminalSessions.sessions}
             unreadBySession={unreadSessions}
             sectionLabels={sectionLabels}
             onClose={closePalette}

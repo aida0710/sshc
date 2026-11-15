@@ -593,6 +593,48 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("terminal.renameFailed");
   });
 
+  describe("moveSession", () => {
+    const shell = (id: string): TerminalSession => ({
+      id, kind: "shell", workspaceId: "default", title: id, startedAt: "2026-11-15T00:00:00Z", state: "connected", problem: "",
+    });
+    const opened = { sessions: [shell("a"), shell("b"), shell("c")], maxSessions: 50 };
+    const ids = (sessions: readonly TerminalSession[]) => sessions.map((session) => session.id);
+
+    // リモートセッションの答えは SSH 越しに届くので、待つと落とした行が一度元の場所へ戻って見える。
+    it("shows the session in its new place before the engine answers, then takes the engine's list", async () => {
+      let answer: (listed: typeof opened) => void = () => undefined;
+      const moveTerminalSession = vi.fn().mockReturnValue(new Promise<typeof opened>((resolve) => { answer = resolve; }));
+      const client = api({ terminalSessions: vi.fn().mockResolvedValue(opened), moveTerminalSession });
+      const { result } = renderHook(() => useTerminalSessions(client, translate));
+      await waitFor(() => expect(ids(result.current.sessions)).toEqual(["a", "b", "c"]));
+
+      let moved: Promise<boolean> = Promise.resolve(false);
+      act(() => { moved = result.current.moveSession("c", { workspaceId: "default", beforeId: "a" }); });
+
+      expect(ids(result.current.sessions)).toEqual(["c", "a", "b"]);
+      expect(moveTerminalSession).toHaveBeenCalledWith("c", { workspaceId: "default", beforeId: "a" });
+      await act(async () => {
+        answer({ sessions: [shell("c"), shell("b"), shell("a")], maxSessions: 50 });
+        await moved;
+      });
+      expect(ids(result.current.sessions)).toEqual(["c", "b", "a"]);
+    });
+
+    it("goes back to the engine's order and says so when the move is refused", async () => {
+      const refusal = new ApiError("terminal_session_not_found", 404, { code: "terminal_session_not_found", message: "gone" });
+      const client = api({ terminalSessions: vi.fn().mockResolvedValue(opened), moveTerminalSession: vi.fn().mockRejectedValue(refusal) });
+      const { result } = renderHook(() => useTerminalSessions(client, translate));
+      await waitFor(() => expect(ids(result.current.sessions)).toEqual(["a", "b", "c"]));
+
+      let outcome = true;
+      await act(async () => { outcome = await result.current.moveSession("c", { workspaceId: "default", beforeId: "a" }); });
+
+      expect(outcome).toBe(false);
+      expect(ids(result.current.sessions)).toEqual(["a", "b", "c"]);
+      expect(result.current.problem).toBe("workspace.moveFailed");
+    });
+  });
+
   it("reconnects the same retained session and adopts the returned state", async () => {
     const connected = {
       id: "a", kind: "ssh", workspaceId: "default", alias: "bastion", title: "bastion",

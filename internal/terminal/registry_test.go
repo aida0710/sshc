@@ -362,6 +362,37 @@ func TestExitedSessionsAreRetainedUpToTheCap(t *testing.T) {
 	}
 }
 
+// 一覧の順は利用者が並べ替えるので、残す終了済みセッションは一覧の位置ではなく終わった時刻で選ぶ。
+// いちばん先に終わったセッションを一覧の最後へ移しても、上限を超えたときに消えるのはそれである。
+func TestTheSessionThatEndedFirstIsDroppedEvenWhenMovedToTheEnd(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	endedAt := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
+	var opened []string
+	openAndEnd := func(index int) {
+		session := openShell(t, registry)
+		opened = append(opened, session.ID())
+		starter.processes[index].exit(terminal.ExitInfo{Code: 0, At: endedAt.Add(time.Duration(index) * time.Minute)})
+		testwait.Until(t, exited(registry, session.ID()))
+	}
+	for index := 0; index < terminal.RetainedExited; index++ {
+		openAndEnd(index)
+	}
+	endedFirst := opened[0]
+	if err := registry.MoveToWorkspace(endedFirst, "", ""); err != nil {
+		t.Fatalf("MoveToWorkspace() = %v", err)
+	}
+
+	openAndEnd(terminal.RetainedExited)
+	registry.Sessions()
+
+	if _, ok := registry.Lookup(endedFirst); ok {
+		t.Fatalf("the session that ended first was kept")
+	}
+	if _, ok := registry.Lookup(opened[1]); !ok {
+		t.Fatalf("the session that ended second was dropped")
+	}
+}
+
 func TestEverySessionGetsItsOwnIdentifier(t *testing.T) {
 	registry, _ := newRegistry(terminal.Limits{MaxSessions: 20, Scrollback: 1 << 10})
 

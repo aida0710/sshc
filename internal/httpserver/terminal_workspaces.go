@@ -143,6 +143,8 @@ func (h TerminalHandlers) MoveWorkspace(c *echo.Context) error {
 	return c.JSON(http.StatusOK, list)
 }
 
+// MoveSession は、セッションを別のワークスペースへ移し、beforeId のセッションの前に、無ければそのワークスペースの
+// 最後に置いて、新しい一覧を返す。同じワークスペースの中での並べ替えも、これで行う。
 func (h TerminalHandlers) MoveSession(c *echo.Context) error {
 	id, ok := sessionIDParam(c)
 	if !ok {
@@ -155,7 +157,11 @@ func (h TerminalHandlers) MoveSession(c *echo.Context) error {
 	if err := h.requireWorkspace(request.WorkspaceId); err != nil {
 		return terminalWorkspaceProblem(c, err)
 	}
-	if err := h.Registry.MoveToWorkspace(id, request.WorkspaceId); err != nil {
+	beforeID := ""
+	if request.BeforeId != nil {
+		beforeID = *request.BeforeId
+	}
+	if err := h.Registry.MoveToWorkspace(id, request.WorkspaceId, beforeID); err != nil {
 		if errors.Is(err, terminal.ErrNotFound) {
 			return problem(c, http.StatusNotFound, "terminal_session_not_found")
 		}
