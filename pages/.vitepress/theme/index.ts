@@ -1,11 +1,11 @@
-import DefaultTheme from "vitepress/theme";
+import docsTheme from "@aida0710/app-docs-theme/theme";
 import type { Theme } from "vitepress";
-import "@fontsource-variable/noto-sans-jp";
 import MermaidDiagram from "./MermaidDiagram.vue";
-import "./style.css";
+import "./colors.css";
+import "./mermaid.css";
 
 const theme: Theme = {
-  extends: DefaultTheme,
+  extends: docsTheme,
   enhanceApp({ app }) {
     app.component("MermaidDiagram", MermaidDiagram);
   },
