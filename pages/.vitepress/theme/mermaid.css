@@ -1,0 +1,16 @@
+/* MermaidDiagram.vue が描く図。図の SVG は v-html で入れるので、scoped にせずここに書く。 */
+.mermaid-diagram {
+  margin: 20px 0;
+  overflow-x: auto;
+}
+
+.mermaid-diagram svg {
+  display: block;
+  margin-inline: auto;
+}
+
+/* Mermaidは本文の外で文字の大きさを測るので、.vp-doc pの余白と行の高さが効くと文字が切れる。 */
+.mermaid-diagram foreignObject p {
+  margin: 0;
+  line-height: 1.5;
+}

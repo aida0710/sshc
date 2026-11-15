@@ -1,0 +1,67 @@
+/* sshc の色。寸法・書体・トップの作りは @aida0710/app-docs-theme が持つ。
+   ライトを :root、ダークを .dark に書く。トップの画面の枠とコマンドの箱は、ターミナルに合わせてどちらも暗くする。 */
+:root {
+  --vp-c-bg: #f4f5f5;
+  --vp-c-bg-alt: #e9ebec;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #eceeef;
+  --vp-c-text-1: #171b1e;
+  --vp-c-text-2: #4f585e;
+  --vp-c-text-3: #778188;
+  --vp-c-divider: #d6dadd;
+  --vp-c-border: #c5cbd0;
+  --vp-c-gutter: #eef0f1;
+  --vp-c-brand-1: #20262a;
+  --vp-c-brand-2: #3f484e;
+  --vp-c-brand-3: #68747b;
+  --vp-c-brand-soft: rgba(32, 38, 42, 0.08);
+  --vp-button-brand-border: #20262a;
+  --vp-button-brand-text: #f4f5f5;
+  --vp-button-brand-bg: #20262a;
+  --vp-button-brand-hover-border: #0d1012;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-hover-bg: #0d1012;
+  --vp-button-alt-border: #c5cbd0;
+  --vp-button-alt-text: #171b1e;
+  --vp-button-alt-bg: #eceeef;
+  --vp-button-alt-hover-border: #778188;
+  --vp-button-alt-hover-text: #171b1e;
+  --vp-button-alt-hover-bg: #ffffff;
+  --vp-code-block-bg: #e8ebed;
+  --docs-frame-bg: #090b0c;
+  --docs-frame-border: #24292d;
+  --docs-frame-dot: #68737a;
+  --docs-command-bg: #0b0e10;
+  --docs-command-text: #e7eaec;
+  --docs-command-muted: #89939a;
+}
+
+.dark {
+  --vp-c-bg: #101315;
+  --vp-c-bg-alt: #15191c;
+  --vp-c-bg-elv: #1b2024;
+  --vp-c-bg-soft: #171b1e;
+  --vp-c-text-1: #e6e9eb;
+  --vp-c-text-2: #aeb5ba;
+  --vp-c-text-3: #79838a;
+  --vp-c-divider: #2a3035;
+  --vp-c-border: #343b41;
+  --vp-c-gutter: #0d1012;
+  --vp-c-brand-1: #d8dde0;
+  --vp-c-brand-2: #aeb7bd;
+  --vp-c-brand-3: #89949b;
+  --vp-c-brand-soft: rgba(174, 183, 189, 0.12);
+  --vp-button-brand-border: #d8dde0;
+  --vp-button-brand-text: #111416;
+  --vp-button-brand-bg: #d8dde0;
+  --vp-button-brand-hover-border: #ffffff;
+  --vp-button-brand-hover-text: #0d1012;
+  --vp-button-brand-hover-bg: #ffffff;
+  --vp-button-alt-border: #3c444a;
+  --vp-button-alt-text: #d8dde0;
+  --vp-button-alt-bg: #1a1f22;
+  --vp-button-alt-hover-border: #5a646b;
+  --vp-button-alt-hover-text: #ffffff;
+  --vp-button-alt-hover-bg: #20262a;
+  --vp-code-block-bg: #0b0e10;
+}

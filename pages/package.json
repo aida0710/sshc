@@ -9,7 +9,7 @@
     "preview": "vitepress preview --host 127.0.0.1"
   },
   "devDependencies": {
-    "@fontsource-variable/noto-sans-jp": "5.3.0",
+    "@aida0710/app-docs-theme": "https://github.com/aida0710/app-docs-theme/releases/download/v0.1.0/aida0710-app-docs-theme-0.1.0.tgz",
     "mermaid": "12.3.0",
     "vitepress": "1.6.4"
   },
