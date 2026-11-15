@@ -14,3 +14,11 @@
   margin: 0;
   line-height: 1.5;
 }
+
+/* 図の箱（フローチャートの箱と囲み、シーケンス図の参加者と注記）の角も、本文のほかの箱と同じ丸めにする。
+   Mermaid が付ける角（四角か 5px）を、テーマの --docs-radius で上書きする。 */
+.mermaid-diagram svg :is(.node, .cluster) > rect,
+.mermaid-diagram svg rect:is(.actor, .note) {
+  rx: var(--docs-radius);
+  ry: var(--docs-radius);
+}
