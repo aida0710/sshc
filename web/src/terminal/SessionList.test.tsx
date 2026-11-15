@@ -26,12 +26,11 @@ function renderList(overrides: Partial<Parameters<typeof SessionList>[0]> = {}) 
     onRename: vi.fn(async () => true),
     onUnpinTitle: vi.fn(async () => true),
     onDuplicate: vi.fn(),
-    onReorder: vi.fn(),
     moveTargets: [{ id: "default", label: "Main" }, { id: "w1", label: "sshc dev" }],
     onMoveToWorkspace: vi.fn(),
     heldSessionId: null,
     onHoldSession: vi.fn(),
-    onMoveIn: vi.fn(),
+    onMove: vi.fn(),
     ...overrides,
   };
   const { rerender } = render(<SessionList {...props} />);
@@ -319,7 +318,17 @@ describe("SessionList", () => {
     await user.click(screen.getByRole("button", { name: "Actions for zsh" }));
     await user.click(screen.getByRole("menuitem", { name: "Move up" }));
 
-    expect(props.onReorder).toHaveBeenCalledWith(["b", "a", "c"]);
+    expect(props.onMove).toHaveBeenCalledWith("b", "a");
+  });
+
+  it("moving down to the last place puts the session at the end of its workspace", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+
+    await user.click(screen.getByRole("button", { name: "Actions for zsh" }));
+    await user.click(screen.getByRole("menuitem", { name: "Move down" }));
+
+    expect(props.onMove).toHaveBeenCalledWith("b", null);
   });
 
   it("offers no move past either end", async () => {

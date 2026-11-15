@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
-import { beforeIdForWorkspaceMove, groupSessionsByWorkspace, orderWithGroupReordered, orderWithSessionMovedInto, workspaceDisplayName } from "./workspaceGrouping";
+import { beforeIdForWorkspaceMove, groupSessionsByWorkspace, sessionsAfterMove, workspaceDisplayName } from "./workspaceGrouping";
 
 const workspaces: TerminalWorkspace[] = [
   { id: "default", name: "", hidden: false, builtIn: true },
@@ -42,24 +42,21 @@ describe("workspace grouping", () => {
     expect(beforeIdForWorkspaceMove(["default", "agents", "w1"], "default", { targetId: "w1", side: "after" })).toBeNull();
     expect(beforeIdForWorkspaceMove(["w1", "default", "agents"], "w1", { targetId: "default", side: "after" })).toBe("agents");
   });
-
-  it("reorders one workspace without moving the sessions of another", () => {
-    expect(orderWithGroupReordered(["a", "x", "b", "y", "c"], ["c", "a", "b"])).toEqual(["c", "x", "a", "y", "b"]);
-  });
 });
 
-describe("orderWithSessionMovedInto", () => {
-  const all = ["a1", "b1", "a2", "b2", "c1"];
+describe("sessionsAfterMove", () => {
+  const all = [session("a1", "default"), session("b1", "w1"), session("a2", "default"), session("b2", "w1")];
+  const placed = (sessions: readonly TerminalSession[]) => sessions.map((member) => `${member.id}@${member.workspaceId}`);
 
-  it("puts a session dropped on a session of the other workspace before it", () => {
-    expect(orderWithSessionMovedInto(all, { sessionId: "c1", members: ["b1", "b2"], beforeId: "b2" })).toEqual(["a1", "b1", "a2", "c1", "b2"]);
+  it("puts a session moved before another right in front of it, in that session's workspace", () => {
+    expect(placed(sessionsAfterMove(all, "a1", { workspaceId: "w1", beforeId: "b2" }))).toEqual(["b1@w1", "a2@default", "a1@w1", "b2@w1"]);
   });
 
-  it("puts a session dropped on the workspace after its last session", () => {
-    expect(orderWithSessionMovedInto(all, { sessionId: "a1", members: ["b1", "b2"], beforeId: null })).toEqual(["b1", "a2", "b2", "a1", "c1"]);
+  it("puts a session moved without a session to go before at the end, the last of its workspace", () => {
+    expect(placed(sessionsAfterMove(all, "a1", { workspaceId: "default", beforeId: null }))).toEqual(["b1@w1", "a2@default", "b2@w1", "a1@default"]);
   });
 
-  it("keeps the place of a session dropped on an empty workspace", () => {
-    expect(orderWithSessionMovedInto(all, { sessionId: "a2", members: [], beforeId: null })).toEqual(all);
+  it("keeps the list as it is when the session to go before is gone, until the engine answers", () => {
+    expect(placed(sessionsAfterMove(all, "a1", { workspaceId: "w1", beforeId: "closed" }))).toEqual(placed(all));
   });
 });

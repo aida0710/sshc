@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { OpenTerminalSessionRequest } from "../api/terminalSessions";
 import type { TerminalWorkspace } from "../api/terminalWorkspaces";
 import { sshSessionTarget } from "../connections/directDestination";
@@ -34,23 +34,11 @@ export function useTerminalWorkspaceController({
   const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget, maxSessions: terminalSessions.maxSessions });
   const { selectSession: setActiveSessionId, dispatch: dispatchSplit } = splitView;
   const { activeSessionId } = splitView.state;
-  const [sessionOrder, setSessionOrder] = useState<string[]>([]);
   const pendingSessionId = useRef<string | null>(null);
   // The session last shown on each run target (null is this machine), shown
   // again when the person comes back to it. A run target's selection starts
   // empty in useSplitView, so what is recorded here is always that target's.
   const lastSessionByRunTarget = useRef(new Map<string | null, string>());
-
-  const orderedSessions = useMemo(() => {
-    const rank = new Map(sessionOrder.map((id, index) => [id, index]));
-    return terminalSessions.sessions
-      .map((session, index) => ({
-        session,
-        rank: rank.get(session.id) ?? sessionOrder.length + index,
-      }))
-      .sort((left, right) => left.rank - right.rank)
-      .map((entry) => entry.session);
-  }, [terminalSessions.sessions, sessionOrder]);
 
   useEffect(() => {
     if (activeSessionId === null) return;
@@ -74,12 +62,13 @@ export function useTerminalWorkspaceController({
   // the one last shown on this run target comes back while it is listed, and
   // otherwise the top of the sidebar.
   useEffect(() => {
-    if (activeSessionId !== null || orderedSessions.length === 0) return;
+    const sessions = terminalSessions.sessions;
+    if (activeSessionId !== null || sessions.length === 0) return;
     const lastShown = lastSessionByRunTarget.current.get(runTarget);
-    const lastShownIsListed = lastShown !== undefined && orderedSessions.some((session) => session.id === lastShown);
-    const next = lastShownIsListed ? lastShown : topSessionId(workspaces, orderedSessions);
+    const lastShownIsListed = lastShown !== undefined && sessions.some((session) => session.id === lastShown);
+    const next = lastShownIsListed ? lastShown : topSessionId(workspaces, sessions);
     if (next !== null) setActiveSessionId(next);
-  }, [orderedSessions, workspaces, activeSessionId, runTarget, setActiveSessionId]);
+  }, [terminalSessions.sessions, workspaces, activeSessionId, runTarget, setActiveSessionId]);
 
   const showSession = useCallback(
     (id: string) => {
@@ -221,13 +210,11 @@ export function useTerminalWorkspaceController({
     splitView,
     activeSessionId,
     terminalScreenMounted,
-    orderedSessions,
     showSession,
     openLocalShell,
     openSSHSession,
     openSSHSessions,
     duplicateSession,
     openSessionInSplit,
-    reorderSessions: setSessionOrder,
   };
 }

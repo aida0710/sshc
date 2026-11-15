@@ -33,7 +33,7 @@ func (s *Session) Reopening() Reopening {
 	return reopening
 }
 
-// Reopenings は、まだ使っているセッションを、開いた順に書き表す。利用者が閉じたセッションと、プログラムが
+// Reopenings は、まだ使っているセッションを、一覧の順に書き表す。利用者が閉じたセッションと、プログラムが
 // 終わったセッションは含めない。接続を失った SSH のセッションは、再接続を待っていても、あきらめていても、
 // まだ使っているものとする。利用者が手で再接続するために残したものである。
 func (r *Registry) Reopenings() []Reopening {

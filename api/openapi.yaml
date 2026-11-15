@@ -511,6 +511,7 @@ paths:
   /api/v1/terminal/sessions/{id}/workspace:
     put:
       operationId: moveTerminalSession
+      description: Moves the session into the workspace, before beforeId or to the end of that workspace without it. The others keep their order. A beforeId that is not a session of that workspace is not found.
       parameters:
         - in: path
           name: id
@@ -5882,12 +5883,15 @@ components:
       additionalProperties: false
       properties:
         beforeId: { type: string, minLength: 1, maxLength: 64 }
+    # セッションを workspaceId のワークスペースへ移し、beforeId のセッションの前に置く。beforeId が
+    # 無ければ、そのワークスペースの最後に置く。並びはエンジンが持つので、どの画面から見ても同じになる。
     MoveTerminalSessionRequest:
       type: object
       additionalProperties: false
       required: [workspaceId]
       properties:
         workspaceId: { type: string, minLength: 1, maxLength: 64 }
+        beforeId: { type: string, minLength: 1, maxLength: 64 }
     TerminalHostKeyQuestion:
       type: object
       additionalProperties: false

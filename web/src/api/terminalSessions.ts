@@ -17,6 +17,9 @@ export type LocalShellProfileList = components["schemas"]["LocalShellProfileList
 export type TerminalHostKeyQuestion = components["schemas"]["TerminalHostKeyQuestion"];
 export type TerminalHostKeyAnswer = components["schemas"]["TerminalHostKeyAnswer"];
 export type TerminalPasswordSaveAnswer = components["schemas"]["TerminalPasswordSaveAnswer"];
+// TerminalSessionPlace は、セッションを移す先である。workspaceId のワークスペースの、beforeId のセッションの前。
+// beforeId が null なら、そのワークスペースの最後。
+export type TerminalSessionPlace = { workspaceId: string; beforeId: string | null };
 
 export type TerminalSessionsApi = {
   // streamPath is the WebSocket path a stream ticket from this API is redeemed at.
@@ -45,7 +48,8 @@ export type TerminalSessionsApi = {
     title: string | null,
   ): Promise<TerminalSessionList>;
   closeTerminalSession(id: string): Promise<TerminalSessionList>;
-  moveTerminalSession(id: string, workspaceId: string): Promise<TerminalSessionList>;
+  // moveTerminalSession は、セッションを place へ移し、新しい並びの一覧を返す。並びはエンジンが持つ。
+  moveTerminalSession(id: string, place: TerminalSessionPlace): Promise<TerminalSessionList>;
   // terminalSessionDirectory is where the program in the foreground of a local
   // shell works, or null when the engine cannot tell (an SSH session, macOS,
   // Windows, or a session that is not connected).
@@ -170,9 +174,12 @@ export function createTerminalSessionsApi(base: string, streamPath: string, read
         throw error;
       }
     },
-    async moveTerminalSession(id, workspaceId) {
+    async moveTerminalSession(id, { workspaceId, beforeId }) {
       return validateTerminalSessionList(
-        await putJSON<unknown>(`${base}/sessions/${encodeURIComponent(id)}/workspace`, { workspaceId }),
+        await putJSON<unknown>(
+          `${base}/sessions/${encodeURIComponent(id)}/workspace`,
+          beforeId === null ? { workspaceId } : { workspaceId, beforeId },
+        ),
       );
     },
     async closeTerminalSession(id) {

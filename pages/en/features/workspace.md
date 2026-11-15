@@ -32,8 +32,9 @@ Connections that LLMs and scripts open with `sshc terminal create` go into Agent
 - **Create**: **+** next to the Workspaces heading (**New workspace**)
 - **See hidden workspaces**: the heading's **…** → **Show hidden workspaces**. Hidden ones appear dimmed.
 - **Open a session**: **+** on a workspace row. **New session** below the tree opens in the selected session's workspace.
-- **Move**: drag a session onto another workspace's row, or onto a session inside it. Dropped on the row, it goes to the end of that workspace; dropped on a session, it goes just before it. Folded and empty workspaces take drops too. A session's **…** → **Move to workspace** does the same
-- **Reorder**: drag a workspace's row onto another workspace. Dropped on its upper half, it goes before that workspace; on its lower half, after it. A workspace's **…** → **Move up** / **Move down** does the same (the way on a phone). Main and Agents can be moved too
+- **Move**: drag a session onto another workspace's row, or onto a session inside it. Dropped on the row, it goes to the end of that workspace; dropped on a session, it goes just before it. Folded and empty workspaces take drops too. A session's **…** → **Move to workspace** does the same, putting it at the end
+- **Reorder sessions**: drag a session onto another session of the same workspace to put it just before that one, or onto the workspace's row to put it at the end. A session's **…** → **Move up** / **Move down** does the same (the way on a phone)
+- **Reorder workspaces**: drag a workspace's row onto another workspace. Dropped on its upper half, it goes before that workspace; on its lower half, after it. A workspace's **…** → **Move up** / **Move down** does the same (the way on a phone). Main and Agents can be moved too
 - **A workspace's …**: rename, hide or show, move up or down, [send a command](/en/terminal/commands), delete
 
 Deleting a workspace closes nothing: its sessions move to Main.
@@ -44,7 +45,7 @@ The engine keeps workspace names, their order, and whether each is hidden in `~/
 
 - Because the engine holds the order, every browser and machine that opens it sees the same order.
 - A new workspace goes to the end, or just before Agents when Agents is last.
-- Which session is in which workspace lives in the engine's memory, like the sessions themselves.
-- When the engine stops cleanly, the record kept for reopening includes each session's workspace, so sessions [reopened](./terminal#reopen-sessions-after-a-stop) on the next start return to the same workspace.
+- Which session is in which workspace, and the order of the sessions in it, live in the engine's memory, like the sessions themselves. So every browser and machine that opens the engine, or uses it for a remote session, sees the sessions in the same order, and reloading the page keeps it.
+- When the engine stops cleanly, the record kept for reopening includes each session's workspace and order, so sessions [reopened](./terminal#reopen-sessions-after-a-stop) on the next start return to the same workspace in the same order.
 
 Use [Split view](./split-view) to arrange sessions on screen. Split arrangements are not saved.

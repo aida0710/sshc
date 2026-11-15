@@ -34,7 +34,7 @@ function sessionsState(overrides: Partial<TerminalSessionsState> = {}): Terminal
     sessions: [], maxSessions: 50, busy: false, problem: "", remoteRefusal: null, remoteRefusalAt: null, opening: false, loaded: true, restoreOffer: undefined,
     rename: vi.fn(async () => true), open: vi.fn(async () => null), openEach: vi.fn(async () => []), reconnect: vi.fn(async () => true),
     stopReconnect: vi.fn(async () => true), answerHostKey: vi.fn(async () => true), answerPasswordSave: vi.fn(async () => true), close: vi.fn(async () => undefined), closeAll: vi.fn(async () => undefined),
-    refresh: vi.fn(async () => undefined), markExited: vi.fn(), programStateChanged: vi.fn(), moveToWorkspace: vi.fn(async () => true),
+    refresh: vi.fn(async () => undefined), markExited: vi.fn(), programStateChanged: vi.fn(), moveSession: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -54,7 +54,6 @@ function renderTree(options: {
     selected: options.selected ?? null,
     onSelect: vi.fn(),
     onDuplicate: vi.fn(),
-    onReorder: vi.fn(),
     onOpenShell: vi.fn(),
     onConnect: vi.fn(),
     aliases: options.aliases ?? [],
@@ -260,8 +259,7 @@ describe("WorkspaceTree", () => {
     fireEvent.dragOver(target, { dataTransfer });
     fireEvent.drop(target, { dataTransfer });
 
-    expect(props.terminalSessions.moveToWorkspace).toHaveBeenCalledWith("main-shell", "w1");
-    expect(props.onReorder).toHaveBeenCalledWith(["dev-shell", "main-shell", "other-shell"]);
+    expect(props.terminalSessions.moveSession).toHaveBeenCalledWith("main-shell", { workspaceId: "w1", beforeId: null });
   });
 
   // The browser asks the element under the pointer at dragenter, and a drop right after crossing into it depends on the answer.
@@ -282,11 +280,10 @@ describe("WorkspaceTree", () => {
     fireEvent.dragOver(sessionRow("dev-b"), { dataTransfer });
     fireEvent.drop(sessionRow("dev-b"), { dataTransfer });
 
-    expect(props.terminalSessions.moveToWorkspace).toHaveBeenCalledWith("main-shell", "w1");
-    expect(props.onReorder).toHaveBeenCalledWith(["dev-a", "main-shell", "dev-b"]);
+    expect(props.terminalSessions.moveSession).toHaveBeenCalledWith("main-shell", { workspaceId: "w1", beforeId: "dev-b" });
   });
 
-  it("reorders a session dropped inside its own workspace without moving it", () => {
+  it("puts a session dropped on another session of its own workspace before it, once", () => {
     const sessions = [session("first", "default"), session("second", "default")];
     const props = renderTree({ sessions });
     const dataTransfer = dragData();
@@ -296,8 +293,8 @@ describe("WorkspaceTree", () => {
     const ownRow = screen.getByRole("button", { name: /^Main/ }).parentElement!;
     fireEvent.drop(ownRow, { dataTransfer });
 
-    expect(props.onReorder).toHaveBeenCalledWith(["second", "first"]);
-    expect(props.terminalSessions.moveToWorkspace).not.toHaveBeenCalled();
+    expect(props.terminalSessions.moveSession).toHaveBeenCalledTimes(1);
+    expect(props.terminalSessions.moveSession).toHaveBeenCalledWith("second", { workspaceId: "default", beforeId: "first" });
   });
 
   it("moves a workspace up and down its menu over the shown workspaces, stepping over hidden ones", async () => {
@@ -337,8 +334,7 @@ describe("WorkspaceTree", () => {
     dragAt("drop", sessionRow("main-shell"), 10, dataTransfer);
 
     expect(props.workspaces.move).toHaveBeenCalledWith("w1", "default");
-    expect(props.onReorder).not.toHaveBeenCalled();
-    expect(props.terminalSessions.moveToWorkspace).not.toHaveBeenCalled();
+    expect(props.terminalSessions.moveSession).not.toHaveBeenCalled();
   });
 
   it("does not move a workspace dropped on itself", () => {

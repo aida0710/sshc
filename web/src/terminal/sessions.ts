@@ -2,11 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePolling } from "../ui/usePolling";
 import { useRequestGeneration, type IsCurrentRequest } from "../ui/useRequestGeneration";
 import { ApiError, failureCode } from "../api/client";
-import type { OpenTerminalSessionRequest, TerminalSession, TerminalSessionList, TerminalSessionsApi as SessionsApi } from "../api/terminalSessions";
+import type {
+  OpenTerminalSessionRequest,
+  TerminalSession,
+  TerminalSessionList,
+  TerminalSessionPlace,
+  TerminalSessionsApi as SessionsApi,
+} from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { hostKeyProblemMessages } from "../shell/hostKeyProblems";
 import type { ExitReport } from "./stream";
+import { sessionsAfterMove } from "./workspaceGrouping";
 
 // A hop or an authentication prompt should appear as soon as a person can
 // notice it; a settled list only needs to catch exits and notifications.
@@ -65,7 +72,8 @@ export type TerminalSessionsState = {
   // or that its program said what it is doing (OSC 7501), so the mark in its row changes with the pane beside it
   // instead of on the next poll.
   programStateChanged: () => void;
-  moveToWorkspace: (id: string, workspaceId: string) => Promise<boolean>;
+  // moveSession は、セッションを place へ移す。並びはエンジンが持つので、ほかのブラウザやマシンからも同じ順に見える。
+  moveSession: (id: string, place: TerminalSessionPlace) => Promise<boolean>;
 };
 
 // noSessions is what is handed out before the engine in use answers. It is one
@@ -400,10 +408,18 @@ export function useTerminalSessions(
     [api, applyMutation, setProblem, translate],
   );
 
-  const moveToWorkspace = useCallback(
-    (id: string, workspaceId: string): Promise<boolean> =>
-      applyMutation(() => api.moveTerminalSession(id, workspaceId), () => setProblem(translate("workspace.moveFailed"))),
-    [api, applyMutation, setProblem, translate],
+  // リモートセッションではエンジンの答えが SSH 越しに届くので、答えを待たずに一覧を移したあとの順にする。待つと、
+  // ドラッグで落とした行が一度元の場所に戻って見える。断られたら（前に置くセッションを別の画面が閉じたなど）、
+  // 一覧を読み直して今の並びに戻す。
+  const moveSession = useCallback(
+    (id: string, place: TerminalSessionPlace): Promise<boolean> => {
+      setSessions((current) => sessionsAfterMove(current, id, place));
+      return applyMutation(() => api.moveTerminalSession(id, place), async () => {
+        setProblem(translate("workspace.moveFailed"));
+        await refresh();
+      });
+    },
+    [api, applyMutation, refresh, setProblem, translate],
   );
 
   const markExited = useCallback((id: string, exit: ExitReport) => {
@@ -444,7 +460,7 @@ export function useTerminalSessions(
     sessions: loaded ? sessions : noSessions,
     maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
     rename, unpinTitle, open, openEach, reconnect, stopReconnect, answerHostKey, answerPasswordSave, close, closeAll, refresh, markExited,
-    programStateChanged, moveToWorkspace,
+    programStateChanged, moveSession,
   };
 }
 

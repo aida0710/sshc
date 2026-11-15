@@ -1,4 +1,4 @@
-import type { TerminalSession } from "../api/terminalSessions";
+import type { TerminalSession, TerminalSessionPlace } from "../api/terminalSessions";
 import { agentsWorkspaceId, defaultWorkspaceId, type TerminalWorkspace } from "../api/terminalWorkspaces";
 import type { Translate } from "../i18n/context";
 
@@ -8,7 +8,7 @@ export type WorkspaceGroup = {
 };
 
 // The sidebar tree: every workspace in the engine's order with its sessions in
-// list order. Hidden workspaces are left out unless asked for. A session whose
+// the engine's list order. Hidden workspaces are left out unless asked for. A session whose
 // workspace is not listed yet (another tab just made it) shows under default
 // until the list catches up, rather than disappearing.
 export function groupSessionsByWorkspace(
@@ -40,14 +40,6 @@ export function workspaceDisplayName(t: Translate, workspace: TerminalWorkspace)
   return workspace.id;
 }
 
-// Reordering inside one workspace keeps every other session where it was: the
-// group's sessions take the group's old positions in the new order.
-export function orderWithGroupReordered(allSessionIds: readonly string[], reorderedGroup: readonly string[]): string[] {
-  const members = new Set(reorderedGroup);
-  const next = [...reorderedGroup];
-  return allSessionIds.map((id) => members.has(id) ? next.shift() ?? id : id);
-}
-
 // Where a workspace is moved to: right before or right after the target workspace.
 export type WorkspacePlaceSide = "before" | "after";
 export type WorkspacePlace = { targetId: string; side: WorkspacePlaceSide };
@@ -61,19 +53,17 @@ export function beforeIdForWorkspaceMove(allWorkspaceIds: readonly string[], wor
   return rest[rest.indexOf(place.targetId) + 1] ?? null;
 }
 
-// A session dragged into another workspace lands before the session it was
-// dropped on, or after that workspace's last session when it was dropped on the
-// workspace itself. An empty workspace has no place to give, so the session
-// keeps its place in the list.
-export function orderWithSessionMovedInto(
-  allSessionIds: readonly string[],
-  { sessionId, members, beforeId }: { sessionId: string; members: readonly string[]; beforeId: string | null },
-): string[] {
-  const rest = allSessionIds.filter((id) => id !== sessionId);
-  const before = beforeId === null ? -1 : rest.indexOf(beforeId);
-  const last = [...members].reverse().find((id) => rest.includes(id));
-  const at = before >= 0 ? before : last === undefined ? -1 : rest.indexOf(last) + 1;
-  if (at < 0) return [...allSessionIds];
-  rest.splice(at, 0, sessionId);
+// sessionsAfterMove は、エンジンが id のセッションを place へ移したあとの一覧である。エンジンと同じく、
+// beforeId のセッションの前に、null なら一覧の最後（そのワークスペースの最後）に置く。エンジンの答えが
+// 届くまでの間だけ使い、答えが届いたらそちらに置き換わる。どちらのセッションも無ければ、元のままにする。
+export function sessionsAfterMove(sessions: readonly TerminalSession[], id: string, place: TerminalSessionPlace): TerminalSession[] {
+  const moved = sessions.find((session) => session.id === id);
+  if (moved === undefined) return [...sessions];
+  const placed = { ...moved, workspaceId: place.workspaceId };
+  if (place.beforeId === id) return sessions.map((session) => session.id === id ? placed : session);
+  const rest = sessions.filter((session) => session.id !== id);
+  const at = place.beforeId === null ? rest.length : rest.findIndex((session) => session.id === place.beforeId);
+  if (at < 0) return [...sessions];
+  rest.splice(at, 0, placed);
   return rest;
 }

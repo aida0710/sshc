@@ -1254,7 +1254,8 @@ type MachineStatus struct {
 
 // MoveTerminalSessionRequest defines model for MoveTerminalSessionRequest.
 type MoveTerminalSessionRequest struct {
-	WorkspaceId string `json:"workspaceId"`
+	BeforeId    *string `json:"beforeId,omitempty"`
+	WorkspaceId string  `json:"workspaceId"`
 }
 
 // MoveTerminalWorkspaceRequest defines model for MoveTerminalWorkspaceRequest.

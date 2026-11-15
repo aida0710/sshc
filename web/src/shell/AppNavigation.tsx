@@ -22,7 +22,6 @@ import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import type { MessageKey } from "../i18n/messages";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import type { TerminalSessionsState } from "../terminal/sessions";
-import type { TerminalSession } from "../api/terminalSessions";
 import type { HostEntry } from "../api/config";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import type { SeenProgramStatus } from "../terminal/programStatus";
@@ -53,7 +52,6 @@ export function AppNavigation({
   terminalWorkspaces,
   runTargets,
   runTargetLink,
-  orderedSessions,
   activeSessionId,
   unreadBySession,
   seenProgramStatus,
@@ -64,7 +62,6 @@ export function AppNavigation({
   canSplitSession,
   onSplitSession,
   onDuplicateSession,
-  onReorderSessions,
   onOpenShell,
   aliases = [],
   hosts = [],
@@ -90,7 +87,6 @@ export function AppNavigation({
   terminalWorkspaces: TerminalWorkspacesState;
   runTargets: RunTargetsState;
   runTargetLink: RunTargetLink;
-  orderedSessions: TerminalSession[];
   activeSessionId: string | null;
   unreadBySession: UnreadSessions;
   seenProgramStatus: SeenProgramStatus;
@@ -102,7 +98,6 @@ export function AppNavigation({
   canSplitSession?: (id: string) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
   onDuplicateSession: (id: string) => void;
-  onReorderSessions: (order: string[]) => void;
   onOpenShell: (workspaceId: string) => void;
   aliases?: string[];
   hosts?: HostEntry[];
@@ -201,7 +196,7 @@ export function AppNavigation({
           WorkspaceTree). The scroll padding is their height, so a row brought into view by the keyboard stops
           below them rather than under them. */}
       <div data-navigation-scroll className="min-h-0 flex-1 scroll-pt-[72px] overflow-y-auto pr-0.5 md:scroll-pt-[60px]">
-        <SplitGroupList groups={splitView.groups} sessions={orderedSessions}
+        <SplitGroupList groups={splitView.groups} sessions={terminalSessions.sessions}
           selected={section === "Terminal" ? splitView.activeGroupNumber : null}
           unreadBySession={unreadBySession}
           seenProgramStatus={seenProgramStatus}
@@ -211,7 +206,7 @@ export function AppNavigation({
         <WorkspaceTree
           workspaces={terminalWorkspaces}
           terminalSessions={terminalSessions}
-          sessions={orderedSessions}
+          sessions={terminalSessions.sessions}
           selected={section === "Terminal" ? activeSessionId : null}
           unreadBySession={unreadBySession}
           seenProgramStatus={seenProgramStatus}
@@ -221,7 +216,6 @@ export function AppNavigation({
           {...(onSplitSession === undefined ? {} : { onSplitSession })}
           onRemoveSessionFromSplit={splitView.removeFromSplit}
           onDuplicate={onDuplicateSession}
-          onReorder={onReorderSessions}
           onOpenShell={onOpenShell}
           aliases={aliases}
           hosts={hosts}
