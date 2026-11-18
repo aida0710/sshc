@@ -312,6 +312,7 @@ export function SnippetsPanel({
               onRetry={() => void loadLibrary()}
               onOpen={(snippet) => draftDiscard.confirmBefore(() => openSnippet(snippet))}
               columns={listAlone}
+              phoneCard={compact}
             />
           </div>
           <div className={listAlone ? "hidden" : workspaceDetailPane(compact, detailOpen)}>

@@ -39,8 +39,8 @@ type ActionMenuProps = {
   items: readonly ActionMenuItem[];
   // Where the button sits decides its size and background.
   triggerClassName: string;
-  // triggerTouchDense gives the button the 36px touch target of a packed list (data-touch-dense in index.css)
-  // instead of the usual 44px.
+  // triggerTouchDense は、ボタンの押す場所を、詰めた一覧の高さ 36px・幅 44px にする（index.css の data-touch-dense）。
+  // 付けなければ、ふつうの 44px 四方になる。
   triggerTouchDense?: boolean;
   iconClassName?: string;
   // 右クリックでも開くときは、開閉を呼び手が持つ。渡さなければこの部品が持つ。

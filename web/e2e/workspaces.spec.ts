@@ -48,10 +48,12 @@ test("keeps the Workspaces heading at the top of the sidebar while the workspace
 
 test.describe("touch sidebar", () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 800 } });
-  // The height of a row and the size of its buttons on a touch screen, which a finger can still hit.
+  // タッチの画面での行の高さとボタンの高さ。指で押せる大きさのまま、多くの行を収める。
   const rowSize = 36;
+  // 行の右の「…」「×」の幅。高さは行に合わせて詰め、幅で押しやすさを保つ。
+  const buttonWidth = 44;
 
-  test("keeps workspace counts and actions visible, with 36px rows and buttons", async ({ page, installation }) => {
+  test("keeps workspace counts and actions visible, with 36px rows and 44px-wide buttons", async ({ page, installation }) => {
     await page.route("**/api/v1/terminal/sessions", (route) => route.fulfill({ json: {
       sessions: [{ id: "shell", kind: "shell", workspaceId: "default", title: "Local shell", state: "connected", problem: "", startedAt: "2026-10-23T00:00:00Z" }],
       maxSessions: 50,
@@ -69,7 +71,7 @@ test.describe("touch sidebar", () => {
     expect((await session.boundingBox())?.height).toBeCloseTo(rowSize, 2);
     for (const name of ["Open a session in Main", "Workspace actions for Main", "Actions for Local shell", "Close Local shell"]) {
       const box = await navigation.getByRole("button", { name, exact: true }).boundingBox();
-      expect(box?.width, name).toBeCloseTo(rowSize, 2);
+      expect(box?.width, name).toBeCloseTo(buttonWidth, 2);
       expect(box?.height, name).toBeCloseTo(rowSize, 2);
     }
   });
