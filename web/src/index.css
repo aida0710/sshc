@@ -813,12 +813,13 @@ select:not([multiple]):not([size]) {
     min-width: 44px;
     touch-action: manipulation;
   }
-  /* A packed list of rows (the sidebar's workspace tree) uses 36px, so that more rows fit on the screen. The
-     minimum stays here, rather than in the rows' classes, because a touch screen 768px to 1023px wide is laid
-     out as a phone while the md: classes already draw the PC's 20px buttons. */
+  /* 詰めた一覧（サイドバーのワークスペースの木）は、行とボタンの高さを 36px にして、画面に多くの行を収める。
+     幅はほかと同じ 44px にし、行の右に並ぶ「…」「×」を指で押し分けやすくする。幅を足しても行は高くならない。
+     最小値を行のクラスではなくここに置くのは、768〜1023px のタッチの画面がスマホの組み方になる一方で、
+     md: のクラスが PC の 20px のボタンを描くからである。 */
   :where(button[data-touch-dense]) {
     min-height: 36px;
-    min-width: 36px;
+    min-width: 44px;
     touch-action: manipulation;
   }
   :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):not(.monaco-editor *):not(.xterm *) {

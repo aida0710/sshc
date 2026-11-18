@@ -240,10 +240,9 @@ export function WorkspaceTree({
 
   return (
     <div className="flex flex-col gap-0.5">
-      {/* The heading stays at the top of the sidebar's list while the sessions scroll under it, so its
-          buttons are always in reach.
-          On a phone, the tree's rows and their buttons (this heading, the workspaces and the sessions) are 36px
-          rather than the usual 44px, so that more sessions fit on the screen (data-touch-dense in index.css). */}
+      {/* 見出しは、セッションがその下をスクロールしても、サイドバーの一覧の上に残す。見出しのボタンにいつも手が届くようにするため。
+          スマホの組み方では、木の行とボタン（この見出し、ワークスペース、セッション）の高さを、ふつうの 44px ではなく
+          36px にして、画面に多くのセッションを収める。ボタンの幅は 44px のまま（index.css の data-touch-dense）。 */}
       <div className="sticky top-0 z-[2] mt-3.5 flex items-center bg-sidebar pr-1 md:pb-2.5 md:pt-1">
         <span aria-hidden="true" className="block grow px-2 text-xs text-ink-faint">
           {t("workspace.heading")}
