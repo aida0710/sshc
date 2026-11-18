@@ -12,6 +12,9 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // Node 25 からは Node 自身の localStorage（Web Storage）が既定で有効になり、jsdom の
+    // window.localStorage を覆い隠して undefined にする。テストは jsdom のものを使うので切る。
+    execArgv: ["--no-experimental-webstorage"],
     setupFiles: ["./vitest.setup.ts"],
     restoreMocks: true,
     // Vitest は Playwright の spec を決して収集してはならない。e2e/*.spec.ts は本物の
