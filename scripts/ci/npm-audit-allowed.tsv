@@ -4,5 +4,3 @@
 # 入らないものだけを書く。期限を過ぎると scripts/ci/npm-audit.sh が失敗する。
 #
 # 書式: <GHSA><TAB><期限 YYYY-MM-DD><TAB><理由>
-
-GHSA-fc5q-39xc-vjpf	2026-12-31	picomatch の ReDoS（1 本の枝の extglob の繰り返し）。4.0.7 まで全版が対象で、修正版がまだ無い。入るのは vite・vitest・tinyglobby・fdir というビルドとテストの道具だけで、画面にもエンジンにも入らない（--omit=dev の監査は通る）。グロブは自分たちの設定から来るので、外から食わされない。修正版が出たら依存を上げてこの行を消す。
