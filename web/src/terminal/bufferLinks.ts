@@ -1,6 +1,8 @@
-import type { IBuffer, IBufferRange, IBufferCellPosition } from "@xterm/xterm";
+import type { IBuffer, IBufferLine, IBufferRange } from "@xterm/xterm";
 import { findTerminalLinks, type TerminalLinkMatch } from "./links";
+import { appendCell, newLogicalLine, type LogicalLine } from "./logicalLine";
 import { previewableNamePattern } from "./pathLinks";
+import { tableCellLines } from "./tableCellLines";
 
 // Bound work during mouse movement even when a program prints without newlines.
 const maxLogicalLineCells = 65536;
@@ -8,10 +10,21 @@ const maxLogicalLineCells = 65536;
 // to 32 rows so aligned output cannot turn a hover into a scrollback scan.
 const maxHardWrappedRows = 32;
 const pathContinuationCharacter = /^[\p{L}\p{N}\p{M}_./\\~%\-]/u;
+// URL の途中に出る記号。プログラムが URL を記号の手前で折ると、続きの行はこの記号で始まる
+// （…?redirect_uri の次の行が =http%3A… で始まる）。
+const urlMark = /^[=&?#+:;,@!$()*]/u;
 // Characters of the middle of a URL that the words of a sentence rarely hold.
 const urlMiddleCharacter = /[/?#&=%+~]/u;
 
 type PositionedLink = { match: TerminalLinkMatch; range: IBufferRange };
+
+// startsContinuation は、行の column からの文字が、前の行の続きの始まりに見えるかを返す。記号で始まる行は、
+// すぐ後ろに文字が続くときだけ続きと読む。記号のあとが空白の行は、見出し（# …）や箇条書き（+ …、* …）である。
+function startsContinuation(line: IBufferLine, column: number): boolean {
+  const first = line.getCell(column)?.getChars() ?? "";
+  if (pathContinuationCharacter.test(first)) return true;
+  return urlMark.test(first) && /^\S/u.test(line.getCell(column + 1)?.getChars() ?? "");
+}
 
 function continuationColumn(buffer: IBuffer, row: number): number | null {
   const line = buffer.getLine(row);
@@ -22,7 +35,7 @@ function continuationColumn(buffer: IBuffer, row: number): number | null {
   while (column < line.length && /^\s*$/u.test(line.getCell(column)?.getChars() ?? "")) column += 1;
   // Indentation is evidence of a program's continuation, but its width is
   // program-dependent. Bullets, prompts and blank rows are separate output.
-  if (column === 0 || !pathContinuationCharacter.test(line.getCell(column)?.getChars() ?? "")) return null;
+  if (column === 0 || !startsContinuation(line, column)) return null;
   const last = previous.getCell(previous.length - 1);
   if (!last) return null;
   if (last.getWidth() === 0 || /\S/u.test(last.getChars())) return column;
@@ -85,21 +98,20 @@ export function bufferRangeText(buffer: IBuffer, range: IBufferRange): string {
   return text;
 }
 
-export function findBufferLinks(buffer: IBuffer, lineNumber: number, allowWindowsPaths = false): PositionedLink[] {
+// wrappedRowsLine は、lineNumber の行を含む、折り返された行のつながりを1続きの文字にする。xterm が折り返した行
+// （isWrapped）と、プログラムが右端で改行して字下げした続きをつなぐ。長すぎるつながりは null。
+function wrappedRowsLine(buffer: IBuffer, lineNumber: number): LogicalLine | null {
   let firstRow = lineNumber - 1;
   let cellCount = 0;
   let hardWrappedRows = 1;
   while (firstRow > 0 && continuationColumn(buffer, firstRow) !== null) {
     cellCount += buffer.getLine(firstRow)?.length ?? 0;
     if (!buffer.getLine(firstRow)?.isWrapped) hardWrappedRows += 1;
-    if (cellCount > maxLogicalLineCells || hardWrappedRows > maxHardWrappedRows) return [];
+    if (cellCount > maxLogicalLineCells || hardWrappedRows > maxHardWrappedRows) return null;
     firstRow -= 1;
   }
 
-  let text = "";
-  const starts: IBufferCellPosition[] = [];
-  const ends: IBufferCellPosition[] = [];
-  const boundaries: number[] = [];
+  const logical = newLogicalLine();
   cellCount = 0;
   hardWrappedRows = 1;
   for (let row = firstRow; row < buffer.length; row += 1) {
@@ -109,26 +121,24 @@ export function findBufferLinks(buffer: IBuffer, lineNumber: number, allowWindow
     cellCount += line.length;
     if (row > firstRow && !line.isWrapped) {
       hardWrappedRows += 1;
-      boundaries.push(text.length);
+      logical.boundaries.push(logical.text.length);
     }
-    if (cellCount > maxLogicalLineCells || hardWrappedRows > maxHardWrappedRows) return [];
+    if (cellCount > maxLogicalLineCells || hardWrappedRows > maxHardWrappedRows) return null;
     for (let column = firstColumn; column < line.length; column += 1) {
       const cell = line.getCell(column);
       if (!cell || cell.getWidth() === 0) continue;
       // Padding before a wide continuation is not part of the printed path.
       const nextColumn = column === line.length - 1 ? continuationColumn(buffer, row + 1) : null;
       if (cell.getChars() === "" && nextColumn !== null && buffer.getLine(row + 1)?.getCell(nextColumn)?.getWidth() === 2) continue;
-      const characters = cell.getChars() || " ";
-      // xterm coordinates count cells; JS match offsets count UTF-16 code units.
-      for (let unit = 0; unit < characters.length; unit += 1) {
-        starts.push({ x: column + 1, y: row + 1 });
-        ends.push({ x: column + cell.getWidth(), y: row + 1 });
-      }
-      text += characters;
+      appendCell(logical, cell, { row, column });
     }
   }
+  return logical;
+}
 
-  return linksAcrossBoundaries(text, boundaries, allowWindowsPaths).flatMap((match) => {
+// linksOnRow は、1続きの文字の中のリンク matches のうち、lineNumber の行にかかるものを、その行での範囲つきで返す。
+function linksOnRow({ starts, ends, boundaries }: LogicalLine, matches: TerminalLinkMatch[], lineNumber: number): PositionedLink[] {
+  return matches.flatMap((match) => {
     let start = starts[match.start];
     let end = ends[match.end - 1];
     if (!start || !end || lineNumber < start.y || lineNumber > end.y) return [];
@@ -140,4 +150,15 @@ export function findBufferLinks(buffer: IBuffer, lineNumber: number, allowWindow
     }
     return [{ match, range: { start, end } }];
   });
+}
+
+export function findBufferLinks(buffer: IBuffer, lineNumber: number, allowWindowsPaths = false): PositionedLink[] {
+  // 表の行は、セルごとに読む。行をそのまま読むと、セルの中で折り返された URL が1行ずつに切れ、となりのセルの
+  // 文字ともつながる。
+  // セルの中の変わり目は、同じ文字の折り返しだと分かっている（tableCellLines.ts）。行のつながりの変わり目は
+  // 字下げからの推測なので、リンクが変わり目をまたいでよいかをリンクごとに確かめる。
+  const cells = tableCellLines(buffer, lineNumber - 1);
+  if (cells !== null) return cells.flatMap((cell) => linksOnRow(cell, findTerminalLinks(cell.text, allowWindowsPaths), lineNumber));
+  const rows = wrappedRowsLine(buffer, lineNumber);
+  return rows === null ? [] : linksOnRow(rows, linksAcrossBoundaries(rows.text, rows.boundaries, allowWindowsPaths), lineNumber);
 }

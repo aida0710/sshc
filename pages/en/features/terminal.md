@@ -334,7 +334,7 @@ While the line holding the cursor ends in a question such as `Password:` or `パ
 
 OSC 8 links and detected URLs open in the system browser. Ctrl-click (⌘-click on a Mac) opens one at once, except an OSC 8 link whose text is a different address from where it goes: that opens a menu showing the real destination first.
 
-A long URL that wraps at the right edge opens as one URL however many rows it takes, including when a program such as Claude Code breaks it at the edge itself and indents the rest.
+A long URL that wraps at the right edge opens as one URL however many rows it takes, including when a program such as Claude Code breaks it at the edge itself and indents the rest. A URL broken over the rows of a table cell also opens as one URL from any of those rows.
 
 URLs and paths on the screen are underlined in the accent colour.
 
