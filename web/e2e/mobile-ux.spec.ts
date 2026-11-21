@@ -1106,7 +1106,8 @@ test("a finger moves the shell's scrollback by the pixel and settles it on a row
   await page.getByRole("button", { name: "Send", exact: true }).tap();
   await expect(drawnRows(page).filter({ visible: true })).toContainText("200");
 
-  // A finger pulls the text down by a third of a row: older lines, the rows drawn that far down.
+  // A finger pulls the text down by a row and a third: older lines, the rows drawn that far down.
+  // 指の向きが決まるまで（10px）は動かないので、それより長く、1行と3分の1だけ動かす。
   const host = page.locator("[data-terminal-host]").first();
   const moved = await page.evaluate(() => {
     const surface = document.querySelector<HTMLElement>(".sshc-select-overlay")!;
@@ -1115,17 +1116,17 @@ test("a finger moves the shell's scrollback by the pixel and settles it on a row
       const finger = new Touch({ identifier: 1, target: surface, clientX: 200, clientY: y });
       surface.dispatchEvent(new TouchEvent(type, { touches: type === "touchend" ? [] : [finger], changedTouches: [finger], bubbles: true, cancelable: true }));
     };
-    const bottomRow = (surface.textContent ?? "").split("\n").filter((line) => line.trim() !== "").at(-1)?.trimEnd() ?? "";
+    const rowAboveBottom = (surface.textContent ?? "").split("\n").filter((line) => line.trim() !== "").at(-2)?.trimEnd() ?? "";
     touch("touchstart", 400);
-    touch("touchmove", 400 + rows / 3);
+    touch("touchmove", 400 + (rows * 4) / 3);
     const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
     const edge = host.querySelector<HTMLElement>("[data-scrollback-edge-row]")!;
-    return { rows, bottomRow, transform: host.style.transform, edge: edge.style.display === "block" ? edge.textContent : null };
+    return { rows, rowAboveBottom, transform: host.style.transform, edge: edge.style.display === "block" ? edge.textContent : null };
   });
-  // The rows from the one before, drawn two thirds of a row up: the text sits a third of a row lower, as the finger
-  // moved it. The row that was at the bottom is now the one under the rows, drawn there.
+  // The rows from two before, drawn two thirds of a row up: the text sits a row and a third lower, as the finger
+  // moved it. The row that was above the bottom one is now the one under the rows, drawn there.
   expect(moved.transform).toBe(`translateY(${-(moved.rows * 2) / 3}px)`);
-  expect(moved.edge).toBe(moved.bottomRow);
+  expect(moved.edge?.trimEnd()).toBe(moved.rowAboveBottom);
 
   // Let go slowly: the rows settle on the nearer one.
   await page.waitForTimeout(150);
@@ -1616,6 +1617,36 @@ test("a sideways swipe over the terminal opens the navigation, and one up and do
   await swipe(page, { x: 80, y: box.y + box.height / 2 }, { x: 330, y: box.y + box.height / 2 + 6 });
   await expect(navigation).toHaveAttribute("data-navigation-open", "true");
   await expect(navigation).toBeInViewport();
+});
+
+// ナビゲーションを引き出す指は真横には動かず、上下にもぶれる。その指の下で、ターミナルはスクロールバックも、
+// 自分でスクロールするプログラムも動かさない。
+test("a slanted swipe that opens the navigation leaves the terminal's scrollback where it was", async ({ page, installation }) => {
+  await mockTerminalSession(page, longOutput);
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  const rows = drawnRows(page).filter({ visible: true });
+  await expect(rows).toContainText("line 80");
+  const box = (await rows.boundingBox())!;
+  const shownBefore = await rows.innerText();
+
+  await swipe(page, { x: 80, y: box.y + box.height * 0.3 }, { x: 330, y: box.y + box.height * 0.3 + 90 });
+  await expect(page.locator("[data-app-navigation]")).toHaveAttribute("data-navigation-open", "true");
+  expect(await rows.innerText()).toBe(shownBefore);
+});
+
+test("a slanted swipe that opens the navigation sends no wheel turns to a full-screen program", async ({ page, installation }) => {
+  const program = fullScreenPrograms[0]!;
+  const messages = await mockTerminalSession(page, `${longOutput}\r\n`, `${program.modes}\x1b[2J\x1b[HFull-screen program`);
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  const screen = page.getByRole("region", { name: "Terminal for Demo shell" });
+  await expect(screen).toContainText("Full-screen program");
+  const box = (await screen.boundingBox())!;
+
+  await swipe(page, { x: 80, y: box.y + box.height * 0.3 }, { x: 330, y: box.y + box.height * 0.3 + 90 });
+  await expect(page.locator("[data-app-navigation]")).toHaveAttribute("data-navigation-open", "true");
+  expect(countSent(messages, program.forward) + countSent(messages, program.back)).toBe(0);
 });
 
 // placedByHand reads whether a swipe left the navigation's position written on it rather than in the

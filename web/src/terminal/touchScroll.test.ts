@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newTouchScroll } from "./touchScroll";
+import { attachTouchScroll, newTouchScroll } from "./touchScroll";
 
 function recorder() {
   const sent: number[] = [];
@@ -268,5 +268,64 @@ describe("touch scroll by the pixel through the scrollback", () => {
     scroll.move(290);
     scroll.cancel();
     expect(shown.at(-1)).toBe(0);
+  });
+});
+
+// 指の動きを、ブラウザが出すタッチイベントとして container に送る。
+function touchEvent(container: HTMLElement, type: "touchstart" | "touchmove" | "touchend", x: number, y: number) {
+  const event = new Event(type, { bubbles: true });
+  Object.defineProperty(event, "touches", { value: type === "touchend" ? [] : [{ clientX: x, clientY: y }] });
+  container.dispatchEvent(event);
+}
+
+function fingerHarness() {
+  const container = document.createElement("div");
+  const sent: number[] = [];
+  const detach = attachTouchScroll(container, { scrollLines: (amount) => sent.push(amount) }, () => 20, {
+    selectionHeld: () => false,
+    reducedMotion: () => true,
+  });
+  // drag は、指を from に置いて to まで少しずつ動かし、離す。
+  const drag = (from: [number, number], to: [number, number]) => {
+    const steps = 20;
+    touchEvent(container, "touchstart", from[0], from[1]);
+    for (let step = 1; step <= steps; step += 1) {
+      touchEvent(container, "touchmove", from[0] + ((to[0] - from[0]) * step) / steps, from[1] + ((to[1] - from[1]) * step) / steps);
+    }
+    touchEvent(container, "touchend", to[0], to[1]);
+  };
+  const scrolled = () => sent.reduce((total, amount) => total + amount, 0);
+  return { drag, scrolled, detach };
+}
+
+describe("the finger's direction on the terminal", () => {
+  it("does not scroll under a finger that swipes sideways, however far it drifts up or down", () => {
+    const { drag, scrolled, detach } = fingerHarness();
+    drag([80, 300], [330, 400]);
+    expect(scrolled()).toBe(0);
+    detach();
+  });
+
+  it("scrolls under a finger that moves up, also when it slants", () => {
+    const { drag, scrolled, detach } = fingerHarness();
+    drag([200, 400], [280, 300]);
+    // 向きが決まるまでに動いた分も数えるので、100px の動きは高さ 20px の行の5行になる。
+    expect(scrolled()).toBe(5);
+    detach();
+  });
+
+  it("does not scroll while the finger has barely moved, so a tap moves nothing", () => {
+    const { drag, scrolled, detach } = fingerHarness();
+    drag([200, 300], [203, 308]);
+    expect(scrolled()).toBe(0);
+    detach();
+  });
+
+  it("decides anew for each finger: a scroll after a sideways swipe scrolls", () => {
+    const { drag, scrolled, detach } = fingerHarness();
+    drag([80, 300], [330, 320]);
+    drag([200, 400], [200, 300]);
+    expect(scrolled()).toBe(5);
+    detach();
   });
 });
