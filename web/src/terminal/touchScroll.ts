@@ -1,3 +1,4 @@
+import { swipeDirection, type SwipeDirection } from "../ui/swipeDirection";
 import type { ScreenPoint } from "./tappedLink";
 
 export type Scroller = { scrollLines(amount: number): void };
@@ -196,6 +197,11 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number, options
 
 // Drives the scroller from single-finger touches on the container. A
 // selection held inside the container wins over scrolling.
+//
+// 指が動き出した向きが決まるまでは何も動かさず、横になぞった指では離すまで動かさない。横になぞる指はスマホの
+// ナビゲーションを出し入れする（useNavigationSwipe）。その指の上下のぶれでスクロールすると、ナビゲーションを
+// 引き出すたびにターミナルが動く。自分でスクロールするプログラムへ送ったホイールは取り消せないので、向きが
+// 決まる前には送らない。
 export function attachTouchScroll(
   container: HTMLElement,
   target: TouchScrollTarget,
@@ -209,6 +215,9 @@ export function attachTouchScroll(
   });
   const single = (event: TouchEvent): Touch | null =>
     event.touches.length === 1 ? (event.touches[0] ?? null) : null;
+  // 指が触れた点と、そこから動き出した向き。
+  let landed: ScreenPoint = { clientX: 0, clientY: 0 };
+  let direction: SwipeDirection = "undecided";
   const touchStart = (event: TouchEvent) => {
     const touch = single(event);
     if (touch === null) {
@@ -216,6 +225,9 @@ export function attachTouchScroll(
       return;
     }
     finger = { clientX: touch.clientX, clientY: touch.clientY, touched: event.target };
+    landed = { clientX: touch.clientX, clientY: touch.clientY };
+    direction = "undecided";
+    // 惰性で動いている行は、指が触れたところで止める。
     scroll.start(touch.clientY, target.smoothScrollback?.(finger) ?? null);
   };
   const touchMove = (event: TouchEvent) => {
@@ -225,7 +237,13 @@ export function attachTouchScroll(
       return;
     }
     finger = { ...finger, clientX: touch.clientX, clientY: touch.clientY };
-    scroll.move(touch.clientY);
+    if (direction === "undecided") {
+      direction = swipeDirection(touch.clientX - landed.clientX, touch.clientY - landed.clientY);
+      // 行の途中で止めていた行は、横になぞる指が離れるのを待たずに行へ戻す。
+      if (direction === "sideways") scroll.end();
+    }
+    // 向きが決まるまでに動いた分も、決まったときにまとめて動かす。指の下の文字が指から離れない。
+    if (direction === "upDown") scroll.move(touch.clientY);
   };
   const touchEnd = () => scroll.end();
   const selectionChanged = () => {
