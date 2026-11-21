@@ -1105,6 +1105,8 @@ test("a finger moves the shell's scrollback by the pixel and settles it on a row
   await textBox.fill("seq 1 200");
   await page.getByRole("button", { name: "Send", exact: true }).tap();
   await expect(drawnRows(page).filter({ visible: true })).toContainText("200");
+  // seq のあとのプロンプトが出るまで待つ。出る前に下の行を読むと、読んだあとで行が1つ増える。
+  await expect.poll(() => page.evaluate(() => (document.querySelector(".sshc-select-overlay")?.textContent ?? "").split("\n").filter((line) => line.trim() !== "").at(-1) ?? "")).toMatch(/[$#%>]\s*$/);
 
   // A finger pulls the text down by a row and a third: older lines, the rows drawn that far down.
   // 指の向きが決まるまで（10px）は動かないので、それより長く、1行と3分の1だけ動かす。
@@ -1491,6 +1493,39 @@ test("a tap on a file path the terminal printed opens its preview at once", asyn
 
   await expect(page.getByRole("dialog", { name: imagePath }).getByRole("img", { name: "shot.png" })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Terminal link actions" })).toHaveCount(0);
+});
+
+// スマホの幅では、プログラムが長い URL を何行にも分けて出す。どの行を押しても、URL の全体が出る。
+test("a tap on the second row of a URL that a program broke before a mark opens the whole URL", async ({ page, installation }) => {
+  // 自動の折り返しを切って書くと、1行目は右端まで埋まり、xterm の折り返しにならない。Claude Code が右端で
+  // 改行して字下げするのと同じ形になる。続きは = で始まる。
+  const overflowing = `https://example.test/authorize?${"scope=read&".repeat(12)}redirect`;
+  await openShellPrinting(page, installation, `\x1b[?7l  ${overflowing}\x1b[?7h\r\n  =http%3A%2F%2F127.0.0.1%2Fcallback\r\n$ `);
+  const rest = await printedBounds(page, "=http%3A%2F%2F127.0.0.1%2Fcallback");
+  const firstRow = ((await drawnRows(page).filter({ visible: true }).locator("> div").first().textContent()) ?? "").trim();
+  expect(firstRow).toMatch(/^https:\/\/example\.test\/authorize\?/);
+  await capture(page, "mobile-url-broken-before-a-mark");
+
+  await page.touchscreen.tap(rest.x + rest.width / 2, rest.y + rest.height / 2);
+
+  await expect(page.getByRole("dialog", { name: "Terminal link actions" }).locator("p")).toHaveAttribute("title", `${firstRow}=http%3A%2F%2F127.0.0.1%2Fcallback`);
+});
+
+test("a tap on a row of a URL broken over the rows of a table cell opens the whole URL", async ({ page, installation }) => {
+  const table = [
+    "┌──────┬──────────────────────┐",
+    "│      │ https://example.test │",
+    "│ docs │ /guides/installation │",
+    "│      │ /index.html          │",
+    "└──────┴──────────────────────┘",
+  ];
+  await openShellPrinting(page, installation, `${table.join("\r\n")}\r\n$ `);
+  const middle = await printedBounds(page, "/guides/installation");
+  await capture(page, "mobile-url-in-a-table-cell");
+
+  await page.touchscreen.tap(middle.x + middle.width * 0.7, middle.y + middle.height / 2);
+
+  await expect(page.getByRole("dialog", { name: "Terminal link actions" }).locator("p")).toHaveAttribute("title", "https://example.test/guides/installation/index.html");
 });
 
 // swipe drags one finger across the screen through real touch events, in small steps as a finger moves.
