@@ -13,7 +13,8 @@ async function tappable(output: string, cols = 30, rows = 4) {
   screen.className = "xterm-screen";
   screen.getBoundingClientRect = () => new DOMRect(100, 50, cols * cellWidth, rows * cellHeight);
   element.appendChild(screen);
-  const view = { element, rows, cols, buffer: terminal.buffer, options: terminal.options };
+  // _core は xterm.js の中身で、OSC 8 のリンクの宛先はここから読む。
+  const view = { element, rows, cols, buffer: terminal.buffer, options: terminal.options, _core: (terminal as unknown as { _core: unknown })._core };
   return { terminal, view };
 }
 
@@ -73,5 +74,41 @@ describe("linkAtPoint", () => {
       expect(linkAtPoint(view, { clientX: 90, clientY: 60 })).toBeNull();
       expect(linkAtPoint(view, cell(5, 5))).toBeNull();
     } finally { terminal.dispose(); }
+  });
+  describe("プログラムが OSC 8 でリンクを付けた文字", () => {
+    const hardBreak = "\x1b[K\r\x1b[1B";
+    const linked = (target: string, text: string, id = "a") => `\x1b]8;id=${id};${target}\x07${text}\x1b]8;;\x07`;
+
+    it("続きの行に / や = が無い URL も、どの行を押しても宛先の全体を返す", async () => {
+      const url = "https://example.test/d/1a9Nex-6jpYi_NXIHhtEOiYgzHyjgA0qx7hU7sims5tg";
+      const output = `see (${linked(url, url.slice(0, 25))}${hardBreak}  ${linked(url, url.slice(25))}) for it`;
+      const { terminal, view } = await tappable(output, 30);
+      try {
+        expect(linkAtPoint(view, cell(10, 1))).toMatchObject({ kind: "url", target: url, text: url });
+        expect(linkAtPoint(view, cell(10, 2))).toMatchObject({ kind: "url", target: url, text: url });
+      } finally { terminal.dispose(); }
+    });
+
+    it("文字が URL でないリンクは、宛先と画面の文字を分けて返す", async () => {
+      const { terminal, view } = await tappable(`read ${linked("https://example.test/actual", "the guide")} first`);
+      try {
+        expect(linkAtPoint(view, cell(8, 1))).toMatchObject({ kind: "url", target: "https://example.test/actual", text: "the guide", start: 5, end: 14 });
+      } finally { terminal.dispose(); }
+    });
+
+    it("リンクの外の文字を押しても何も返さない", async () => {
+      const { terminal, view } = await tappable(`read ${linked("https://example.test/actual", "the guide")} first`);
+      try {
+        expect(linkAtPoint(view, cell(2, 1))).toBeNull();
+        expect(linkAtPoint(view, cell(17, 1))).toBeNull();
+      } finally { terminal.dispose(); }
+    });
+
+    it("http と https でない宛先のリンクは返さない", async () => {
+      const { terminal, view } = await tappable(linked("javascript:alert(1)", "press here"));
+      try {
+        expect(linkAtPoint(view, cell(3, 1))).toBeNull();
+      } finally { terminal.dispose(); }
+    });
   });
 });

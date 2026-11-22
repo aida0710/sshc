@@ -1528,6 +1528,22 @@ test("a tap on a row of a URL broken over the rows of a table cell opens the who
   await expect(page.getByRole("dialog", { name: "Terminal link actions" }).locator("p")).toHaveAttribute("title", "https://example.test/guides/installation/index.html");
 });
 
+// Claude Code は、出した URL に OSC 8 で宛先を付ける。続きの行に / や = が1つも無い URL は、画面の文字だけでは
+// 次の語と見分けられないが、宛先はプログラムが渡している。
+test("a tap on the second row of a URL a program linked with OSC 8 opens the whole URL", async ({ page, installation }) => {
+  const url = "https://example.test/d/1a9Nex-6jpYi_NXIHhtEOiYgzHyjgA0q";
+  const linked = (text: string) => `\x1b]8;id=deck;${url}\x07${text}\x1b]8;;\x07`;
+  const head = "https://example.test/d/1a9Ne";
+  const rest = "x-6jpYi_NXIHhtEOiYgzHyjgA0q";
+  await openShellPrinting(page, installation, `see (${linked(head)}\r\n  ${linked(rest)}) is ready\r\n$ `);
+  const second = await printedBounds(page, rest);
+  await capture(page, "mobile-url-linked-with-osc-8");
+
+  await page.touchscreen.tap(second.x + second.width / 2, second.y + second.height / 2);
+
+  await expect(page.getByRole("dialog", { name: "Terminal link actions" }).locator("p")).toHaveAttribute("title", url);
+});
+
 // swipe drags one finger across the screen through real touch events, in small steps as a finger moves.
 async function swipe(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
   const client = await page.context().newCDPSession(page);
