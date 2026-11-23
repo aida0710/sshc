@@ -62,8 +62,10 @@ func (m *Manager) ForwardAPI(w http.ResponseWriter, r *http.Request, alias, remo
 	if len(body) > maxForwardedBody {
 		return ErrRequestTooLarge
 	}
+	// 確認のトークンは、接続先のエンジンが出したものを画面が持っていて、接続先が確かめる。
 	call := APICall{
 		Method: r.Method, Path: remotePath, RawQuery: r.URL.RawQuery, ContentType: r.Header.Get("Content-Type"), Body: body,
+		ActionToken: r.Header.Get(handoff.ActionHeader),
 	}
 	err = m.exchange(r.Context(), engine, call, func(response *http.Response) { copyResponse(w, response) })
 	var refusal *RemoteRefusalError

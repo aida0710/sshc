@@ -363,8 +363,15 @@ function pathMatches(template: string, actual: string): boolean {
   );
 }
 
+// A request this machine's engine forwards to a run target's (/api/v1/engines/<alias>/…) is the same operation as
+// this machine's own: the document declares it once, and the forwarded request is checked against that.
+const forwardedPath = /^\/api\/v1\/engines\/[^/]+\/(.+)$/;
+
 function endpointFor(method: string, path: string): Endpoint | undefined {
-  return endpoints.find((candidate) => candidate.method === method.toUpperCase() && pathMatches(candidate.path, path));
+  const declared = (asked: string) =>
+    endpoints.find((candidate) => candidate.method === method.toUpperCase() && pathMatches(candidate.path, asked));
+  const forwarded = forwardedPath.exec(path);
+  return declared(path) ?? (forwarded === null ? undefined : declared("/api/v1/" + forwarded[1]));
 }
 
 export function validateOpenAPISchema<T>(name: OpenAPISchemaName, value: unknown): T {

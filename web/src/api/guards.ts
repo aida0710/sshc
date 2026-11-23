@@ -21,8 +21,10 @@ export function toProblem(error: unknown): Problem {
   return { code: "request_failed", message: "request rejected" };
 }
 
-export async function issueAction(kind: string, target: string): Promise<string> {
-  const response = await apiClient.mutate<unknown>("/api/v1/actions", {
+// issueAction asks the engine for the one-time token that confirms an operation it gates. base is the API of the
+// engine that will do the operation (engineApiBase): a token is checked by the engine that issued it.
+export async function issueAction(kind: string, target: string, base = "/api/v1"): Promise<string> {
+  const response = await apiClient.mutate<unknown>(`${base}/actions`, {
     method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({ kind, target }),

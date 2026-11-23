@@ -142,6 +142,11 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodGet, "/api/v1/engines/r100/terminal/connection-history", "r100 /api/v1/terminal/connection-history"},
 		{http.MethodGet, "/api/v1/engines/r100/config/overview", "r100 /api/v1/config/overview"},
 		{http.MethodGet, "/api/v1/engines/r100/connections/recent", "r100 /api/v1/connections/recent"},
+		{http.MethodPost, "/api/v1/engines/r100/actions", "r100 /api/v1/actions"},
+		{http.MethodGet, "/api/v1/engines/r100/known-hosts", "r100 /api/v1/known-hosts"},
+		{http.MethodPost, "/api/v1/engines/r100/known-hosts/delete", "r100 /api/v1/known-hosts/delete"},
+		{http.MethodPost, "/api/v1/engines/r100/known-hosts/scan", "r100 /api/v1/known-hosts/scan"},
+		{http.MethodPost, "/api/v1/engines/r100/known-hosts/add", "r100 /api/v1/known-hosts/add"},
 	} {
 		directory.forwarded = nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)

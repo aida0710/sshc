@@ -13,7 +13,7 @@ Keep an sshc engine running on an SSH host (an always-on server, for example), a
 
 A regular SSH session differs in which engine holds the connection. This machine's engine holds it, so the session ends when this machine's engine stops. A remote session runs on the host's engine, so it stays connected when this machine's engine stops.
 
-The terminals change (sessions and [workspaces](./workspace)), and so does the list of connections on Home. Connections, SFTP, the vault and settings stay this machine's.
+The terminals change (sessions and [workspaces](./workspace)), and so do the list of connections on Home and Known Hosts. Connections, SFTP, the vault and settings stay this machine's.
 
 ## Usage
 

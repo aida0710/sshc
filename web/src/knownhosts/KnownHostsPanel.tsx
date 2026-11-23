@@ -1,8 +1,9 @@
 import { Tag } from "../ui/Tag";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import { failureCode } from "../api/client";
-import { knownHostsApi, type KnownHostCandidate, type KnownHostEntry, type KnownHostsApi, type KnownHostsResponse } from "../api/knownHosts";
+import { createKnownHostsApi, type KnownHostCandidate, type KnownHostEntry, type KnownHostsApi, type KnownHostsResponse } from "../api/knownHosts";
+import { engineApiBase } from "../api/remoteEngines";
 import {
   CheckboxField,
   Field,
@@ -26,7 +27,12 @@ import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { useToast } from "../ui/useToast";
 import { asciiTextEntry } from "../ui/softKeyboard";
 
-type KnownHostsPanelProps = { api?: KnownHostsApi };
+type KnownHostsPanelProps = {
+  // runTarget is the engine whose known_hosts this is; null is this machine. The panel is mounted anew for another
+  // engine (its key in sections.tsx), so nothing one engine listed is shown as another's.
+  runTarget?: string | null;
+  api?: KnownHostsApi;
+};
 // A key type is one word, so it keeps its line. A fingerprint keeps its line once the window is wide enough for it
 // beside the host (50 letters), so that it reads as one value, and otherwise breaks wherever it has to.
 const keyTypeCell = "whitespace-nowrap font-mono text-xs text-ink-muted";
@@ -50,8 +56,10 @@ function failureMessage(t: Translate, failure: unknown, otherwise: string): stri
   return failureCode(failure) === "known_hosts_symlink" ? t("kh.symlink") : otherwise;
 }
 
-export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
+export function KnownHostsPanel({ runTarget = null, api: apiOverride }: KnownHostsPanelProps) {
   const t = useTranslate();
+  const engineApi = useMemo(() => createKnownHostsApi(engineApiBase(runTarget)), [runTarget]);
+  const api = apiOverride ?? engineApi;
   const [query, setQuery] = useState("");
   const [listing, setListing] = useState<KnownHostsResponse | null>(null);
   const [pending, setPending] = useState<KnownHostEntry | null>(null);
