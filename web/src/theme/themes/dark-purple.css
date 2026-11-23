@@ -30,6 +30,9 @@
   --ui-notice-ink: #f0b429;
   --ui-danger: #ff858d;
   --ui-live: #54c69a;
+  /* The frame and the name tag shown while a remote session is chosen. */
+  --ui-remote: #e8890c;
+  --ui-remote-ink: #1a1205;
   /* The icons of pictures and recordings in a file list, so they are found at a glance. */
   --ui-kind-image: #7dd3a8;
   --ui-kind-video: #f0a37a;

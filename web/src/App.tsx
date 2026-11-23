@@ -21,6 +21,7 @@ import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation } from "./shell/AppNavigation";
+import { RemoteSessionFrame, remoteSessionTagRoom } from "./shell/RemoteSessionFrame";
 import { hiddenNavigationWidth, navigationShown, navigationWidth } from "./shell/navigationLayout";
 import { useColumnWidth } from "./ui/useColumnWidth";
 import { useStoredValue } from "./ui/useStoredValue";
@@ -419,7 +420,8 @@ export function App({
   if (state === "session-ended") return <SessionEndedScreen />;
 
   const app = (
-    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned} data-navigation-hidden={navigationHidden}>
+    <div className={`sshc-app flex h-screen flex-col bg-canvas text-ink ${runTargets.selected === null ? "" : remoteSessionTagRoom}`} data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned} data-navigation-hidden={navigationHidden}>
+      {runTargets.selected === null ? null : <RemoteSessionFrame alias={runTargets.selected} />}
       <div
         ref={rechecked}
         className="contents"

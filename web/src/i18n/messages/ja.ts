@@ -611,6 +611,7 @@ export const ja = {
   "sftp.deleteHeading": "このリモート項目を削除しますか？",
   "sftp.deleteHeadingCount": "選択した{count}件を削除しますか？",
   "runTarget.label": "リモートセッション",
+  "runTarget.frameLabel": "リモートセッション: {name}",
   "runTarget.choose": "リモートセッションのsshcエンジンを選ぶ（いま: {name}）",
   "runTarget.heading": "実行中のsshcエンジン",
   "runTarget.thisMachine": "localhost",
