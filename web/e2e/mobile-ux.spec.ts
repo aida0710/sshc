@@ -1127,7 +1127,8 @@ test("a finger moves the shell's scrollback by the pixel and settles it on a row
   });
   // The rows from two before, drawn two thirds of a row up: the text sits a row and a third lower, as the finger
   // moved it. The row that was above the bottom one is now the one under the rows, drawn there.
-  expect(moved.transform).toBe(`translateY(${-(moved.rows * 2) / 3}px)`);
+  // 行の高さが割り切れない文字の大きさでは、ブラウザが style の値を小数3桁ほどに丸めるので、数として比べる。
+  expect(Number.parseFloat(/^translateY\((.+)px\)$/u.exec(moved.transform)?.[1] ?? "")).toBeCloseTo(-(moved.rows * 2) / 3, 2);
   expect(moved.edge?.trimEnd()).toBe(moved.rowAboveBottom);
 
   // Let go slowly: the rows settle on the nearer one.

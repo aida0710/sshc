@@ -228,6 +228,9 @@ Besides the configurable font size, pinching two fingers on a terminal, or turni
 - The page does not zoom.
 - The size applies only to that terminal's display and is not saved.
 - Changing the font size in the settings returns to the configured size.
+- When the size changes, the terminal shows the current size at its top right for about 3 seconds. While it differs from the configured size, a [Reset] button beside it returns to the configured size.
+- Pressing Ctrl in the middle of a scroll does not change the size. A trackpad keeps sending the scroll for a while after the fingers lift, and Ctrl+Space or the like may be pressed during it.
+- With the font size left blank in the settings, the text is 13 px on a phone and on a PC alike. To make it larger on a phone only, create a [preset](/en/reference/settings#presets) for the phone and set its font size.
 
 ### Rendering and display
 

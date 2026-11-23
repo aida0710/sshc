@@ -14,7 +14,7 @@ import { palettes } from "../terminal/palettes";
 import type { DescribableControlProps } from "../ui/describeControl";
 import { FieldRow } from "../ui/FieldRow";
 import { CheckboxField, control, sizedControl } from "../ui/form";
-import { fontSizeRange } from "../terminal/fontSize";
+import { defaultFontSize, fontSizeRange } from "../terminal/fontSize";
 import { defaultMaxSessions, defaultReplayBufferKiB, maxSessionsRange, replayBufferKiBRange, type TerminalDraft } from "./terminalSettingsDraft";
 
 // The rows of Settings > Terminal, in the groups the page shows together: on a computer each group (or two)
@@ -50,7 +50,7 @@ export function TerminalLookFields({ draft, edit, type }: GroupProps) {
           unchosen={t("terminal.fontFollowsSystem")}
         />
       </FieldRow>
-      <FieldRow label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint")}>
+      <FieldRow label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint", { size: defaultFontSize })}>
         <FontSizeInput value={draft.fontSize} onChange={(next) => type({ fontSize: next })} />
       </FieldRow>
       <FieldRow label={t("terminal.backgroundLabel")} hint={t("terminal.backgroundHint")} interactiveChildren>
@@ -80,7 +80,7 @@ function FontSizeInput({ value, onChange, ...description }: { value: string; onC
         {...description}
         className={`${sizedControl("w-[110px]")} font-mono`}
         value={value}
-        placeholder="15 / 13"
+        placeholder={String(defaultFontSize)}
         onChange={(event) => onChange(event.target.value)}
       />
       <span aria-hidden="true" className={unitText}>px</span>

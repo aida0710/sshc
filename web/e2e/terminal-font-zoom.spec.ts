@@ -45,3 +45,30 @@ test("Ctrl+= and Ctrl+- in a terminal step the size of its text, and Ctrl+0 brin
   await expect.poll(() => fontSizeOf(page)).toBe(before);
   expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(zoomBefore);
 });
+
+test("changing the size of a terminal's text shows the size and a reset to the settings' size, which leaves the keys with the terminal", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const region = page.getByRole("region", { name: /^Terminal for / });
+  await expect(region).toBeVisible();
+  const before = await fontSizeOf(page);
+  // Nothing is shown for the size the terminal opens at.
+  await expect(region.getByRole("button", { name: "Reset" })).toHaveCount(0);
+  await terminalKeyboard(page).focus();
+
+  await page.keyboard.press("Control+Equal");
+  await page.keyboard.press("Control+Equal");
+  const tip = region.getByRole("status").filter({ hasText: `${before + 2}px` });
+  await expect(tip).toBeVisible();
+
+  await tip.getByRole("button", { name: "Reset" }).click();
+  await expect.poll(() => fontSizeOf(page)).toBe(before);
+  // At the settings' size there is nothing to go back to.
+  await expect(region.getByRole("status").filter({ hasText: `${before}px` })).toBeVisible();
+  await expect(region.getByRole("button", { name: "Reset" })).toHaveCount(0);
+  await expect(terminalKeyboard(page)).toBeFocused();
+  // The tip stays while the pointer is on it, and leaves by itself once the pointer has left.
+  const screen = await screenRect(page);
+  await page.mouse.move(screen.x + screen.width / 2, screen.y + screen.height / 2);
+  await expect(region.getByRole("status").filter({ hasText: `${before}px` })).toHaveCount(0, { timeout: 10_000 });
+});
