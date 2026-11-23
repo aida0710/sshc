@@ -1,9 +1,10 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FieldEdit, HostDetail, HostMetadata, SavePreview, UpdateConnectionRequest } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
 import type { Problem } from "../api/client";
-import { diagnosticsApi, type DiagnosticsApi } from "../api/diagnostics";
-import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
+import { type DiagnosticsApi } from "../api/diagnostics";
+import { type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
 import { useMoreToTheRight } from "../ui/useMoreToTheRight";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
@@ -29,7 +30,6 @@ const fadeAtTheRight = "[mask-image:linear-gradient(to_right,#000_calc(100%-2rem
 
 // The detail view checks a host and edits its secrets, so it is handed both.
 export type HostDetailApi = DiagnosticsApi & ConnectionSecretsApi;
-export const hostDetailApi: HostDetailApi = { ...diagnosticsApi, ...connectionSecretsApi };
 
 type HostDetailPanelProps = {
   detail: HostDetail;
@@ -81,7 +81,7 @@ export function HostDetailPanel({
   onBlockRaw,
   onBasicSave,
   onMetadataSave,
-  integrations = hostDetailApi,
+  integrations: integrationsOverride,
   panel: controlledPanel,
   advanced: controlledAdvanced,
   onLocationChange,
@@ -95,6 +95,8 @@ export function HostDetailPanel({
   savedAliases = [],
 }: HostDetailPanelProps) {
   const t = useTranslate();
+  const engineApis = useEngineApis();
+  const integrations = integrationsOverride ?? engineApis.hostDetail;
   const [localPanel, setLocalPanel] = useState<ConnectionPanel>("Basic");
   const [lastAdvanced, setLastAdvanced] = useState<AdvancedArea>("Settings");
   const [basicDirty, setBasicDirty] = useState(false);

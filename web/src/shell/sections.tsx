@@ -103,7 +103,11 @@ export type SectionViewProps = {
   navigation: Navigation;
   handoff: Handoff;
   shell: Shell;
+  // declared is what the SSH configuration of the engine the screens work with declares.
   declared: Declared;
+  // thisMachineDeclared is what this machine's own SSH configuration declares, for the sections that stay this
+  // machine's while a remote session is chosen (SFTP and Snippets).
+  thisMachineDeclared: Declared;
   sftpTarget: SFTPTarget | null;
   onSftpTargetHandled: (request: number) => void;
 };
@@ -119,6 +123,7 @@ export function SectionView(props: SectionViewProps) {
   if (props.section === "Connections") {
     return (
       <ConnectionsPage
+        key={props.shell.runTarget ?? ""}
         onInspector={props.shell.onInspector}
         creationDraft={props.handoff.connectionDraft}
         onCreationDraftChange={props.handoff.onConnectionDraftChange}
@@ -194,6 +199,7 @@ function SectionPage({
   handoff,
   shell,
   declared,
+  thisMachineDeclared,
   sftpTarget,
   onSftpTargetHandled,
 }: SectionViewProps) {
@@ -213,6 +219,7 @@ function SectionPage({
   if (section === "Config") {
     return (
       <ConfigExplorer
+        key={shell.runTarget ?? ""}
         target={fileTarget}
         onTargetHandled={navigation.onFileTargetHandled}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
@@ -224,9 +231,9 @@ function SectionPage({
     return (
       <SFTPWorkspace
         title={t(sectionLabels.Files)}
-        aliases={declared.knownAliases}
-        hosts={declared.hosts}
-        hostVPN={declared.hostVPN}
+        aliases={thisMachineDeclared.knownAliases}
+        hosts={thisMachineDeclared.hosts}
+        hostVPN={thisMachineDeclared.hostVPN}
         target={sftpTarget}
         onTargetHandled={onSftpTargetHandled}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
@@ -238,7 +245,7 @@ function SectionPage({
   if (section === "Snippets") {
     return (
       <SnippetsPanel
-        aliases={declared.knownAliases}
+        aliases={thisMachineDeclared.knownAliases}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
         onNavigateLocation={onNavigateLocation}
         selectedSnippetId={new URLSearchParams(navigation.location.search).get(
@@ -253,7 +260,8 @@ function SectionPage({
       : section === "Key Passphrases"
         ? "key_passphrase"
         : "totp";
-    return <SecretsPanel kind={kind} onLock={onLock} />;
+    // Locking another engine's Vault leaves this machine's as it is, so this machine's lock screen is not shown.
+    return <SecretsPanel key={shell.runTarget ?? ""} kind={kind} {...(shell.runTarget === null ? { onLock } : {})} />;
   }
   if (section === "Settings") {
     return (
@@ -272,17 +280,19 @@ function SectionPage({
   if (section === "VPN") {
     return (
       <VPNPanel
+        key={shell.runTarget ?? ""}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
         onNavigateLocation={onNavigateLocation}
       />
     );
   }
   if (section === "History") {
-    return <HistoryPanel />;
+    return <HistoryPanel key={shell.runTarget ?? ""} />;
   }
   if (section === "Keys") {
     return (
       <KeysScreen
+        key={shell.runTarget ?? ""}
         onInspector={onInspector}
         onShowInspector={onShowInspector}
         groups={declared.groups}
@@ -298,6 +308,7 @@ function SectionPage({
   if (section === "Remote Keys") {
     return (
       <RemoteKeyPanel
+        key={shell.runTarget ?? ""}
         hosts={declared.knownAliases}
         preferredPublicKeyPath={handoff.publicKey?.publicRelativePath ?? null}
         onPreferredPublicKeyHandled={handoff.onPublicKeyHandled}
@@ -305,7 +316,7 @@ function SectionPage({
     );
   }
   if (section === "Diagnostics") {
-    return <DiagnosticsPanel hosts={declared.knownAliases} />;
+    return <DiagnosticsPanel key={shell.runTarget ?? ""} hosts={declared.knownAliases} />;
   }
   return (
     <section aria-labelledby="section-heading" className="flex flex-col gap-4">

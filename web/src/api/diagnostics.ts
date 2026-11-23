@@ -1,3 +1,4 @@
+import { localApiBase } from "./remoteEngines";
 import { issueAction, postEmpty, postJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
@@ -38,35 +39,41 @@ function validateAuthentication(value: unknown): AuthenticationResponse {
 
 // Checks that read the SSH configuration or touch a host without opening a
 // terminal: the effective config, reachability and an authentication probe.
-export const diagnosticsApi: DiagnosticsApi = {
-  async configCheck() {
-    return validateConfigCheck(
-      await postEmpty<unknown>("/api/v1/diagnostics/config"),
-    );
-  },
-  async effective(alias) {
-    return validateEffective(
-      await postJSON<unknown>("/api/v1/diagnostics/effective", { alias }),
-    );
-  },
-  async reachability(alias) {
-    const token = await issueAction(REACHABILITY_ACTION_KIND, alias);
-    return validateReachability(
-      await postJSON<unknown>(
-        "/api/v1/diagnostics/reachability",
-        { alias },
-        token,
-      ),
-    );
-  },
-  async authentication(alias, acknowledgeExecutable) {
-    const token = await issueAction(AUTHENTICATION_ACTION_KIND, alias);
-    return validateAuthentication(
-      await postJSON<unknown>(
-        "/api/v1/diagnostics/authentication",
-        { alias, acknowledgeExecutable },
-        token,
-      ),
-    );
-  },
-};
+// createDiagnosticsApi is this API of the engine at base (engineApiBase): this machine's, or a run target's as this
+// machine's engine forwards it.
+export function createDiagnosticsApi(base: string): DiagnosticsApi {
+  return {
+    async configCheck() {
+      return validateConfigCheck(
+        await postEmpty<unknown>(`${base}/diagnostics/config`),
+      );
+    },
+    async effective(alias) {
+      return validateEffective(
+        await postJSON<unknown>(`${base}/diagnostics/effective`, { alias }),
+      );
+    },
+    async reachability(alias) {
+      const token = await issueAction(REACHABILITY_ACTION_KIND, alias, base);
+      return validateReachability(
+        await postJSON<unknown>(
+          `${base}/diagnostics/reachability`,
+          { alias },
+          token,
+        ),
+      );
+    },
+    async authentication(alias, acknowledgeExecutable) {
+      const token = await issueAction(AUTHENTICATION_ACTION_KIND, alias, base);
+      return validateAuthentication(
+        await postJSON<unknown>(
+          `${base}/diagnostics/authentication`,
+          { alias, acknowledgeExecutable },
+          token,
+        ),
+      );
+    },
+  };
+}
+
+export const diagnosticsApi = createDiagnosticsApi(localApiBase);

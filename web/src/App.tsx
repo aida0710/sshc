@@ -21,6 +21,8 @@ import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation } from "./shell/AppNavigation";
+import { configApi } from "./api/config";
+import { EngineApisProvider, useEngineApisOf } from "./shell/engineApis";
 import { RemoteSessionFrame, remoteSessionTagRoom } from "./shell/RemoteSessionFrame";
 import { hiddenNavigationWidth, navigationShown, navigationWidth } from "./shell/navigationLayout";
 import { useColumnWidth } from "./ui/useColumnWidth";
@@ -108,7 +110,7 @@ export function App({
   const navigationRail = useMediaQuery(navigationRailQuery);
   const shortcuts = useBindings();
   const { resolved: resolvedTheme, scheme } = useTheme();
-  const { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore, currentLocation } =
+  const { route, location, navigate, navigateLocation, mayLeaveFor, setNavigationBlocker, hasEntryBefore, currentLocation } =
     useSectionRoute({ present: presentLocationChange });
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
@@ -130,7 +132,17 @@ export function App({
   usePreloadedSectionPages(state === "ready");
   useFirstScreenReport(state !== "starting" && (state !== "ready" || settingsLoaded));
   const handoffs = useSectionHandoffs(navigate);
-  const declared = useDeclaredConfig(state === "ready", section);
+  // Choosing another engine makes its screens anew. A screen with an unsaved draft is asked first, as when leaving it
+  // for the terminal.
+  const mayChangeEngine = useCallback(() => mayLeaveFor("Terminal"), [mayLeaveFor]);
+  const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version, mayChange: mayChangeEngine });
+  // The screens work with the engine chosen for the remote session: what the SSH configuration declares, too.
+  const engineApis = useEngineApisOf(runTargets.selected, runTargets.vaultUnlock.revision);
+  const declared = useDeclaredConfig(state === "ready", section, engineApis.config);
+  // The screens that stay this machine's while a remote session is chosen (SFTP, Snippets) list this machine's
+  // connections. With this machine chosen that is `declared`, read once.
+  const declaredHere = useDeclaredConfig(state === "ready" && runTargets.selected !== null, section, configApi);
+  const thisMachineDeclared = runTargets.selected === null ? declared : declaredHere;
   const [desktopNavigationWidth, resizeDesktopNavigation] = useColumnWidth(navigationWidth);
   const [desktopNavigation, setDesktopNavigation] = useStoredValue(navigationShown);
   const {
@@ -177,11 +189,10 @@ export function App({
     setAndroidAppearance(scheme);
   }, [resolvedTheme, scheme]);
 
-  const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version });
   const runTargetApis = useRunTargetApis(runTargets.selected, runTargets.vaultUnlock.revision);
   const sessionAddresses = useMemo(
-    () => runTargets.selected === null ? addressesByAlias(declared.hosts) : new Map<string, string>(),
-    [declared.hosts, runTargets.selected],
+    () => addressesByAlias(declared.hosts),
+    [declared.hosts],
   );
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
   useSessionProblemToast(terminalSessions.problem);
@@ -223,7 +234,7 @@ export function App({
   useHomeWithoutSessions({ terminalFace, activeSessionId, terminalSessions, showHome: showHomeInPlace });
   const directDestination = useDirectDestinationActions({
     aliases: declared.knownAliases,
-    canSave: runTargets.selected === null,
+    canSave: true,
     open: openSSHSession,
     onSaved: declared.readAgain,
   });
@@ -420,6 +431,7 @@ export function App({
   if (state === "session-ended") return <SessionEndedScreen />;
 
   const app = (
+    <EngineApisProvider apis={engineApis}>
     <div className={`sshc-app flex h-screen flex-col bg-canvas text-ink ${runTargets.selected === null ? "" : remoteSessionTagRoom}`} data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned} data-navigation-hidden={navigationHidden}>
       {runTargets.selected === null ? null : <RemoteSessionFrame alias={runTargets.selected} />}
       <div
@@ -537,6 +549,7 @@ export function App({
             onOpenShell={(workspaceId) => void openLocalShell(undefined, undefined, workspaceId)}
             aliases={declared.knownAliases}
             hosts={declared.hosts}
+            engineChoices={{ aliases: thisMachineDeclared.knownAliases, hosts: thisMachineDeclared.hosts }}
             onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
             directDestination={directDestination}
             onOpenCommandPalette={openPaletteFromNavigation}
@@ -615,6 +628,7 @@ export function App({
                         onOpenTerminal: openSFTPTerminal,
                       },
                       declared: { groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN },
+                      thisMachineDeclared: { groups: thisMachineDeclared.groups, knownAliases: thisMachineDeclared.knownAliases, hosts: thisMachineDeclared.hosts, hostVPN: thisMachineDeclared.hostVPN },
                       sftpTarget: handoffs.sftpTarget,
                       onSftpTargetHandled: handoffs.consumeSftpTarget,
                     }}
@@ -695,6 +709,7 @@ export function App({
       {heldForRecheck && vaultRecheck === "checking" ? <VaultRecheckMark /> : null}
       {heldForRecheck && vaultRecheck === "retrying" ? <VaultRecheckOverlay /> : null}
     </div>
+    </EngineApisProvider>
   );
   return <SessionAddressesContext.Provider value={sessionAddresses}>{app}</SessionAddressesContext.Provider>;
 }

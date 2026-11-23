@@ -1,3 +1,4 @@
+import { localApiBase } from "../api/remoteEngines";
 import { apiClient } from "../api/client";
 import { issueAction, postJSON, sendJSON } from "../api/guards";
 import type { components } from "../api/schema";
@@ -105,74 +106,80 @@ function validateRestore(value: unknown): RestoreTrashResponse {
 
 
 
-export const keysApi: KeysApi = {
-  async inventory() {
-    return validateInventory(await apiClient.read("/api/v1/keys"));
-  },
-  async algorithms() {
-    return validateAlgorithms(await apiClient.read("/api/v1/keys/algorithms"));
-  },
-  generate: (input) =>
-    postJSON<GenerateKeyResponse>("/api/v1/keys", {
-      algorithm: input.algorithm,
-      bits: input.bits ?? 0,
-      fileName: input.fileName,
-      group: input.group,
-      comment: input.comment,
-      passphrase: input.passphrase,
-      unencrypted: input.unencrypted,
-    }),
-  hardwareCommand: (input) => postJSON<HardwareCommandResponse>("/api/v1/keys/hardware-command", input),
-  changePassphrase: (keyId, input) =>
-    postJSON<ChangePassphraseResponse>(`/api/v1/keys/${encodeURIComponent(keyId)}/passphrase`, input),
-  async reveal(keyId) {
-    const token = await issueAction(REVEAL_ACTION_KIND, keyId);
-    return validateReveal(
-      await apiClient.mutate<unknown>(`/api/v1/keys/${encodeURIComponent(keyId)}/reveal`, {
+// createKeysApi is this API of the engine at base (engineApiBase): this machine's, or a run target's as this
+// machine's engine forwards it.
+export function createKeysApi(base: string): KeysApi {
+  return {
+    async inventory() {
+      return validateInventory(await apiClient.read(`${base}/keys`));
+    },
+    async algorithms() {
+      return validateAlgorithms(await apiClient.read(`${base}/keys/algorithms`));
+    },
+    generate: (input) =>
+      postJSON<GenerateKeyResponse>(`${base}/keys`, {
+        algorithm: input.algorithm,
+        bits: input.bits ?? 0,
+        fileName: input.fileName,
+        group: input.group,
+        comment: input.comment,
+        passphrase: input.passphrase,
+        unencrypted: input.unencrypted,
+      }),
+    hardwareCommand: (input) => postJSON<HardwareCommandResponse>(`${base}/keys/hardware-command`, input),
+    changePassphrase: (keyId, input) =>
+      postJSON<ChangePassphraseResponse>(`${base}/keys/${encodeURIComponent(keyId)}/passphrase`, input),
+    async reveal(keyId) {
+      const token = await issueAction(REVEAL_ACTION_KIND, keyId, base);
+      return validateReveal(
+        await apiClient.mutate<unknown>(`${base}/keys/${encodeURIComponent(keyId)}/reveal`, {
+          method: "POST",
+          headers: { "X-SSHC-Action": token },
+        }),
+      );
+    },
+    async publicKey(keyId) {
+      return validatePublicKey(await apiClient.read(`${base}/keys/${encodeURIComponent(keyId)}/public`));
+    },
+    async relocate(keyId, change) {
+      return validateRelocate(await sendJSON<unknown>(`${base}/keys/${encodeURIComponent(keyId)}/location`, {
         method: "POST",
-        headers: { "X-SSHC-Action": token },
-      }),
-    );
-  },
-  async publicKey(keyId) {
-    return validatePublicKey(await apiClient.read(`/api/v1/keys/${encodeURIComponent(keyId)}/public`));
-  },
-  async relocate(keyId, change) {
-    return validateRelocate(await sendJSON<unknown>(`/api/v1/keys/${encodeURIComponent(keyId)}/location`, {
-      method: "POST",
-      body: change,
-      refusalStatus: blockedStatus,
-    }));
-  },
-  async registerWithAgent(keyId, input) {
-    return validateRegister(
-      await postJSON<unknown>(`/api/v1/keys/${encodeURIComponent(keyId)}/agent`, input),
-    );
-  },
-  async deregisterFromAgent(keyId) {
-    return validateAgentIdentitiesResponse(
-      await apiClient.mutate<unknown>(`/api/v1/keys/${encodeURIComponent(keyId)}/agent`, {
+        body: change,
+        refusalStatus: blockedStatus,
+      }));
+    },
+    async registerWithAgent(keyId, input) {
+      return validateRegister(
+        await postJSON<unknown>(`${base}/keys/${encodeURIComponent(keyId)}/agent`, input),
+      );
+    },
+    async deregisterFromAgent(keyId) {
+      return validateAgentIdentitiesResponse(
+        await apiClient.mutate<unknown>(`${base}/keys/${encodeURIComponent(keyId)}/agent`, {
+          method: "DELETE",
+        }),
+      );
+    },
+    trash: (keyId) =>
+      apiClient.mutate<TrashKeyResponse>(`${base}/keys/${encodeURIComponent(keyId)}/trash`, { method: "POST" }),
+    async listTrash() {
+      return validateTrashList(await apiClient.read(`${base}/trash`));
+    },
+    async restore(entryId) {
+      return validateRestore(await apiClient.mutate<unknown>(
+        `${base}/trash/${encodeURIComponent(entryId)}/restore`,
+        { method: "POST" },
+        { refusalStatus: blockedStatus },
+      ));
+    },
+    async purge(entryId) {
+      const token = await issueAction(PURGE_ACTION_KIND, entryId, base);
+      return apiClient.mutate<PurgeTrashResponse>(`${base}/trash/${encodeURIComponent(entryId)}`, {
         method: "DELETE",
-      }),
-    );
-  },
-  trash: (keyId) =>
-    apiClient.mutate<TrashKeyResponse>(`/api/v1/keys/${encodeURIComponent(keyId)}/trash`, { method: "POST" }),
-  async listTrash() {
-    return validateTrashList(await apiClient.read("/api/v1/trash"));
-  },
-  async restore(entryId) {
-    return validateRestore(await apiClient.mutate<unknown>(
-      `/api/v1/trash/${encodeURIComponent(entryId)}/restore`,
-      { method: "POST" },
-      { refusalStatus: blockedStatus },
-    ));
-  },
-  async purge(entryId) {
-    const token = await issueAction(PURGE_ACTION_KIND, entryId);
-    return apiClient.mutate<PurgeTrashResponse>(`/api/v1/trash/${encodeURIComponent(entryId)}`, {
-      method: "DELETE",
-      headers: { "X-SSHC-Action": token },
-    });
-  },
-};
+        headers: { "X-SSHC-Action": token },
+      });
+    },
+  };
+}
+
+export const keysApi = createKeysApi(localApiBase);

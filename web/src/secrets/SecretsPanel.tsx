@@ -1,3 +1,4 @@
+import { useEngineApis } from "../shell/engineApis";
 import { LockScreen } from "./LockScreen";
 import { useCallback, useEffect, useState } from "react";
 import { failureCode } from "../api/client";
@@ -53,10 +54,12 @@ function emptyCredentialList(): CredentialList {
 // form above the list and each row's menu opening what it needs under the row.
 export function SecretsPanel({
   kind,
-  api = secretsApi,
+  api: apiOverride,
   onLock,
 }: SecretsPanelProps) {
   const t = useTranslate();
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.secrets;
   const compact = useMediaQuery(mobileViewportQuery);
   const [status, setStatus] = useState<PasswordVaultStatus | null>(null);
   const [credentialList, setCredentialList] =

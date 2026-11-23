@@ -23,9 +23,11 @@ import (
 // fakeEngineDirectory は、実行先の一覧と、取り次ぎに渡された alias と接続先のパスを覚える。
 type fakeEngineDirectory struct {
 	fakeRemoteEngines
-	engines    []string
-	addErr     error
-	forwarded  []string
+	engines   []string
+	addErr    error
+	forwarded []string
+	// waitedLong は、長い上限で取り次いだ操作である。
+	waitedLong []string
 	streamed   []string
 	statusSeen remoteengine.Status
 	statusErr  error
@@ -80,6 +82,12 @@ func (f *fakeEngineDirectory) UnlockVault(_ context.Context, alias, passphrase s
 }
 func (f *fakeEngineDirectory) ForwardAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
 	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+func (f *fakeEngineDirectory) ForwardSlowAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	f.waitedLong = append(f.waitedLong, remotePath)
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
@@ -143,6 +151,15 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodGet, "/api/v1/engines/r100/config/overview", "r100 /api/v1/config/overview"},
 		{http.MethodGet, "/api/v1/engines/r100/connections/recent", "r100 /api/v1/connections/recent"},
 		{http.MethodPost, "/api/v1/engines/r100/actions", "r100 /api/v1/actions"},
+		{http.MethodGet, "/api/v1/engines/r100/config/host", "r100 /api/v1/config/host"},
+		{http.MethodGet, "/api/v1/engines/r100/passwords/web/eligibility", "r100 /api/v1/passwords/web/eligibility"},
+		{http.MethodDelete, "/api/v1/engines/r100/credentials/password/assign/web", "r100 /api/v1/credentials/password/assign/web"},
+		{http.MethodPost, "/api/v1/engines/r100/keys/k1/reveal", "r100 /api/v1/keys/k1/reveal"},
+		{http.MethodDelete, "/api/v1/engines/r100/vpn/profiles/office/route", "r100 /api/v1/vpn/profiles/office/route"},
+		{http.MethodPost, "/api/v1/engines/r100/diagnostics/reachability", "r100 /api/v1/diagnostics/reachability"},
+		{http.MethodPost, "/api/v1/engines/r100/config/save", "r100 /api/v1/config/save"},
+		{http.MethodPatch, "/api/v1/engines/r100/connections", "r100 /api/v1/connections"},
+		{http.MethodGet, "/api/v1/engines/r100/history/pending/tx-1", "r100 /api/v1/history/pending/tx-1"},
 		{http.MethodGet, "/api/v1/engines/r100/known-hosts", "r100 /api/v1/known-hosts"},
 		{http.MethodPost, "/api/v1/engines/r100/known-hosts/delete", "r100 /api/v1/known-hosts/delete"},
 		{http.MethodPost, "/api/v1/engines/r100/known-hosts/scan", "r100 /api/v1/known-hosts/scan"},
@@ -174,11 +191,37 @@ func TestWhatStaysThisMachinesIsNeverForwarded(t *testing.T) {
 		{http.MethodGet, "/api/v1/engines/r100/session"},
 		{http.MethodDelete, "/api/v1/engines/r100/session"},
 		{http.MethodGet, "/api/v1/engines/r100/snippets"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/change"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/reset-unsupported"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/recover-compatible-backup"},
 	} {
 		directory.forwarded = nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)
 		if len(directory.forwarded) != 0 || (recorder.Code != http.StatusNotFound && recorder.Code != http.StatusMethodNotAllowed) {
 			t.Errorf("%s %s = %d, forwarded %v", tc.method, tc.path, recorder.Code, directory.forwarded)
+		}
+	}
+}
+
+// よそのマシンの答えを待つ操作は、実行先がまだ働いているうちに「届かない」と断らないよう、長く待つ。
+func TestOperationsThatWaitForAnotherHostAreForwardedWithTheLongLimit(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	for _, tc := range []struct {
+		method, path string
+		long         bool
+	}{
+		{http.MethodPost, "/api/v1/engines/r100/diagnostics/authentication", true},
+		{http.MethodPost, "/api/v1/engines/r100/known-hosts/scan", true},
+		{http.MethodPost, "/api/v1/engines/r100/vpn/profiles/office/route", true},
+		{http.MethodPost, "/api/v1/engines/r100/remote-keys/register", true},
+		{http.MethodGet, "/api/v1/engines/r100/config/overview", false},
+		{http.MethodPost, "/api/v1/engines/r100/config/save", false},
+	} {
+		directory.forwarded, directory.waitedLong = nil, nil
+		recorder := send(t, engine, tc.method, tc.path, "", nil)
+		if recorder.Code != http.StatusOK || len(directory.forwarded) != 1 || (len(directory.waitedLong) == 1) != tc.long {
+			t.Errorf("%s %s = %d, forwarded %v, with the long limit %v", tc.method, tc.path, recorder.Code, directory.forwarded, directory.waitedLong)
 		}
 	}
 }

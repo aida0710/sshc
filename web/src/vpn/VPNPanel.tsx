@@ -1,7 +1,8 @@
+import { useEngineApis } from "../shell/engineApis";
 import { runsInAndroidApp } from "../android/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import { vpnApi, type VPNApi, type VPNOverview, type VPNProfile, type VPNSecrets } from "../api/vpn";
+import { type VPNApi, type VPNOverview, type VPNProfile, type VPNSecrets } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
 import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
@@ -43,7 +44,9 @@ type VPNPanelProps = {
   onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 };
 
-export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLocation }: VPNPanelProps) {
+export function VPNPanel({ api: apiOverride, onNavigationBlockerChange, onNavigateLocation }: VPNPanelProps) {
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.vpn;
   const t = useTranslate();
   const operation = useAsyncOperation();
   const [overview, setOverview] = useState<VPNOverview | null>(null);

@@ -45,11 +45,15 @@ export function useRunTargets({
   translate,
   enabled,
   localVersion,
+  mayChange = () => true,
   api = remoteEnginesApi,
 }: {
   translate: Translate;
   enabled: boolean;
   localVersion: string;
+  // mayChange says whether the engine the screens work with may change now. The screens of an engine are made anew
+  // for another one, so a screen holding an unsaved draft says no, and asks the person about the draft.
+  mayChange?: () => boolean;
   api?: RemoteEnginesApi;
 }): RunTargetsState {
   const [engines, setEngines] = useState<string[]>([]);
@@ -78,9 +82,10 @@ export function useRunTargets({
   const unread = useRunTargetUnread({ api, selected, enabled: enabled && engines.length > 0 });
 
   const select = useCallback((alias: string | null) => {
+    if (alias !== selected && !mayChange()) return;
     setProblem("");
     keepMachineState("runTarget", alias ?? "");
-  }, []);
+  }, [mayChange, selected]);
 
   // report shows why a request about an engine failed. A different version is
   // answered with the information dialog, whose Update fixes it.
