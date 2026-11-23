@@ -124,7 +124,7 @@ describe("TerminalView", () => {
     }
   });
 
-  it("uses the phone font size on a phone viewport and follows the viewport when it changes", () => {
+  it("draws at the same font size on a phone viewport as on a PC when the settings leave the size unset", () => {
     let phone = true;
     const listeners: (() => void)[] = [];
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -144,7 +144,7 @@ describe("TerminalView", () => {
 
     try {
       renderView();
-      expect(view?.options.fontSize).toBe(15);
+      expect(view?.options.fontSize).toBe(13);
 
       phone = false;
       act(() => listeners.forEach((listener) => listener()));

@@ -92,6 +92,7 @@ describe("the catalogue", () => {
         "splitView.heading",
         "sync.historyRelation.head",
         "terminal.browserNotificationsHeading",
+        "terminal.fontSizeTipSize",
         "terminal.localhost",
         "terminal.notificationVolumeHint",
         "terminal.overview.cpu",

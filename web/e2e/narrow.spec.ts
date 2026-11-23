@@ -1147,4 +1147,17 @@ test("two fingers pinch the text of the terminal, not the page", async ({ page, 
 
   await expect.poll(async () => Number.parseFloat((await drawnRowFont(page)).fontSize)).toBe(Math.min(32, before * 2));
   expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
+
+  // A phone draws at the same size as a PC until a preset says otherwise.
+  expect(before).toBe(13);
+  // The tip says the new size, and its reset goes back to the settings' size without taking the focus, which
+  // would open the keyboard.
+  const tip = page.getByRole("status").filter({ hasText: `${before * 2}px` });
+  await expect(tip).toBeVisible();
+  const focused = () => page.evaluate(() => document.activeElement?.outerHTML.slice(0, 120));
+  const focusedBefore = await focused();
+  await tip.getByRole("button", { name: "Reset" }).tap();
+  await expect.poll(async () => Number.parseFloat((await drawnRowFont(page)).fontSize)).toBe(before);
+  await expect(page.getByRole("status").filter({ hasText: `${before}px` })).toBeVisible();
+  expect(await focused()).toBe(focusedBefore);
 });
