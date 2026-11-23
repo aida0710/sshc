@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"sshc/internal/handoff"
@@ -37,6 +39,26 @@ const credentialProbePath = "/api/v1/passwords"
 // 本文は流すと送り直せないので、本文のある要求では、先に軽い操作で資格を確かめる（古い資格は
 // そこで受け取り直す）。本文の無い要求は、ForwardAPI と同じく、資格を断られたら一度だけ送り直す。
 func (m *Manager) ForwardFileAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error {
+	return m.forwardFile(w, r, fileForward{alias: alias, remotePath: remotePath})
+}
+
+// ForwardMediaAPI は、<audio> と <video> が読むメディアを取り次ぐ。ブラウザは、この答えを CSRF のトークン無しで
+// 取りに来られ、リンクからも開ける（httpserver の forwardedMediaRoute）。接続先が HTML やスクリプトを返すと、
+// このマシンの画面のオリジンで開いてしまうので、音声か動画の答えだけを渡す。このマシンのメディアの受け口は
+// 自分で種類を決めるが、取り次ぎでは接続先の言う種類を確かめるしかない。
+func (m *Manager) ForwardMediaAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error {
+	return m.forwardFile(w, r, fileForward{alias: alias, remotePath: remotePath, mediaOnly: true})
+}
+
+// fileForward は、ファイルの中身を運ぶ取り次ぎの先である。mediaOnly なら、音声か動画の答えだけを渡す。
+type fileForward struct {
+	alias      string
+	remotePath string
+	mediaOnly  bool
+}
+
+func (m *Manager) forwardFile(w http.ResponseWriter, r *http.Request, to fileForward) error {
+	alias, remotePath := to.alias, to.remotePath
 	engine, err := m.engine(alias)
 	if err != nil {
 		return err
@@ -50,7 +72,7 @@ func (m *Manager) ForwardFileAPI(w http.ResponseWriter, r *http.Request, alias, 
 		}
 	}
 	for attempt := 0; ; attempt++ {
-		retry, err := m.forwardFileOnce(w, r, engine, fileAttempt{remotePath: remotePath, mayRetry: attempt == 0 && !hasBody})
+		retry, err := m.forwardFileOnce(w, r, engine, fileAttempt{remotePath: remotePath, mayRetry: attempt == 0 && !hasBody, mediaOnly: to.mediaOnly})
 		if retry {
 			continue
 		}
@@ -65,6 +87,7 @@ func (m *Manager) ForwardFileAPI(w http.ResponseWriter, r *http.Request, alias, 
 type fileAttempt struct {
 	remotePath string
 	mayRetry   bool
+	mediaOnly  bool
 }
 
 func (m *Manager) forwardFileOnce(w http.ResponseWriter, r *http.Request, engine *remoteEngine, attempt fileAttempt) (retry bool, _ error) {
@@ -110,10 +133,23 @@ func (m *Manager) forwardFileOnce(w http.ResponseWriter, r *http.Request, engine
 		return false, &RemoteRefusalError{Status: http.StatusBadGateway, Code: code}
 	}
 	defer func() { _ = response.Body.Close() }()
+	if attempt.mediaOnly && !isMediaAnswer(response) {
+		return false, &RemoteRefusalError{Status: http.StatusBadGateway, Code: "remote_engine_refused"}
+	}
 	copyAllowedHeaders(w.Header(), response.Header, forwardedFileResponseHeaders)
 	w.WriteHeader(response.StatusCode)
 	_, _ = io.Copy(flushingWriter{writer: w, controller: http.NewResponseController(w)}, response.Body)
 	return false, nil
+}
+
+// isMediaAnswer は、答えが音声か動画の中身かどうかを返す。うまくいった答え（200 と、途中からの 206）だけを見る。
+// 断りは remoteRefusal が先に確かめていて、ここへ来るのは problem の JSON か、条件に合わない範囲の答えである。
+func isMediaAnswer(response *http.Response) bool {
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusPartialContent {
+		return strings.HasPrefix(response.Header.Get("Content-Type"), "application/problem+json") || response.Header.Get("Content-Type") == ""
+	}
+	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	return err == nil && (strings.HasPrefix(mediaType, "audio/") || strings.HasPrefix(mediaType, "video/"))
 }
 
 // flushingWriter は、書くたびにブラウザへ送り出す。メディアの再生や進み具合の表示が、溜まった分を待たない。

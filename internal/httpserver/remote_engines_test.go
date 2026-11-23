@@ -26,6 +26,8 @@ type fakeEngineDirectory struct {
 	engines   []string
 	addErr    error
 	forwarded []string
+	// mediaOnly は、音声か動画の答えだけを渡す形で取り次いだ操作である。
+	mediaOnly []string
 	// streamedFiles は、本文を流して取り次いだ操作である。
 	streamedFiles []string
 	// waitedLong は、長い上限で取り次いだ操作である。
@@ -96,6 +98,12 @@ func (f *fakeEngineDirectory) ForwardSlowAPI(w http.ResponseWriter, _ *http.Requ
 func (f *fakeEngineDirectory) ForwardFileAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
 	f.forwarded = append(f.forwarded, alias+" "+remotePath)
 	f.streamedFiles = append(f.streamedFiles, remotePath)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+func (f *fakeEngineDirectory) ForwardMediaAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	f.mediaOnly = append(f.mediaOnly, remotePath)
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
@@ -249,7 +257,6 @@ func TestOperationsThatCarryAFileAreForwardedAsStreams(t *testing.T) {
 		{http.MethodGet, "/api/v1/engines/r100/sftp/web/thumbnail", true},
 		{http.MethodPatch, "/api/v1/engines/r100/sftp/web/uploads/u1", true},
 		{http.MethodGet, "/api/v1/engines/r100/sftp/local/download", true},
-		{http.MethodGet, "/api/v1/engines/r100/sftp/media/ticket-1", true},
 		{http.MethodPost, "/api/v1/engines/r100/sftp/web/uploads/u1/complete", false},
 		{http.MethodGet, "/api/v1/engines/r100/sftp/local/entries", false},
 	} {
@@ -258,6 +265,11 @@ func TestOperationsThatCarryAFileAreForwardedAsStreams(t *testing.T) {
 		if recorder.Code != http.StatusOK || len(directory.forwarded) != 1 || (len(directory.streamedFiles) == 1) != tc.streamed {
 			t.Errorf("%s %s = %d, forwarded %v, as a stream %v", tc.method, tc.path, recorder.Code, directory.forwarded, directory.streamedFiles)
 		}
+	}
+	// トークン無しで読めるのはメディアの経路だけで、音声か動画の答えだけを渡す取り次ぎを通る。
+	directory.forwarded, directory.mediaOnly = nil, nil
+	if recorder := send(t, engine, http.MethodGet, "/api/v1/engines/r100/sftp/media/ticket-1", "", nil); recorder.Code != http.StatusOK || len(directory.mediaOnly) != 1 {
+		t.Errorf("the media route = %d, as media only %v", recorder.Code, directory.mediaOnly)
 	}
 }
 

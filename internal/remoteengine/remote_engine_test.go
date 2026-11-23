@@ -158,6 +158,21 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"code":"vault_locked","message":"request rejected"}`)
 	case "/api/v1/terminal/shell-profiles":
 		w.WriteHeader(http.StatusForbidden)
+	case "/api/v1/sftp/media/a-video":
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Header().Set("Set-Cookie", "leaked=1")
+		fmt.Fprint(w, "the bytes of a video")
+	case "/api/v1/sftp/media/a-page":
+		// 乗っ取られた接続先が、メディアの代わりにページを返す。
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, "<script>steal()</script>")
+	case "/api/v1/sftp/media/a-script":
+		w.Header().Set("Content-Type", "text/javascript")
+		fmt.Fprint(w, "steal()")
+	case "/api/v1/sftp/media/gone":
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"code":"sftp_not_found","message":"request rejected"}`)
 	case "/api/v1/keys":
 		// 入口の断り: このマシンのエンジンからの要求の CSRF のトークンが合わない。
 		w.Header().Set("Content-Type", "application/problem+json")
@@ -438,6 +453,38 @@ func TestARefusalOfTheOperationItselfReachesTheScreenAndARefusalAtTheEntranceDoe
 		if recorder.Code != tc.status || !strings.Contains(recorder.Body.String(), `"code":"`+tc.code+`"`) {
 			t.Errorf("%s = %d %s, want %d %s", tc.remotePath, recorder.Code, recorder.Body.String(), tc.status, tc.code)
 		}
+	}
+}
+
+// メディアの経路は、ブラウザが CSRF のトークン無しで開ける。接続先がページやスクリプトを返しても、
+// このマシンの画面のオリジンで開かないよう、音声か動画の答えだけを渡す。
+func TestTheForwardedMediaRouteHandsOverOnlyAudioAndVideo(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
+		t.Fatal(err)
+	}
+	media := func(ticket string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100/sftp/media/"+ticket, nil)
+		if err := manager.ForwardMediaAPI(recorder, request, "r100", "/api/v1/sftp/media/"+ticket); err != nil {
+			t.Fatal(err)
+		}
+		return recorder
+	}
+	video := media("a-video")
+	if video.Code != http.StatusOK || video.Body.String() != "the bytes of a video" || video.Header().Get("Content-Type") != "video/mp4" || video.Header().Get("Set-Cookie") != "" {
+		t.Fatalf("a video = %d %q, headers %v", video.Code, video.Body.String(), video.Header())
+	}
+	for _, ticket := range []string{"a-page", "a-script"} {
+		refused := media(ticket)
+		if refused.Code != http.StatusBadGateway || strings.Contains(refused.Body.String(), "steal") || !strings.Contains(refused.Body.String(), "remote_engine_refused") {
+			t.Errorf("%s = %d %q (%s)", ticket, refused.Code, refused.Body.String(), refused.Header().Get("Content-Type"))
+		}
+	}
+	// 接続先の断りは、理由ごと届く。
+	if gone := media("gone"); gone.Code != http.StatusNotFound || !strings.Contains(gone.Body.String(), "sftp_not_found") {
+		t.Errorf("a ticket the remote does not know = %d %q", gone.Code, gone.Body.String())
 	}
 }
 

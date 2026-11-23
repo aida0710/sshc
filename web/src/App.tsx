@@ -36,7 +36,7 @@ import { useSessionProblemToast } from "./terminal/useSessionProblemToast";
 import { useRunTargetLink } from "./terminal/useRunTargetLink";
 import { useRunTargets } from "./terminal/useRunTargets";
 import { TransferNotifications } from "./sftp/TransferNotifications";
-import { transferManagerFor } from "./sftp/transferManager";
+import { transferManagersToFollow } from "./sftp/transferManager";
 import { localHostAlias } from "./sftp/localHost";
 import { useTransferUnloadWarning } from "./sftp/useTransferUnloadWarning";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
@@ -232,6 +232,7 @@ export function App({
   const showHomeInPlace = useCallback(() => navigateLocation(sectionPath("Home"), { replace: true }), [navigateLocation]);
   useHomeWithoutSessions({ terminalFace, activeSessionId, terminalSessions, showHome: showHomeInPlace });
   const directDestination = useDirectDestinationActions({
+    config: engineApis.config,
     aliases: declared.knownAliases,
     canSave: true,
     open: openSSHSession,
@@ -328,10 +329,12 @@ export function App({
   // Transfers run in the engine, so the queue keeps up even while this tab is
   // hidden; a couple of seconds is fast enough for progress and cheap enough
   // for the engine.
-  usePolling(() => transferManagerFor(runTargets.selected).reconcile(), {
+  // The queue of the engine shown is read, and so is that of any other engine this browser is moving a file for:
+  // its jobs go on behind, and the next one starts from what the engine lists.
+  usePolling(() => Promise.all(transferManagersToFollow(runTargets.selected).map((manager) => manager.reconcile())).then(() => undefined), {
     intervalMs: transferReconcileIntervalMs, enabled: state === "ready", whileHidden: true, immediately: true,
   });
-  useTransferUnloadWarning();
+  useTransferUnloadWarning(runTargets.selected);
 
   const unreadSessions = useTerminalNotifications(
     terminalSessions.sessions,

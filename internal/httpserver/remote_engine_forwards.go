@@ -18,6 +18,9 @@ type forwardedRoute struct {
 	// file は、ファイルの中身を運ぶ操作かどうか。要求と答えの本文を、溜めずに流す
 	// （remoteengine.ForwardFileAPI）。
 	file bool
+	// media は、<audio> と <video> が CSRF のトークン無しで読む操作かどうか。音声か動画の答えだけを渡す
+	// （remoteengine.ForwardMediaAPI）。
+	media bool
 }
 
 // forwardedMediaRoute は、実行先のファイルを <audio> と <video> が読む経路である。このマシンの
@@ -118,7 +121,7 @@ var forwardedRoutes = []forwardedRoute{
 	{method: http.MethodGet, path: "/sftp/local/download", file: true},
 	{method: http.MethodPost, path: "/sftp/media-tickets", slow: true},
 	{method: http.MethodDelete, path: "/sftp/media-tickets/:ticket"},
-	{method: http.MethodGet, path: "/sftp/media/:ticket", file: true},
+	{method: http.MethodGet, path: "/sftp/media/:ticket", media: true},
 	{method: http.MethodPost, path: "/sftp/local/directories"},
 	{method: http.MethodPost, path: "/sftp/local/rename"},
 	{method: http.MethodPost, path: "/sftp/local/delete-plan"},
@@ -159,6 +162,8 @@ func registerForwardedRoutes(engine *echo.Echo, handlers RemoteEngineHandlers) {
 	for _, route := range forwardedRoutes {
 		forward := handlers.Engines.ForwardAPI
 		switch {
+		case route.media:
+			forward = handlers.Engines.ForwardMediaAPI
 		case route.file:
 			forward = handlers.Engines.ForwardFileAPI
 		case route.slow:

@@ -596,3 +596,20 @@ export function transferManagerFor(runTarget: string | null): SFTPTransferManage
   runTargetTransferManagers.set(runTarget, made);
   return made;
 }
+
+// allTransferManagers are the queues made so far: this machine's, and each run target's that was shown.
+export function allTransferManagers(): SFTPTransferManager[] {
+  return [sftpTransferManager, ...runTargetTransferManagers.values()];
+}
+
+// transferManagersToFollow are the queues the page keeps reading: the one of the engine shown, and every other one
+// this browser is moving a file for. A queue behind another engine with nothing of this browser's is left alone, so
+// that an engine nobody looks at is not asked every few seconds.
+export function transferManagersToFollow(shownRunTarget: string | null): SFTPTransferManager[] {
+  return queuesToFollow(transferManagerFor(shownRunTarget), allTransferManagers());
+}
+
+// queuesToFollow picks, among `all`, the queue shown and the others this browser is moving a file for.
+export function queuesToFollow(shown: SFTPTransferManager, all: readonly SFTPTransferManager[]): SFTPTransferManager[] {
+  return [shown, ...all.filter((manager) => manager !== shown && manager.hasBrowserTransfers())];
+}
