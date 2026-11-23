@@ -1149,7 +1149,7 @@ test("two fingers pinch the text of the terminal, not the page", async ({ page, 
   expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
 
   // A phone draws at the same size as a PC until a preset says otherwise.
-  expect(before).toBe(8);
+  expect(before).toBe(13);
   // The tip says the new size, and its reset goes back to the settings' size without taking the focus, which
   // would open the keyboard.
   const tip = page.getByRole("status").filter({ hasText: `${before * 2}px` });

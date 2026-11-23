@@ -144,11 +144,11 @@ describe("TerminalView", () => {
 
     try {
       renderView();
-      expect(view?.options.fontSize).toBe(8);
+      expect(view?.options.fontSize).toBe(13);
 
       phone = false;
       act(() => listeners.forEach((listener) => listener()));
-      expect(view?.options.fontSize).toBe(8);
+      expect(view?.options.fontSize).toBe(13);
     } finally {
       open.mockRestore();
     }
