@@ -1161,3 +1161,15 @@ test("two fingers pinch the text of the terminal, not the page", async ({ page, 
   await expect(page.getByRole("status").filter({ hasText: `${before}px` })).toBeVisible();
   expect(await focused()).toBe(focusedBefore);
 });
+
+test("with no session open, Terminal in the bottom bar shows Home, and a connection tapped there opens its terminal", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Quick navigation", exact: true }).getByRole("link", { name: "Terminal", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Available connections" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/u);
+
+  await page.getByRole("list", { name: "Available connections" }).getByRole("listitem").filter({ hasText: "bastion" }).getByText("bastion", { exact: true }).tap();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
+  await expect(page).toHaveURL(/\/terminal$/u);
+});

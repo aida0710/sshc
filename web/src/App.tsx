@@ -217,7 +217,7 @@ export function App({
     openSessionInSplit,
   } = terminalWorkspace;
   const showHomeInPlace = useCallback(() => navigateLocation(sectionPath("Home"), { replace: true }), [navigateLocation]);
-  useHomeWithoutSessions({ terminalFace, terminalSessions, showHome: showHomeInPlace });
+  useHomeWithoutSessions({ terminalFace, activeSessionId, terminalSessions, showHome: showHomeInPlace });
   const directDestination = useDirectDestinationActions({
     aliases: declared.knownAliases,
     canSave: runTargets.selected === null,
