@@ -27,11 +27,8 @@ type OverviewPanelProps = {
   loadSync?: () => Promise<SyncStatus>;
   loadRecent?: () => Promise<RecentConnectionList>;
   // onConnect opens a session to the connection on the engine new sessions open on, and shows it. It settles once
-  // the engine has answered; a failure is said where the terminal's other failures are.
+  // the engine has answered; a failure is said where the terminal's other failures are (the sidebar and a toast).
   onConnect: (alias: string) => Promise<void>;
-  // sessionProblem is why the last session did not open, or empty. The sidebar says it too, and a phone hides the
-  // sidebar, so Home says it there.
-  sessionProblem?: string;
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
   onAddConnection: () => void;
@@ -48,7 +45,6 @@ export function OverviewPanel({
   loadSync = loadDefaultSync,
   loadRecent = loadDefaultRecent,
   onConnect,
-  sessionProblem = "",
   onNavigate,
   onNavigateLocation,
   onAddConnection,
@@ -128,9 +124,6 @@ export function OverviewPanel({
         )}
       />
 
-      {sessionProblem === "" ? null : (
-        <div className="hidden mobile-layout:block"><Notice tone="danger">{sessionProblem}</Notice></div>
-      )}
       {loading || overview === null || !listsFailed ? null : (
         <Notice actions={retryButton}>{t("home.listsLoadFailed")}</Notice>
       )}
