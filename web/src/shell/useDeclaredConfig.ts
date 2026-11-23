@@ -15,6 +15,9 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
   const [hosts, setHosts] = useState<HostEntry[]>([]);
   const [files, setFiles] = useState<FileNode[]>([]);
   const [readCount, setReadCount] = useState(0);
+  // read says whether what is held was read from `config`: false from the moment another engine is chosen until its
+  // own SSH configuration answers.
+  const [read, setRead] = useState(false);
 
   const adoptOverview = useCallback((overview: Overview) => {
     setGroups((overview.metadata.groups ?? []).map((group) => group.name));
@@ -30,6 +33,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
     ]);
     setHosts(overview.hosts.filter((host) => host.identity.alias !== ""));
     setFiles(overview.files);
+    setRead(true);
   }, []);
 
   // What another engine declared is not this one's: until this one's is read, and when it cannot be, nothing is
@@ -43,6 +47,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
     setKnownAliases([]);
     setHosts([]);
     setFiles([]);
+    setRead(false);
   }
 
   useEffect(() => {
@@ -60,7 +65,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
   }, [enabled, section, readCount, adoptOverview, config]);
 
   return {
-    groups, hostAppearance, hostVPN, knownAliases, hosts, files,
+    groups, hostAppearance, hostVPN, knownAliases, hosts, files, read,
     // adoptOverview takes an overview a section read after changing the connections, without leaving that section.
     adoptOverview,
     // readAgain is for a change made outside the sections.
