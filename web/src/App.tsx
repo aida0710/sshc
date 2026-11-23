@@ -576,6 +576,7 @@ export function App({
                       settings={terminalSettings}
                       hostAppearance={declared.hostAppearance}
                       hostVPN={declared.hostVPN}
+                      hostSettingsRead={declared.read}
                       api={runTargetApis.sessions}
                       runTargets={runTargets}
                       runTargetLink={runTargetLink}

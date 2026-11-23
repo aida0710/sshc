@@ -7,6 +7,7 @@ import { TerminalSplitView } from "../terminal/splitView/TerminalSplitView";
 import { defaultRetainedTerminals } from "../terminal/splitView/retainedSessions";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
 import type { RemotePathAction } from "../sftp/SFTPPanel";
+import { hostSettingsToDrawWith, type HostSettings } from "../terminal/hostSettings";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type { ExitReport } from "../terminal/stream";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
@@ -29,7 +30,7 @@ type ShownTerminals = {
   sessions: TerminalSession[];
   splitView: SplitViewController;
   api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
-};
+} & HostSettings;
 
 // Terminals stay mounted behind other sections so output keeps flowing.
 // Each session uses its host's appearance.
@@ -41,6 +42,7 @@ export function TerminalScreen({
   settings,
   hostAppearance,
   hostVPN,
+  hostSettingsRead,
   api,
   runTargets,
   runTargetLink,
@@ -58,6 +60,9 @@ export function TerminalScreen({
   hostAppearance: Map<string, TerminalAppearance>;
   // hostVPN は、alias ごとに通るVPN経路の名前である。
   hostVPN: Map<string, string>;
+  // hostSettingsRead は、hostAppearance と hostVPN が、今の実行先の SSH の設定から読んだものかどうか。
+  // 実行先を替えた直後は、読み終えるまで空である。
+  hostSettingsRead: boolean;
   // api is the terminal API of the run target the sessions belong to.
   api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   // runTargets says which engine that is; its selected alias is null for this
@@ -104,10 +109,10 @@ export function TerminalScreen({
     const appearance = resolveAppearance(
       session.alias === undefined
         ? undefined
-        : hostAppearance.get(session.alias),
+        : shown.hostAppearance.get(session.alias),
       settings.appearance,
     );
-    const vpnProfile = session.alias === undefined ? "" : hostVPN.get(session.alias) ?? "";
+    const vpnProfile = session.alias === undefined ? "" : shown.hostVPN.get(session.alias) ?? "";
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <Suspense fallback={<RouteSkeleton kind="terminal" />}>
@@ -173,7 +178,13 @@ export function TerminalScreen({
   // until it answers, and while it is behind another, its terminals are drawn from what it listed last.
   const kept = useRef(new Map<string | null, ShownTerminals>()).current;
   const listed = terminalSessions.loaded && refusal === null;
-  if (listed) kept.set(runTarget, { runTarget, sessions: terminalSessions.sessions, splitView, api });
+  if (listed) {
+    // A terminal draws with the appearance its connection asks for. Those settings are read after the engine is
+    // chosen, and are another engine's while it is behind: until this engine's are read, its terminals keep the ones
+    // they were drawn with. A terminal given another font changes its size, and the program in it is told.
+    const hostSettings = hostSettingsToDrawWith({ current: { hostAppearance, hostVPN }, read: hostSettingsRead, drawnWith: kept.get(runTarget) });
+    kept.set(runTarget, { runTarget, sessions: terminalSessions.sessions, splitView, api, ...hostSettings });
+  }
   for (const keptRunTarget of kept.keys()) {
     if (keptRunTarget !== null && keptRunTarget !== runTarget && !runTargets.engines.includes(keptRunTarget)) kept.delete(keptRunTarget);
   }

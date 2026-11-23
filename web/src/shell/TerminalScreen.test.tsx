@@ -64,6 +64,7 @@ function Screen({ api, targets, connectedEngines = new Set() }: { api: TerminalS
       settings={{ appearance: { palette: "", font: "", background: "" } }}
       hostAppearance={new Map()}
       hostVPN={new Map()}
+      hostSettingsRead
       api={api}
       runTargets={targets}
       runTargetLink={{ phase: "ready", refusal: null, connectedEngines }}
@@ -232,6 +233,7 @@ function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: Ru
       settings={{ appearance: { palette: "", font: "", background: "" } }}
       hostAppearance={new Map()}
       hostVPN={new Map()}
+      hostSettingsRead
       api={api}
       runTargets={targets}
       runTargetLink={{ phase: "ready", refusal: null, connectedEngines }}
