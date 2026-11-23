@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { failureCode } from "../api/client";
 import { configApi, type Overview } from "../api/config";
 import { recentConnectionsApi, type RecentConnectionList } from "../api/recentConnections";
 import { syncApi, type SyncStatus } from "../api/sync";
-import { terminalSessionsApi } from "../api/terminalSessions";
 import { useLanguage } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
@@ -28,10 +26,14 @@ type OverviewPanelProps = {
   loadOverview?: () => Promise<Overview>;
   loadSync?: () => Promise<SyncStatus>;
   loadRecent?: () => Promise<RecentConnectionList>;
-  launch?: (alias: string) => Promise<{ session: { id: string } }>;
+  // onConnect opens a session to the connection on the engine new sessions open on, and shows it. It settles once
+  // the engine has answered; a failure is said where the terminal's other failures are.
+  onConnect: (alias: string) => Promise<void>;
+  // sessionProblem is why the last session did not open, or empty. The sidebar says it too, and a phone hides the
+  // sidebar, so Home says it there.
+  sessionProblem?: string;
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
-  onSessionOpened?: (id: string) => void;
   onAddConnection: () => void;
   onOpenLocalShell: () => void;
 };
@@ -39,17 +41,16 @@ type OverviewPanelProps = {
 const loadDefaultOverview = () => configApi.overview();
 const loadDefaultSync = () => syncApi.syncStatus();
 const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
-const launchDefault = (alias: string) => terminalSessionsApi.openTerminalSession({ kind: "ssh", alias });
 
 export function OverviewPanel({
   runTarget,
   loadOverview = loadDefaultOverview,
   loadSync = loadDefaultSync,
   loadRecent = loadDefaultRecent,
-  launch = launchDefault,
+  onConnect,
+  sessionProblem = "",
   onNavigate,
   onNavigateLocation,
-  onSessionOpened,
   onAddConnection,
   onOpenLocalShell,
 }: OverviewPanelProps) {
@@ -62,7 +63,6 @@ export function OverviewPanel({
   const [recent, setRecent] = useState<RecentConnectionList["connections"]>([]);
   const [launching, setLaunching] = useState("");
   const launchPending = useRef(false);
-  const [problem, setProblem] = useState("");
   // 読めなかったことを「無い」と見分けられるように、履歴の失敗は空の一覧とは
   // 別に持つ。SSH設定を読めなかったときは overview を null にする。
   const [listsFailed, setListsFailed] = useState(false);
@@ -94,16 +94,8 @@ export function OverviewPanel({
     if (launchPending.current) return;
     launchPending.current = true;
     setLaunching(alias);
-    setProblem("");
     try {
-      const opened = await launch(alias);
-      onSessionOpened?.(opened.session.id);
-    } catch (error) {
-      setProblem(
-        failureCode(error) === "terminal_session_limit"
-          ? t("terminal.limitRefused")
-          : t("terminal.openFailed"),
-      );
+      await onConnect(alias);
     } finally {
       launchPending.current = false;
       setLaunching("");
@@ -136,7 +128,9 @@ export function OverviewPanel({
         )}
       />
 
-      {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
+      {sessionProblem === "" ? null : (
+        <div className="hidden mobile-layout:block"><Notice tone="danger">{sessionProblem}</Notice></div>
+      )}
       {loading || overview === null || !listsFailed ? null : (
         <Notice actions={retryButton}>{t("home.listsLoadFailed")}</Notice>
       )}

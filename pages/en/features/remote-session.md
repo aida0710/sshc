@@ -32,7 +32,7 @@ If the chosen host's vault is locked, the terminal area shows a field for that v
 
 ## Which engine a session opens on
 
-With a remote session chosen, some actions still open the session on this machine.
+With a remote session chosen, every action that opens a session opens it on the chosen engine, except the one in SFTP.
 
 | Action | Opens on |
 |---|---|
@@ -40,7 +40,8 @@ With a remote session chosen, some actions still open the session on this machin
 | **Connect** in Connections | The chosen engine |
 | **Connect all** in Connections | The chosen engine |
 | **Open a local shell** on Home | The chosen engine |
-| A connection card on Home (double click, a tap on a touch screen, or **Connect** in its **…**) | This machine. **Remote session** switches back to localhost |
+| A connection card on Home (double click, a tap on a touch screen, or **Connect** in its **…**) | The chosen engine |
+| **Open Terminal here** in SFTP | This machine. **Remote session** switches back to localhost |
 
 An SSH session in a remote session takes its connection name from this machine's list, but the remote engine decides where it connects with its own machine's `~/.ssh/config`. If that file has no connection of the same name, the session cannot open.
 
