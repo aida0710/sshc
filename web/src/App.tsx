@@ -29,6 +29,7 @@ import { useTerminalSessions } from "./terminal/sessions";
 import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
 import { SessionAddressesContext } from "./terminal/sessionDestination";
 import { useRunTargetApis } from "./terminal/useRunTargetApis";
+import { useSessionProblemToast } from "./terminal/useSessionProblemToast";
 import { useRunTargetLink } from "./terminal/useRunTargetLink";
 import { useRunTargets } from "./terminal/useRunTargets";
 import { TransferNotifications } from "./sftp/TransferNotifications";
@@ -182,6 +183,7 @@ export function App({
     [declared.hosts, runTargets.selected],
   );
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
+  useSessionProblemToast(terminalSessions.problem);
   const runTargetLink = useRunTargetLink({
     selected: runTargets.selected,
     api: runTargets.api,

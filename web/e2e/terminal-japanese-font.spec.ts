@@ -20,15 +20,17 @@ test("draws Japanese with BIZ UDGothic and Latin letters with JetBrains Mono onc
   await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  // Both bundled families are fetched before the terminal uses the font, while the screen holds no Japanese yet: a
+  // family that arrived with its first character would leave WebGL's texture atlas with what another font drew.
+  await expect.poll(async () => (await drawnRowFont(page)).fontFamily).toMatch(/^"?JetBrains Mono"?, "?BIZ UDGothic"?,/);
+  expect(await page.evaluate(() => [...document.fonts].filter((face) => face.status === "loaded").map((face) => face.family.replace(/"/g, ""))))
+    .toEqual(expect.arrayContaining(["JetBrains Mono", "BIZ UDGothic"]));
+
   await terminalKeyboard(page).focus();
   await page.keyboard.type("cat ~/japanese.txt");
   await page.keyboard.press("Enter");
   await expect(screen).toContainText("path\\to\\file");
   await expect(screen).toContainText("接");
-
-  // Both bundled families are fetched before the rows are drawn, so neither waits for its first character.
-  await expect.poll(() => page.evaluate(() => [...document.fonts].filter((face) => face.status === "loaded").map((face) => face.family.replace(/"/g, "")))).toEqual(expect.arrayContaining(["JetBrains Mono", "BIZ UDGothic"]));
-  expect((await drawnRowFont(page)).fontFamily).toMatch(/^"?JetBrains Mono"?, "?BIZ UDGothic"?,/);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/biz-udgothic.png` });
   }

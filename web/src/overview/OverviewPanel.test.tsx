@@ -208,20 +208,6 @@ describe("OverviewPanel", () => {
     expect(screen.queryByRole("button", { name: "Opening database…" })).not.toBeInTheDocument();
   });
 
-  it("says why the last session did not open", async () => {
-    render(
-      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()} onConnect={vi.fn()}
-        sessionProblem="No more sessions can be opened."
-        loadOverview={vi.fn().mockResolvedValue(overview)}
-        loadSync={vi.fn().mockResolvedValue(sync)}
-        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        onNavigate={vi.fn()}
-        onNavigateLocation={vi.fn()}
-      />,
-    );
-    expect(await screen.findByText("No more sessions can be opened.")).toBeInTheDocument();
-  });
-
   it("opens the exact connection settings URL without launching", async () => {
     const launch = vi.fn();
     const navigateLocation = vi.fn();

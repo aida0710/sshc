@@ -599,6 +599,28 @@ test("opens a connection chosen on Home on the run target, which stays chosen", 
   await expect(page.getByRole("button", { name: /^Choose the remote session engine \(now: bastion\)/ })).toBeVisible();
 });
 
+test("says on a phone why a connection chosen on Home did not open on the run target", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await page.route(`**${sessionsPath}`, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    // bastion's own SSH configuration has no connection of this name.
+    await route.fulfill({ status: 422, contentType: "application/problem+json", json: { code: "alias_unresolvable", message: "request rejected" } });
+  });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "web", exact: true })).toBeVisible();
+  await openSection(page, "Home");
+  // The sidebar, which keeps the reason, is hidden at this width.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("[data-app-navigation]")).not.toBeInViewport();
+
+  await page.getByRole("button", { name: /^Connect to bastion\./ }).dblclick();
+  await expect(page.getByRole("status").filter({ hasText: "The settings for this connection could not be resolved." })).toBeInViewport();
+});
+
 test("says a host is being reached while it does not answer, and going back to this machine does not wait for it", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: localVersion });
   await openApplication(page, installation);
