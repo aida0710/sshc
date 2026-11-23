@@ -43,8 +43,16 @@ function restorePane(value: unknown): SFTPPane[] {
   return tabs.length === 0 ? [] : [paneOf(tabs, restoreActiveId(value.activeIndex, tabs))];
 }
 
-export function restorePanes(): SFTPPane[] {
-  const stored = readMachineStateJSON("sftpPanes", []);
+// The tabs of this machine's own SFTP are kept under sftpPanes. Those of a remote session's engine name that
+// engine's connections and folders, so each engine keeps its own, by alias, under sftpPanesByRunTarget.
+function storedPanesOf(runTarget: string | null): unknown {
+  if (runTarget === null) return readMachineStateJSON("sftpPanes", []);
+  const byRunTarget = readMachineStateJSON("sftpPanesByRunTarget", {});
+  return isRecord(byRunTarget) ? byRunTarget[runTarget] ?? [] : [];
+}
+
+export function restorePanes(runTarget: string | null): SFTPPane[] {
+  const stored = storedPanesOf(runTarget);
   const panes = Array.isArray(stored) ? stored.flatMap(restorePane).slice(0, maxPanes) : [];
   return panes.length === 0 ? [blankPane()] : panes;
 }
@@ -57,8 +65,13 @@ function storedPane(pane: SFTPPane): StoredPane {
   };
 }
 
-export function rememberPanes(panes: SFTPPane[]): void {
-  keepMachineStateJSON("sftpPanes", panes.map(storedPane));
+export function rememberPanes(runTarget: string | null, panes: SFTPPane[]): void {
+  if (runTarget === null) {
+    keepMachineStateJSON("sftpPanes", panes.map(storedPane));
+    return;
+  }
+  const byRunTarget = readMachineStateJSON("sftpPanesByRunTarget", {});
+  keepMachineStateJSON("sftpPanesByRunTarget", { ...(isRecord(byRunTarget) ? byRunTarget : {}), [runTarget]: panes.map(storedPane) });
 }
 
 // sftpSplitRatio is the left pane's share of a split workspace, which each browser keeps for its own screen.

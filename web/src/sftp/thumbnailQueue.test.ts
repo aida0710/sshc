@@ -7,7 +7,7 @@ type Asked = { path: string; signal: AbortSignal; resolve: (blob: Blob) => void;
 let asked: Asked[];
 
 function request(path: string, finished: (url: string | null) => void = () => undefined) {
-  return requestThumbnail({ alias: "edge", path, revision: "r" }, finished);
+  return requestThumbnail(sftpApi.thumbnail, { alias: "edge", path, revision: "r" }, finished);
 }
 
 async function settle() {

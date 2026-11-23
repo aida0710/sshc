@@ -1,3 +1,4 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
@@ -73,7 +74,8 @@ export function useSFTPBrowser({
   reportLocation.current = onLocationChange;
   const latest = useRef({ alias, path, connected });
   latest.current = { alias, path, connected };
-  const source = useMemo(() => sourceFor(alias), [alias]);
+  const { sftp } = useEngineApis();
+  const source = useMemo(() => sourceFor(alias, sftp), [alias, sftp]);
 
   function knownHost(candidate: string): boolean {
     return candidate === localHostAlias || aliases.includes(candidate);
@@ -107,7 +109,7 @@ export function useSFTPBrowser({
 
   async function load(nextPath: string = latest.current.path, options: LoadOptions = {}): Promise<RemoteEntry[] | null> {
     const targetAlias = options.alias ?? latest.current.alias;
-    const target = sourceFor(targetAlias);
+    const target = sourceFor(targetAlias, sftp);
     const isCurrent = beginRequest();
     if (target === null) {
       setBusy(false);
@@ -123,7 +125,7 @@ export function useSFTPBrowser({
     // connection, which the engine reports while it lasts.
     const opensConnection = !target.local && (!latest.current.connected || targetAlias !== latest.current.alias);
     const connection = opensConnection ? {
-      watch: watchConnectionAttempt(targetAlias, (reading) => { if (isCurrent()) setConnection(reading); }),
+      watch: watchConnectionAttempt(sftp.files, targetAlias, (reading) => { if (isCurrent()) setConnection(reading); }),
       abort: new AbortController(),
     } : null;
     if (connection !== null) {
@@ -232,7 +234,7 @@ export function useSFTPBrowser({
 
   useEffect(() => {
     if (initialLocation === null || openedInitialLocation.current) return;
-    const restored = sourceFor(initialLocation.alias);
+    const restored = sourceFor(initialLocation.alias, sftp);
     if (restored === null || !knownHost(initialLocation.alias) ||
         (initialLocation.path !== "" && !restored.acceptsPath(initialLocation.path))) return;
     openedInitialLocation.current = true;

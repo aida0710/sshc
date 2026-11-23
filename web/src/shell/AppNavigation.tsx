@@ -1,3 +1,4 @@
+import { useSftpTransferManager } from "../sftp/useSftpTransferManager";
 import type { PaneEdge } from "../terminal/splitView/layout";
 import { SplitGroupList } from "../terminal/splitView/SplitGroupList";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
@@ -26,7 +27,6 @@ import type { HostEntry } from "../api/config";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import type { SeenProgramStatus } from "../terminal/programStatus";
 import { navigationWidth } from "./navigationLayout";
-import { sftpTransferManager } from "../sftp/transferManager";
 import type { SessionShortcutRequest } from "./useAppShortcuts";
 
 // A phone reaches the other sections and Menu from the bar at the bottom (MobileNavigation), so its
@@ -111,6 +111,7 @@ export function AppNavigation({
   // sessionShortcut is the last new session or close session shortcut, for the session list to answer.
   sessionShortcut?: SessionShortcutRequest | null;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
   const t = useTranslate();
   const shortcuts = useBindings();
   const transfers = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);

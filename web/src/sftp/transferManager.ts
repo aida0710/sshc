@@ -1,7 +1,8 @@
 import { retryableTransferFailure, waitForTransferReconnect } from "./transferRecovery";
 import { defaultLargeFileChunkBytes, defaultLargeFileParallelism, defaultLargeFileThreshold } from "./transferDefaults";
 import { failureCode } from "../api/client";
-import { sftpApi, type TransferJobList, type TransferKind, type TransferQueueMove } from "./api";
+import { engineApiBase } from "../api/remoteEngines";
+import { createSftpApi, sftpApi, type TransferJobList, type TransferKind, type TransferQueueMove } from "./api";
 import { DownloadPlane } from "./downloadPlane";
 import { TransferLedger, type ManagedTransferJob, type TransferNotice } from "./transferLedger";
 import type { TransferManagerAPI, TransferPlaneContext } from "./transferPlane";
@@ -581,3 +582,17 @@ export class SFTPTransferManager {
 }
 
 export const sftpTransferManager = new SFTPTransferManager();
+
+const runTargetTransferManagers = new Map<string, SFTPTransferManager>();
+
+// transferManagerFor is the transfer queue of an engine: this machine's (runTarget null), or a run target's. Each
+// engine keeps one for as long as the page lives, so an upload or a download the browser runs goes on while another
+// engine is shown.
+export function transferManagerFor(runTarget: string | null): SFTPTransferManager {
+  if (runTarget === null) return sftpTransferManager;
+  const known = runTargetTransferManagers.get(runTarget);
+  if (known !== undefined) return known;
+  const made = new SFTPTransferManager(createSftpApi(engineApiBase(runTarget)));
+  runTargetTransferManagers.set(runTarget, made);
+  return made;
+}

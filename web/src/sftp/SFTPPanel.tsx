@@ -1,3 +1,5 @@
+import { useEngineApis } from "../shell/engineApis";
+import { useSftpTransferManager } from "./useSftpTransferManager";
 import { sourceFor } from "./sftpSource";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import type { HostEntry } from "../api/config";
@@ -33,7 +35,6 @@ import { SFTPTextEditor } from "./SFTPTextEditor";
 import { useSFTPTextEditor } from "./useSFTPTextEditor";
 import { SFTPToolbar } from "./SFTPToolbar";
 import { TransferManagerList } from "./TransferManagerList";
-import { sftpTransferManager } from "./transferManager";
 import { remoteParentOf } from "./sftpSource";
 import { useSFTPBrowser, type RestoredSFTPLocation } from "./useSFTPBrowser";
 import { SFTPConnectionStatus } from "./SFTPConnectionStatus";
@@ -142,6 +143,8 @@ export function SFTPPanel({
   // onChooseHost opens the connection picker from the empty pane, when the picker has no button of its own here.
   onChooseHost?: () => void;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
+  const { sftp } = useEngineApis();
   const t = useTranslate();
   const [searchOptionsOpen, setSearchOptionsOpen] = useState(false);
   const [details, setDetails] = useState<RemoteEntry[] | null>(null);
@@ -200,7 +203,7 @@ export function SFTPPanel({
     onProblem: setProblem,
     // The saved revision is what the listing must show next.
     onSaved: async (targetAlias, saved) => {
-      await browser.load(sourceFor(targetAlias)?.parentOf(saved.entry.path) ?? remoteParentOf(saved.entry.path), { alias: targetAlias, refresh: true });
+      await browser.load(sourceFor(targetAlias, sftp)?.parentOf(saved.entry.path) ?? remoteParentOf(saved.entry.path), { alias: targetAlias, refresh: true });
     },
     onNavigationBlockerChange,
     onDirtyChange,

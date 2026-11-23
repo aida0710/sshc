@@ -30,6 +30,8 @@ type RemoteEngineDirectory interface {
 	ForwardAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
 	// ForwardSlowAPI は、接続先がよそのマシンを待ってから答える操作を、長い上限で取り次ぐ。
 	ForwardSlowAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
+	// ForwardFileAPI は、ファイルの中身を運ぶ操作を、要求と答えの本文を流して取り次ぐ。
+	ForwardFileAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
 	// DialRunTargetLoopback は、実行先の 127.0.0.1:port へ、取り次ぎの SSH の接続の上で TCP を開く。
 	DialRunTargetLoopback(ctx context.Context, alias string, port int) (net.Conn, error)
 	// CallAPI は、このマシンのエンジン自身が、実行先のエンジンのターミナルの API へ送る。

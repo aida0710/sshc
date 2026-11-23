@@ -1,9 +1,10 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Icon } from "../ui/icons";
 import { useTranslate, type Translate } from "../i18n/context";
 import { showBrowserNotification } from "../ui/browserNotifications";
 import { notifiesTransfersNatively } from "../android/native";
-import { sftpTransferManager, type TransferNotice } from "./transferManager";
+import { type TransferNotice } from "./transferManager";
 import { sftpTransferProblemText } from "./sftpProblemText";
 
 export function notifyBackgroundTransfers(
@@ -29,6 +30,7 @@ export function notifyBackgroundTransfers(
 }
 
 export function TransferNotifications() {
+  const sftpTransferManager = useSftpTransferManager();
   const t = useTranslate();
   const notices = useSyncExternalStore(sftpTransferManager.subscribeNotices, sftpTransferManager.getNoticeSnapshot);
   const delivered = useRef(new Set<string>());

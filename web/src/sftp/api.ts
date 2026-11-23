@@ -1,3 +1,4 @@
+import { localApiBase } from "../api/remoteEngines";
 import { localHostAlias } from "./localHost";
 import { apiClient, failureCode } from "../api/client";
 import { issueAction, patchJSON, postJSON, putJSON, sendJSON } from "../api/guards";
@@ -124,9 +125,9 @@ export type DownloadTarget = { alias: string; jobId: string; remotePath: string 
 export type DownloadStream = DownloadTarget & { directory: boolean; offset: number };
 export type ModeChange = { alias: string; remotePath: string; mode: string; expectedRevision: string; recursive: boolean };
 
-function pathFor(alias: string, suffix: string, remotePath: string): string {
-  if (alias === localHostAlias && (suffix === "text" || suffix === "preview" || suffix === "thumbnail")) return `/api/v1/sftp/local/${suffix}?path=${encodeURIComponent(remotePath)}`;
-  return `/api/v1/sftp/${encodeURIComponent(alias)}/${suffix}?path=${encodeURIComponent(remotePath)}`;
+function pathFor(base: string, alias: string, suffix: string, remotePath: string): string {
+  if (alias === localHostAlias && (suffix === "text" || suffix === "preview" || suffix === "thumbnail")) return `${base}/sftp/local/${suffix}?path=${encodeURIComponent(remotePath)}`;
+  return `${base}/sftp/${encodeURIComponent(alias)}/${suffix}?path=${encodeURIComponent(remotePath)}`;
 }
 
 function entry(value: unknown): RemoteEntry {
@@ -141,218 +142,226 @@ function transferJob(value: unknown): TransferJob {
   return validateOpenAPISchema<TransferJob>("SFTPTransferJob", value);
 }
 
-export const sftpApi = {
-  async listLocal(path = ""): Promise<LocalListing> {
-    const query = path === "" ? "" : `?path=${encodeURIComponent(path)}`;
-    return validateOpenAPISchema<LocalListing>("SFTPLocalListing", await apiClient.read(`/api/v1/sftp/local/entries${query}`));
-  },
-  async listTransfers(): Promise<TransferJobList> {
-    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.read("/api/v1/sftp/transfers"));
-  },
-  async moveTransfer(id: string, move: TransferQueueMove): Promise<TransferJobList> {
-    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await postJSON<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/queue-position`, { move }, undefined, transferProblems));
-  },
-  async createTransfer(input: CreateTransferJob): Promise<TransferJob> {
-    const actionToken = input.direction === "remote" && input.operation === "delete"
-      ? await issueAction("sftp.delete", `${input.alias}:${input.remotePath}`)
-      : null;
-    return transferJob(await postJSON<unknown>(
-      "/api/v1/sftp/transfers",
-      { sourceAlias: "", sourcePath: "", operation: "", overwrite: false, ...input },
-      actionToken ?? undefined,
-    ));
-  },
-  async compareDirectories({ left, right, mode = "metadata", signal }: DirectoryCompareOptions): Promise<DirectoryComparison> {
-    const query = new URLSearchParams({ leftAlias: left.alias, leftPath: left.path, rightAlias: right.alias, rightPath: right.path, mode });
-    return validateOpenAPISchema<DirectoryComparison>("SFTPDirectoryComparison", await apiClient.read(`/api/v1/sftp/compare?${query.toString()}`, {
-      ...(signal === undefined ? {} : { signal }),
-      locallyHandledCodes: [...connectionProblems, "sftp_compare_limit", "sftp_not_found", "sftp_conflict", "sftp_unsupported_operation", "sftp_local_privacy_protection"],
-    }));
-  },
-  async clearFinishedTransfers(): Promise<void> {
-    await apiClient.mutate<unknown>("/api/v1/sftp/transfers/finished", { method: "DELETE" }, { locallyHandledCodes: transferProblems });
-  },
-  async removeTransfer(id: string): Promise<void> {
-    await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}`, { method: "DELETE" }, {
-      locallyHandledCodes: transferProblems,
-    });
-  },
-  async updateTransfer(id: string, action: TransferJobAction, options: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean } = {}): Promise<TransferJob> {
-    return transferJob(await postJSON<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/actions`, { action, ...options }, undefined, transferProblems));
-  },
-  async checkpointDownload(id: string, offset: number, revision: string): Promise<TransferJob> {
-    return transferJob(await postJSON<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/download-checkpoint`, { offset, revision }, undefined, transferProblems));
-  },
-  async verifyDownload({ alias, jobId, remotePath }: DownloadTarget, revision: string): Promise<void> {
-    const endpoint = `${pathFor(alias, "download", remotePath)}&jobId=${encodeURIComponent(jobId)}&verify=true`;
-    const response = await apiClient.send(endpoint, { method: "GET", headers: { "If-Range": revision } });
-    if (response.status !== 204) throw new Error("download_changed");
-  },
-  async list(alias: string, remotePath = "", { attempt, signal }: SFTPListOptions = {}): Promise<{ path: string; entries: RemoteEntry[] }> {
-    const listing = remotePath === ""
-      ? `/api/v1/sftp/${encodeURIComponent(alias)}/entries`
-      : pathFor(alias, "entries", remotePath);
-    const endpoint = attempt === undefined
-      ? listing
-      : `${listing}${listing.includes("?") ? "&" : "?"}attempt=${encodeURIComponent(attempt)}`;
-    return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(endpoint, {
-      ...(signal === undefined ? {} : { signal }),
-      locallyHandledCodes: connectionProblems,
-    }));
-  },
-  // connectionAttempt returns the stage and connection log of the listing that
-  // named this attempt, or null while that listing has not begun connecting.
-  async connectionAttempt(alias: string, attempt: string): Promise<SFTPConnectionAttempt | null> {
-    const endpoint = `/api/v1/sftp/${encodeURIComponent(alias)}/connection-attempts/${encodeURIComponent(attempt)}`;
-    try {
-      return validateOpenAPISchema<SFTPConnectionAttempt>("SFTPConnectionAttempt", await apiClient.read(endpoint, {
-        locallyHandledCodes: [connectionAttemptNotFound],
+// createSftpApi is this API of the engine at base (engineApiBase): this machine's, or a run target's as this
+// machine's engine forwards it.
+export function createSftpApi(base: string) {
+  return {
+    async listLocal(path = ""): Promise<LocalListing> {
+      const query = path === "" ? "" : `?path=${encodeURIComponent(path)}`;
+      return validateOpenAPISchema<LocalListing>("SFTPLocalListing", await apiClient.read(`${base}/sftp/local/entries${query}`));
+    },
+    async listTransfers(): Promise<TransferJobList> {
+      return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.read(`${base}/sftp/transfers`));
+    },
+    async moveTransfer(id: string, move: TransferQueueMove): Promise<TransferJobList> {
+      return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await postJSON<unknown>(`${base}/sftp/transfers/${encodeURIComponent(id)}/queue-position`, { move }, undefined, transferProblems));
+    },
+    async createTransfer(input: CreateTransferJob): Promise<TransferJob> {
+      const actionToken = input.direction === "remote" && input.operation === "delete"
+        ? await issueAction("sftp.delete", `${input.alias}:${input.remotePath}`, base)
+        : null;
+      return transferJob(await postJSON<unknown>(
+        `${base}/sftp/transfers`,
+        { sourceAlias: "", sourcePath: "", operation: "", overwrite: false, ...input },
+        actionToken ?? undefined,
+      ));
+    },
+    async compareDirectories({ left, right, mode = "metadata", signal }: DirectoryCompareOptions): Promise<DirectoryComparison> {
+      const query = new URLSearchParams({ leftAlias: left.alias, leftPath: left.path, rightAlias: right.alias, rightPath: right.path, mode });
+      return validateOpenAPISchema<DirectoryComparison>("SFTPDirectoryComparison", await apiClient.read(`${base}/sftp/compare?${query.toString()}`, {
+        ...(signal === undefined ? {} : { signal }),
+        locallyHandledCodes: [...connectionProblems, "sftp_compare_limit", "sftp_not_found", "sftp_conflict", "sftp_unsupported_operation", "sftp_local_privacy_protection"],
       }));
-    } catch (error) {
-      if (failureCode(error) === connectionAttemptNotFound) return null;
-      throw error;
-    }
-  },
-  // answerHostKey answers the host key question of the listing that named this
-  // attempt, as the terminal's buttons answer theirs, and returns the attempt
-  // as it is after the answer. Null when the question is no longer open.
-  async answerHostKey(alias: string, attempt: string, answer: HostKeyAnswer): Promise<SFTPConnectionAttempt | null> {
-    const endpoint = `/api/v1/sftp/${encodeURIComponent(alias)}/connection-attempts/${encodeURIComponent(attempt)}/host-key`;
-    try {
-      return validateOpenAPISchema<SFTPConnectionAttempt>("SFTPConnectionAttempt",
-        await postJSON<unknown>(endpoint, answer, undefined, [noHostKeyQuestion, connectionAttemptNotFound]));
-    } catch (error) {
-      const code = failureCode(error);
-      if (code === noHostKeyQuestion || code === connectionAttemptNotFound) return null;
-      throw error;
-    }
-  },
-  async search({ alias, path, query, mode = "name", signal }: SearchOptions): Promise<RemoteSearchResult> {
-    const parameters = new URLSearchParams({ path, query, mode });
-    const endpoint = `/api/v1/sftp/${encodeURIComponent(alias)}/search?${parameters.toString()}`;
-    return validateOpenAPISchema<RemoteSearchResult>("SFTPSearchResult", await apiClient.read(endpoint, {
-      ...(signal === undefined ? {} : { signal }),
-      locallyHandledCodes: [...connectionProblems, "sftp_not_found", "invalid_request", "sftp_unsupported_entry", "sftp_wrong_type"],
-    }));
-  },
-  async directoryStats(alias: string, remotePath: string): Promise<RemoteDirectoryStats> {
-    return validateOpenAPISchema<RemoteDirectoryStats>("SFTPDirectoryStats", await apiClient.read(pathFor(alias, "stats", remotePath), {
-      locallyHandledCodes: [...connectionProblems, "sftp_not_found", "sftp_wrong_type"],
-    }));
-  },
-  // A file on the engine's own disk needs no transfer job: the engine sends it
-  // whole, and the browser saves it like any finished download.
-  async downloadLocalFile(localPath: string): Promise<Blob> {
-    const response = await apiClient.readResponse(`/api/v1/sftp/local/download?path=${encodeURIComponent(localPath)}`, { locallyHandledCodes: transferProblems });
-    return response.blob();
-  },
-  // A ticket lets <audio> and <video> read the file: they cannot send the
-  // CSRF header, so the ticket in the URL stands in for it.
-  async issueMediaTicket(alias: string, remotePath: string): Promise<string> {
-    const issued = validateOpenAPISchema<MediaTicket>("SFTPMediaTicket", await postJSON<unknown>("/api/v1/sftp/media-tickets", { alias, path: remotePath }, undefined, previewProblems));
-    return issued.ticket;
-  },
-  async revokeMediaTicket(ticket: string): Promise<void> {
-    await apiClient.mutate<unknown>(`/api/v1/sftp/media-tickets/${encodeURIComponent(ticket)}`, { method: "DELETE" }, { locallyHandledCodes: previewProblems });
-  },
-  mediaURL(ticket: string): string {
-    return `/api/v1/sftp/media/${encodeURIComponent(ticket)}`;
-  },
-  async previewFile(alias: string, remotePath: string): Promise<RemotePreview> {
-    const response = await apiClient.readResponse(pathFor(alias, "preview", remotePath), { locallyHandledCodes: previewProblems });
-    return {
-      contentType: (response.headers.get("Content-Type") ?? "").split(";")[0]?.trim() ?? "",
-      revision: response.headers.get("ETag") ?? "",
-      blob: await response.blob(),
-    };
-  },
-  // A row shows its picture or keeps its icon, and never says why, so no failure of a thumbnail is worth a notice.
-  async thumbnail({ alias, path, revision }: { alias: string; path: string; revision: string }, signal: AbortSignal): Promise<Blob> {
-    const endpoint = `${pathFor(alias, "thumbnail", path)}&revision=${encodeURIComponent(revision)}`;
-    const response = await apiClient.readResponse(endpoint, { signal, locallyHandledCodes: thumbnailProblems });
-    return response.blob();
-  },
-  async readText(alias: string, remotePath: string, options?: { expectedRevision?: string; signal?: AbortSignal }): Promise<RemoteTextFile> {
-    const endpoint = pathFor(alias, "text", remotePath) + (options?.expectedRevision === undefined ? "" : `&expectedRevision=${encodeURIComponent(options.expectedRevision)}`);
-    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.read(endpoint, { ...(options?.signal === undefined ? {} : { signal: options.signal }), locallyHandledCodes: [...connectionProblems, "sftp_conflict", "sftp_unsupported_entry", "sftp_not_utf8", "sftp_text_too_large", "sftp_local_permission_denied", "sftp_local_privacy_protection"] }));
-  },
-  async saveText(alias: string, remotePath: string, contents: string, expectedRevision: string): Promise<RemoteTextFile> {
-    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await putJSON<unknown>(pathFor(alias, "text", remotePath), { contents, expectedRevision }, [...connectionProblems, "sftp_conflict", "sftp_not_found", "sftp_unsupported_entry", "sftp_local_permission_denied", "sftp_local_privacy_protection"]));
-  },
-  async mkdir(alias: string, remotePath: string): Promise<RemoteEntry> {
-    return entry(await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entries`, { path: remotePath, type: "directory" }));
-  },
-  async createEmptyFile(alias: string, remotePath: string): Promise<RemoteEntry> {
-    return entry(await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entries`, { path: remotePath, type: "file" }, undefined, ["sftp_exists", "sftp_failed"]));
-  },
-  async rename(alias: string, from: string, to: string): Promise<RemoteEntry> {
-    return entry(await patchJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entry`, { from, to }));
-  },
-  async startUpload({ alias, id, remotePath, size, sourceFingerprint, signal }: UploadStart): Promise<ResumableUpload> {
-    return resumableUpload(await sendJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, { method: "POST", body: { path: remotePath, size, sourceFingerprint }, locallyHandledCodes: transferProblems, ...(signal === undefined ? {} : { signal }) }));
-  },
-  async appendUpload({ alias, id, remotePath, offset, total, chunk, range, signal }: UploadChunk): Promise<ResumableUpload> {
-    const rangeQuery = range ? `&range=true&length=${chunk.size}` : "";
-    const query = `/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}${rangeQuery}`;
-    return resumableUpload(await apiClient.mutate<unknown>(query, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/octet-stream" },
-      body: chunk,
-      ...(signal === undefined ? {} : { signal }),
-    }, { locallyHandledCodes: transferProblems }));
-  },
-  async completeUpload({ alias, id, remotePath, size, expectedRevision, sourceFingerprint, signal }: UploadCompletion): Promise<void> {
-    await sendJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, { method: "POST", body: { path: remotePath, size, expectedRevision, sourceFingerprint }, locallyHandledCodes: transferProblems, ...(signal === undefined ? {} : { signal }) });
-  },
-  async cancelUpload({ alias, id, remotePath }: UploadTarget): Promise<void> {
-    await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}`, {
-      method: "DELETE",
-    }, { locallyHandledCodes: transferProblems });
-  },
-  async streamDownload({ alias, jobId, remotePath, directory, offset }: DownloadStream, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }> {
-    const headers = !directory && offset > 0
-      ? { Range: `bytes=${offset}-`, ...(options.revision === undefined ? {} : { "If-Range": options.revision }) }
-      : undefined;
-    const endpoint = `${pathFor(alias, directory ? "archive" : "download", remotePath)}&jobId=${encodeURIComponent(jobId)}`;
-    const response = await apiClient.send(endpoint, {
-      method: "GET", ...(headers === undefined ? {} : { headers }), ...(options.signal === undefined ? {} : { signal: options.signal }),
-    }, { locallyHandledCodes: transferProblems });
-    if (!response.ok || (!directory && offset > 0 && response.status !== 200 && response.status !== 206)) throw new Error("download_failed");
-    const length = Number(response.headers.get("Content-Length"));
-    const reset = !directory && offset > 0 && response.status === 200;
-    const responseOffset = reset ? 0 : offset;
-    const total = Number.isFinite(length) && length >= 0 ? responseOffset + length : null;
-    const revision = response.headers.get("ETag");
-    if (!directory && revision === null) throw new Error("download_revision_missing");
-    if (revision !== null) options.onRevision?.(revision);
-    if (reset) await options.onReset?.(total);
-    let bytes = responseOffset;
-    if (response.body === null) {
-      const chunk = new Uint8Array(await (await response.blob()).arrayBuffer());
-      bytes += chunk.byteLength;
-      await options.onChunk(chunk, total);
+    },
+    async clearFinishedTransfers(): Promise<void> {
+      await apiClient.mutate<unknown>(`${base}/sftp/transfers/finished`, { method: "DELETE" }, { locallyHandledCodes: transferProblems });
+    },
+    async removeTransfer(id: string): Promise<void> {
+      await apiClient.mutate<unknown>(`${base}/sftp/transfers/${encodeURIComponent(id)}`, { method: "DELETE" }, {
+        locallyHandledCodes: transferProblems,
+      });
+    },
+    async updateTransfer(id: string, action: TransferJobAction, options: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean } = {}): Promise<TransferJob> {
+      return transferJob(await postJSON<unknown>(`${base}/sftp/transfers/${encodeURIComponent(id)}/actions`, { action, ...options }, undefined, transferProblems));
+    },
+    async checkpointDownload(id: string, offset: number, revision: string): Promise<TransferJob> {
+      return transferJob(await postJSON<unknown>(`${base}/sftp/transfers/${encodeURIComponent(id)}/download-checkpoint`, { offset, revision }, undefined, transferProblems));
+    },
+    async verifyDownload({ alias, jobId, remotePath }: DownloadTarget, revision: string): Promise<void> {
+      const endpoint = `${pathFor(base, alias, "download", remotePath)}&jobId=${encodeURIComponent(jobId)}&verify=true`;
+      const response = await apiClient.send(endpoint, { method: "GET", headers: { "If-Range": revision } });
+      if (response.status !== 204) throw new Error("download_changed");
+    },
+    async list(alias: string, remotePath = "", { attempt, signal }: SFTPListOptions = {}): Promise<{ path: string; entries: RemoteEntry[] }> {
+      const listing = remotePath === ""
+        ? `${base}/sftp/${encodeURIComponent(alias)}/entries`
+        : pathFor(base, alias, "entries", remotePath);
+      const endpoint = attempt === undefined
+        ? listing
+        : `${listing}${listing.includes("?") ? "&" : "?"}attempt=${encodeURIComponent(attempt)}`;
+      return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(endpoint, {
+        ...(signal === undefined ? {} : { signal }),
+        locallyHandledCodes: connectionProblems,
+      }));
+    },
+    // connectionAttempt returns the stage and connection log of the listing that
+    // named this attempt, or null while that listing has not begun connecting.
+    async connectionAttempt(alias: string, attempt: string): Promise<SFTPConnectionAttempt | null> {
+      const endpoint = `${base}/sftp/${encodeURIComponent(alias)}/connection-attempts/${encodeURIComponent(attempt)}`;
+      try {
+        return validateOpenAPISchema<SFTPConnectionAttempt>("SFTPConnectionAttempt", await apiClient.read(endpoint, {
+          locallyHandledCodes: [connectionAttemptNotFound],
+        }));
+      } catch (error) {
+        if (failureCode(error) === connectionAttemptNotFound) return null;
+        throw error;
+      }
+    },
+    // answerHostKey answers the host key question of the listing that named this
+    // attempt, as the terminal's buttons answer theirs, and returns the attempt
+    // as it is after the answer. Null when the question is no longer open.
+    async answerHostKey(alias: string, attempt: string, answer: HostKeyAnswer): Promise<SFTPConnectionAttempt | null> {
+      const endpoint = `${base}/sftp/${encodeURIComponent(alias)}/connection-attempts/${encodeURIComponent(attempt)}/host-key`;
+      try {
+        return validateOpenAPISchema<SFTPConnectionAttempt>("SFTPConnectionAttempt",
+          await postJSON<unknown>(endpoint, answer, undefined, [noHostKeyQuestion, connectionAttemptNotFound]));
+      } catch (error) {
+        const code = failureCode(error);
+        if (code === noHostKeyQuestion || code === connectionAttemptNotFound) return null;
+        throw error;
+      }
+    },
+    async search({ alias, path, query, mode = "name", signal }: SearchOptions): Promise<RemoteSearchResult> {
+      const parameters = new URLSearchParams({ path, query, mode });
+      const endpoint = `${base}/sftp/${encodeURIComponent(alias)}/search?${parameters.toString()}`;
+      return validateOpenAPISchema<RemoteSearchResult>("SFTPSearchResult", await apiClient.read(endpoint, {
+        ...(signal === undefined ? {} : { signal }),
+        locallyHandledCodes: [...connectionProblems, "sftp_not_found", "invalid_request", "sftp_unsupported_entry", "sftp_wrong_type"],
+      }));
+    },
+    async directoryStats(alias: string, remotePath: string): Promise<RemoteDirectoryStats> {
+      return validateOpenAPISchema<RemoteDirectoryStats>("SFTPDirectoryStats", await apiClient.read(pathFor(base, alias, "stats", remotePath), {
+        locallyHandledCodes: [...connectionProblems, "sftp_not_found", "sftp_wrong_type"],
+      }));
+    },
+    // A file on the engine's own disk needs no transfer job: the engine sends it
+    // whole, and the browser saves it like any finished download.
+    async downloadLocalFile(localPath: string): Promise<Blob> {
+      const response = await apiClient.readResponse(`${base}/sftp/local/download?path=${encodeURIComponent(localPath)}`, { locallyHandledCodes: transferProblems });
+      return response.blob();
+    },
+    // A ticket lets <audio> and <video> read the file: they cannot send the
+    // CSRF header, so the ticket in the URL stands in for it.
+    async issueMediaTicket(alias: string, remotePath: string): Promise<string> {
+      const issued = validateOpenAPISchema<MediaTicket>("SFTPMediaTicket", await postJSON<unknown>(`${base}/sftp/media-tickets`, { alias, path: remotePath }, undefined, previewProblems));
+      return issued.ticket;
+    },
+    async revokeMediaTicket(ticket: string): Promise<void> {
+      await apiClient.mutate<unknown>(`${base}/sftp/media-tickets/${encodeURIComponent(ticket)}`, { method: "DELETE" }, { locallyHandledCodes: previewProblems });
+    },
+    mediaURL(ticket: string): string {
+      return `${base}/sftp/media/${encodeURIComponent(ticket)}`;
+    },
+    async previewFile(alias: string, remotePath: string): Promise<RemotePreview> {
+      const response = await apiClient.readResponse(pathFor(base, alias, "preview", remotePath), { locallyHandledCodes: previewProblems });
+      return {
+        contentType: (response.headers.get("Content-Type") ?? "").split(";")[0]?.trim() ?? "",
+        revision: response.headers.get("ETag") ?? "",
+        blob: await response.blob(),
+      };
+    },
+    // A row shows its picture or keeps its icon, and never says why, so no failure of a thumbnail is worth a notice.
+    async thumbnail({ alias, path, revision }: { alias: string; path: string; revision: string }, signal: AbortSignal): Promise<Blob> {
+      const endpoint = `${pathFor(base, alias, "thumbnail", path)}&revision=${encodeURIComponent(revision)}`;
+      const response = await apiClient.readResponse(endpoint, { signal, locallyHandledCodes: thumbnailProblems });
+      return response.blob();
+    },
+    async readText(alias: string, remotePath: string, options?: { expectedRevision?: string; signal?: AbortSignal }): Promise<RemoteTextFile> {
+      const endpoint = pathFor(base, alias, "text", remotePath) + (options?.expectedRevision === undefined ? "" : `&expectedRevision=${encodeURIComponent(options.expectedRevision)}`);
+      return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.read(endpoint, { ...(options?.signal === undefined ? {} : { signal: options.signal }), locallyHandledCodes: [...connectionProblems, "sftp_conflict", "sftp_unsupported_entry", "sftp_not_utf8", "sftp_text_too_large", "sftp_local_permission_denied", "sftp_local_privacy_protection"] }));
+    },
+    async saveText(alias: string, remotePath: string, contents: string, expectedRevision: string): Promise<RemoteTextFile> {
+      return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await putJSON<unknown>(pathFor(base, alias, "text", remotePath), { contents, expectedRevision }, [...connectionProblems, "sftp_conflict", "sftp_not_found", "sftp_unsupported_entry", "sftp_local_permission_denied", "sftp_local_privacy_protection"]));
+    },
+    async mkdir(alias: string, remotePath: string): Promise<RemoteEntry> {
+      return entry(await postJSON<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/entries`, { path: remotePath, type: "directory" }));
+    },
+    async createEmptyFile(alias: string, remotePath: string): Promise<RemoteEntry> {
+      return entry(await postJSON<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/entries`, { path: remotePath, type: "file" }, undefined, ["sftp_exists", "sftp_failed"]));
+    },
+    async rename(alias: string, from: string, to: string): Promise<RemoteEntry> {
+      return entry(await patchJSON<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/entry`, { from, to }));
+    },
+    async startUpload({ alias, id, remotePath, size, sourceFingerprint, signal }: UploadStart): Promise<ResumableUpload> {
+      return resumableUpload(await sendJSON<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, { method: "POST", body: { path: remotePath, size, sourceFingerprint }, locallyHandledCodes: transferProblems, ...(signal === undefined ? {} : { signal }) }));
+    },
+    async appendUpload({ alias, id, remotePath, offset, total, chunk, range, signal }: UploadChunk): Promise<ResumableUpload> {
+      const rangeQuery = range ? `&range=true&length=${chunk.size}` : "";
+      const query = `${base}/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}${rangeQuery}`;
+      return resumableUpload(await apiClient.mutate<unknown>(query, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: chunk,
+        ...(signal === undefined ? {} : { signal }),
+      }, { locallyHandledCodes: transferProblems }));
+    },
+    async completeUpload({ alias, id, remotePath, size, expectedRevision, sourceFingerprint, signal }: UploadCompletion): Promise<void> {
+      await sendJSON<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, { method: "POST", body: { path: remotePath, size, expectedRevision, sourceFingerprint }, locallyHandledCodes: transferProblems, ...(signal === undefined ? {} : { signal }) });
+    },
+    async cancelUpload({ alias, id, remotePath }: UploadTarget): Promise<void> {
+      await apiClient.mutate<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}`, {
+        method: "DELETE",
+      }, { locallyHandledCodes: transferProblems });
+    },
+    async streamDownload({ alias, jobId, remotePath, directory, offset }: DownloadStream, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }> {
+      const headers = !directory && offset > 0
+        ? { Range: `bytes=${offset}-`, ...(options.revision === undefined ? {} : { "If-Range": options.revision }) }
+        : undefined;
+      const endpoint = `${pathFor(base, alias, directory ? "archive" : "download", remotePath)}&jobId=${encodeURIComponent(jobId)}`;
+      const response = await apiClient.send(endpoint, {
+        method: "GET", ...(headers === undefined ? {} : { headers }), ...(options.signal === undefined ? {} : { signal: options.signal }),
+      }, { locallyHandledCodes: transferProblems });
+      if (!response.ok || (!directory && offset > 0 && response.status !== 200 && response.status !== 206)) throw new Error("download_failed");
+      const length = Number(response.headers.get("Content-Length"));
+      const reset = !directory && offset > 0 && response.status === 200;
+      const responseOffset = reset ? 0 : offset;
+      const total = Number.isFinite(length) && length >= 0 ? responseOffset + length : null;
+      const revision = response.headers.get("ETag");
+      if (!directory && revision === null) throw new Error("download_revision_missing");
+      if (revision !== null) options.onRevision?.(revision);
+      if (reset) await options.onReset?.(total);
+      let bytes = responseOffset;
+      if (response.body === null) {
+        const chunk = new Uint8Array(await (await response.blob()).arrayBuffer());
+        bytes += chunk.byteLength;
+        await options.onChunk(chunk, total);
+        return { bytes, total };
+      }
+      const reader = response.body.getReader();
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        bytes += next.value.byteLength;
+        await options.onChunk(next.value, total);
+      }
       return { bytes, total };
-    }
-    const reader = response.body.getReader();
-    while (true) {
-      const next = await reader.read();
-      if (next.done) break;
-      bytes += next.value.byteLength;
-      await options.onChunk(next.value, total);
-    }
-    return { bytes, total };
-  },
-  // Resolves to null when the bytes are in the saved file already (Android
-  // copies them before returning), and otherwise to the browser's save.
-  async saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): Promise<BrowserSave | null> {
-    const blob = new Blob(chunks, { type: directory ? "application/zip" : "application/octet-stream" });
-    const components = remotePath.split("/").filter(Boolean);
-    const name = `${components[components.length - 1] ?? "download"}${directory ? ".zip" : ""}`;
-    return saveFile(blob, name);
-  },
-  async chmod({ alias, remotePath, mode, expectedRevision, recursive }: ModeChange): Promise<RemoteEntry> {
-    const target = `${alias}:${remotePath}:${mode}${recursive ? ":recursive" : ""}`;
-    const token = await issueAction("sftp.chmod", target);
-    return entry(await patchJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/mode`, { path: remotePath, mode, expectedRevision, recursive }, token));
-  },
-};
+    },
+    // Resolves to null when the bytes are in the saved file already (Android
+    // copies them before returning), and otherwise to the browser's save.
+    async saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): Promise<BrowserSave | null> {
+      const blob = new Blob(chunks, { type: directory ? "application/zip" : "application/octet-stream" });
+      const components = remotePath.split("/").filter(Boolean);
+      const name = `${components[components.length - 1] ?? "download"}${directory ? ".zip" : ""}`;
+      return saveFile(blob, name);
+    },
+    async chmod({ alias, remotePath, mode, expectedRevision, recursive }: ModeChange): Promise<RemoteEntry> {
+      const target = `${alias}:${remotePath}:${mode}${recursive ? ":recursive" : ""}`;
+      const token = await issueAction("sftp.chmod", target, base);
+      return entry(await patchJSON<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/mode`, { path: remotePath, mode, expectedRevision, recursive }, token));
+    },
+  };
+}
+
+export type SftpApi = ReturnType<typeof createSftpApi>;
+
+export const sftpApi: SftpApi = createSftpApi(localApiBase);

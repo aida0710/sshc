@@ -17,7 +17,7 @@ describe("watchConnectionAttempt", () => {
   it("reads the attempt every half second until it is stopped", async () => {
     api.connectionAttempt.mockResolvedValue(reading);
     const onChange = vi.fn();
-    const watch = watchConnectionAttempt("edge", onChange);
+    const watch = watchConnectionAttempt(api, "edge", onChange);
     expect(watch.attempt).toMatch(/^[A-Za-z0-9-]{16,64}$/);
 
     await vi.advanceTimersByTimeAsync(1000);
@@ -33,7 +33,7 @@ describe("watchConnectionAttempt", () => {
   it("reads once more when stopped for a failure, so the reason is shown", async () => {
     api.connectionAttempt.mockResolvedValue({ ...reading, finished: true });
     const onChange = vi.fn();
-    const watch = watchConnectionAttempt("edge", onChange);
+    const watch = watchConnectionAttempt(api, "edge", onChange);
     await watch.stop({ readFinal: true });
     expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...reading, finished: true });
   });
@@ -41,7 +41,7 @@ describe("watchConnectionAttempt", () => {
   it("waits quietly while the listing has not begun connecting or the read fails", async () => {
     api.connectionAttempt.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("offline"));
     const onChange = vi.fn();
-    const watch = watchConnectionAttempt("edge", onChange);
+    const watch = watchConnectionAttempt(api, "edge", onChange);
     await vi.advanceTimersByTimeAsync(1000);
     expect(onChange).not.toHaveBeenCalled();
     await watch.stop({ readFinal: false });
@@ -51,7 +51,7 @@ describe("watchConnectionAttempt", () => {
     const answered = { ...reading, progress: { phase: "authenticating", alias: "edge", hostName: "edge", user: "ops", hop: 1, hops: 1 } };
     api.answerHostKey.mockResolvedValue(answered);
     const onChange = vi.fn();
-    const watch = watchConnectionAttempt("edge", onChange);
+    const watch = watchConnectionAttempt(api, "edge", onChange);
 
     await expect(watch.answerHostKey("SHA256:key", true)).resolves.toBe(true);
     expect(api.answerHostKey).toHaveBeenCalledExactlyOnceWith("edge", watch.attempt, { fingerprint: "SHA256:key", accept: true });
@@ -63,7 +63,7 @@ describe("watchConnectionAttempt", () => {
     api.answerHostKey.mockResolvedValue(null);
     api.connectionAttempt.mockResolvedValue(reading);
     const onChange = vi.fn();
-    const watch = watchConnectionAttempt("edge", onChange);
+    const watch = watchConnectionAttempt(api, "edge", onChange);
 
     await expect(watch.answerHostKey("SHA256:key", false)).resolves.toBe(false);
     expect(onChange).toHaveBeenCalledExactlyOnceWith(reading);

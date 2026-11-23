@@ -1,9 +1,10 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
 import { useId, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Icon, type IconName } from "../ui/icons";
 import { formatBytes, formatDuration } from "../ui/format";
-import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
+import { type ManagedTransferJob } from "./transferManager";
 import { getDisplayedTransferStatus, type DisplayedTransferStatus } from "./transferQueueSummaryModel";
 import { TransferJobRoute } from "./TransferJobRoute";
 import { TransferExclusionSummary } from "./TransferExclusionSummary";
@@ -54,6 +55,7 @@ export function TransferJobRow({ job, waiting, processingStopped, maxReconnectAt
   maxReconnectAttempts: number;
   runControl: RunTransferControl;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
   const t = useTranslate();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsId = useId();

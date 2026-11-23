@@ -7590,6 +7590,8 @@ components:
       properties:
         runTarget: { type: string, maxLength: 65536 }
         sftpPanes: { type: string, maxLength: 65536 }
+        # リモートセッションの実行先ごとの SFTP のタブ。接続名から、sftpPanes と同じ形を引く。
+        sftpPanesByRunTarget: { type: string, maxLength: 65536 }
         sftpQueueView: { type: string, maxLength: 65536 }
         collapsedTerminalWorkspaces: { type: string, maxLength: 65536 }
         showHiddenTerminalWorkspaces: { type: string, maxLength: 65536 }

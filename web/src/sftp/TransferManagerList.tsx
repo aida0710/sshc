@@ -1,3 +1,4 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
 import { TransferBatchList } from "./TransferBatchList";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
@@ -12,7 +13,7 @@ import { keepMachineStateJSON, readMachineStateJSON } from "../settings/machineS
 import { setTransfersStopped } from "../settings/settingsStore";
 import { menuItemClass, menuSurface } from "../ui/menuStyle";
 import { settingsPagePath } from "../settings/settingsRoute";
-import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
+import { type ManagedTransferJob } from "./transferManager";
 import { getTransferQueueSummary } from "./transferQueueSummaryModel";
 import { TransferQueueSummary } from "./TransferQueueSummary";
 import { useTransferControl } from "./useTransferControl";
@@ -52,6 +53,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
   // divided draws a line above the queue, for when it sits under the file list in the same card.
   divided?: boolean;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
   const t = useTranslate();
   const [view, setView] = useState<QueueView>(restoreView);
   const compactViewport = useMediaQuery(mobileViewportQuery);

@@ -308,7 +308,6 @@ export function TerminalView({
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
   const pathPreview = useTerminalPathPreview({
     session,
-    runTarget,
     api,
     terminal,
     currentDirectory,

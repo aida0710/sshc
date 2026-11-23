@@ -1,7 +1,7 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
 import { useCallback, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { transferControlFailureMessage } from "./transferControlFailure";
-import { sftpTransferManager } from "./transferManager";
 
 // runControl resolves to whether the change went through. A change that did not
 // go through has already been told to the user through `problem`, so the caller
@@ -18,6 +18,7 @@ export type TransferControl = {
 // Runs changes to the engine's transfer queue and its settings. A change that
 // fails lists the queue again, so the screen shows what the engine holds.
 export function useTransferControl(): TransferControl {
+  const sftpTransferManager = useSftpTransferManager();
   const t = useTranslate();
   const [problem, setProblem] = useState("");
   const runControl = useCallback<RunTransferControl>(async (operation) => {
@@ -30,7 +31,7 @@ export function useTransferControl(): TransferControl {
       setProblem(t(transferControlFailureMessage(error)));
       return false;
     }
-  }, [t]);
+  }, [t, sftpTransferManager]);
   const dismissProblem = useCallback(() => setProblem(""), []);
   return { problem, runControl, dismissProblem };
 }

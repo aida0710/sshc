@@ -1,3 +1,4 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useRef, useState, type RefObject } from "react";
 import type { Terminal } from "@xterm/xterm";
 import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
@@ -11,7 +12,6 @@ import { savedConnectionOf } from "./terminalPresentation";
 import { pathPreviewHome } from "./pathPreviewHome";
 import { previewPathsInBuffer, previewPathTargetsInBuffer } from "./previewPaths";
 import { isHomePath, resolveTerminalPath } from "./relativePaths";
-import { useSameDestination } from "./useSameDestination";
 
 export type TerminalPathPreview = {
   // previewAlias is the connection whose files the preview reads; undefined where this session's files
@@ -28,9 +28,8 @@ export type TerminalPathPreview = {
 };
 
 // useTerminalPathPreview previews a file path printed in the terminal, reading it from the session's host.
-export function useTerminalPathPreview({ session, runTarget, api, terminal, currentDirectory, allowWindowsPaths, onOpenRemotePath, notice }: {
+export function useTerminalPathPreview({ session, api, terminal, currentDirectory, allowWindowsPaths, onOpenRemotePath, notice }: {
   session: TerminalSession;
-  runTarget: string | undefined;
   api: Pick<TerminalSessionsApi, "terminalSessionDirectory">;
   terminal: RefObject<Terminal | null>;
   // currentDirectory is the directory the shell last reported through OSC 7 or OSC 9;9.
@@ -44,8 +43,8 @@ export function useTerminalPathPreview({ session, runTarget, api, terminal, curr
   const [shown, setShown] = useState<{ path: string; paths: string[] } | null>(null);
   const previewLinkedPath = useRef<((path: string) => void) | null>(null);
   const remoteAlias = savedConnectionOf(session);
-  const sameDestination = useSameDestination(remoteAlias, runTarget);
-  const previewAlias = pathPreviewAlias(session, runTarget, sameDestination);
+  const previewAlias = pathPreviewAlias(session);
+  const { sftp: { files: sftpApi } } = useEngineApis();
 
   // A relative path is relative to where the program that printed it works.
   // The engine reads that for a local shell; an SSH session only has the
@@ -56,7 +55,7 @@ export function useTerminalPathPreview({ session, runTarget, api, terminal, curr
     const needsHome = isHomePath(path) || (buffer !== undefined && previewPathTargetsInBuffer(buffer, allowWindowsPaths).some(isHomePath));
     const [engineDirectory, home] = await Promise.all([
       api.terminalSessionDirectory(session.id).catch(() => null),
-      needsHome ? pathPreviewHome(previewAlias).catch(() => null) : null,
+      needsHome ? pathPreviewHome(sftpApi, previewAlias).catch(() => null) : null,
     ]);
     const directory = engineDirectory ?? (currentDirectory === "" ? null : currentDirectory);
     const resolvedPath = resolveTerminalPath(path, directory, home);
@@ -71,9 +70,8 @@ export function useTerminalPathPreview({ session, runTarget, api, terminal, curr
   }
   previewLinkedPath.current = previewAlias === undefined ? null : (path) => void previewPath(path);
 
-  // SFTP can open a file of an SSH session at its host. A session opened on a run target reached its host
-  // through that engine's SSH config, which this machine may not share; only the same destination will do.
-  const openInSFTP = (runTarget === undefined || sameDestination) && remoteAlias !== undefined && onOpenRemotePath !== undefined
+  // SFTP can open a file of an SSH session at its host: SFTP works with the engine that runs the session.
+  const openInSFTP = remoteAlias !== undefined && onOpenRemotePath !== undefined
     ? (path: string, action: RemotePathAction) => {
       setShown(null);
       onOpenRemotePath(remoteAlias, path, action);

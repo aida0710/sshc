@@ -41,6 +41,7 @@ const (
 var interfaceStateKeys = map[string]bool{
 	"runTarget":                    true,
 	"sftpPanes":                    true,
+	"sftpPanesByRunTarget":         true,
 	"sftpQueueView":                true,
 	"collapsedTerminalWorkspaces":  true,
 	"showHiddenTerminalWorkspaces": true,

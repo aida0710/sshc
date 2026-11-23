@@ -1,5 +1,6 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useRef, useState } from "react";
-import { sftpApi, type RemoteEntry, type RemoteSearchResult } from "./api";
+import { type RemoteEntry, type RemoteSearchResult } from "./api";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 import type { SearchMode } from "./contentToolTypes";
 
@@ -16,6 +17,7 @@ export function useSFTPSearch({
   // Selection and focus belong to the rows that were just replaced.
   onResults?: () => void;
 }) {
+  const { sftp: { files: sftpApi } } = useEngineApis();
   const { alias, path, entries } = browser;
   const [search, setSearch] = useState<SearchResult | null>(null);
   const [filter, setFilter] = useState("");

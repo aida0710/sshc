@@ -1,8 +1,8 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { RemoteEntry } from "./api";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
-import { remoteMetadataApi } from "./remoteMetadataApi";
 import { remoteJoin } from "./sftpSource";
 import { sftpProblemText } from "./sftpProblemText";
 
@@ -15,6 +15,7 @@ export type MetadataValues = { name: string; target: string; uid: number; gid: n
 
 // A dialog holds the host and directory where it opened until its operation completes.
 export function useSFTPMetadataActions(browser: SFTPBrowserModel, refreshAfterChange: (path: string, alias: string) => Promise<unknown>) {
+  const { sftp: { remoteMetadata: remoteMetadataApi } } = useEngineApis();
   const t = useTranslate();
   const [opened, setOpened] = useState<{
     intent: MetadataIntent; alias: string; directory: string; isCurrent: () => boolean;

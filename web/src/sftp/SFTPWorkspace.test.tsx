@@ -103,7 +103,7 @@ describe("SFTP tabs", () => {
     fakeSettingsServer();
     vi.clearAllMocks();
     // What an earlier test left connected when it took the section down is not this test's.
-    rememberTabsConnectedOnLeaving([], new Set());
+    rememberTabsConnectedOnLeaving(null, [], new Set());
     api.list.mockImplementation(async (_alias: string, requestedPath: string) => ({
       path: requestedPath === "" ? "/home/edge" : requestedPath,
       entries: [],

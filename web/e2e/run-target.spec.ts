@@ -127,6 +127,17 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       await route.fulfill({ json: { entries: [], retentionDays: 30 } });
     } else if (path.endsWith("/vpn")) {
       await route.fulfill({ json: { available: true, profiles: [], checking: false } });
+    } else if (path.endsWith("/sftp/transfers")) {
+      // bastion's own transfer queue, with nothing in it.
+      await route.fulfill({ json: {
+        maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 16777216,
+        largeFileParallelism: 4, largeFileChunkBytes: 33554432, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, jobs: [],
+      } });
+    } else if (path.endsWith("/sftp/local/entries")) {
+      // The files of bastion's own machine.
+      await route.fulfill({ json: { path: "/home/ops", home: "/home/ops", entries: [
+        { name: "only-on-bastion.txt", path: "/home/ops/only-on-bastion.txt", type: "file", size: 12, mode: "-rw-r--r--", modifiedAt: "2026-11-01T00:00:00Z", revision: "r1" },
+      ] } });
     } else if (path.endsWith("/known-hosts")) {
       // bastion's own known_hosts.
       await route.fulfill({ json: { path: "/home/ops/.ssh/known_hosts", entries: [
@@ -775,6 +786,19 @@ test("lists no connection for a new session while the chosen engine's cannot be 
   await expect(choice).toBeVisible();
   await expect(choice.getByRole("button", { name: /\bnas\b/ })).toHaveCount(0);
   await expect(choice.getByRole("button", { name: /^SSH.*bastion|^bastion\b/ })).toHaveCount(0);
+});
+
+test("shows in SFTP the files of the chosen engine's machine and its connections", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  await expect(page.locator("[data-remote-session-frame]")).toBeVisible();
+  const asked: string[] = [];
+  page.on("request", (request) => asked.push(new URL(request.url()).pathname));
+
+  await openSection(page, "SFTP");
+  await expect.poll(() => asked).toContain("/api/v1/engines/bastion/sftp/transfers");
+  expect(asked.filter((path) => path.startsWith("/api/v1/sftp/"))).toEqual([]);
 });
 
 test("opens a connection chosen on Home on the run target, which stays chosen", async ({ page, installation }) => {
