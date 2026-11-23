@@ -71,7 +71,7 @@ describe("OverviewPanel", () => {
     const onAddConnection = vi.fn();
     const onOpenLocalShell = vi.fn();
     render(
-      <OverviewPanel
+      <OverviewPanel onConnect={vi.fn()}
        runTarget={null}
         onAddConnection={onAddConnection}
         onOpenLocalShell={onOpenLocalShell}
@@ -101,7 +101,7 @@ describe("OverviewPanel", () => {
   it("says nothing about sync until its status has been asked for", async () => {
     let answerSync: (status: SyncStatus) => void = () => {};
     render(
-      <OverviewPanel
+      <OverviewPanel onConnect={vi.fn()}
        runTarget={null}
         onAddConnection={vi.fn()}
         onOpenLocalShell={vi.fn()}
@@ -124,7 +124,7 @@ describe("OverviewPanel", () => {
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        launch={vi.fn()}
+        onConnect={vi.fn()}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
       />,
@@ -141,7 +141,7 @@ describe("OverviewPanel", () => {
   });
 
   it("puts recent connections first, searches groups and launches only from the explicit action", async () => {
-    const launch = vi.fn().mockResolvedValue({ session: { id: "session-1" } });
+    const launch = vi.fn().mockResolvedValue(undefined);
     render(
       <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue(overview)}
@@ -155,7 +155,7 @@ describe("OverviewPanel", () => {
             lastConnectedAt: "2026-08-24T15:30:00Z",
           }],
         })}
-        launch={launch}
+        onConnect={launch}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
       />,
@@ -181,19 +181,17 @@ describe("OverviewPanel", () => {
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
   });
 
-  it("opens once from the focused card and reports readiness after the pending state", async () => {
-    let finish!: (value: { session: { id: string } }) => void;
-    const launch = vi.fn(() => new Promise<{ session: { id: string } }>((resolve) => { finish = resolve; }));
-    const opened = vi.fn();
+  it("opens once from the focused card and lets another open after the pending state", async () => {
+    let finish!: () => void;
+    const launch = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
     render(
       <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        launch={launch}
+        onConnect={launch}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
-        onSessionOpened={opened}
       />,
     );
 
@@ -204,12 +202,24 @@ describe("OverviewPanel", () => {
     const another = screen.getByRole("button", { name: /^Connect to bastion\./ });
     await userEvent.click(another);
     expect(launch).toHaveBeenCalledExactlyOnceWith("database");
-    expect(opened).not.toHaveBeenCalled();
 
-    await act(async () => finish({ session: { id: "session-1" } }));
-    expect(opened).toHaveBeenCalledExactlyOnceWith("session-1");
+    await act(async () => finish());
     expect(another).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Opening database…" })).not.toBeInTheDocument();
+  });
+
+  it("says why the last session did not open", async () => {
+    render(
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()} onConnect={vi.fn()}
+        sessionProblem="No more sessions can be opened."
+        loadOverview={vi.fn().mockResolvedValue(overview)}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
+        onNavigate={vi.fn()}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText("No more sessions can be opened.")).toBeInTheDocument();
   });
 
   it("opens the exact connection settings URL without launching", async () => {
@@ -220,7 +230,7 @@ describe("OverviewPanel", () => {
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        launch={launch}
+        onConnect={launch}
         onNavigate={vi.fn()}
         onNavigateLocation={navigateLocation}
       />,
@@ -246,7 +256,7 @@ describe("OverviewPanel", () => {
         loadOverview={loadOverview}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        launch={vi.fn()}
+        onConnect={vi.fn()}
         onNavigate={navigate}
         onNavigateLocation={vi.fn()}
       />,
@@ -269,7 +279,7 @@ describe("OverviewPanel", () => {
         })}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        launch={vi.fn()}
+        onConnect={vi.fn()}
         onNavigate={navigate}
         onNavigateLocation={vi.fn()}
       />,
@@ -294,7 +304,7 @@ describe("OverviewPanel", () => {
         })}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        launch={vi.fn()}
+        onConnect={vi.fn()}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
       />,
@@ -315,7 +325,7 @@ describe("OverviewPanel", () => {
         })}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        launch={vi.fn()}
+        onConnect={vi.fn()}
         onNavigate={navigate}
         onNavigateLocation={vi.fn()}
       />,
@@ -336,7 +346,7 @@ describe("OverviewPanel", () => {
       .mockRejectedValueOnce(new Error("config_failed"))
       .mockResolvedValue({ ...overview, diagnostics: [] });
     render(
-      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel onConnect={vi.fn()} runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={loadOverview}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
@@ -354,7 +364,7 @@ describe("OverviewPanel", () => {
 
   it("says connection history could not be read instead of showing none", async () => {
     render(
-      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel onConnect={vi.fn()} runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue({ ...overview, diagnostics: [] })}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockRejectedValue(new Error("history_failed"))}
@@ -370,7 +380,7 @@ describe("OverviewPanel", () => {
   it("keeps sync accessible without showing an empty attention section", async () => {
     const navigate = vi.fn();
     render(
-      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel onConnect={vi.fn()} runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue({ ...overview, diagnostics: [] })}
         loadSync={vi.fn().mockResolvedValue({ ...sync, configured: false })}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
@@ -403,7 +413,7 @@ describe("OverviewPanel", () => {
         })}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
-        launch={vi.fn()}
+        onConnect={vi.fn()}
         onNavigate={navigate}
         onNavigateLocation={vi.fn()}
       />,
@@ -416,7 +426,7 @@ describe("OverviewPanel", () => {
   });
 
   it("shows current targets for recent connections and reconnects from the action menu", async () => {
-    const launch = vi.fn().mockResolvedValue({ session: { id: "session-1" } });
+    const launch = vi.fn().mockResolvedValue(undefined);
     render(
       <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue(overview)}
@@ -430,7 +440,7 @@ describe("OverviewPanel", () => {
             lastConnectedAt: "2026-08-24T15:30:00Z",
           }],
         })}
-        launch={launch}
+        onConnect={launch}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
       />,

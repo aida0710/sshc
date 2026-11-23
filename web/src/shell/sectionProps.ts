@@ -44,7 +44,6 @@ export type Shell = {
   terminalSessions: TerminalSessionsState;
   // runTarget is the engine new sessions open on; null is this machine.
   runTarget: string | null;
-  onShowSession: (id: string) => void;
   // onOpenSSHSession は、接続を開いてからそのターミナルを表示する。cwd は開始位置である。
   onOpenSSHSession: (alias: string, cwd?: string) => Promise<void>;
   // onOpenSSHSessions opens a session for each of aliases, in that order, and shows the first.

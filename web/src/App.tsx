@@ -82,7 +82,7 @@ const transferReconcileIntervalMs = 2_000;
 
 // What SFTP or Home asked of this machine's terminals while they ran on a run
 // target: a session to open there, or one Home opened there to show.
-type PendingLocalRequest = { kind: "open"; alias: string; cwd?: string } | { kind: "show"; sessionId: string };
+type PendingLocalRequest = { alias: string; cwd?: string };
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -270,7 +270,7 @@ export function App({
     phoneBackSlot: mobileLayout ? phoneBackSlot : null,
   }), [inspector, inspectorOpen, inspectorTriggerRef, mobileLayout, phoneActionsSlot, phoneBackSlot, setInspectorOpen]);
 
-  // SFTP and Home open terminals on this machine. With an engine on an SSH
+  // SFTP opens terminals on this machine. With an engine on an SSH
   // host chosen, the run target goes back to this machine first, and what was
   // asked for is done once this machine's terminal API is the one in use.
   const [pendingLocalRequest, setPendingLocalRequest] = useState<PendingLocalRequest | null>(null);
@@ -288,7 +288,7 @@ export function App({
   }, [mobileLayout, navigationPinned, desktopNavigation, setDesktopNavigation, setNavigationOpen]);
   const openSFTPTerminal = useCallback(async (alias: string, cwd?: string) => {
     if (runTargets.selected !== null) {
-      setPendingLocalRequest(cwd === undefined ? { kind: "open", alias } : { kind: "open", alias, cwd });
+      setPendingLocalRequest(cwd === undefined ? { alias } : { alias, cwd });
       runTargets.select(null);
       return;
     }
@@ -299,22 +299,11 @@ export function App({
     await openSSHSession(alias, cwd);
   }, [openLocalShell, openSSHSession, runTargets]);
 
-  // Home opens a session on this machine itself, so it is shown there.
-  const showLocalSession = useCallback((id: string) => {
-    if (runTargets.selected !== null) {
-      setPendingLocalRequest({ kind: "show", sessionId: id });
-      runTargets.select(null);
-      return;
-    }
-    showSession(id);
-  }, [runTargets, showSession]);
-
   useEffect(() => {
     if (pendingLocalRequest === null || runTargets.selected !== null) return;
     setPendingLocalRequest(null);
-    if (pendingLocalRequest.kind === "show") showSession(pendingLocalRequest.sessionId);
-    else void openSFTPTerminal(pendingLocalRequest.alias, pendingLocalRequest.cwd);
-  }, [openSFTPTerminal, pendingLocalRequest, runTargets.selected, showSession]);
+    void openSFTPTerminal(pendingLocalRequest.alias, pendingLocalRequest.cwd);
+  }, [openSFTPTerminal, pendingLocalRequest, runTargets.selected]);
 
   // Splitting beside the session shown: a phone shows one pane at a time, and has no splitting to ask for.
   const splittableSessionId = !splitView.compact && activeSessionId !== null && splitView.splitRefusal(activeSessionId) === null ? activeSessionId : null;
@@ -614,7 +603,6 @@ export function App({
                         onShowInspector: () => setInspectorOpen(true),
                         terminalSessions,
                         runTarget: runTargets.selected,
-                        onShowSession: showLocalSession,
                         onOpenSSHSession: openSSHSession,
                         onOpenSSHSessions: openSSHSessions,
                         onOverviewRead: declared.adoptOverview,

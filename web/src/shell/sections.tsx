@@ -144,7 +144,8 @@ export function SectionView(props: SectionViewProps) {
           runTarget={props.shell.runTarget}
           onNavigate={props.navigation.onNavigate}
           onNavigateLocation={props.navigation.onNavigateLocation}
-          onSessionOpened={props.shell.onShowSession}
+          onConnect={props.shell.onOpenSSHSession}
+          sessionProblem={props.shell.terminalSessions.problem}
           onAddConnection={props.shell.onAddConnection}
           onOpenLocalShell={props.shell.onOpenLocalShell}
         />

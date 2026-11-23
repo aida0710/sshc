@@ -551,18 +551,30 @@ test("shows again the session that was open on each run target when switching ba
   await expect(sessionRow("db")).toHaveAttribute("aria-current", "true");
 });
 
-test("shows a session Home opened on this machine while terminals ran on a run target", async ({ page, installation }) => {
-  await stubLocalSessions(page, [terminalSession("build", "Build")]);
-  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+test("opens a connection chosen on Home on the run target, which stays chosen", async ({ page, installation }) => {
+  const sessions = [terminalSession("web", "web")];
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions });
+  const asked: unknown[] = [];
+  await page.route(`**${sessionsPath}`, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    asked.push(route.request().postDataJSON());
+    const opened = terminalSession("from-home", "From Home");
+    sessions.push(opened);
+    await route.fulfill({ status: 201, json: { session: opened, streamTicket: "bastion-ticket" } });
+  });
   await openApplication(page, installation);
   await chooseBastion(page);
-  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "web", exact: true })).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(navigation.getByRole("button", { name: "web", exact: true })).toBeVisible();
 
   await openSection(page, "Home");
   await page.getByRole("button", { name: /^Connect to bastion\./ }).dblclick();
-  await expect(page.getByRole("button", { name: /^Choose the remote session engine \(now: localhost\)/ })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "From Home", exact: true }))
-    .toHaveAttribute("aria-current", "true");
+  await expect(navigation.getByRole("button", { name: "From Home", exact: true })).toHaveAttribute("aria-current", "true");
+  expect(asked).toEqual([expect.objectContaining({ kind: "ssh", alias: "bastion" })]);
+  await expect(page.getByRole("button", { name: /^Choose the remote session engine \(now: bastion\)/ })).toBeVisible();
 });
 
 test("says a host is being reached while it does not answer, and going back to this machine does not wait for it", async ({ page, installation }) => {
