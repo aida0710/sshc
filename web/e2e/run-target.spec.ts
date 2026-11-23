@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
+import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 
 const localVersion = "v0.53.0";
 const remoteVersion = "v0.51.0";
@@ -301,6 +301,28 @@ test("switches back to localhost from the terminal area", async ({ page, install
   await panel.getByRole("button", { name: "Switch back to localhost", exact: true }).click();
   await expect(panel).toBeHidden();
   await expect(page.getByRole("button", { name: /^Choose the remote session engine \(now: localhost\)/ })).toBeVisible();
+});
+
+test("keeps this machine's split view while a remote session engine is shown", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const panes = page.locator("[data-split-view-pane]");
+  await panes.getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Show in split view on the right", exact: true }).click();
+  await page.getByRole("dialog", { name: "New session on the right" }).getByRole("button", { name: /^Duplicate session/ }).click();
+  await expect(panes).toHaveCount(2);
+  const splitSessions = await panes.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-split-view-pane")));
+
+  // bastion lists a session of its own, which is shown alone.
+  await chooseBastion(page);
+  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "web", exact: true })).toHaveAttribute("aria-current", "true");
+  await expect(panes).toHaveCount(1);
+  await expect(panes).toHaveAttribute("data-split-view-pane", "web");
+  await chooseLocalhost(page);
+
+  await expect(panes).toHaveCount(2);
+  expect(await panes.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-split-view-pane")))).toEqual(splitSessions);
 });
 
 test("keeps the run-target switcher usable while the panel is shown", async ({ page, installation }) => {

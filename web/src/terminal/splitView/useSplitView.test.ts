@@ -94,7 +94,7 @@ describe("split view session lifecycle", () => {
     expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["one", "two"]);
     expect(result.current.activeSessionId).toBe("one");
   });
-  it("discards the split when changing run target even if session IDs are identical", () => {
+  it("does not show one run target's splits on another, even if session IDs are identical", () => {
     const { result, rerender } = setup();
     act(() => result.current.splitView.split({ sourceSessionId: "two", targetSessionId: "one", edge: "right" }));
     act(() => result.current.showSession("four"));
@@ -104,11 +104,7 @@ describe("split view session lifecycle", () => {
     expect(result.current.splitView.groups).toEqual([]);
     expect(paneSessionIds(result.current.splitView.state.root)).toHaveLength(1);
     rerender({ listed: sessions, runTarget: null });
-    expect(result.current.splitView.groups).toEqual([]);
-    // The session last focused on this machine (the pane the last split added) comes back, on its own.
-    expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["five"]);
-    act(() => result.current.splitView.split({ sourceSessionId: "four", targetSessionId: "five", edge: "right" }));
-    expect(result.current.splitView.groups[0]!.number).toBe(1);
+    expect(result.current.splitView.groups.map((group) => paneSessionIds(group.view.root))).toEqual([["one", "two"], ["four", "five"]]);
   });
   it("prunes ended sessions while their group is not displayed", () => {
     const { result, rerender } = setup();
@@ -125,5 +121,47 @@ describe("split view session lifecycle", () => {
     expect(result.current.splitView.canSplit("three")).toBe(false);
     act(() => result.current.splitView.split({ sourceSessionId: "three", targetSessionId: "one", edge: "right" }));
     expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["one"]);
+  });
+});
+
+describe("the splits of a run target", () => {
+  function setupWithLoading() {
+    return renderHook(({ listed, loaded, runTarget }: { listed: TerminalSession[]; loaded: boolean; runTarget: string | null }) => useTerminalWorkspaceController({
+      terminalSessions: { sessions: listed, loaded, refresh, maxSessions: 0 } as unknown as TerminalSessionsState, workspaces,
+      section: "Terminal", navigate: vi.fn(), closeNavigation: vi.fn(), runTarget,
+    }), { initialProps: { listed: sessions, loaded: true, runTarget: null as string | null } });
+  }
+  const remoteSessions: TerminalSession[] = [{ ...sessions[0]!, id: "remote-one", title: "remote-one" }];
+
+  it("are as they were left when the person comes back from another run target", () => {
+    const { result, rerender } = setupWithLoading();
+    act(() => result.current.showSession("one"));
+    act(() => result.current.splitView.split({ sourceSessionId: "two", targetSessionId: "one", edge: "right" }));
+    const leftRoot = result.current.splitView.state.root;
+
+    // The other run target's list arrives after the change, and so does this machine's on the way back.
+    rerender({ listed: [], loaded: false, runTarget: "bastion" });
+    rerender({ listed: remoteSessions, loaded: true, runTarget: "bastion" });
+    expect(result.current.splitView.groups).toEqual([]);
+    expect(result.current.splitView.state.activeSessionId).toBe("remote-one");
+    rerender({ listed: [], loaded: false, runTarget: null });
+    expect(result.current.splitView.groups).toEqual([]);
+    rerender({ listed: sessions, loaded: true, runTarget: null });
+
+    expect(result.current.splitView.state.root).toEqual(leftRoot);
+    expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["one", "two"]);
+    expect(result.current.splitView.state.activeSessionId).toBe("two");
+  });
+
+  it("lose the pane of a session that ended while another run target was shown", () => {
+    const { result, rerender } = setupWithLoading();
+    act(() => result.current.showSession("one"));
+    act(() => result.current.splitView.split({ sourceSessionId: "two", targetSessionId: "one", edge: "right" }));
+    act(() => result.current.splitView.split({ sourceSessionId: "four", targetSessionId: "two", edge: "right" }));
+
+    rerender({ listed: remoteSessions, loaded: true, runTarget: "bastion" });
+    rerender({ listed: sessions.filter((session) => session.id !== "two"), loaded: true, runTarget: null });
+
+    expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["one", "four"]);
   });
 });

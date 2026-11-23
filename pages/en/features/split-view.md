@@ -45,6 +45,6 @@ The selected pane has a colored border. Choose **…** → **Dissolve** on a spl
 
 Mobile widths show one pane at a time. If you narrow the window during split view, switch panes using the session names at the top. The sidebar still lets you switch between splits. Widening the window restores the split.
 
-Splits and arrangements are not saved to the server or browser storage. Reloading the browser tab or switching the remote session's engine clears split view.
+Splits and arrangements are not saved to the server or browser storage. Reloading the browser tab clears split view. Switching the remote session's engine does not: each engine's splits are remembered, and switching back shows them as they were.
 
 See [Workspaces](./workspace) for grouping sessions in the sidebar.
