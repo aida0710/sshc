@@ -55,6 +55,7 @@ import { useAppViewport } from "./ui/useAppViewport";
 import { useFieldLetGoOnLeaving } from "./ui/useFieldLetGoOnLeaving";
 import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckMark, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
 import { navigationId, startSections } from "./shell/sections";
+import { useHomeWithoutSessions } from "./shell/useHomeWithoutSessions";
 import { KeptSections } from "./shell/KeptSections";
 import { useKeptSections } from "./shell/useKeptSections";
 import { usePreloadedSectionPages } from "./shell/usePreloadedSectionPages";
@@ -215,6 +216,8 @@ export function App({
     duplicateSession,
     openSessionInSplit,
   } = terminalWorkspace;
+  const showHomeInPlace = useCallback(() => navigateLocation(sectionPath("Home"), { replace: true }), [navigateLocation]);
+  useHomeWithoutSessions({ terminalFace, terminalSessions, showHome: showHomeInPlace });
   const directDestination = useDirectDestinationActions({
     aliases: declared.knownAliases,
     canSave: runTargets.selected === null,
@@ -573,11 +576,6 @@ export function App({
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                       onOpenNavigation={navigationPinned ? undefined : () => setNavigationOpen(true)}
-                      onNewSession={() => requestSession({ action: "newSession" })}
-                      onAddConnection={addConnection}
-                      onOpenSync={() => navigate("Sync")}
-                      onOpenConnection={(alias) => void openSSHSession(alias)}
-                      onShowConnections={() => navigate("Connections")}
                     />
                   </div>
                 ) : null}
@@ -615,6 +613,7 @@ export function App({
                         onInspector: setInspector,
                         onShowInspector: () => setInspectorOpen(true),
                         terminalSessions,
+                        runTarget: runTargets.selected,
                         onShowSession: showLocalSession,
                         onOpenSSHSession: openSSHSession,
                         onOpenSSHSessions: openSSHSessions,

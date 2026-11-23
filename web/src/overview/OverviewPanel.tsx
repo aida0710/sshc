@@ -10,6 +10,11 @@ import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { PageBoard } from "../ui/PageBoard";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
+import { presetInUse, useSettings } from "../settings/settingsStore";
+import { emptyTerminalArtOf } from "./dashboard/emptyTerminalArt";
+import { HomeBackdrop } from "./dashboard/HomeBackdrop";
+import { HomeMachineSection } from "./dashboard/HomeMachineSection";
+import { useTerminalOverview } from "./dashboard/useTerminalOverview";
 import { ConnectionStartTiles } from "../connections/ConnectionStartTiles";
 import { attentionNoticesOf } from "../connections/noticeKinds";
 import { PanelState } from "../ui/PanelState";
@@ -18,6 +23,8 @@ import { formatOptionalDateTime } from "../ui/format";
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
 type OverviewPanelProps = {
+  // runTarget is the engine new sessions open on; null is this machine. The foot of Home shows that machine.
+  runTarget: string | null;
   loadOverview?: () => Promise<Overview>;
   loadSync?: () => Promise<SyncStatus>;
   loadRecent?: () => Promise<RecentConnectionList>;
@@ -35,6 +42,7 @@ const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
 const launchDefault = (alias: string) => terminalSessionsApi.openTerminalSession({ kind: "ssh", alias });
 
 export function OverviewPanel({
+  runTarget,
   loadOverview = loadDefaultOverview,
   loadSync = loadDefaultSync,
   loadRecent = loadDefaultRecent,
@@ -46,6 +54,8 @@ export function OverviewPanel({
   onOpenLocalShell,
 }: OverviewPanelProps) {
   const { t, locale } = useLanguage();
+  const machineOverview = useTerminalOverview(runTarget);
+  const art = emptyTerminalArtOf(presetInUse(useSettings().document));
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [sync, setSync] = useState<SyncStatus | null>(null);
@@ -114,7 +124,8 @@ export function OverviewPanel({
   const noConnections = overview !== null && connectionCount === 0;
 
   return (
-    <PageBoard wide stretch={noConnections} labelledBy="home-heading" className="flex flex-col gap-[18px]">
+    <PageBoard wide stretch={noConnections} labelledBy="home-heading" className="relative isolate flex flex-col gap-[18px]">
+      {art === "none" ? null : <HomeBackdrop art={art} history={machineOverview.history} />}
       <PageHeader
         title={t("home.heading")}
         headingId="home-heading"
@@ -190,6 +201,8 @@ export function OverviewPanel({
           <Button small onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
         </section>
       )}
+
+      <HomeMachineSection overview={machineOverview} runTarget={runTarget} />
     </PageBoard>
   );
 }

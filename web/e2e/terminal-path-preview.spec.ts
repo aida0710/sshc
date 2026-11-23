@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import type { Page } from "@playwright/test";
 import { expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 import { samplePNG } from "./support/images";
+import { standardPresetMetadata } from "./support/settings";
 import { drawnSpan, terminalKeyboard, terminalScreen, waitForTerminalLayout } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
@@ -378,6 +379,8 @@ test("previews paths hard-wrapped by a real shell from every row and navigates w
     "printf 'paths-ready\\n'",
   ].join("\n");
   await writeFile(join(installation.home, "print-wrapped-paths.sh"), script);
+  // The paths wrap only on a terminal too narrow for them: at the default size the rows are wider than the paths.
+  await installation.write("sshc/metadata.json", standardPresetMetadata({ terminal: { fontSize: 13 } }));
   await openApplication(page, installation);
   await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Terminal for / });

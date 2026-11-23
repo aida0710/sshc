@@ -12,7 +12,7 @@ export type TerminalOverviewApi = {
   connectionHistory(): Promise<ConnectionHistory>;
 };
 
-// The overview is decoration on the empty terminal: when it cannot be read, the empty state leaves it out and says
+// The overview is decoration on Home: when it cannot be read, Home leaves it out and says
 // nothing. An engine older than these routes answers 404 without a problem (request_failed).
 const quietFailures = ["request_failed", "not_found", "network_request_failed"] as const;
 

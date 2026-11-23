@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "../../ui/icons";
 
-// OverviewPanel is one of the translucent cards under the tiles of the empty terminal (the activity and the
-// recent connections). The art behind shows through, blurred, so the card reads over it.
-export function OverviewPanel({
+// DashboardCard is a translucent card at the foot of Home (the activity). The art behind shows through, blurred, so
+// the card reads over it.
+export function DashboardCard({
   icon,
   title,
   action,
