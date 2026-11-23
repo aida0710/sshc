@@ -30,7 +30,7 @@ import { useStoredValue } from "./ui/useStoredValue";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
-import { SessionAddressesContext } from "./terminal/sessionDestination";
+import { SessionAddressesContext, SessionEngineContext } from "./terminal/sessionDestination";
 import { useRunTargetApis } from "./terminal/useRunTargetApis";
 import { useSessionProblemToast } from "./terminal/useSessionProblemToast";
 import { useRunTargetLink } from "./terminal/useRunTargetLink";
@@ -700,5 +700,9 @@ export function App({
     </div>
     </EngineApisProvider>
   );
-  return <SessionAddressesContext.Provider value={sessionAddresses}>{app}</SessionAddressesContext.Provider>;
+  return (
+    <SessionAddressesContext.Provider value={sessionAddresses}>
+      <SessionEngineContext.Provider value={runTargets.selected}>{app}</SessionEngineContext.Provider>
+    </SessionAddressesContext.Provider>
+  );
 }

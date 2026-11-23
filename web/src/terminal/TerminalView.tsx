@@ -512,7 +512,7 @@ export function TerminalView({
   }, [shownFontSize, reducedMotion, scrollbackLines, session.state]);
 
   const displayTitle = terminalDisplayTitle(session);
-  const subtitle = terminalSubtitle(session, t);
+  const subtitle = terminalSubtitle(session, t, runTarget ?? null);
   // Ctrl と Alt は、ターミナルに打つ次のキーに効く。入力欄に打っている最中に押すと、キーボードを上げたまま、
   // 打つ先をターミナルへ移す。閉じているキーボードは閉じたままにする。そのとき、キーバーはすでにフォーカスを
   // 手放している（keepKeyboardAsIs）。
@@ -596,7 +596,7 @@ export function TerminalView({
             osc52Enabled={osc52Enabled}
             onQuickCommands={openQuickCommands}
             onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
-            onOpenRemoteDirectory={runTarget === undefined && savedConnection !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
+            onOpenRemoteDirectory={savedConnection !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
               ? () => onOpenRemotePath(savedConnection, currentDirectory, "browse")
               : undefined}
             onCopyContext={() => assembled.current?.copy.copyContext()}

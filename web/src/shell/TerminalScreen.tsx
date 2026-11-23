@@ -8,6 +8,7 @@ import { defaultRetainedTerminals } from "../terminal/splitView/retainedSessions
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
 import type { RemotePathAction } from "../sftp/SFTPPanel";
 import { hostSettingsToDrawWith, type HostSettings } from "../terminal/hostSettings";
+import { SessionEngineContext } from "../terminal/sessionDestination";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type { ExitReport } from "../terminal/stream";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
@@ -198,11 +199,15 @@ export function TerminalScreen({
       // would show around the bar. Hidden, not removed, the terminals keep their size and output for when the engine
       // answers again.
       <div key={runTarget ?? ""} className={refusal === null ? "h-full" : "invisible h-full"} inert={refusal !== null}>
-        <TerminalSplitView splitView={shown.splitView} sessions={shown.sessions} retainedTerminals={retainedTerminals} renderTerminal={terminalRenderer(shown, listed)} />
+        <SessionEngineContext.Provider value={shown.runTarget}>
+          <TerminalSplitView splitView={shown.splitView} sessions={shown.sessions} retainedTerminals={retainedTerminals} renderTerminal={terminalRenderer(shown, listed)} />
+        </SessionEngineContext.Provider>
       </div>
     ) : (
       <div key={shown.runTarget ?? ""} data-kept-run-target={shown.runTarget ?? ""} aria-hidden="true" inert className="invisible absolute inset-0">
-        <TerminalSplitView splitView={shown.splitView} sessions={shown.sessions} retainedTerminals={retainedTerminals} renderTerminal={terminalRenderer(shown, false)} behind />
+        <SessionEngineContext.Provider value={shown.runTarget}>
+          <TerminalSplitView splitView={shown.splitView} sessions={shown.sessions} retainedTerminals={retainedTerminals} renderTerminal={terminalRenderer(shown, false)} behind />
+        </SessionEngineContext.Provider>
       </div>
     ))}
     {waitingForEngine ? (

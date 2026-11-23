@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import { LanguageProvider } from "../i18n/context";
 import { SessionDestinationLine } from "./SessionDestinationLine";
-import { SessionAddressesContext } from "./sessionDestination";
+import { SessionAddressesContext, SessionEngineContext } from "./sessionDestination";
 
 const session = (overrides: Partial<TerminalSession>): TerminalSession => ({
   id: "one", kind: "ssh", workspaceId: "main", alias: "web-01", title: "web-01", startedAt: "2026-11-03T08:00:00Z",
@@ -39,5 +39,17 @@ describe("the line under a session's name", () => {
   it("does not take a local shell's name for an alias", () => {
     renderLine(session({ kind: "shell", alias: undefined as never, title: "web-01" }));
     expect(screen.getByText("localhost")).toBeVisible();
+  });
+
+  it("names a shell after the remote session's engine it runs on, not this machine", () => {
+    render(
+      <LanguageProvider>
+        <SessionEngineContext.Provider value="bastion">
+          <SessionDestinationLine session={session({ kind: "shell", alias: undefined as never, title: "bash" })} />
+        </SessionEngineContext.Provider>
+      </LanguageProvider>,
+    );
+    expect(screen.getByText("bastion")).toBeVisible();
+    expect(screen.queryByText("localhost")).toBeNull();
   });
 });
