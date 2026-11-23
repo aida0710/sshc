@@ -114,6 +114,11 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
     } else if (path.endsWith("/config/overview")) {
       // bastion's own SSH configuration: this machine's, with one connection under another name.
       await route.fulfill({ contentType: "application/json", body: (await localOverview).replaceAll('"nas"', '"warehouse"') });
+    } else if (path.endsWith("/known-hosts")) {
+      // bastion's own known_hosts.
+      await route.fulfill({ json: { path: "/home/ops/.ssh/known_hosts", entries: [
+        { line: 1, digest: "d".repeat(64), marker: "", hosts: ["only-bastion-knows.example"], hashed: false, keyType: "ssh-ed25519", fingerprint: "SHA256:bastionbastionbastionbastionbastionbastion12", comment: "" },
+      ] } });
     } else if (path.endsWith("/connections/recent")) {
       await route.fulfill({ json: { connections: [] } });
     } else {
@@ -677,6 +682,19 @@ test("lists on Home the connections of the chosen engine, not this machine's", a
   await openSection(page, "Home");
   await expect(page.getByRole("button", { name: /^Connect to nas\./ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Connect to warehouse\./ })).toHaveCount(0);
+});
+
+test("shows in Known Hosts the keys the chosen engine knows, not this machine's", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  await openSection(page, "Known Hosts");
+  await expect(page.getByText("only-bastion-knows.example", { exact: true })).toBeVisible();
+
+  // The screen is this machine's again once localhost is chosen, without leaving it.
+  await chooseLocalhost(page);
+  await openSection(page, "Known Hosts");
+  await expect(page.getByText("only-bastion-knows.example", { exact: true })).toHaveCount(0);
 });
 
 test("opens a connection chosen on Home on the run target, which stays chosen", async ({ page, installation }) => {

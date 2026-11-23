@@ -408,6 +408,25 @@ func TestAnEngineThatCannotProveItsSecretIsRefused(t *testing.T) {
 	}
 }
 
+// 実行先の操作を確認するトークンは、実行先のエンジンが出して画面が持つ。取り次ぐときに落とすと、
+// 実行先は確認の無い操作として断る。
+func TestAForwardedRequestCarriesTheConfirmationTokenToTheRemoteEngine(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/engines/r100/terminal/commands", strings.NewReader("{}"))
+	request.Header.Set(handoff.ActionHeader, "token-the-remote-issued")
+	recorder := httptest.NewRecorder()
+	if err := manager.ForwardAPI(recorder, request, "r100", "/api/v1/terminal/commands"); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Body.String() != `{"action":"token-the-remote-issued"}` {
+		t.Fatalf("the remote engine received %s", recorder.Body.String())
+	}
+}
+
 func TestOnlyAnAddedEngineIsForwardedToAndRemovingItKeepsTheRemoteRunning(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
 	manager := newEngineManager(t, remote, "v9")

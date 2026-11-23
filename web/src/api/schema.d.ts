@@ -612,40 +612,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/engines/{alias}/config/overview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Forwarded to the remote engine's /api/v1/config/overview. Home shows the connections of the chosen engine. */
-        get: operations["remoteEngineGetConfigOverview"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/engines/{alias}/connections/recent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Forwarded to the remote engine's /api/v1/connections/recent. */
-        get: operations["remoteEngineListRecentConnections"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/engines/{alias}/terminal/machine": {
         parameters: {
             query?: never;
@@ -7011,64 +6977,6 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
-            502: components["responses"]["Problem"];
-        };
-    };
-    remoteEngineGetConfigOverview: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                alias: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The SSH configuration of the machine the remote engine runs on */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Overview"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            500: components["responses"]["Problem"];
-            502: components["responses"]["Problem"];
-        };
-    };
-    remoteEngineListRecentConnections: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                alias: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful SSH connections on the remote engine's machine, newest first */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecentConnectionList"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            500: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
         };
     };

@@ -293,7 +293,7 @@ function SectionPage({
     );
   }
   if (section === "Known Hosts") {
-    return <KnownHostsPanel />;
+    return <KnownHostsPanel key={shell.runTarget ?? ""} runTarget={shell.runTarget} />;
   }
   if (section === "Remote Keys") {
     return (
