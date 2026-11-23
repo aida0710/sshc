@@ -1,10 +1,11 @@
+import { useEngineApis } from "../shell/engineApis";
 import { Tag } from "../ui/Tag";
 import { useCallback, useEffect, useState } from "react";
 import { MoreDetails } from "../ui/MoreDetails";
 import { toProblem } from "../api/guards";
 import { useLanguage } from "../i18n/context";
 import type { Problem } from "../api/client";
-import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
+import { type HistoryEntry, type PendingTransaction } from "../api/config";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
 import { Icon } from "../ui/icons";
@@ -25,6 +26,7 @@ const entryColumns = "grid grid-cols-[minmax(0,1fr)] gap-4 py-3.5 md:grid-cols-[
 const restoreButtonWraps = "min-w-0 whitespace-normal! text-left [overflow-wrap:anywhere]";
 
 export function HistoryPanel() {
+  const { config: configApi } = useEngineApis();
   const { t, locale } = useLanguage();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [pending, setPending] = useState<PendingTransaction[]>([]);
@@ -51,7 +53,7 @@ export function HistoryPanel() {
     }
 
     setReadFailed(historyResult.status === "rejected" || overviewResult.status === "rejected");
-  }, []);
+  }, [configApi]);
 
   useEffect(() => {
     void reload();

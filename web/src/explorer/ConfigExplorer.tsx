@@ -1,9 +1,10 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toProblem } from "../api/guards";
 import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import type { Problem } from "../api/client";
-import { configApi, type FileContents, type Overview, type SavePreview } from "../api/config";
+import { type FileContents, type Overview, type SavePreview } from "../api/config";
 import { SavePreviewPanel } from "../connections/SavePreview";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import type { ActionMenuItem } from "../ui/ActionMenu";
@@ -59,6 +60,7 @@ function staysInConfig(next: BrowserLocation): boolean {
 
 
 export function ConfigExplorer({ target = null, onTargetHandled = () => undefined, onNavigationBlockerChange, onNavigateLocation }: ConfigExplorerProps) {
+  const { config: configApi } = useEngineApis();
   const t = useTranslate();
   const compact = useMediaQuery(mobileViewportQuery);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -97,7 +99,7 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     } catch (error) {
       setProblem(toProblem(error));
     }
-  }, []);
+  }, [configApi]);
 
   useEffect(() => {
     void reload();

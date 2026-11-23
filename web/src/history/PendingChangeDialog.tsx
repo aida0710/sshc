@@ -1,5 +1,6 @@
+import { useEngineApis } from "../shell/engineApis";
 import { lazy, Suspense, useEffect, useId, useState } from "react";
-import { configApi, type PendingChanges, type PendingFileChange, type PendingTransaction } from "../api/config";
+import { type PendingChanges, type PendingFileChange, type PendingTransaction } from "../api/config";
 import type { Problem } from "../api/client";
 import { toProblem } from "../api/guards";
 import { loadMonacoDiffEditor } from "../editor/loadMonacoEditor";
@@ -42,6 +43,7 @@ export function PendingChangeDialog({
   onRecover: (action: "complete" | "rollback") => void;
   onDismiss: () => void;
 }) {
+  const { config: configApi } = useEngineApis();
   const { t, locale } = useLanguage();
   const headingId = useId();
   const [changes, setChanges] = useState<PendingChanges | null>(null);
@@ -55,7 +57,7 @@ export function PendingChangeDialog({
       (error: unknown) => { if (current) setProblem(toProblem(error)); },
     );
     return () => { current = false; };
-  }, [transaction.id]);
+  }, [configApi, transaction.id]);
 
   const files = changes?.files ?? [];
   const file = files[selected];

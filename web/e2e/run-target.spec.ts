@@ -114,6 +114,19 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
     } else if (path.endsWith("/config/overview")) {
       // bastion's own SSH configuration: this machine's, with one connection under another name.
       await route.fulfill({ contentType: "application/json", body: (await localOverview).replaceAll('"nas"', '"warehouse"') });
+    } else if (path.endsWith("/passwords")) {
+      // bastion's own Vault, open and empty.
+      await route.fulfill({ json: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] } });
+    } else if (path.endsWith("/credentials")) {
+      await route.fulfill({ json: { credentials: [], dedicatedKeyPassphrases: [], keyHostUsageComplete: true } });
+    } else if (path.endsWith("/keys")) {
+      await route.fulfill({ json: { items: [], unreadable: [], agentDelegations: [], unresolvedReferences: [], agentAvailable: false, agentIdentities: [] } });
+    } else if (path.endsWith("/keys/algorithms")) {
+      await route.fulfill({ json: { variants: [], source: "bastion" } });
+    } else if (path.endsWith("/trash")) {
+      await route.fulfill({ json: { entries: [], retentionDays: 30 } });
+    } else if (path.endsWith("/vpn")) {
+      await route.fulfill({ json: { available: true, profiles: [], checking: false } });
     } else if (path.endsWith("/known-hosts")) {
       // bastion's own known_hosts.
       await route.fulfill({ json: { path: "/home/ops/.ssh/known_hosts", entries: [
@@ -695,6 +708,40 @@ test("shows in Known Hosts the keys the chosen engine knows, not this machine's"
   await chooseLocalhost(page);
   await openSection(page, "Known Hosts");
   await expect(page.getByText("only-bastion-knows.example", { exact: true })).toHaveCount(0);
+});
+
+test("lists the chosen engine's connections in Connections and for a new session", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+
+  await openSection(page, "Connections");
+  const connections = page.getByRole("region", { name: "Connections", exact: true });
+  await expect(connections.getByRole("button", { name: "warehouse", exact: true })).toBeVisible();
+  await expect(connections.getByRole("button", { name: "nas", exact: true })).toHaveCount(0);
+
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: "New session", exact: true }).click();
+  const choice = page.getByRole("dialog");
+  await expect(choice.getByRole("button", { name: /warehouse/ })).toBeVisible();
+  await expect(choice.getByRole("button", { name: /\bnas\b/ })).toHaveCount(0);
+});
+
+test("asks the chosen engine, not this machine, for the Vault, the SSH keys and the VPN", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  await expect(page.locator("[data-remote-session-frame]")).toBeVisible();
+  const asked: string[] = [];
+  page.on("request", (request) => asked.push(new URL(request.url()).pathname));
+
+  for (const section of ["Account passwords", "Keys", "VPN"] as const) {
+    await openSection(page, section);
+  }
+  await expect.poll(() => asked).toEqual(expect.arrayContaining([
+    "/api/v1/engines/bastion/credentials", "/api/v1/engines/bastion/keys", "/api/v1/engines/bastion/vpn",
+  ]));
+  expect(asked.filter((path) => ["/api/v1/credentials", "/api/v1/keys", "/api/v1/vpn"].includes(path))).toEqual([]);
 });
 
 test("opens a connection chosen on Home on the run target, which stays chosen", async ({ page, installation }) => {

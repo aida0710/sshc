@@ -1,3 +1,4 @@
+import { localApiBase } from "./remoteEngines";
 import { apiClient } from "./client";
 import { issueAction, patchJSON, putJSON } from "./guards";
 import type { components } from "./schema";
@@ -12,8 +13,8 @@ export type CredentialKind = "password" | "key_passphrase" | "totp";
 
 const CREDENTIAL_REVEAL_ACTION_KIND = "credential.reveal";
 
-function credentialPath(kind: CredentialKind, name: string): string {
-  return `/api/v1/credentials/${kind}/${encodeURIComponent(name)}`;
+function credentialPath(base: string, kind: CredentialKind, name: string): string {
+  return `${base}/credentials/${kind}/${encodeURIComponent(name)}`;
 }
 
 export type CredentialsApi = {
@@ -60,62 +61,66 @@ function validateTOTPCodeSet(value: unknown): TOTPCodeSet {
 
 // Named credentials (passwords, key passphrases, TOTP secrets) and their
 // assignment to hosts and keys.
-export const credentialsApi: CredentialsApi = {
-  async credentials() {
-    return validateCredentialList(await apiClient.read("/api/v1/credentials"));
-  },
-  async storeCredential(kind, name, secret) {
-    return validateCredentialList(
-      await putJSON<unknown>(credentialPath(kind, name), { secret }),
-    );
-  },
-  async revealCredential(kind, name) {
-    const token = await issueAction(
-      CREDENTIAL_REVEAL_ACTION_KIND,
-      `${kind}\n${name}`,
-    );
-    return validateRevealCredential(
-      await apiClient.mutate<unknown>(`${credentialPath(kind, name)}/reveal`, {
-        method: "POST",
-        headers: { "X-SSHC-Action": token },
-      }),
-    );
-  },
-  async totpCodes(name) {
-    const token = await issueAction(
-      CREDENTIAL_REVEAL_ACTION_KIND,
-      `totp\n${name}`,
-    );
-    return validateTOTPCodeSet(
-      await apiClient.mutate<unknown>(
-        `${credentialPath("totp", name)}/codes`,
-        { method: "POST", headers: { "X-SSHC-Action": token } },
-      ),
-    );
-  },
-  async updateCredential(kind, currentName, name, secret) {
-    return validateCredentialList(
-      await patchJSON<unknown>(credentialPath(kind, currentName), { name, secret }),
-    );
-  },
-  async deleteCredential(kind, name) {
-    return validateCredentialList(
-      await apiClient.mutate<unknown>(credentialPath(kind, name), {
-        method: "DELETE",
-      }),
-    );
-  },
-  async assignCredential(kind, subject, name) {
-    return validateCredentialList(
-      await putJSON<unknown>(`/api/v1/credentials/${kind}/assign`, { subject, name }),
-    );
-  },
-  async unassignCredential(kind, subject) {
-    return validateCredentialList(
-      await apiClient.mutate<unknown>(
-        `/api/v1/credentials/${kind}/assign/${encodeURIComponent(subject)}`,
-        { method: "DELETE" },
-      ),
-    );
-  },
-};
+// createCredentialsApi is this API of the engine at base (engineApiBase): this machine's, or a run target's as this
+// machine's engine forwards it.
+export function createCredentialsApi(base: string): CredentialsApi {
+  return {
+    async credentials() {
+      return validateCredentialList(await apiClient.read(`${base}/credentials`));
+    },
+    async storeCredential(kind, name, secret) {
+      return validateCredentialList(
+        await putJSON<unknown>(credentialPath(base, kind, name), { secret }),
+      );
+    },
+    async revealCredential(kind, name) {
+      const token = await issueAction(
+        CREDENTIAL_REVEAL_ACTION_KIND,
+        `${kind}\n${name}`, base);
+      return validateRevealCredential(
+        await apiClient.mutate<unknown>(`${credentialPath(base, kind, name)}/reveal`, {
+          method: "POST",
+          headers: { "X-SSHC-Action": token },
+        }),
+      );
+    },
+    async totpCodes(name) {
+      const token = await issueAction(
+        CREDENTIAL_REVEAL_ACTION_KIND,
+        `totp\n${name}`, base);
+      return validateTOTPCodeSet(
+        await apiClient.mutate<unknown>(
+          `${credentialPath(base, "totp", name)}/codes`,
+          { method: "POST", headers: { "X-SSHC-Action": token } },
+        ),
+      );
+    },
+    async updateCredential(kind, currentName, name, secret) {
+      return validateCredentialList(
+        await patchJSON<unknown>(credentialPath(base, kind, currentName), { name, secret }),
+      );
+    },
+    async deleteCredential(kind, name) {
+      return validateCredentialList(
+        await apiClient.mutate<unknown>(credentialPath(base, kind, name), {
+          method: "DELETE",
+        }),
+      );
+    },
+    async assignCredential(kind, subject, name) {
+      return validateCredentialList(
+        await putJSON<unknown>(`${base}/credentials/${kind}/assign`, { subject, name }),
+      );
+    },
+    async unassignCredential(kind, subject) {
+      return validateCredentialList(
+        await apiClient.mutate<unknown>(
+          `${base}/credentials/${kind}/assign/${encodeURIComponent(subject)}`,
+          { method: "DELETE" },
+        ),
+      );
+    },
+  };
+}
+
+export const credentialsApi = createCredentialsApi(localApiBase);

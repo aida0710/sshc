@@ -136,5 +136,7 @@ export function createConfigApi(base: string, reads?: ReadScope) {
   };
 }
 
-export const configApi = createConfigApi(localApiBase);
+export type ConfigApi = ReturnType<typeof createConfigApi>;
+
+export const configApi: ConfigApi = createConfigApi(localApiBase);
 

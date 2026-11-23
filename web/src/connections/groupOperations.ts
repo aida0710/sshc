@@ -1,4 +1,4 @@
-import { configApi, type GroupMetadata, type Overview } from "../api/config";
+import type { ConfigApi, GroupMetadata, Overview } from "../api/config";
 import { toProblem } from "../api/guards";
 import type { SaveFeedback } from "./pageState";
 
@@ -6,12 +6,14 @@ type GroupOperationsOptions = {
   overview: Overview | null;
   feedback: Pick<SaveFeedback, "setPreview" | "setProblem">;
   reload: () => Promise<Overview | null>;
+  // config は、保存する相手の sshc エンジンの API である。
+  config: Pick<ConfigApi, "save">;
 };
 
 // createGroupOperations は、Connections 画面から行うグループの作成と、設定・表示順・隠すの保存を持つ。どちらも metadata の
 // グループの設定を書き換える操作で、Groups 画面と同じ sshcエンジンの保存を呼ぶ。名前の変更と削除は
 // 開いている接続先の場所も変えるので、createConnectionManagement が持つ。
-export function createGroupOperations({ overview, feedback, reload }: GroupOperationsOptions) {
+export function createGroupOperations({ config: configApi, overview, feedback, reload }: GroupOperationsOptions) {
   const { setPreview, setProblem } = feedback;
 
   // 作成と設定の保存は、読み込んだときのグループの設定を base に送る。ほかで変わっていればサーバーが断る。

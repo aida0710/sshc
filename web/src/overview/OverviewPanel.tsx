@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Overview } from "../api/config";
 import type { RecentConnectionList } from "../api/recentConnections";
 import { syncApi, type SyncStatus } from "../api/sync";
@@ -13,7 +13,7 @@ import { emptyTerminalArtOf } from "./dashboard/emptyTerminalArt";
 import { HomeBackdrop } from "./dashboard/HomeBackdrop";
 import { HomeMachineSection } from "./dashboard/HomeMachineSection";
 import { useTerminalOverview } from "./dashboard/useTerminalOverview";
-import { useHomeApis } from "./useHomeApis";
+import { useEngineApis } from "../shell/engineApis";
 import { ConnectionStartTiles } from "../connections/ConnectionStartTiles";
 import { attentionNoticesOf } from "../connections/noticeKinds";
 import { PanelState } from "../ui/PanelState";
@@ -52,9 +52,9 @@ export function OverviewPanel({
 }: OverviewPanelProps) {
   const { t, locale } = useLanguage();
   const machineOverview = useTerminalOverview(runTarget);
-  const homeApis = useHomeApis(runTarget);
-  const loadOverview = loadOverviewOverride ?? homeApis.loadOverview;
-  const loadRecent = loadRecentOverride ?? homeApis.loadRecent;
+  const { config, recentConnections } = useEngineApis();
+  const loadOverview = useMemo(() => loadOverviewOverride ?? (() => config.overview()), [loadOverviewOverride, config]);
+  const loadRecent = useMemo(() => loadRecentOverride ?? (() => recentConnections.recentConnections()), [loadRecentOverride, recentConnections]);
   const art = emptyTerminalArtOf(presetInUse(useSettings().document));
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);

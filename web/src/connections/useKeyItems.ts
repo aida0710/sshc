@@ -1,10 +1,13 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState } from "react";
-import { keysApi, type KeyItem, type KeysApi } from "../keys/api";
+import type { KeyItem, KeysApi } from "../keys/api";
 
 export type KeyItemsState = { kind: "loading" } | { kind: "ready"; items: KeyItem[] } | { kind: "failed" };
 
 // useKeyItems は、~/.ssh の鍵の一覧を1回読む。グループの欄が keys/<グループ>/ の中身を出すのに使う。
-export function useKeyItems(api: Pick<KeysApi, "inventory"> = keysApi): KeyItemsState {
+export function useKeyItems(apiOverride?: Pick<KeysApi, "inventory">): KeyItemsState {
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.keys;
   const [state, setState] = useState<KeyItemsState>({ kind: "loading" });
   useEffect(() => {
     let active = true;

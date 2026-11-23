@@ -1,6 +1,7 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState } from "react";
 import { ConfigDiagnosticList } from "../sshconfig/ConfigDiagnosticList";
-import { diagnosticsApi, type AuthenticationResponse, type ConfigCheckResponse, type DiagnosticsApi, type EffectiveResponse, type ReachabilityResponse } from "../api/diagnostics";
+import { type AuthenticationResponse, type ConfigCheckResponse, type DiagnosticsApi, type EffectiveResponse, type ReachabilityResponse } from "../api/diagnostics";
 import {
   Field,
   control,
@@ -36,7 +37,9 @@ type DiagnosticsPanelProps = {
   host?: string;
 };
 
-export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ api: apiOverride, host, hosts = [] }: DiagnosticsPanelProps) {
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.diagnostics;
   const t = useTranslate();
   const embedded = host !== undefined;
   const [typedAlias, setTypedAlias] = useState("");

@@ -143,6 +143,15 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodGet, "/api/v1/engines/r100/config/overview", "r100 /api/v1/config/overview"},
 		{http.MethodGet, "/api/v1/engines/r100/connections/recent", "r100 /api/v1/connections/recent"},
 		{http.MethodPost, "/api/v1/engines/r100/actions", "r100 /api/v1/actions"},
+		{http.MethodGet, "/api/v1/engines/r100/config/host", "r100 /api/v1/config/host"},
+		{http.MethodGet, "/api/v1/engines/r100/passwords/web/eligibility", "r100 /api/v1/passwords/web/eligibility"},
+		{http.MethodDelete, "/api/v1/engines/r100/credentials/password/assign/web", "r100 /api/v1/credentials/password/assign/web"},
+		{http.MethodPost, "/api/v1/engines/r100/keys/k1/reveal", "r100 /api/v1/keys/k1/reveal"},
+		{http.MethodDelete, "/api/v1/engines/r100/vpn/profiles/office/route", "r100 /api/v1/vpn/profiles/office/route"},
+		{http.MethodPost, "/api/v1/engines/r100/diagnostics/reachability", "r100 /api/v1/diagnostics/reachability"},
+		{http.MethodPost, "/api/v1/engines/r100/config/save", "r100 /api/v1/config/save"},
+		{http.MethodPatch, "/api/v1/engines/r100/connections", "r100 /api/v1/connections"},
+		{http.MethodGet, "/api/v1/engines/r100/history/pending/tx-1", "r100 /api/v1/history/pending/tx-1"},
 		{http.MethodGet, "/api/v1/engines/r100/known-hosts", "r100 /api/v1/known-hosts"},
 		{http.MethodPost, "/api/v1/engines/r100/known-hosts/delete", "r100 /api/v1/known-hosts/delete"},
 		{http.MethodPost, "/api/v1/engines/r100/known-hosts/scan", "r100 /api/v1/known-hosts/scan"},
@@ -174,6 +183,9 @@ func TestWhatStaysThisMachinesIsNeverForwarded(t *testing.T) {
 		{http.MethodGet, "/api/v1/engines/r100/session"},
 		{http.MethodDelete, "/api/v1/engines/r100/session"},
 		{http.MethodGet, "/api/v1/engines/r100/snippets"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/change"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/reset-unsupported"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/recover-compatible-backup"},
 	} {
 		directory.forwarded = nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { configApi, type FileNode, type HostEntry, type HostMetadata, type Overview } from "../api/config";
+import type { ConfigApi, FileNode, HostEntry, HostMetadata, Overview } from "../api/config";
 import type { TerminalAppearance } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
 
 // What the SSH configuration declares, read once per section and when asked: the groups,
 // the hosts (with the appearance and VPN route each one asked for) and the config files. Sections take these instead of reading the
-// overview themselves.
-export function useDeclaredConfig(enabled: boolean, section: Section | null) {
+// overview themselves. config is the API of the engine the screens work with: another engine's declarations replace
+// these as soon as they are read.
+export function useDeclaredConfig(enabled: boolean, section: Section | null, config: Pick<ConfigApi, "overview">) {
   const [groups, setGroups] = useState<string[]>([]);
   const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
   const [hostVPN, setHostVPN] = useState<Map<string, string>>(new Map());
@@ -34,7 +35,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null) {
   useEffect(() => {
     if (!enabled) return;
     let active = true;
-    void configApi
+    void config
       .overview()
       .then((overview) => {
         if (active) adoptOverview(overview);
@@ -43,7 +44,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null) {
     return () => {
       active = false;
     };
-  }, [enabled, section, readCount, adoptOverview]);
+  }, [enabled, section, readCount, adoptOverview, config]);
 
   return {
     groups, hostAppearance, hostVPN, knownAliases, hosts, files,

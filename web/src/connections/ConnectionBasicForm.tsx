@@ -1,9 +1,10 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type { Problem } from "../api/client";
 import type { HostDetail, UpdateConnectionRequest } from "../api/config";
-import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
+import { type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
-import { keysApi, type KeysApi } from "../keys/api";
+import { type KeysApi } from "../keys/api";
 import { Notice } from "../ui/surface";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
@@ -54,8 +55,8 @@ export function ConnectionBasicForm({
   detail,
   problem,
   onSave,
-  keys = keysApi,
-  secrets: secretsApi = connectionSecretsApi,
+  keys: keysOverride,
+  secrets: secretsOverride,
   preferredKey = null,
   onPreferredKeyApplied,
   savedState,
@@ -65,6 +66,9 @@ export function ConnectionBasicForm({
   checks = null,
 }: ConnectionBasicFormProps) {
   const t = useTranslate();
+  const engineApis = useEngineApis();
+  const keys = keysOverride ?? engineApis.keys;
+  const secretsApi = secretsOverride ?? engineApis.secrets;
   const identity = detail.form.entry.identity;
   const resetKey = draftResetKey(identity, detail.file.contents);
   const secrets = useConnectionSecrets({ detail, resetKey, keys, secrets: secretsApi, savedState });

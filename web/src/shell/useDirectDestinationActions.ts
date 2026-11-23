@@ -1,4 +1,4 @@
-import { configApi } from "../api/config";
+import { useEngineApis } from "./engineApis";
 import { connectionAliasFromHostName, uniqueConnectionAlias } from "../connections/connectionAliasFromHost";
 import type { DirectDestination } from "../connections/directDestination";
 import { useTranslate } from "../i18n/context";
@@ -27,6 +27,7 @@ export function useDirectDestinationActions({ aliases, canSave, open, onSaved }:
 }): DirectDestinationActions {
   const t = useTranslate();
   const showToast = useToast();
+  const { config: configApi } = useEngineApis();
 
   function aliasFor(destination: DirectDestination): string {
     return uniqueConnectionAlias(connectionAliasFromHostName(destination.host) || fallbackAliasBase, aliases);

@@ -1,6 +1,7 @@
+import { useEngineApis } from "../shell/engineApis";
 import {
-  configApi,
   hostMetadataEditRequest,
+  type ConfigApi,
   type EditRequest,
   type FieldEdit,
   type HostMetadata,
@@ -35,12 +36,13 @@ export function useConnectionSave({
   reload,
   followCommittedIdentity,
 }: ConnectionSaveOptions) {
+  const { config: configApi } = useEngineApis();
   const t = useTranslate();
   const { detail } = selected;
   const { setPreview, setProblem, setLocalError } = feedback;
 
   async function submit(request: EditRequest, reselect = true): Promise<SaveAttempt> {
-    let result: Awaited<ReturnType<typeof configApi.save>>;
+    let result: Awaited<ReturnType<ConfigApi["save"]>>;
     try {
       result = await configApi.save(request);
     } catch (error) {

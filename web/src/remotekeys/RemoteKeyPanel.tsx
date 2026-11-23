@@ -1,10 +1,10 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import { keysApi, type KeyItem, type KeysApi } from "../keys/api";
+import { type KeyItem, type KeysApi } from "../keys/api";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import {
-  remoteKeysApi,
   type RemoteKeyInput,
   type RemoteKeyPlan,
   type RemoteKeyRegisterResponse,
@@ -50,13 +50,16 @@ const outcomeLabels: Record<string, MessageKey> = {
 };
 
 export function RemoteKeyPanel({
-  api = remoteKeysApi,
-  keys = keysApi,
+  api: apiOverride,
+  keys: keysOverride,
   hosts = [],
   preferredPublicKeyPath = null,
   onPreferredPublicKeyHandled,
 }: RemoteKeyPanelProps) {
   const t = useTranslate();
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.remoteKeys;
+  const keys = keysOverride ?? engineApis.keys;
   const [hostQuery, setHostQuery] = useState("");
   const [selectedAliases, setSelectedAliases] = useState<string[]>([]);
   const [keyPath, setKeyPath] = useState("");

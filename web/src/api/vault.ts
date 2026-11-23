@@ -1,3 +1,4 @@
+import { localApiBase } from "./remoteEngines";
 import { apiClient } from "./client";
 import { asRecord, postEmpty, postJSON } from "./guards";
 import type { components } from "./schema";
@@ -31,53 +32,59 @@ function validatePasswordEligibility(value: unknown): PasswordEligibility {
 
 // The password vault itself: its lock state, the master password, and whether
 // a host may be given a password. Stored values go through the credentials API.
-export const vaultApi: VaultApi = {
-  async passwordVault() {
-    return validateVaultStatus(await apiClient.read("/api/v1/passwords"));
-  },
-  async initialiseVault(passphrase) {
-    return validateVaultStatus(
-      await postJSON<unknown>("/api/v1/passwords/initialise", { passphrase }),
-    );
-  },
-  async unlockVault(passphrase) {
-    return validateVaultStatus(
-      await postJSON<unknown>("/api/v1/passwords/unlock", { passphrase }),
-    );
-  },
-  async recoverCompatibleVault(passphrase) {
-    return validateVaultStatus(
-      await postJSON<unknown>("/api/v1/passwords/recover-compatible-backup", {
-        passphrase,
-      }),
-    );
-  },
-  async resetUnsupportedVault(passphrase) {
-    return validateVaultStatus(
-      await postJSON<unknown>("/api/v1/passwords/reset-unsupported", {
-        passphrase,
-        acknowledged: true,
-      }),
-    );
-  },
-  async lockVault() {
-    return validateVaultStatus(
-      await postEmpty<unknown>("/api/v1/passwords/lock"),
-    );
-  },
-  async changeMasterPassword(current, next) {
-    const answer = await postJSON<unknown>("/api/v1/passwords/change", {
-      current,
-      next,
-    });
-    const record = asRecord(answer);
-    return { vault: validateVaultStatus(record.vault) };
-  },
-  async passwordEligibility(alias) {
-    return validatePasswordEligibility(
-      await apiClient.read(
-        `/api/v1/passwords/${encodeURIComponent(alias)}/eligibility`,
-      ),
-    );
-  },
-};
+// createVaultApi is this API of the engine at base (engineApiBase): this machine's, or a run target's as this
+// machine's engine forwards it.
+export function createVaultApi(base: string): VaultApi {
+  return {
+    async passwordVault() {
+      return validateVaultStatus(await apiClient.read(`${base}/passwords`));
+    },
+    async initialiseVault(passphrase) {
+      return validateVaultStatus(
+        await postJSON<unknown>(`${base}/passwords/initialise`, { passphrase }),
+      );
+    },
+    async unlockVault(passphrase) {
+      return validateVaultStatus(
+        await postJSON<unknown>(`${base}/passwords/unlock`, { passphrase }),
+      );
+    },
+    async recoverCompatibleVault(passphrase) {
+      return validateVaultStatus(
+        await postJSON<unknown>(`${base}/passwords/recover-compatible-backup`, {
+          passphrase,
+        }),
+      );
+    },
+    async resetUnsupportedVault(passphrase) {
+      return validateVaultStatus(
+        await postJSON<unknown>(`${base}/passwords/reset-unsupported`, {
+          passphrase,
+          acknowledged: true,
+        }),
+      );
+    },
+    async lockVault() {
+      return validateVaultStatus(
+        await postEmpty<unknown>(`${base}/passwords/lock`),
+      );
+    },
+    async changeMasterPassword(current, next) {
+      const answer = await postJSON<unknown>(`${base}/passwords/change`, {
+        current,
+        next,
+      });
+      const record = asRecord(answer);
+      return { vault: validateVaultStatus(record.vault) };
+    },
+    async passwordEligibility(alias) {
+      return validatePasswordEligibility(
+        await apiClient.read(
+          `${base}/passwords/${encodeURIComponent(alias)}/eligibility`,
+        ),
+      );
+    },
+  };
+}
+
+export const vaultApi = createVaultApi(localApiBase);
