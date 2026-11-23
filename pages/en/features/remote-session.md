@@ -24,6 +24,8 @@ The terminals change (sessions and [workspaces](./workspace)), and so does the l
 
 While a remote session is chosen, every screen has a frame around the whole window and a tag with the connection name at the top edge. They go away when you switch back to localhost.
 
+Switching engines keeps the terminals you were shown behind the new engine's. When you switch back, their scrollback, the size you zoomed the text to and what you were typing in a phone's text box are as you left them. What is kept is the terminals that were shown and as many more as the setting for terminals kept behind allows.
+
 Switching engines opens the session you last had open on that engine. If it has been closed, the session at the top of the sidebar opens instead (sessions in hidden workspaces are not picked).
 
 Which engine is chosen is saved as this machine's state, so it stays after a reload. Only the session you last had open is remembered by this browser tab alone: after a reload, the top of the sidebar opens first.
