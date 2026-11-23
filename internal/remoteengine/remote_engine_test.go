@@ -246,7 +246,7 @@ func forward(t *testing.T, manager *Manager, method, body string) (int, string, 
 	request.Header.Set("Cookie", "sshc_session=this-machine")
 	request.Header.Set(handoff.CSRFHeader, "this-machine-csrf")
 	recorder := httptest.NewRecorder()
-	if err := manager.ForwardTerminalAPI(recorder, request, "r100", "/api/v1/terminal/sessions"); err != nil {
+	if err := manager.ForwardAPI(recorder, request, "r100", "/api/v1/terminal/sessions"); err != nil {
 		t.Fatal(err)
 	}
 	return recorder.Code, recorder.Body.String(), recorder.Header()
@@ -330,7 +330,7 @@ func TestACallToTheRemoteTerminalAPICarriesTheActionTokenAndRenewsAnExpiredSessi
 		t.Fatal(err)
 	}
 	remote.expired.Store(true)
-	answer, err := manager.CallTerminalAPI(context.Background(), "r100", TerminalCall{
+	answer, err := manager.CallAPI(context.Background(), "r100", APICall{
 		Method: http.MethodPost, Path: "/api/v1/terminal/commands", ContentType: "application/json",
 		Body: []byte(`{}`), ActionToken: "remote-token",
 	})
@@ -412,7 +412,7 @@ func TestOnlyAnAddedEngineIsForwardedToAndRemovingItKeepsTheRemoteRunning(t *tes
 	remote := newFakeRemoteEngine(t)
 	manager := newEngineManager(t, remote, "v9")
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100/terminal/sessions", nil)
-	if err := manager.ForwardTerminalAPI(httptest.NewRecorder(), request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrNotAdded) {
+	if err := manager.ForwardAPI(httptest.NewRecorder(), request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrNotAdded) {
 		t.Fatalf("forward before adding = %v, want ErrNotAdded", err)
 	}
 	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
@@ -421,7 +421,7 @@ func TestOnlyAnAddedEngineIsForwardedToAndRemovingItKeepsTheRemoteRunning(t *tes
 	if err := manager.RemoveEngine("r100"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.ForwardTerminalAPI(httptest.NewRecorder(), request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrNotAdded) {
+	if err := manager.ForwardAPI(httptest.NewRecorder(), request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrNotAdded) {
 		t.Fatalf("forward after removing = %v, want ErrNotAdded", err)
 	}
 }
@@ -485,7 +485,7 @@ func TestTheRemoteEnginesOwnRefusalsAreNotMistakenForThisMachines(t *testing.T) 
 	} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100/terminal/x", nil)
-		if err := manager.ForwardTerminalAPI(recorder, request, "r100", path); err != nil {
+		if err := manager.ForwardAPI(recorder, request, "r100", path); err != nil {
 			t.Fatal(err)
 		}
 		if recorder.Code != http.StatusBadGateway || !strings.Contains(recorder.Body.String(), want) {

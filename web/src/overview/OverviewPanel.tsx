@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { configApi, type Overview } from "../api/config";
-import { recentConnectionsApi, type RecentConnectionList } from "../api/recentConnections";
+import type { Overview } from "../api/config";
+import type { RecentConnectionList } from "../api/recentConnections";
 import { syncApi, type SyncStatus } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import { Icon } from "../ui/icons";
@@ -13,6 +13,7 @@ import { emptyTerminalArtOf } from "./dashboard/emptyTerminalArt";
 import { HomeBackdrop } from "./dashboard/HomeBackdrop";
 import { HomeMachineSection } from "./dashboard/HomeMachineSection";
 import { useTerminalOverview } from "./dashboard/useTerminalOverview";
+import { useHomeApis } from "./useHomeApis";
 import { ConnectionStartTiles } from "../connections/ConnectionStartTiles";
 import { attentionNoticesOf } from "../connections/noticeKinds";
 import { PanelState } from "../ui/PanelState";
@@ -21,7 +22,8 @@ import { formatOptionalDateTime } from "../ui/format";
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
 type OverviewPanelProps = {
-  // runTarget is the engine new sessions open on; null is this machine. The foot of Home shows that machine.
+  // runTarget is the engine new sessions open on; null is this machine. Home lists that engine's connections, and
+  // its foot shows that machine.
   runTarget: string | null;
   loadOverview?: () => Promise<Overview>;
   loadSync?: () => Promise<SyncStatus>;
@@ -35,15 +37,13 @@ type OverviewPanelProps = {
   onOpenLocalShell: () => void;
 };
 
-const loadDefaultOverview = () => configApi.overview();
 const loadDefaultSync = () => syncApi.syncStatus();
-const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
 
 export function OverviewPanel({
   runTarget,
-  loadOverview = loadDefaultOverview,
+  loadOverview: loadOverviewOverride,
   loadSync = loadDefaultSync,
-  loadRecent = loadDefaultRecent,
+  loadRecent: loadRecentOverride,
   onConnect,
   onNavigate,
   onNavigateLocation,
@@ -52,6 +52,9 @@ export function OverviewPanel({
 }: OverviewPanelProps) {
   const { t, locale } = useLanguage();
   const machineOverview = useTerminalOverview(runTarget);
+  const homeApis = useHomeApis(runTarget);
+  const loadOverview = loadOverviewOverride ?? homeApis.loadOverview;
+  const loadRecent = loadRecentOverride ?? homeApis.loadRecent;
   const art = emptyTerminalArtOf(presetInUse(useSettings().document));
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,6 +69,8 @@ export function OverviewPanel({
 
   useEffect(() => {
     let active = true;
+    // Another engine's lists are not this one's: until these are read, Home shows that it is reading.
+    setLoading(true);
     void Promise.allSettled([loadOverview(), loadSync(), loadRecent()]).then(([workspace, remote, history]) => {
       if (!active) return;
       setOverview(workspace.status === "fulfilled" ? workspace.value : null);
@@ -80,7 +85,6 @@ export function OverviewPanel({
   }, [loadOverview, loadSync, loadRecent, loadAttempt]);
 
   function reload() {
-    setLoading(true);
     setLoadAttempt((attempt) => attempt + 1);
   }
 

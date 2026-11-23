@@ -28,6 +28,9 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
   const commandPreviews: unknown[] = [];
   let finishUpdate = () => {};
   const updateFinished = new Promise<void>((resolve) => { finishUpdate = resolve; });
+  // What this machine's engine answers the app with when it reads its own SSH configuration.
+  const localOverview = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/config/overview" && response.ok())
+    .then((response) => response.text());
   await page.route("**/api/v1/health", async (route) => {
     await route.fulfill({ json: { status: "ok", version: localVersion } });
   });
@@ -107,6 +110,11 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
         { id: "default", name: "", hidden: false, builtIn: true },
         { id: "agents", name: "", hidden: true, builtIn: true },
       ], maxWorkspaces: 50 } });
+    } else if (path.endsWith("/config/overview")) {
+      // bastion's own SSH configuration: this machine's, with one connection under another name.
+      await route.fulfill({ contentType: "application/json", body: (await localOverview).replaceAll('"nas"', '"warehouse"') });
+    } else if (path.endsWith("/connections/recent")) {
+      await route.fulfill({ json: { connections: [] } });
     } else {
       throw new Error(`Unexpected remote engine request: ${path}`);
     }
@@ -607,6 +615,23 @@ test("shows again the session that was open on each run target when switching ba
   await expect(sessionRow("Logs")).toHaveAttribute("aria-current", "true");
   await chooseBastion(page);
   await expect(sessionRow("db")).toHaveAttribute("aria-current", "true");
+});
+
+test("lists on Home the connections of the chosen engine, not this machine's", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await openSection(page, "Home");
+  await expect(page.getByRole("button", { name: /^Connect to nas\./ })).toBeVisible();
+
+  await chooseBastion(page);
+  await openSection(page, "Home");
+  await expect(page.getByRole("button", { name: /^Connect to warehouse\./ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Connect to nas\./ })).toHaveCount(0);
+
+  await chooseLocalhost(page);
+  await openSection(page, "Home");
+  await expect(page.getByRole("button", { name: /^Connect to nas\./ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Connect to warehouse\./ })).toHaveCount(0);
 });
 
 test("opens a connection chosen on Home on the run target, which stays chosen", async ({ page, installation }) => {

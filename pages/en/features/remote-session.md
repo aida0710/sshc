@@ -13,7 +13,7 @@ Keep an sshc engine running on an SSH host (an always-on server, for example), a
 
 A regular SSH session differs in which engine holds the connection. This machine's engine holds it, so the session ends when this machine's engine stops. A remote session runs on the host's engine, so it stays connected when this machine's engine stops.
 
-Only the terminals change: sessions and [workspaces](./workspace). Connections, SFTP, the vault and settings stay this machine's.
+The terminals change (sessions and [workspaces](./workspace)), and so does the list of connections on Home. Connections, SFTP, the vault and settings stay this machine's.
 
 ## Usage
 
@@ -45,7 +45,9 @@ With a remote session chosen, every action that opens a session opens it on the 
 | A connection card on Home (double click, a tap on a touch screen, or **Connect** in its **…**) | The chosen engine |
 | **Open Terminal here** in SFTP | This machine. **Remote session** switches back to localhost |
 
-An SSH session in a remote session takes its connection name from this machine's list, but the remote engine decides where it connects with its own machine's `~/.ssh/config`. If that file has no connection of the same name, the session cannot open.
+Home lists the connections of the remote engine's machine, and a session opened from a card connects to that connection.
+
+In Connections and in **New session** in the sidebar, an SSH session takes its connection name from this machine's list, but the remote engine decides where it connects with its own machine's `~/.ssh/config`. If that file has no connection of the same name, the session cannot open.
 
 Typing `user@host[:port]` in the new session search offers only **Connect**. The remote engine's configuration files cannot be written from here, so **Save as a connection and connect** is not offered.
 

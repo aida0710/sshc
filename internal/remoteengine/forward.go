@@ -14,7 +14,7 @@ import (
 	"sshc/internal/handoff"
 )
 
-// maxForwardedBody は、取り次ぐターミナルの API の要求の本文の上限である。取り次ぐのは
+// maxForwardedBody は、取り次ぐ API の要求の本文の上限である。取り次ぐのは
 // セッションの作成や名前の変更のような短い JSON だけで、接続先のエンジン自身の上限より
 // 小さい。本文は、資格を受け取り直して一度だけ送り直すために読み切って持つ。
 const maxForwardedBody = 1 << 20
@@ -42,7 +42,7 @@ var forwardedUpgradeHeaders = []string{
 	"Connection", "Upgrade", "Sec-WebSocket-Accept", "Sec-WebSocket-Protocol", "Sec-WebSocket-Extensions",
 }
 
-// ForwardTerminalAPI は、ブラウザの要求を、接続先のエンジンの remotePath（/api/v1/terminal/…）
+// ForwardAPI は、ブラウザの要求を、接続先のエンジンの remotePath（/api/v1/…）
 // へ取り次ぐ。ブラウザの cookie と CSRF のトークンはこのマシンのエンジンのもので、接続先へは
 // 送らない。代わりに、このマシンのエンジンが接続先から受け取った資格を付ける。
 //
@@ -50,7 +50,7 @@ var forwardedUpgradeHeaders = []string{
 // 接続先が資格を断ったとき（資格が古くなった）は、受け取り直して一度だけ送り直す。
 // 前のポートで接続先のエンジンが身元を示せないとき（起動し直してポートを移った）も、
 // handoff を読み直して一度だけ送り直す。
-func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error {
+func (m *Manager) ForwardAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error {
 	engine, err := m.engine(alias)
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 	if len(body) > maxForwardedBody {
 		return ErrRequestTooLarge
 	}
-	call := TerminalCall{
+	call := APICall{
 		Method: r.Method, Path: remotePath, RawQuery: r.URL.RawQuery, ContentType: r.Header.Get("Content-Type"), Body: body,
 	}
 	err = m.exchange(r.Context(), engine, call, func(response *http.Response) { copyResponse(w, response) })
@@ -74,11 +74,11 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 	return err
 }
 
-// TerminalCall は、このマシンのエンジン自身が、接続先のエンジンのターミナルの API へ送る要求1つ
+// APICall は、このマシンのエンジン自身が、接続先のエンジンの API へ送る要求1つ
 // である（ブラウザの要求の取り次ぎではない）。
-type TerminalCall struct {
+type APICall struct {
 	Method string
-	// Path は /api/v1/terminal/… である。
+	// Path は /api/v1/… である。
 	Path        string
 	RawQuery    string
 	ContentType string
@@ -87,14 +87,14 @@ type TerminalCall struct {
 	ActionToken string
 }
 
-// TerminalAnswer は、接続先のエンジンの答えである。
-type TerminalAnswer struct {
+// APIAnswer は、接続先のエンジンの答えである。
+type APIAnswer struct {
 	Status      int
 	ContentType string
 	Body        []byte
 }
 
-// maxCalledAnswer は、CallTerminalAPI が読む答えの上限である。答えは、最大 64 の宛先と
+// maxCalledAnswer は、CallAPI が読む答えの上限である。答えは、最大 64 の宛先と
 // それぞれのコマンドを並べた JSON か、セッションの一覧（転送を中継している実行先の取り次ぎ）
 // までである。
 const maxCalledAnswer = 1 << 20
@@ -102,15 +102,15 @@ const maxCalledAnswer = 1 << 20
 // ErrAnswerTooLarge は、接続先の答えが maxCalledAnswer を超えたことを表す。
 var ErrAnswerTooLarge = errors.New("the remote engine's answer is too large")
 
-// CallTerminalAPI は、call を接続先のエンジンへ送り、答えを返す。資格の扱いと送り直しは
-// ForwardTerminalAPI と同じである。接続先へ届かなかったときや、接続先が資格や Vault を
+// CallAPI は、call を接続先のエンジンへ送り、答えを返す。資格の扱いと送り直しは
+// ForwardAPI と同じである。接続先へ届かなかったときや、接続先が資格や Vault を
 // 断ったときは *RemoteRefusalError を返す。
-func (m *Manager) CallTerminalAPI(ctx context.Context, alias string, call TerminalCall) (TerminalAnswer, error) {
+func (m *Manager) CallAPI(ctx context.Context, alias string, call APICall) (APIAnswer, error) {
 	engine, err := m.engine(alias)
 	if err != nil {
-		return TerminalAnswer{}, err
+		return APIAnswer{}, err
 	}
-	var answer TerminalAnswer
+	var answer APIAnswer
 	var readErr error
 	err = m.exchange(ctx, engine, call, func(response *http.Response) {
 		defer func() { _ = response.Body.Close() }()
@@ -122,7 +122,7 @@ func (m *Manager) CallTerminalAPI(ctx context.Context, alias string, call Termin
 		}
 	})
 	if err != nil {
-		return TerminalAnswer{}, err
+		return APIAnswer{}, err
 	}
 	return answer, readErr
 }
@@ -138,7 +138,7 @@ func (e *RemoteRefusalError) Error() string { return "the remote engine refused:
 
 // exchange は call を送り、答えを receive に渡す。receive は本文を閉じる。資格が古いか、
 // 前のポートに繋がらなかった1回目は、資格を受け取り直して一度だけ送り直す。
-func (m *Manager) exchange(ctx context.Context, engine *remoteEngine, call TerminalCall, receive func(*http.Response)) error {
+func (m *Manager) exchange(ctx context.Context, engine *remoteEngine, call APICall, receive func(*http.Response)) error {
 	for attempt := 0; ; attempt++ {
 		retry, err := m.exchangeOnce(ctx, engine, exchangeAttempt{call: call, first: attempt == 0}, receive)
 		if !retry {
@@ -149,7 +149,7 @@ func (m *Manager) exchange(ctx context.Context, engine *remoteEngine, call Termi
 
 // exchangeAttempt は、送る要求の1回分である。first は、断られたら送り直してよい1回目かどうか。
 type exchangeAttempt struct {
-	call  TerminalCall
+	call  APICall
 	first bool
 }
 
@@ -238,7 +238,7 @@ var remoteRefusalCodes = map[string]string{
 }
 
 // request は、call を接続先のエンジンへの要求にし、このマシンのエンジンが受け取った資格を付ける。
-func (call TerminalCall) request(ctx context.Context, session *remoteSession) *http.Request {
+func (call APICall) request(ctx context.Context, session *remoteSession) *http.Request {
 	target := url.URL{Scheme: "http", Host: loopbackHost(session.port), Path: call.Path, RawQuery: call.RawQuery}
 	request, _ := http.NewRequestWithContext(ctx, call.Method, target.String(), bytes.NewReader(call.Body))
 	if call.ContentType != "" {

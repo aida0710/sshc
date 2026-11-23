@@ -157,7 +157,7 @@ func (h RemoteEngineHandlers) StartRunTargetForward(c *echo.Context) error {
 		_ = listener.Close()
 		return unexpectedProblem(c, "terminal_forward_failed", err)
 	}
-	reply, err := h.Engines.CallTerminalAPI(c.Request().Context(), alias, remoteengine.TerminalCall{
+	reply, err := h.Engines.CallAPI(c.Request().Context(), alias, remoteengine.APICall{
 		Method: http.MethodPost, Path: "/api/v1/terminal/sessions/" + sessionID + "/forwards",
 		ContentType: echo.MIMEApplicationJSON, Body: body,
 	})
@@ -194,7 +194,7 @@ func (h RemoteEngineHandlers) startRunTargetRemoteForward(c *echo.Context, alias
 	if err != nil {
 		return unexpectedProblem(c, "terminal_forward_failed", err)
 	}
-	reply, err := h.Engines.CallTerminalAPI(c.Request().Context(), alias, remoteengine.TerminalCall{
+	reply, err := h.Engines.CallAPI(c.Request().Context(), alias, remoteengine.APICall{
 		Method: http.MethodPost, Path: "/api/v1/terminal/sessions/" + sessionID + "/forwards",
 		ContentType: echo.MIMEApplicationJSON, Body: body,
 	})
@@ -223,7 +223,7 @@ func (h RemoteEngineHandlers) StopRunTargetForward(c *echo.Context) error {
 		return problem(c, http.StatusNotFound, "terminal_forward_not_found")
 	}
 	h.forwards.remove(runTargetForwardKey{alias: alias, sessionID: sessionID, forwardID: forwardID})
-	reply, err := h.Engines.CallTerminalAPI(c.Request().Context(), alias, remoteengine.TerminalCall{
+	reply, err := h.Engines.CallAPI(c.Request().Context(), alias, remoteengine.APICall{
 		Method: http.MethodDelete, Path: "/api/v1/terminal/sessions/" + sessionID + "/forwards/" + forwardID,
 	})
 	if err != nil {
@@ -241,7 +241,7 @@ func (h RemoteEngineHandlers) StopRunTargetForward(c *echo.Context) error {
 
 // runTargetForwardIDs は、実行先のセッションに今ある転送の ID を返す。
 func (h RemoteEngineHandlers) runTargetForwardIDs(ctx context.Context, alias, sessionID string) (map[string]bool, error) {
-	reply, err := h.Engines.CallTerminalAPI(ctx, alias, remoteengine.TerminalCall{Method: http.MethodGet, Path: "/api/v1/terminal/sessions"})
+	reply, err := h.Engines.CallAPI(ctx, alias, remoteengine.APICall{Method: http.MethodGet, Path: "/api/v1/terminal/sessions"})
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +339,7 @@ func (h RemoteEngineHandlers) forwardWithLocalListens(c *echo.Context, alias, re
 		// 取り次ぎ（remoteengine）が大きすぎる本文を断るときと同じ答えにする。
 		return remoteEngineProblem(c, remoteengine.ErrRequestTooLarge)
 	}
-	reply, err := h.Engines.CallTerminalAPI(request.Context(), alias, remoteengine.TerminalCall{
+	reply, err := h.Engines.CallAPI(request.Context(), alias, remoteengine.APICall{
 		Method: request.Method, Path: remotePath, RawQuery: request.URL.RawQuery,
 		ContentType: request.Header.Get(echo.HeaderContentType), Body: body,
 	})
