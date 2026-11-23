@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TerminalSession } from "../../api/terminalSessions";
 import { mobileViewportQuery, useMediaQuery } from "../../ui/useMediaQuery";
 import { paneSessionIds, type PaneEdge } from "./layout";
-import { activeSplitView, emptySplitGroups, reduceSplitGroups, type SplitGroupsAction } from "./splitGroups";
+import { activeSplitView, emptySplitGroups, reduceSplitGroups, type SplitGroupsAction, type SplitGroupsState } from "./splitGroups";
 
 // SplitRequest is a session waiting to be told what goes beside it, and on which side.
 export type SplitRequest = { targetSessionId: string; edge: PaneEdge };
@@ -14,28 +14,36 @@ export type SplitRefusal = "ended" | "groups" | "sessions";
 // A session not open yet has no id. The reducer only needs one to ask whether a new pane has room.
 const sessionNotOpenYet = "session-not-open-yet";
 
-export function useSplitView({ sessions, runTarget, maxSessions = 0 }: {
+export function useSplitView({ sessions, sessionsLoaded = true, runTarget, maxSessions = 0 }: {
   sessions: TerminalSession[];
+  // sessionsLoaded says whether `sessions` is the run target's own list. Until it is, the list is still the one
+  // the previous run target answered with, or empty.
+  sessionsLoaded?: boolean;
   runTarget: string | null;
   // maxSessions is how many live sessions the engine allows; 0 until it has said.
   maxSessions?: number;
 }) {
-  const [current, setCurrent] = useState({ runTarget, state: emptySplitGroups });
+  // Each run target keeps its own splits, so that coming back to one finds them as they were left.
+  const [groupsByRunTarget, setGroupsByRunTarget] = useState<ReadonlyMap<string | null, SplitGroupsState>>(new Map());
   const [splitRequest, setSplitRequest] = useState<SplitRequest | null>(null);
+  const [requestRunTarget, setRequestRunTarget] = useState(runTarget);
   const compact = useMediaQuery(mobileViewportQuery);
-  // A target change must discard the old engine's layout before rendering it.
-  if (current.runTarget !== runTarget) {
-    setCurrent({ runTarget, state: emptySplitGroups });
+  // A request for a split names a session of the run target it was made on.
+  if (requestRunTarget !== runTarget) {
+    setRequestRunTarget(runTarget);
     setSplitRequest(null);
   }
-  const groupState = current.runTarget === runTarget ? current.state : emptySplitGroups;
+  // Until the run target's list is read, its panes cannot be told from closed sessions, so none are shown and
+  // none are pruned.
+  const groupState = sessionsLoaded ? groupsByRunTarget.get(runTarget) ?? emptySplitGroups : emptySplitGroups;
   const state = activeSplitView(groupState);
   const dispatch = useCallback((action: SplitGroupsAction) => {
-    setCurrent((previous) => {
-      const next = reduceSplitGroups(previous.state, action);
-      return next === previous.state ? previous : { ...previous, state: next };
+    setGroupsByRunTarget((previous) => {
+      const before = previous.get(runTarget) ?? emptySplitGroups;
+      const next = reduceSplitGroups(before, action);
+      return next === before ? previous : new Map(previous).set(runTarget, next);
     });
-  }, []);
+  }, [runTarget]);
   const selectSession = useCallback((sessionId: string | null, focus = true) => {
     dispatch({ type: "select", sessionId, focus });
   }, [dispatch]);
@@ -44,9 +52,10 @@ export function useSplitView({ sessions, runTarget, maxSessions = 0 }: {
     .filter((session) => session.state !== "exited" && session.exited === undefined)
     .map((session) => session.id)), [sessions]);
   useEffect(() => {
+    if (!sessionsLoaded) return;
     const closed = new Set(groupState.groups.flatMap((group) => paneSessionIds(group.view.root)).filter((id) => !liveSessionIds.has(id)));
     if (closed.size > 0) dispatch({ type: "prune", sessionIds: closed });
-  }, [liveSessionIds, groupState.groups, dispatch]);
+  }, [sessionsLoaded, liveSessionIds, groupState.groups, dispatch]);
 
   function canSplit(sessionId: string, targetSessionId = state.activeSessionId): boolean {
     return !compact && targetSessionId !== null
