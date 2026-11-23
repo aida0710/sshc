@@ -332,8 +332,7 @@ test("frames the whole window and names the engine while a remote session is cho
   await expect(frame).toHaveCount(0);
 
   await chooseBastion(page);
-  await expect(frame.getByText("Remote session: bastion", { exact: true })).toBeVisible();
-  await expect(frame.getByText("bastion", { exact: true })).toBeHidden();
+  await expect(frame).toHaveText("Remote session: bastion");
   const viewport = page.viewportSize()!;
   expect(await frame.boundingBox()).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
   await openSection(page, "Connections");
@@ -351,10 +350,12 @@ test("frames the whole window and names the engine while a remote session is cho
     await changeDisplayLanguage(page, "en");
   }
 
-  // A phone has room for the name only.
+  // A phone's header would be under the name tag, so the app starts below it.
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(frame.getByText("bastion", { exact: true })).toBeVisible();
-  await expect(frame.getByText("Remote session: bastion", { exact: true })).toBeHidden();
+  await expect(page.locator("[data-app-navigation]")).not.toBeInViewport();
+  const tag = (await frame.locator("span").boundingBox())!;
+  const header = (await page.locator("[data-app-header]").boundingBox())!;
+  expect(header.y).toBeGreaterThanOrEqual(tag.y + tag.height);
   await page.setViewportSize({ width: 1280, height: 800 });
   await chooseLocalhost(page);
   await expect(frame).toHaveCount(0);
