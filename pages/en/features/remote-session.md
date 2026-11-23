@@ -129,18 +129,18 @@ While an action runs, the dialog shows what the host's `sshc` writes as it is wr
 - If the host has no vault yet, create it through **Open its full screen in a new tab**.
 - SSH sessions opened in a remote session can use port forwarding. For Local and Dynamic forwards, this machine listens on its `127.0.0.1` and carries each connection to the remote sshc engine. A Remote forward's destination is resolved from the remote sshc engine. These forwards are temporary and cannot be saved to the connection's settings.
 - Quick Commands and sending a command to several sessions also work in remote sessions. The snippets are this machine's, and variables and secrets are filled in on this machine. The confirmation shows the command with secrets hidden, and only the remote sshc engine receives the filled-in command. A command is sent only to sessions on the engine being shown (never across engines).
-- Path preview and Open in SFTP for an SSH session opened in a remote session work only when this machine's settings have the same alias with the same destination (HostName, Port and User) as the remote sshc engine's.
+- Path preview and **Open current directory in SFTP** for a session opened in a remote session use the files and connections of the sshc engine that runs the session.
 - When a terminal on an engine that is not chosen sends a notification, the **Remote session** button and that engine's row get a mark. Only engines that this machine's engine is connected to get marks (sshc does not connect or ask for a password to show one). sshc checks every 15 seconds, so a mark can appear a little late. Choosing that engine clears the mark, and the rows of the sessions that sent notifications get their own unread marks.
 - The host must run macOS or Linux.
 
 ## How it works
 
-This machine's engine opens a single SSH connection to the host and forwards terminal operations and their input and output through it.
+This machine's engine opens a single SSH connection to the host and forwards, through it, the terminals' input and output and the operations of the screens that belong to the remote engine.
 
 ```mermaid
 flowchart TD
-  browser["This machine's browser"] <--> local["This machine's engine<br/>Connections, SFTP, Vault, settings"]
-  local <-- "One SSH connection" --> remote["The host's engine"]
+  browser["This machine's browser"] <--> local["This machine's engine<br/>Settings, Snippets, Sync"]
+  local <-- "One SSH connection" --> remote["The host's engine<br/>Connections, SFTP, Vault and more"]
   remote <--> shell["Terminals"]
 ```
 
