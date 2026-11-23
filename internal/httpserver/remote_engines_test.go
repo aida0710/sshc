@@ -23,9 +23,11 @@ import (
 // fakeEngineDirectory は、実行先の一覧と、取り次ぎに渡された alias と接続先のパスを覚える。
 type fakeEngineDirectory struct {
 	fakeRemoteEngines
-	engines    []string
-	addErr     error
-	forwarded  []string
+	engines   []string
+	addErr    error
+	forwarded []string
+	// waitedLong は、長い上限で取り次いだ操作である。
+	waitedLong []string
 	streamed   []string
 	statusSeen remoteengine.Status
 	statusErr  error
@@ -80,6 +82,12 @@ func (f *fakeEngineDirectory) UnlockVault(_ context.Context, alias, passphrase s
 }
 func (f *fakeEngineDirectory) ForwardAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
 	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+func (f *fakeEngineDirectory) ForwardSlowAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	f.waitedLong = append(f.waitedLong, remotePath)
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
@@ -191,6 +199,29 @@ func TestWhatStaysThisMachinesIsNeverForwarded(t *testing.T) {
 		recorder := send(t, engine, tc.method, tc.path, "", nil)
 		if len(directory.forwarded) != 0 || (recorder.Code != http.StatusNotFound && recorder.Code != http.StatusMethodNotAllowed) {
 			t.Errorf("%s %s = %d, forwarded %v", tc.method, tc.path, recorder.Code, directory.forwarded)
+		}
+	}
+}
+
+// よそのマシンの答えを待つ操作は、実行先がまだ働いているうちに「届かない」と断らないよう、長く待つ。
+func TestOperationsThatWaitForAnotherHostAreForwardedWithTheLongLimit(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	for _, tc := range []struct {
+		method, path string
+		long         bool
+	}{
+		{http.MethodPost, "/api/v1/engines/r100/diagnostics/authentication", true},
+		{http.MethodPost, "/api/v1/engines/r100/known-hosts/scan", true},
+		{http.MethodPost, "/api/v1/engines/r100/vpn/profiles/office/route", true},
+		{http.MethodPost, "/api/v1/engines/r100/remote-keys/register", true},
+		{http.MethodGet, "/api/v1/engines/r100/config/overview", false},
+		{http.MethodPost, "/api/v1/engines/r100/config/save", false},
+	} {
+		directory.forwarded, directory.waitedLong = nil, nil
+		recorder := send(t, engine, tc.method, tc.path, "", nil)
+		if recorder.Code != http.StatusOK || len(directory.forwarded) != 1 || (len(directory.waitedLong) == 1) != tc.long {
+			t.Errorf("%s %s = %d, forwarded %v, with the long limit %v", tc.method, tc.path, recorder.Code, directory.forwarded, directory.waitedLong)
 		}
 	}
 }

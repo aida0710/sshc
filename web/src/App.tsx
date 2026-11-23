@@ -110,7 +110,7 @@ export function App({
   const navigationRail = useMediaQuery(navigationRailQuery);
   const shortcuts = useBindings();
   const { resolved: resolvedTheme, scheme } = useTheme();
-  const { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore, currentLocation } =
+  const { route, location, navigate, navigateLocation, mayLeaveFor, setNavigationBlocker, hasEntryBefore, currentLocation } =
     useSectionRoute({ present: presentLocationChange });
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
@@ -132,7 +132,10 @@ export function App({
   usePreloadedSectionPages(state === "ready");
   useFirstScreenReport(state !== "starting" && (state !== "ready" || settingsLoaded));
   const handoffs = useSectionHandoffs(navigate);
-  const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version });
+  // Choosing another engine makes its screens anew. A screen with an unsaved draft is asked first, as when leaving it
+  // for the terminal.
+  const mayChangeEngine = useCallback(() => mayLeaveFor("Terminal"), [mayLeaveFor]);
+  const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version, mayChange: mayChangeEngine });
   // The screens work with the engine chosen for the remote session: what the SSH configuration declares, too.
   const engineApis = useEngineApisOf(runTargets.selected, runTargets.vaultUnlock.revision);
   const declared = useDeclaredConfig(state === "ready", section, engineApis.config);
@@ -546,6 +549,7 @@ export function App({
             onOpenShell={(workspaceId) => void openLocalShell(undefined, undefined, workspaceId)}
             aliases={declared.knownAliases}
             hosts={declared.hosts}
+            engineChoices={{ aliases: thisMachineDeclared.knownAliases, hosts: thisMachineDeclared.hosts }}
             onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
             directDestination={directDestination}
             onOpenCommandPalette={openPaletteFromNavigation}

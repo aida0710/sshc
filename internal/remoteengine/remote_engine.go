@@ -25,12 +25,15 @@ var (
 // runTargetCompatibility に書き、接続先の番号がこれと同じなら、sshc のバージョンが
 // 違っても実行先として使う。画面は接続先のエンジンの API をそのまま使うためである。
 //
-// 取り次ぐ API（httpserver の registerRemoteEngineRoutes が接続先へ渡す
-// /api/v1/terminal/… の要求と答え）、handoff と /cli/ の手順、ターミナルの入出力の
-// ストリームの形を、古い相手と通じない形に変えたときに 1 つ上げる。
+// 取り次ぐ API（httpserver の registerRemoteEngineRoutes と forwardedRoutes が接続先へ渡す
+// 要求と答え）、handoff と /cli/ の手順、ターミナルの入出力のストリームの形を、古い相手と
+// 通じない形に変えたときに 1 つ上げる。
+//
+// 4 は、取り次ぐ API をターミナルから、接続先の管理・鍵・Vault・VPN・診断まで広げた番号である。
+// 画面はそれらの答えを自分の版の形で確かめるので、3 までの相手の答えが通るとは限らない。
 // 上げたリリースでは、実行先の sshc も更新が要る（docs/releasing.md）。
 // 0 は、番号を書かない古い sshc の handoff を読んだときの値なので使わない。
-const Compatibility = 3
+const Compatibility = 4
 
 // IncompatibleEngineError は、接続先の sshc の互換の番号がこのマシンと違うことを表す。
 // 番号を書かない古い sshc も含む。Local と Remote は、それぞれの sshc のバージョンである。

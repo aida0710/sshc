@@ -53,6 +53,8 @@ type Manager struct {
 	options ManagerOptions
 	// answerLimit は forwardedAnswerLimit である。試験だけが短くする。
 	answerLimit time.Duration
+	// slowAnswerLimit は slowForwardedAnswerLimit である。試験だけが短くする。
+	slowAnswerLimit time.Duration
 	// linkLimit は linkAttemptLimit、sessionLimit は sessionAnswerLimit である。試験だけが短くする。
 	linkLimit    time.Duration
 	sessionLimit time.Duration
@@ -72,7 +74,7 @@ type Manager struct {
 func NewManager(options ManagerOptions) *Manager {
 	actionContext, stopActions := context.WithCancel(context.Background())
 	return &Manager{
-		options: options, answerLimit: forwardedAnswerLimit, linkLimit: linkAttemptLimit, sessionLimit: sessionAnswerLimit,
+		options: options, answerLimit: forwardedAnswerLimit, slowAnswerLimit: slowForwardedAnswerLimit, linkLimit: linkAttemptLimit, sessionLimit: sessionAnswerLimit,
 		hosts: map[string]*remoteHost{}, actions: map[string]*actionLog{},
 		actionContext: actionContext, stopActions: stopActions,
 	}

@@ -20,7 +20,7 @@
 
 次のどれかを、古いsshcと通じない形に変えた変更では、同じ変更で`Compatibility`を1つ上げてください。
 
-- リモートのsshcエンジンへ取り次ぐAPI（`/api/v1/terminal/…`）の要求と答えの形
+- リモートのsshcエンジンへ取り次ぐAPIの要求と答えの形（ターミナルの`/api/v1/terminal/…`と、`internal/httpserver/remote_engine_forwards.go`の`forwardedRoutes`に並べた操作）
 - handoffと`/cli/`の手順（資格の受け取り方、身元の確かめ方）
 - ターミナルの入出力のストリームの形
 

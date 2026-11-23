@@ -32,6 +32,19 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
     setFiles(overview.files);
   }, []);
 
+  // What another engine declared is not this one's: until this one's is read, and when it cannot be, nothing is
+  // listed. A section asks again when it is shown, so a failure is not said here.
+  const [declaredBy, setDeclaredBy] = useState(config);
+  if (declaredBy !== config) {
+    setDeclaredBy(config);
+    setGroups([]);
+    setHostAppearance(new Map());
+    setHostVPN(new Map());
+    setKnownAliases([]);
+    setHosts([]);
+    setFiles([]);
+  }
+
   useEffect(() => {
     if (!enabled) return;
     let active = true;

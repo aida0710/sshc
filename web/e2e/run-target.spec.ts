@@ -744,6 +744,39 @@ test("asks the chosen engine, not this machine, for the Vault, the SSH keys and 
   expect(asked.filter((path) => ["/api/v1/credentials", "/api/v1/keys", "/api/v1/vpn"].includes(path))).toEqual([]);
 });
 
+test("asks about an unsaved connection before the engine changes under it, and keeps it when told to", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await openSection(page, "Connections");
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion", exact: true }).click();
+  await page.getByLabel("Port", { exact: true }).fill("2244");
+  await expect(page.getByText("Unsaved changes", { exact: true })).toBeVisible();
+
+  await chooseBastion(page);
+  const discardDialog = page.getByRole("dialog", { name: "Discard changes" });
+  await expect(discardDialog).toBeVisible();
+  await discardDialog.getByRole("button", { name: "Keep editing" }).click();
+
+  // The engine did not change, and what was typed is still there.
+  await expect(page.locator("[data-remote-session-frame]")).toHaveCount(0);
+  await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
+});
+
+test("lists no connection for a new session while the chosen engine's cannot be read", async ({ page, installation }) => {
+  await stubRunTarget(page, { refusal: "unreachable" });
+  await openApplication(page, installation);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await chooseBastion(page);
+  await expect(page.getByRole("region", { name: "Could not connect to bastion", exact: true })).toBeVisible();
+
+  // This machine's connections are not offered as bastion's.
+  await navigation.getByRole("button", { name: "New session", exact: true }).click();
+  const choice = page.getByRole("dialog");
+  await expect(choice).toBeVisible();
+  await expect(choice.getByRole("button", { name: /\bnas\b/ })).toHaveCount(0);
+  await expect(choice.getByRole("button", { name: /^SSH.*bastion|^bastion\b/ })).toHaveCount(0);
+});
+
 test("opens a connection chosen on Home on the run target, which stays chosen", async ({ page, installation }) => {
   const sessions = [terminalSession("web", "web")];
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions });

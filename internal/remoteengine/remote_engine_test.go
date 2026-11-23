@@ -158,6 +158,11 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"code":"vault_locked","message":"request rejected"}`)
 	case "/api/v1/terminal/shell-profiles":
 		w.WriteHeader(http.StatusForbidden)
+	case "/api/v1/keys":
+		// 入口の断り: このマシンのエンジンからの要求の CSRF のトークンが合わない。
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"code":"invalid_csrf","message":"request rejected"}`)
 	case "/api/v1/terminal/restore":
 		// fetch は Location の無い 3xx を追わず、画面は code で読む。
 		w.Header().Set("Content-Type", "application/problem+json")
@@ -405,6 +410,34 @@ func TestAnEngineThatCannotProveItsSecretIsRefused(t *testing.T) {
 	defer manager.Close()
 	if err := manager.AddEngine(context.Background(), "r100"); !errors.Is(err, ErrUnproven) {
 		t.Fatalf("AddEngine = %v, want ErrUnproven", err)
+	}
+}
+
+// 接続先が操作そのものを断った理由（マスターパスワードの間違いなど）は、画面がその code で文を出すので、
+// そのまま返す。接続先の入口の断りは、このマシンの画面が自分のセッションの終わりと読まない code にする。
+func TestARefusalOfTheOperationItselfReachesTheScreenAndARefusalAtTheEntranceDoesNot(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		remotePath string
+		status     int
+		code       string
+	}{
+		{"/api/v1/passwords/unlock", http.StatusForbidden, "wrong_passphrase"},
+		{"/api/v1/keys", http.StatusBadGateway, "remote_engine_refused"},
+		{"/api/v1/terminal/shell-profiles", http.StatusBadGateway, "remote_engine_refused"},
+	} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100"+strings.TrimPrefix(tc.remotePath, "/api/v1"), nil)
+		if err := manager.ForwardAPI(recorder, request, "r100", tc.remotePath); err != nil {
+			t.Fatal(err)
+		}
+		if recorder.Code != tc.status || !strings.Contains(recorder.Body.String(), `"code":"`+tc.code+`"`) {
+			t.Errorf("%s = %d %s, want %d %s", tc.remotePath, recorder.Code, recorder.Body.String(), tc.status, tc.code)
+		}
 	}
 }
 

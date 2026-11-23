@@ -65,6 +65,7 @@ export function AppNavigation({
   onOpenShell,
   aliases = [],
   hosts = [],
+  engineChoices,
   onConnect,
   directDestination,
   onOpenCommandPalette,
@@ -101,6 +102,9 @@ export function AppNavigation({
   onOpenShell: (workspaceId: string) => void;
   aliases?: string[];
   hosts?: HostEntry[];
+  // engineChoices are this machine's own connections: an engine is added to this machine's engine, which reaches it
+  // with this machine's SSH configuration, whatever engine the screens work with.
+  engineChoices: { aliases: string[]; hosts: HostEntry[] };
   onConnect?: (alias: string, workspaceId: string) => void;
   directDestination?: DirectDestinationActions | undefined;
   onOpenCommandPalette: () => void;
@@ -228,7 +232,7 @@ export function AppNavigation({
       </div>
 
       <div className="shrink-0">
-        <RunTargetSwitcher targets={runTargets} link={runTargetLink} aliases={aliases} hosts={hosts} onShowTerminal={onShowTerminal} />
+        <RunTargetSwitcher targets={runTargets} link={runTargetLink} aliases={engineChoices.aliases} hosts={engineChoices.hosts} onShowTerminal={onShowTerminal} />
       </div>
 
       <NavigationResizeHandle width={desktopWidth} onWidthChange={onDesktopWidthChange} />
