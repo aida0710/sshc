@@ -1425,7 +1425,7 @@ export const ja = {
   "terminal.tintHint":
     "値を大きくすると画像が暗くなり、文字を読みやすくできます。",
   "connection.backgroundLabel": "背景画像",
-  "terminal.fontHint": "JetBrains Monoはアプリに同梱しています。",
+  "terminal.fontHint": "JetBrains MonoとBIZ UDGothicはアプリに同梱しています。「JetBrains Mono + BIZ UDGothic」は、日本語をBIZ UDGothicで表示します。",
   "terminal.fontFollowsSystem": "システムの等幅フォントを使用",
   "terminal.fontFollowsOverall": "プリセットに従う",
   "connection.fontLabel": "フォント",

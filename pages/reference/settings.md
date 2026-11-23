@@ -80,6 +80,8 @@ Syncで同期しているマシンを、このマシンを先頭にして並べ�
 
 Terminalのカラーパレット、フォント、背景、色合いは［Settings］→［Terminal］で設定します。
 
+フォントは、システムの等幅フォント、JetBrains Mono、JetBrains Mono + BIZ UDGothic の3つから選べます。JetBrains MonoとBIZ UDGothic（BIZ UDゴシック）はアプリに同梱しています。JetBrains Mono + BIZ UDGothic を選ぶと、英数字と記号をJetBrains Monoで、日本語をBIZ UDGothicで表示します。BIZ UDGothicは日本語の読みやすさを重視したフォントです。斜体の字形が無いので、日本語の斜体はブラウザが字を傾けて表示します。
+
 Vaultの作成／ロック解除画面でも、テーマと言語を切り替えられます。
 
 ## Keyboard shortcuts

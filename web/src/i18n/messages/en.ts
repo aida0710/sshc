@@ -1425,7 +1425,7 @@ export const en = {
   "terminal.tintHint":
     "Increase the opacity to darken the image and improve text readability.",
   "connection.backgroundLabel": "Terminal background image",
-  "terminal.fontHint": "JetBrains Mono ships with the application.",
+  "terminal.fontHint": "JetBrains Mono and BIZ UDGothic ship with the application. “JetBrains Mono + BIZ UDGothic” draws Japanese with BIZ UDGothic.",
   "terminal.fontFollowsSystem": "Use the device's monospace font",
   "terminal.fontFollowsOverall": "Use the preset's",
   "connection.fontLabel": "Terminal font family",

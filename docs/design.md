@@ -533,7 +533,7 @@ HomeのOSアイコンはHostMetadataの`os`を手動指定として優先し、�
 
 Menu末尾のOthersからLicense（`/license`）へ移動する。名前・バージョン・ライセンス名の一覧を検索でき、各行を展開すると配布元URLと著作権・ライセンス・NOTICEの原文を読める。本文はUIへ同梱して遅延読込みし、外部通信を必要としない。
 
-生成手順は`scripts/licenses/README.md`。Goの各配布先で使うモジュール、Webの非開発依存、Gradleで解決したAndroidの実AAR/JAR、Go runtime、JetBrains Mono、Deviconを収録する。MonacoのThirdPartyNoticesとAndroid archive内の通知文も取り込む。依存manifestと同梱ライセンスのhashをWebテストで照合し、変更時には一覧を再生成する。OSが提供するシステムライブラリはこの一覧の対象外。
+生成手順は`scripts/licenses/README.md`。Goの各配布先で使うモジュール、Webの非開発依存、Gradleで解決したAndroidの実AAR/JAR、Go runtime、JetBrains Mono、BIZ UDGothic、Deviconを収録する。MonacoのThirdPartyNoticesとAndroid archive内の通知文も取り込む。依存manifestと同梱ライセンスのhashをWebテストで照合し、変更時には一覧を再生成する。OSが提供するシステムライブラリはこの一覧の対象外。
 
 
 ### アプリのキーコンフィグ
