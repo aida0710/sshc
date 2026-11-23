@@ -13,7 +13,7 @@ function created(alias: string): CreateConnectionResponse {
 function actions(overrides: Partial<Parameters<typeof useDirectDestinationActions>[0]> = {}) {
   const open = vi.fn(async () => undefined);
   const onSaved = vi.fn();
-  const { result } = renderHook(() => useDirectDestinationActions({ aliases: [], canSave: true, open, onSaved, ...overrides }));
+  const { result } = renderHook(() => useDirectDestinationActions({ config: configApi, aliases: [], canSave: true, open, onSaved, ...overrides }));
   return { result, open, onSaved };
 }
 

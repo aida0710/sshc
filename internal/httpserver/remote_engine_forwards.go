@@ -15,14 +15,25 @@ type forwardedRoute struct {
 	// slow は、実行先がよそのマシンの答えを待ってから答える操作かどうか。答えを長く待つ
 	// （remoteengine.ForwardSlowAPI）。
 	slow bool
+	// file は、ファイルの中身を運ぶ操作かどうか。要求と答えの本文を、溜めずに流す
+	// （remoteengine.ForwardFileAPI）。
+	file bool
+	// media は、<audio> と <video> が CSRF のトークン無しで読む操作かどうか。音声か動画の答えだけを渡す
+	// （remoteengine.ForwardMediaAPI）。
+	media bool
 }
+
+// forwardedMediaRoute は、実行先のファイルを <audio> と <video> が読む経路である。このマシンの
+// sftpMediaRoute と同じく、CSRF のトークンの代わりに URL のチケットで確かめる。チケットは実行先の
+// エンジンが出し、実行先が確かめる。このマシンは、セッションの cookie と Vault のロックの解除を求める。
+const forwardedMediaRoute = enginesPrefix + "/:alias/sftp/media/:ticket"
 
 // forwardedRoutes は、リモートセッションを選んでいる間、画面が実行先のものとして出す操作である。
 // ここに無い操作は取り次がない。同期、更新、設定、このマシンのセッション、スニペットは、実行先を
 // 選んでいてもこのマシンのものなので、足さない（TestWhatStaysThisMachinesIsNeverForwarded）。
 //
-// 足せるのは、短い JSON を送って JSON で答える操作だけである（remoteengine.ForwardAPI の本文の上限）。
-// すぐには答えない操作には slow を付ける。
+// 短い JSON を送って JSON で答える操作は、そのまま足す（remoteengine.ForwardAPI の本文の上限に収まるもの）。
+// すぐには答えない操作には slow を、ファイルの中身を運ぶ操作には file を付ける。
 // 契約（api/openapi.yaml）には、このマシンの操作だけを書く。取り次ぐ操作は、同じ要求と応答に、
 // 実行先へ届かないときの 502 が加わるだけである。
 var forwardedRoutes = []forwardedRoute{
@@ -91,6 +102,54 @@ var forwardedRoutes = []forwardedRoute{
 	{method: http.MethodPost, path: "/diagnostics/effective"},
 	{method: http.MethodPost, path: "/diagnostics/reachability", slow: true},
 	{method: http.MethodPost, path: "/diagnostics/authentication", slow: true},
+	// SFTP。転送の仕事は実行先のエンジンが持ち、「ローカル」は実行先のマシンのファイルである。
+	// 接続先へつなぐのを待つ操作は slow、ファイルの中身を運ぶ操作は file にする。
+	{method: http.MethodGet, path: "/sftp/transfers"},
+	{method: http.MethodPost, path: "/sftp/transfers", slow: true},
+	{method: http.MethodDelete, path: "/sftp/transfers/finished"},
+	{method: http.MethodDelete, path: "/sftp/transfers/:id"},
+	{method: http.MethodPut, path: "/sftp/transfers/settings"},
+	{method: http.MethodPost, path: "/sftp/transfers/:id/queue-position"},
+	{method: http.MethodPost, path: "/sftp/transfers/:id/actions"},
+	{method: http.MethodPost, path: "/sftp/transfers/:id/download-checkpoint"},
+	{method: http.MethodGet, path: "/sftp/compare", slow: true},
+	{method: http.MethodGet, path: "/sftp/local/entries"},
+	{method: http.MethodGet, path: "/sftp/local/text", file: true},
+	{method: http.MethodPut, path: "/sftp/local/text", file: true},
+	{method: http.MethodGet, path: "/sftp/local/preview", file: true},
+	{method: http.MethodGet, path: "/sftp/local/thumbnail", file: true},
+	{method: http.MethodGet, path: "/sftp/local/download", file: true},
+	{method: http.MethodPost, path: "/sftp/media-tickets", slow: true},
+	{method: http.MethodDelete, path: "/sftp/media-tickets/:ticket"},
+	{method: http.MethodGet, path: "/sftp/media/:ticket", media: true},
+	{method: http.MethodPost, path: "/sftp/local/directories"},
+	{method: http.MethodPost, path: "/sftp/local/rename"},
+	{method: http.MethodPost, path: "/sftp/local/delete-plan"},
+	{method: http.MethodPost, path: "/sftp/local/delete"},
+	{method: http.MethodGet, path: "/sftp/:alias/entries", slow: true},
+	{method: http.MethodGet, path: "/sftp/:alias/connection-attempts/:attempt", slow: true},
+	{method: http.MethodPost, path: "/sftp/:alias/connection-attempts/:attempt/host-key", slow: true},
+	{method: http.MethodPost, path: "/sftp/:alias/entries", slow: true},
+	{method: http.MethodGet, path: "/sftp/:alias/stats", slow: true},
+	{method: http.MethodGet, path: "/sftp/:alias/preview", file: true},
+	{method: http.MethodGet, path: "/sftp/:alias/thumbnail", file: true},
+	{method: http.MethodGet, path: "/sftp/:alias/search", slow: true},
+	{method: http.MethodGet, path: "/sftp/:alias/text", file: true},
+	{method: http.MethodPut, path: "/sftp/:alias/text", file: true},
+	{method: http.MethodGet, path: "/sftp/:alias/download", file: true},
+	{method: http.MethodGet, path: "/sftp/:alias/archive", file: true},
+	{method: http.MethodPost, path: "/sftp/:alias/uploads/:id", slow: true},
+	{method: http.MethodPatch, path: "/sftp/:alias/uploads/:id", file: true},
+	{method: http.MethodPost, path: "/sftp/:alias/uploads/:id/complete", slow: true},
+	{method: http.MethodDelete, path: "/sftp/:alias/uploads/:id", slow: true},
+	{method: http.MethodPatch, path: "/sftp/:alias/entry", slow: true},
+	{method: http.MethodPatch, path: "/sftp/:alias/mode", slow: true},
+	{method: http.MethodPost, path: "/sftp/:alias/mode-plan", slow: true},
+	{method: http.MethodPatch, path: "/sftp/:alias/modes", slow: true},
+	{method: http.MethodPost, path: "/sftp/:alias/symlink", slow: true},
+	{method: http.MethodPatch, path: "/sftp/:alias/symlink", slow: true},
+	{method: http.MethodPatch, path: "/sftp/:alias/ownership", slow: true},
+	{method: http.MethodGet, path: "/sftp/:alias/space", slow: true},
 	// Known Hosts。
 	{method: http.MethodGet, path: "/known-hosts"},
 	{method: http.MethodPost, path: "/known-hosts/delete"},
@@ -102,7 +161,12 @@ var forwardedRoutes = []forwardedRoute{
 func registerForwardedRoutes(engine *echo.Echo, handlers RemoteEngineHandlers) {
 	for _, route := range forwardedRoutes {
 		forward := handlers.Engines.ForwardAPI
-		if route.slow {
+		switch {
+		case route.media:
+			forward = handlers.Engines.ForwardMediaAPI
+		case route.file:
+			forward = handlers.Engines.ForwardFileAPI
+		case route.slow:
 			forward = handlers.Engines.ForwardSlowAPI
 		}
 		engine.Add(route.method, enginesPrefix+"/:alias"+route.path, handlers.forwarding(forward))

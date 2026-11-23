@@ -1,8 +1,9 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { useTranslate } from "../i18n/context";
-import { sftpApi, type RemoteEntry } from "./api";
-import { chmodApi, chmodRefusalCodes, type ChmodOptions, type ChmodSelection } from "./chmodApi";
+import { type RemoteEntry } from "./api";
+import { chmodRefusalCodes, type ChmodOptions, type ChmodSelection } from "./chmodApi";
 import { remoteParentOf } from "./sftpSource";
 import { sftpProblemText } from "./sftpProblemText";
 import { symbolicModeToOctal } from "./transfers";
@@ -17,6 +18,7 @@ export function useSFTPPermissions({ browser, refreshAfterChange, offerUndo, onI
   offerUndo: (label: string, run: () => Promise<void>) => void;
   onInteract: () => void;
 }) {
+  const { sftp: { files: sftpApi, chmod: chmodApi } } = useEngineApis();
   const t = useTranslate();
   const [intent, setIntent] = useState<PermissionsIntent | null>(null);
   const opened = useRef<PermissionsIntent | null>(null);

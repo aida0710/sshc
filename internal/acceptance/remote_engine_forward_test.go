@@ -1,11 +1,14 @@
 package acceptance_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	"sshc/internal/handoff"
+	"sshc/internal/httpserver"
 	"sshc/internal/remoteengine"
 	"sshc/internal/session"
 	"sshc/internal/storage"
@@ -82,6 +86,85 @@ func forwarded(t *testing.T, manager *remoteengine.Manager, method, remotePath, 
 		t.Fatalf("forward %s %s: %v", method, remotePath, err)
 	}
 	return recorder.Code, recorder.Body.String()
+}
+
+// forwardedFile は、ファイルの中身を運ぶ要求を取り次ぎ、実行先の本物のハンドラの答えを返す。
+func forwardedFile(t *testing.T, manager *remoteengine.Manager, method, remotePath string, body []byte, header map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(method, "/api/v1/engines/remote"+strings.TrimPrefix(remotePath, "/api/v1"), bytes.NewReader(body))
+	for name, value := range header {
+		request.Header.Set(name, value)
+	}
+	recorder := httptest.NewRecorder()
+	path, _, _ := strings.Cut(remotePath, "?")
+	if err := manager.ForwardFileAPI(recorder, request, "remote", path); err != nil {
+		t.Fatalf("forward %s %s: %v", method, remotePath, err)
+	}
+	return recorder
+}
+
+// 実行先のマシンのファイルを、取り次ぎを通して読む。「ローカル」のファイルは実行先の本物のディスクにある。
+func TestFilesOfTheRemoteMachineAreStreamedThroughTheForward(t *testing.T) {
+	t.Parallel()
+	remote := newFixture(t)
+	manager := forwardingTo(t, remote)
+	// 取り次ぎが溜める上限（1 MiB）より大きいファイル。
+	contents := bytes.Repeat([]byte("0123456789abcdef"), (3<<20)/16)
+	path := filepath.Join(remote.home, "large.bin")
+	mustWrite(t, path, contents, 0o600)
+	query := "?path=" + url.QueryEscape(path)
+
+	t.Run("a file larger than the forward buffers arrives whole, to be saved under its name", func(t *testing.T) {
+		answer := forwardedFile(t, manager, http.MethodGet, "/api/v1/sftp/local/download"+query, nil, nil)
+		if answer.Code != http.StatusOK || !bytes.Equal(answer.Body.Bytes(), contents) {
+			t.Fatalf("download = %d, %d bytes of %d", answer.Code, answer.Body.Len(), len(contents))
+		}
+		if disposition := answer.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "attachment") || !strings.Contains(disposition, "large.bin") {
+			t.Fatalf("Content-Disposition = %q", disposition)
+		}
+		if answer.Header().Get("Set-Cookie") != "" {
+			t.Fatalf("a cookie of the remote engine reached the browser: %q", answer.Header().Get("Set-Cookie"))
+		}
+	})
+
+	t.Run("a part of the file is read from where the browser asks", func(t *testing.T) {
+		answer := forwardedFile(t, manager, http.MethodGet, "/api/v1/sftp/local/download"+query, nil, map[string]string{"Range": "bytes=1048576-1048591"})
+		if answer.Code != http.StatusPartialContent || !bytes.Equal(answer.Body.Bytes(), contents[1<<20:(1<<20)+16]) {
+			t.Fatalf("a range = %d %q", answer.Code, answer.Body.String())
+		}
+		if contentRange := answer.Header().Get("Content-Range"); contentRange != fmt.Sprintf("bytes 1048576-1048591/%d", len(contents)) {
+			t.Fatalf("Content-Range = %q", contentRange)
+		}
+	})
+
+	t.Run("a text file is read with its revision and saved back against it", func(t *testing.T) {
+		notePath := filepath.Join(remote.home, "note.txt")
+		mustWrite(t, notePath, []byte("first\n"), 0o600)
+		noteQuery := "?path=" + url.QueryEscape(notePath)
+		read := forwardedFile(t, manager, http.MethodGet, "/api/v1/sftp/local/text"+noteQuery, nil, nil)
+		var text struct {
+			Contents string `json:"contents"`
+			Revision string `json:"revision"`
+		}
+		if read.Code != http.StatusOK || json.Unmarshal(read.Body.Bytes(), &text) != nil || text.Contents != "first\n" || text.Revision == "" {
+			t.Fatalf("read = %d %s", read.Code, read.Body.String())
+		}
+		saved := forwardedFile(t, manager, http.MethodPut, "/api/v1/sftp/local/text"+noteQuery,
+			mustJSON(t, map[string]any{"contents": "second\n", "expectedRevision": text.Revision}), map[string]string{"Content-Type": "application/json"})
+		if saved.Code != http.StatusOK {
+			t.Fatalf("save = %d %s", saved.Code, saved.Body.String())
+		}
+		if got, err := os.ReadFile(notePath); err != nil || string(got) != "second\n" {
+			t.Fatalf("the remote file holds %q, %v", got, err)
+		}
+	})
+
+	t.Run("the remote engine's refusal of a file says why", func(t *testing.T) {
+		answer := forwardedFile(t, manager, http.MethodGet, "/api/v1/sftp/local/download?path="+url.QueryEscape(filepath.Join(remote.home, "absent.bin")), nil, nil)
+		if answer.Code < 400 || answer.Code >= 500 || !strings.Contains(answer.Body.String(), `"code":`) || strings.Contains(answer.Body.String(), "remote_engine_") {
+			t.Fatalf("a missing file = %d %s", answer.Code, answer.Body.String())
+		}
+	})
 }
 
 // 取り次ぎの相手を代役ではなく本物のサーバーにして、画面が頼る答えを確かめる: 確認のトークンで守られた操作、
@@ -160,4 +243,34 @@ func TestForwardedOperationsAreAnsweredByTheRemoteEnginesOwnHandlers(t *testing.
 			t.Fatal("the refused save still changed the remote config")
 		}
 	})
+}
+
+// <audio> と <video> は CSRF のトークンを送れないので、実行先のメディアを読む経路だけは、トークン無しで通す。
+// チケットは実行先が確かめ、このマシンはセッションの cookie を求める。ほかの取り次ぐ経路は、読むだけでも
+// トークンが要る。
+func TestOnlyTheForwardedMediaRouteIsReadWithoutTheCSRFToken(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	withoutToken := func(request *http.Request) { request.Header.Del(httpserver.CSRFHeader) }
+	code := func(response *http.Response) (int, string) {
+		status := response.StatusCode
+		return status, readBody(t, response)
+	}
+
+	// 実行先を足していないので、通った要求は「足していない」と断られる。
+	if status, body := code(f.do(http.MethodGet, "/api/v1/engines/remote/sftp/media/some-ticket", nil, withoutToken)); status != http.StatusNotFound || !strings.Contains(body, "remote_engine_not_added") {
+		t.Fatalf("the forwarded media route without the token = %d %s", status, body)
+	}
+	if status, body := code(f.doAnonymous(http.MethodGet, "/api/v1/engines/remote/sftp/media/some-ticket", nil)); status != http.StatusUnauthorized {
+		t.Fatalf("the forwarded media route without a session = %d %s", status, body)
+	}
+	for _, path := range []string{
+		"/api/v1/engines/remote/sftp/local/download?path=/etc/hostname",
+		"/api/v1/engines/remote/sftp/web/download?path=/etc/hostname",
+		"/api/v1/engines/remote/keys",
+	} {
+		if status, body := code(f.do(http.MethodGet, path, nil, withoutToken)); status != http.StatusForbidden || !strings.Contains(body, "invalid_csrf") {
+			t.Errorf("%s without the token = %d %s", path, status, body)
+		}
+	}
 }

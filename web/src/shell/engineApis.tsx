@@ -6,6 +6,7 @@ import { createVaultApi, vaultApi, type VaultApi } from "../api/vault";
 import { createVPNApi, vpnApi, type VPNApi } from "../api/vpn";
 import { createKeysApi, keysApi, type KeysApi } from "../keys/api";
 import { createRemoteKeysApi, remoteKeysApi, type RemoteKeysApi } from "../remotekeys/api";
+import { createSftpApis, thisMachineSftpApis, type SftpApis } from "../sftp/sftpApis";
 import { createReadScope, type ReadScope } from "../api/readScope";
 import { createRecentConnectionsApi, recentConnectionsApi, type RecentConnectionsApi } from "../api/recentConnections";
 import { engineApiBase } from "../api/remoteEngines";
@@ -22,6 +23,7 @@ export type EngineApis = {
   remoteKeys: RemoteKeysApi;
   vpn: VPNApi;
   diagnostics: DiagnosticsApi;
+  sftp: SftpApis;
   // secrets は、そのエンジンの Vault と、Vault に入れた値の API である。
   secrets: VaultApi & CredentialsApi;
   // hostDetail は、接続先の詳細が使う、診断と Vault の API である。
@@ -36,7 +38,7 @@ function engineApisAt(runTarget: string | null, parts: Omit<EngineApis, "runTarg
 
 const thisMachine = engineApisAt(null, {
   config: configApi, recentConnections: recentConnectionsApi, keys: keysApi, remoteKeys: remoteKeysApi, vpn: vpnApi,
-  diagnostics: diagnosticsApi, vault: vaultApi, credentials: credentialsApi,
+  diagnostics: diagnosticsApi, vault: vaultApi, credentials: credentialsApi, sftp: thisMachineSftpApis,
 });
 
 const EngineApisContext = createContext<EngineApis>(thisMachine);
@@ -56,6 +58,7 @@ export function useEngineApisOf(runTarget: string | null, vaultRevision = 0): En
       config: createConfigApi(base, reads), recentConnections: createRecentConnectionsApi(base, reads),
       keys: createKeysApi(base), remoteKeys: createRemoteKeysApi(base), vpn: createVPNApi(base),
       diagnostics: createDiagnosticsApi(base), vault: createVaultApi(base), credentials: createCredentialsApi(base),
+      sftp: createSftpApis(base),
     });
     return { apis, reads };
     // vaultRevision は、作り直すきっかけとしてだけ使う。

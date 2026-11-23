@@ -1,3 +1,4 @@
+import { localApiBase } from "../api/remoteEngines";
 import { apiClient } from "../api/client";
 import { sendJSON, postJSON } from "../api/guards";
 import type { components } from "../api/schema";
@@ -22,26 +23,34 @@ function symlinkActionTarget(alias: string, request: CreateSymlinkRequest): stri
   return `${alias}:${request.path}:${encoded}`;
 }
 
-async function metadataConfirmation(kind: string, target: string): Promise<string> {
-  const response = await postJSON<unknown>("/api/v1/actions", { kind, target }, undefined, metadataProblems);
+async function metadataConfirmation(base: string, kind: string, target: string): Promise<string> {
+  const response = await postJSON<unknown>(`${base}/actions`, { kind, target }, undefined, metadataProblems);
   return validateOpenAPISchema<components["schemas"]["IssueActionResponse"]>("IssueActionResponse", response).token;
 }
 
-export const remoteMetadataApi = {
-  async createSymlink(alias: string, request: CreateSymlinkRequest): Promise<RemoteEntry> {
-    const token = await metadataConfirmation("sftp.symlink.create", symlinkActionTarget(alias, request));
-    return validateOpenAPISchema<RemoteEntry>("SFTPEntry", await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/symlink`, request, token, metadataProblems));
-  },
-  async changeSymlink(alias: string, request: ChangeSymlinkRequest): Promise<RemoteEntry> {
-    const token = await metadataConfirmation("sftp.symlink", symlinkActionTarget(alias, request));
-    return validateOpenAPISchema<RemoteEntry>("SFTPEntry", await sendJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/symlink`, { method: "PATCH", body: request, actionToken: token, locallyHandledCodes: metadataProblems }));
-  },
-  async changeOwnership(alias: string, request: OwnershipRequest): Promise<RemoteEntry> {
-    const token = await metadataConfirmation("sftp.ownership", `${alias}:${request.path}:${request.uid}:${request.gid}`);
-    return validateOpenAPISchema<RemoteEntry>("SFTPEntry", await sendJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/ownership`, { method: "PATCH", body: request, actionToken: token, locallyHandledCodes: metadataProblems }));
-  },
-  async filesystemSpace(alias: string, path: string): Promise<FilesystemSpace> {
-    const response = await apiClient.read(`/api/v1/sftp/${encodeURIComponent(alias)}/space?path=${encodeURIComponent(path)}`, { locallyHandledCodes: metadataProblems });
-    return validateOpenAPISchema<FilesystemSpace>("SFTPFilesystemSpace", response);
-  },
-};
+// createRemoteMetadataApi is this API of the engine at base (engineApiBase): this machine's, or a run target's as this
+// machine's engine forwards it.
+export function createRemoteMetadataApi(base: string) {
+  return {
+    async createSymlink(alias: string, request: CreateSymlinkRequest): Promise<RemoteEntry> {
+      const token = await metadataConfirmation(base, "sftp.symlink.create", symlinkActionTarget(alias, request));
+      return validateOpenAPISchema<RemoteEntry>("SFTPEntry", await postJSON<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/symlink`, request, token, metadataProblems));
+    },
+    async changeSymlink(alias: string, request: ChangeSymlinkRequest): Promise<RemoteEntry> {
+      const token = await metadataConfirmation(base, "sftp.symlink", symlinkActionTarget(alias, request));
+      return validateOpenAPISchema<RemoteEntry>("SFTPEntry", await sendJSON<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/symlink`, { method: "PATCH", body: request, actionToken: token, locallyHandledCodes: metadataProblems }));
+    },
+    async changeOwnership(alias: string, request: OwnershipRequest): Promise<RemoteEntry> {
+      const token = await metadataConfirmation(base, "sftp.ownership", `${alias}:${request.path}:${request.uid}:${request.gid}`);
+      return validateOpenAPISchema<RemoteEntry>("SFTPEntry", await sendJSON<unknown>(`${base}/sftp/${encodeURIComponent(alias)}/ownership`, { method: "PATCH", body: request, actionToken: token, locallyHandledCodes: metadataProblems }));
+    },
+    async filesystemSpace(alias: string, path: string): Promise<FilesystemSpace> {
+      const response = await apiClient.read(`${base}/sftp/${encodeURIComponent(alias)}/space?path=${encodeURIComponent(path)}`, { locallyHandledCodes: metadataProblems });
+      return validateOpenAPISchema<FilesystemSpace>("SFTPFilesystemSpace", response);
+    },
+  };
+}
+
+export type RemoteMetadataApi = ReturnType<typeof createRemoteMetadataApi>;
+
+export const remoteMetadataApi: RemoteMetadataApi = createRemoteMetadataApi(localApiBase);

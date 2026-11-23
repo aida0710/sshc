@@ -36,7 +36,7 @@ import { useSessionProblemToast } from "./terminal/useSessionProblemToast";
 import { useRunTargetLink } from "./terminal/useRunTargetLink";
 import { useRunTargets } from "./terminal/useRunTargets";
 import { TransferNotifications } from "./sftp/TransferNotifications";
-import { sftpTransferManager } from "./sftp/transferManager";
+import { transferManagersToFollow } from "./sftp/transferManager";
 import { localHostAlias } from "./sftp/localHost";
 import { useTransferUnloadWarning } from "./sftp/useTransferUnloadWarning";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
@@ -86,7 +86,6 @@ const transferReconcileIntervalMs = 2_000;
 
 // What SFTP or Home asked of this machine's terminals while they ran on a run
 // target: a session to open there, or one Home opened there to show.
-type PendingLocalRequest = { alias: string; cwd?: string };
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -233,6 +232,7 @@ export function App({
   const showHomeInPlace = useCallback(() => navigateLocation(sectionPath("Home"), { replace: true }), [navigateLocation]);
   useHomeWithoutSessions({ terminalFace, activeSessionId, terminalSessions, showHome: showHomeInPlace });
   const directDestination = useDirectDestinationActions({
+    config: engineApis.config,
     aliases: declared.knownAliases,
     canSave: true,
     open: openSSHSession,
@@ -284,10 +284,6 @@ export function App({
     phoneBackSlot: mobileLayout ? phoneBackSlot : null,
   }), [inspector, inspectorOpen, inspectorTriggerRef, mobileLayout, phoneActionsSlot, phoneBackSlot, setInspectorOpen]);
 
-  // SFTP opens terminals on this machine. With an engine on an SSH
-  // host chosen, the run target goes back to this machine first, and what was
-  // asked for is done once this machine's terminal API is the one in use.
-  const [pendingLocalRequest, setPendingLocalRequest] = useState<PendingLocalRequest | null>(null);
   const [sessionShortcut, setSessionShortcut] = useState<SessionShortcutRequest | null>(null);
   const requestSession = useCallback((request: SessionShortcut) => {
     setSessionShortcut((previous) => ({ ...request, serial: (previous?.serial ?? 0) + 1 }));
@@ -300,24 +296,14 @@ export function App({
     if (!mobileLayout) setDesktopNavigation(desktopNavigation === "hidden" ? "shown" : "hidden");
     else if (!navigationPinned) setNavigationOpen((open) => !open);
   }, [mobileLayout, navigationPinned, desktopNavigation, setDesktopNavigation, setNavigationOpen]);
+  // SFTP works with the engine the terminals run on, so a terminal opened from a folder opens on that engine.
   const openSFTPTerminal = useCallback(async (alias: string, cwd?: string) => {
-    if (runTargets.selected !== null) {
-      setPendingLocalRequest(cwd === undefined ? { alias } : { alias, cwd });
-      runTargets.select(null);
-      return;
-    }
     if (alias === localHostAlias) {
       await openLocalShell(undefined, cwd);
       return;
     }
     await openSSHSession(alias, cwd);
-  }, [openLocalShell, openSSHSession, runTargets]);
-
-  useEffect(() => {
-    if (pendingLocalRequest === null || runTargets.selected !== null) return;
-    setPendingLocalRequest(null);
-    void openSFTPTerminal(pendingLocalRequest.alias, pendingLocalRequest.cwd);
-  }, [openSFTPTerminal, pendingLocalRequest, runTargets.selected]);
+  }, [openLocalShell, openSSHSession]);
 
   // Splitting beside the session shown: a phone shows one pane at a time, and has no splitting to ask for.
   const splittableSessionId = !splitView.compact && activeSessionId !== null && splitView.splitRefusal(activeSessionId) === null ? activeSessionId : null;
@@ -343,10 +329,12 @@ export function App({
   // Transfers run in the engine, so the queue keeps up even while this tab is
   // hidden; a couple of seconds is fast enough for progress and cheap enough
   // for the engine.
-  usePolling(() => sftpTransferManager.reconcile(), {
+  // The queue of the engine shown is read, and so is that of any other engine this browser is moving a file for:
+  // its jobs go on behind, and the next one starts from what the engine lists.
+  usePolling(() => Promise.all(transferManagersToFollow(runTargets.selected).map((manager) => manager.reconcile())).then(() => undefined), {
     intervalMs: transferReconcileIntervalMs, enabled: state === "ready", whileHidden: true, immediately: true,
   });
-  useTransferUnloadWarning();
+  useTransferUnloadWarning(runTargets.selected);
 
   const unreadSessions = useTerminalNotifications(
     terminalSessions.sessions,

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import type { MessageKey } from "../i18n/messages";
-import { sftpApi } from "./api";
+import type { SftpApi } from "./api";
+import { useEngineApis } from "../shell/engineApis";
 import { blobDataURL } from "./blobDataURL";
 import { playableMediaKind, type PlayableMediaKind } from "./playableMedia";
 
@@ -29,10 +30,12 @@ function unavailableReason(error: unknown): MessageKey {
 }
 
 type ShowPreview = (preview: FilePreviewState) => void;
+// PreviewApi is what a preview reads the file with: the API of the engine the pane works with.
+type PreviewApi = Pick<SftpApi, "issueMediaTicket" | "revokeMediaTicket" | "mediaURL" | "previewFile" | "readText">;
 
 // The player gets a ticket, which lives as long as the player may ask for more
 // of the file. The returned function stops the preview and revokes it.
-function startMediaPreview({ alias, path, element, show }: { alias: string; path: string; element: PlayableMediaKind; show: ShowPreview }): () => void {
+function startMediaPreview({ sftpApi, alias, path, element, show }: { sftpApi: PreviewApi; alias: string; path: string; element: PlayableMediaKind; show: ShowPreview }): () => void {
   let active = true;
   let ticket: string | null = null;
   void sftpApi.issueMediaTicket(alias, path).then((issued) => {
@@ -53,7 +56,7 @@ function startMediaPreview({ alias, path, element, show }: { alias: string; path
 
 // Any other file is read as an image, or as text when the engine says the
 // bytes are not an image. The returned function stops the preview.
-function startFilePreview({ alias, path, show }: { alias: string; path: string; show: ShowPreview }): () => void {
+function startFilePreview({ sftpApi, alias, path, show }: { sftpApi: PreviewApi; alias: string; path: string; show: ShowPreview }): () => void {
   let active = true;
   void (async () => {
     try {
@@ -92,19 +95,20 @@ type ShownPreview = { alias: string; path: string; preview: FilePreviewState };
 // showed, so that coming back to a file reads it again rather than showing a player whose ticket was revoked.
 export function useFilePreview(alias: string, path: string | null): FilePreviewState {
   const [shown, setShown] = useState<ShownPreview | null>(null);
+  const { sftp: { files: sftpApi } } = useEngineApis();
 
   useEffect(() => {
     if (path === null) return;
     const show = (preview: FilePreviewState) => setShown({ alias, path, preview });
     const element = playableMediaKind(path);
     const stop = element === null
-      ? startFilePreview({ alias, path, show })
-      : startMediaPreview({ alias, path, element, show });
+      ? startFilePreview({ sftpApi, alias, path, show })
+      : startMediaPreview({ sftpApi, alias, path, element, show });
     return () => {
       stop();
       setShown(null);
     };
-  }, [alias, path]);
+  }, [alias, path, sftpApi]);
 
   if (path === null) return { kind: "idle" };
   if (shown === null || shown.alias !== alias || shown.path !== path) return { kind: "loading" };

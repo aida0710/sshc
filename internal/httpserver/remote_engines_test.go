@@ -26,6 +26,10 @@ type fakeEngineDirectory struct {
 	engines   []string
 	addErr    error
 	forwarded []string
+	// mediaOnly は、音声か動画の答えだけを渡す形で取り次いだ操作である。
+	mediaOnly []string
+	// streamedFiles は、本文を流して取り次いだ操作である。
+	streamedFiles []string
 	// waitedLong は、長い上限で取り次いだ操作である。
 	waitedLong []string
 	streamed   []string
@@ -88,6 +92,18 @@ func (f *fakeEngineDirectory) ForwardAPI(w http.ResponseWriter, _ *http.Request,
 func (f *fakeEngineDirectory) ForwardSlowAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
 	f.forwarded = append(f.forwarded, alias+" "+remotePath)
 	f.waitedLong = append(f.waitedLong, remotePath)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+func (f *fakeEngineDirectory) ForwardFileAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	f.streamedFiles = append(f.streamedFiles, remotePath)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+func (f *fakeEngineDirectory) ForwardMediaAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	f.mediaOnly = append(f.mediaOnly, remotePath)
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
@@ -215,14 +231,45 @@ func TestOperationsThatWaitForAnotherHostAreForwardedWithTheLongLimit(t *testing
 		{http.MethodPost, "/api/v1/engines/r100/known-hosts/scan", true},
 		{http.MethodPost, "/api/v1/engines/r100/vpn/profiles/office/route", true},
 		{http.MethodPost, "/api/v1/engines/r100/remote-keys/register", true},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/web/entries", true},
 		{http.MethodGet, "/api/v1/engines/r100/config/overview", false},
 		{http.MethodPost, "/api/v1/engines/r100/config/save", false},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/transfers", false},
 	} {
 		directory.forwarded, directory.waitedLong = nil, nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)
 		if recorder.Code != http.StatusOK || len(directory.forwarded) != 1 || (len(directory.waitedLong) == 1) != tc.long {
 			t.Errorf("%s %s = %d, forwarded %v, with the long limit %v", tc.method, tc.path, recorder.Code, directory.forwarded, directory.waitedLong)
 		}
+	}
+}
+
+// ファイルの中身を運ぶ操作は、溜めると上限（1 MiB）で切れるので、流して取り次ぐ。
+func TestOperationsThatCarryAFileAreForwardedAsStreams(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	for _, tc := range []struct {
+		method, path string
+		streamed     bool
+	}{
+		{http.MethodGet, "/api/v1/engines/r100/sftp/web/download", true},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/web/archive", true},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/web/thumbnail", true},
+		{http.MethodPatch, "/api/v1/engines/r100/sftp/web/uploads/u1", true},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/local/download", true},
+		{http.MethodPost, "/api/v1/engines/r100/sftp/web/uploads/u1/complete", false},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/local/entries", false},
+	} {
+		directory.forwarded, directory.streamedFiles = nil, nil
+		recorder := send(t, engine, tc.method, tc.path, "", nil)
+		if recorder.Code != http.StatusOK || len(directory.forwarded) != 1 || (len(directory.streamedFiles) == 1) != tc.streamed {
+			t.Errorf("%s %s = %d, forwarded %v, as a stream %v", tc.method, tc.path, recorder.Code, directory.forwarded, directory.streamedFiles)
+		}
+	}
+	// トークン無しで読めるのはメディアの経路だけで、音声か動画の答えだけを渡す取り次ぎを通る。
+	directory.forwarded, directory.mediaOnly = nil, nil
+	if recorder := send(t, engine, http.MethodGet, "/api/v1/engines/r100/sftp/media/ticket-1", "", nil); recorder.Code != http.StatusOK || len(directory.mediaOnly) != 1 {
+		t.Errorf("the media route = %d, as media only %v", recorder.Code, directory.mediaOnly)
 	}
 }
 

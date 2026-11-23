@@ -4888,6 +4888,7 @@ export interface components {
         InterfaceState: {
             runTarget?: string;
             sftpPanes?: string;
+            sftpPanesByRunTarget?: string;
             sftpQueueView?: string;
             collapsedTerminalWorkspaces?: string;
             showHiddenTerminalWorkspaces?: string;

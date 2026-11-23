@@ -380,7 +380,7 @@ flowchart TD
   kind -- SSH --> host["That host"]
 ```
 
-An SSH session opened in a remote session is read from this machine with the same alias only when this machine has that alias and it takes it to the same destination (HostName, Port and User) as the remote sshc engine does. Otherwise, so that no other machine's file is shown, clicking the path opens a menu with **Copy link** only.
+The files of a session opened in a remote session are read by the engine that runs the session. For an SSH session, that is the connection of that name in that engine's configuration.
 
 ### Which paths become links
 
@@ -425,7 +425,6 @@ If the home folder cannot be read, sshc explains why the path cannot be opened.
 While a preview is open, the left and right arrow keys, or **Previous** and **Next**, move to the other files the same terminal printed (paths ending in the extensions above).
 
 - While text is shown, the arrow keys inside the editor move its cursor.
-- In an SSH session opened in a remote session, it works only when the file can be read as above.
 
 ## Images and character widths
 
@@ -485,7 +484,7 @@ In a local shell on Windows, mode 2027 and the VT320 status line have no effect:
 | **Local shell** at the top | The shell chosen in **Default local shell** under **Settings** → **Terminal**, or the system login shell when none is chosen |
 | Search, recent connections and groups | An SSH host |
 | Type `user@host[:port]` in the search, then **Connect** | Connects without saving |
-| Type `user@host[:port]` in the search, then **Save as a connection and connect** | Writes a Host block and connects (not offered in a [remote session](./remote-session#which-engine-a-session-opens-on)) |
+| Type `user@host[:port]` in the search, then **Save as a connection and connect** | Writes a Host block and connects (in a [remote session](./remote-session#which-engine-a-session-opens-on), on the remote engine's machine) |
 
 A session opened without saving has no connection name, so SFTP, startup Snippets and saving a forward to the connection are not available for it.
 

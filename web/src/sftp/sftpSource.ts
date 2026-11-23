@@ -1,6 +1,6 @@
-import { sftpApi, type RemoteEntry, type SFTPListOptions } from "./api";
+import type { RemoteEntry, SFTPListOptions } from "./api";
 import { localHostAlias } from "./localHost";
-import { localMutationApi } from "./localMutationApi";
+import type { SftpApis } from "./sftpApis";
 
 // A source is somewhere a pane can browse: an SSH host over SFTP, or the
 // filesystem of the machine the sshc engine runs on. The pane never asks which
@@ -71,7 +71,7 @@ const remoteCapabilities: SFTPCapabilities = {
   details: true, browserUpload: true, download: true, dragOut: true, terminal: true,
 };
 
-function remoteSource(alias: string): SFTPSource {
+function remoteSource(alias: string, { files: sftpApi }: SftpApis): SFTPSource {
   return {
     alias,
     local: false,
@@ -121,41 +121,45 @@ const localCapabilities: SFTPCapabilities = {
   details: true, browserUpload: false, download: false, dragOut: true, terminal: true,
 };
 
-const localSource: SFTPSource = {
-  alias: localHostAlias,
-  local: true,
-  can: localCapabilities,
-  list: (path) => sftpApi.listLocal(path),
-  mkdir: localMutationApi.mkdir,
-  rename: localMutationApi.rename,
-  removeEntries: localMutationApi.remove,
-  parentOf: localParentOf,
-  join: localJoin,
-  isRoot: (path) => path === localRootOf(path),
-  rootOf: localRootOf,
-  crumbs(value, home) {
-    const normalized = value.replace(/\\/g, "/");
-    // Inside the home folder the trail starts at "~", as a shell prompt does; the folders above it are
-    // the same every time and only push the current one out of view.
-    if (home !== undefined && home !== "" && (normalized === home || normalized.startsWith(`${home}/`))) {
-      const below = normalized.slice(home.length).split("/").filter(Boolean);
+function localSource({ files: sftpApi, localMutation: localMutationApi }: SftpApis): SFTPSource {
+  return {
+    alias: localHostAlias,
+    local: true,
+    can: localCapabilities,
+    list: (path) => sftpApi.listLocal(path),
+    mkdir: localMutationApi.mkdir,
+    rename: localMutationApi.rename,
+    removeEntries: localMutationApi.remove,
+    parentOf: localParentOf,
+    join: localJoin,
+    isRoot: (path) => path === localRootOf(path),
+    rootOf: localRootOf,
+    crumbs(value, home) {
+      const normalized = value.replace(/\\/g, "/");
+      // Inside the home folder the trail starts at "~", as a shell prompt does; the folders above it are
+      // the same every time and only push the current one out of view.
+      if (home !== undefined && home !== "" && (normalized === home || normalized.startsWith(`${home}/`))) {
+        const below = normalized.slice(home.length).split("/").filter(Boolean);
+        return [
+          { label: "~", path: home },
+          ...below.map((part, index) => ({ label: part, path: `${home}/${below.slice(0, index + 1).join("/")}` })),
+        ];
+      }
+      const root = localRootOf(normalized);
+      if (normalized === root) return [{ label: root, path: root }];
+      const parts = normalized.slice(root.length).split("/").filter(Boolean);
       return [
-        { label: "~", path: home },
-        ...below.map((part, index) => ({ label: part, path: `${home}/${below.slice(0, index + 1).join("/")}` })),
+        { label: root, path: root },
+        ...parts.map((part, index) => ({ label: part, path: `${root}${parts.slice(0, index + 1).join("/")}` })),
       ];
-    }
-    const root = localRootOf(normalized);
-    if (normalized === root) return [{ label: root, path: root }];
-    const parts = normalized.slice(root.length).split("/").filter(Boolean);
-    return [
-      { label: root, path: root },
-      ...parts.map((part, index) => ({ label: part, path: `${root}${parts.slice(0, index + 1).join("/")}` })),
-    ];
-  },
-  acceptsPath: (path) => path.startsWith("/") || /^[A-Za-z]:\//.test(path),
-};
+    },
+    acceptsPath: (path) => path.startsWith("/") || /^[A-Za-z]:\//.test(path),
+  };
+}
 
-export function sourceFor(alias: string): SFTPSource | null {
+// sourceFor is where a pane's files come from: the files of the machine the engine of `apis` runs on, or of an SSH
+// host that engine reaches.
+export function sourceFor(alias: string, apis: SftpApis): SFTPSource | null {
   if (alias === "") return null;
-  return alias === localHostAlias ? localSource : remoteSource(alias);
+  return alias === localHostAlias ? localSource(apis) : remoteSource(alias, apis);
 }

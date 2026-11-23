@@ -1,3 +1,4 @@
+import { localApiBase } from "../api/remoteEngines";
 import { sendJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
@@ -18,16 +19,24 @@ export const chmodRefusalCodes = [
   "session_required", "invalid_session", "invalid_csrf", "vault_locked",
 ];
 
-export const chmodApi = {
-  async plan(alias: string, selection: ChmodSelection): Promise<ChmodPlan> {
-    return validateOpenAPISchema<ChmodPlan>("SFTPChmodPlan", await sendJSON(`/api/v1/sftp/${encodeURIComponent(alias)}/mode-plan`, {
-      method: "POST", body: selection, locallyHandledCodes: chmodRefusalCodes,
-    }));
-  },
-  async apply({ alias, selection, plan }: { alias: string; selection: ChmodSelection; plan: ChmodPlan }): Promise<ChmodResult> {
-    return validateOpenAPISchema<ChmodResult>("SFTPChmodResult", await sendJSON(`/api/v1/sftp/${encodeURIComponent(alias)}/modes`, {
-      method: "PATCH", body: { ...selection, expectedRevision: plan.revision },
-      actionToken: plan.actionToken, locallyHandledCodes: chmodRefusalCodes,
-    }));
-  },
-};
+// createChmodApi is this API of the engine at base (engineApiBase): this machine's, or a run target's as this
+// machine's engine forwards it.
+export function createChmodApi(base: string) {
+  return {
+    async plan(alias: string, selection: ChmodSelection): Promise<ChmodPlan> {
+      return validateOpenAPISchema<ChmodPlan>("SFTPChmodPlan", await sendJSON(`${base}/sftp/${encodeURIComponent(alias)}/mode-plan`, {
+        method: "POST", body: selection, locallyHandledCodes: chmodRefusalCodes,
+      }));
+    },
+    async apply({ alias, selection, plan }: { alias: string; selection: ChmodSelection; plan: ChmodPlan }): Promise<ChmodResult> {
+      return validateOpenAPISchema<ChmodResult>("SFTPChmodResult", await sendJSON(`${base}/sftp/${encodeURIComponent(alias)}/modes`, {
+        method: "PATCH", body: { ...selection, expectedRevision: plan.revision },
+        actionToken: plan.actionToken, locallyHandledCodes: chmodRefusalCodes,
+      }));
+    },
+  };
+}
+
+export type ChmodApi = ReturnType<typeof createChmodApi>;
+
+export const chmodApi: ChmodApi = createChmodApi(localApiBase);

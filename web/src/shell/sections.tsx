@@ -230,10 +230,11 @@ function SectionPage({
   if (section === "Files") {
     return (
       <SFTPWorkspace
+        key={shell.runTarget ?? ""}
         title={t(sectionLabels.Files)}
-        aliases={thisMachineDeclared.knownAliases}
-        hosts={thisMachineDeclared.hosts}
-        hostVPN={thisMachineDeclared.hostVPN}
+        aliases={declared.knownAliases}
+        hosts={declared.hosts}
+        hostVPN={declared.hostVPN}
         target={sftpTarget}
         onTargetHandled={onSftpTargetHandled}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}

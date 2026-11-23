@@ -127,6 +127,17 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       await route.fulfill({ json: { entries: [], retentionDays: 30 } });
     } else if (path.endsWith("/vpn")) {
       await route.fulfill({ json: { available: true, profiles: [], checking: false } });
+    } else if (path.endsWith("/sftp/transfers")) {
+      // bastion's own transfer queue, with nothing in it.
+      await route.fulfill({ json: {
+        maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 16777216,
+        largeFileParallelism: 4, largeFileChunkBytes: 33554432, speedLimitBytesPerSecond: 0, autoReconnect: false, maxReconnectAttempts: 0, jobs: [],
+      } });
+    } else if (path.endsWith("/sftp/local/entries")) {
+      // The files of bastion's own machine.
+      await route.fulfill({ json: { path: "/home/ops", home: "/home/ops", entries: [
+        { name: "only-on-bastion.txt", path: "/home/ops/only-on-bastion.txt", type: "file", size: 12, mode: "-rw-r--r--", modifiedAt: "2026-11-01T00:00:00Z", revision: "r1" },
+      ] } });
     } else if (path.endsWith("/known-hosts")) {
       // bastion's own known_hosts.
       await route.fulfill({ json: { path: "/home/ops/.ssh/known_hosts", entries: [
@@ -775,6 +786,58 @@ test("lists no connection for a new session while the chosen engine's cannot be 
   await expect(choice).toBeVisible();
   await expect(choice.getByRole("button", { name: /\bnas\b/ })).toHaveCount(0);
   await expect(choice.getByRole("button", { name: /^SSH.*bastion|^bastion\b/ })).toHaveCount(0);
+});
+
+test("shows in SFTP the files of the chosen engine's machine and its connections", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  await expect(page.locator("[data-remote-session-frame]")).toBeVisible();
+  const asked: string[] = [];
+  page.on("request", (request) => asked.push(new URL(request.url()).pathname));
+
+  await openSection(page, "SFTP");
+  await expect.poll(() => asked).toContain("/api/v1/engines/bastion/sftp/transfers");
+  expect(asked.filter((path) => path.startsWith("/api/v1/sftp/"))).toEqual([]);
+});
+
+test("saves a destination typed for a new session in the chosen engine's SSH configuration, where the session opens", async ({ page, installation }) => {
+  const sessions = [terminalSession("web", "web")];
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions });
+  const saved: unknown[] = [];
+  await page.route("**/api/v1/engines/bastion/connections", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    saved.push(route.request().postDataJSON());
+    await route.fulfill({ status: 201, json: { transactionId: "tx-1", identity: { path: "config", alias: "10-0-0-9" }, preview: { operation: "connection.create", diffs: [] } } });
+  });
+  await page.route(`**${sessionsPath}`, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    const opened = terminalSession("saved-destination", "10-0-0-9");
+    sessions.push(opened);
+    await route.fulfill({ status: 201, json: { session: opened, streamTicket: "bastion-ticket" } });
+  });
+  const savedHere: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/connections") savedHere.push(request.url());
+  });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(navigation.getByRole("button", { name: "web", exact: true })).toBeVisible();
+
+  await navigation.getByRole("button", { name: "New session", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New session" });
+  await dialog.getByRole("searchbox").fill("deploy@10.0.0.9");
+  await dialog.getByRole("button", { name: /^Save as a connection and connect/ }).click();
+
+  await expect.poll(() => saved).toEqual([expect.objectContaining({ hostName: "10.0.0.9", user: "deploy" })]);
+  expect(savedHere).toEqual([]);
 });
 
 test("opens a connection chosen on Home on the run target, which stays chosen", async ({ page, installation }) => {

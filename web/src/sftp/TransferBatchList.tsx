@@ -1,6 +1,7 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
-import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
+import { type ManagedTransferJob } from "./transferManager";
 import { TransferJobRow } from "./TransferJobRow";
 import type { RunTransferControl } from "./useTransferControl";
 
@@ -11,6 +12,7 @@ export function TransferBatchList({ batches, waiting, processingStopped, maxReco
   maxReconnectAttempts: number;
   runControl: RunTransferControl;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
   const t = useTranslate();
   return batches.map(([batchId, items]) => {
     const first = items[0]!;

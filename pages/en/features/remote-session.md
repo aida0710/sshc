@@ -1,6 +1,6 @@
 ---
 title: Remote sessions
-description: Run terminals and manage connections on the sshc engine that stays up on an SSH host, while settings and SFTP stay on this machine.
+description: Run terminals, manage connections and use SFTP on the sshc engine that stays up on an SSH host, while settings stay on this machine.
 ---
 
 # Remote sessions
@@ -20,10 +20,10 @@ While a remote session is chosen, these screens are the remote engine's machine'
 - SSH Keys, Known Hosts and Remote Keys
 - The vault (passwords, key passphrases and OTP)
 - VPN and Diagnostics
+- SFTP. "Local" is the files of the remote engine's machine. Uploads and downloads from the browser pass through this machine's engine to the remote engine.
 
 These stay this machine's whatever engine is chosen:
 
-- SFTP
 - Snippets
 - Settings (presets, appearance and shortcuts), the language and the theme
 - Sync and updating sshc
@@ -51,7 +51,7 @@ If the chosen host's vault is locked, the terminal area shows a field for that v
 
 ## Which engine a session opens on
 
-With a remote session chosen, every action that opens a session opens it on the chosen engine, except the one in SFTP.
+With a remote session chosen, every action that opens a session opens it on the chosen engine.
 
 | Action | Opens on |
 |---|---|
@@ -60,7 +60,7 @@ With a remote session chosen, every action that opens a session opens it on the 
 | **Connect all** in Connections | The chosen engine |
 | **Open a local shell** on Home | The chosen engine |
 | A connection card on Home (double click, a tap on a touch screen, or **Connect** in its **…**) | The chosen engine |
-| **Open Terminal here** in SFTP | This machine. **Remote session** switches back to localhost |
+| **Open Terminal here** in SFTP | The chosen engine |
 
 Home, Connections and **New session** in the sidebar list the connections of the remote engine's machine. Adding, editing or removing a connection changes that machine's `~/.ssh/config`.
 
