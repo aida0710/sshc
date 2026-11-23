@@ -606,6 +606,7 @@ export const en = {
   "sftp.deleteHeading": "Delete this remote entry?",
   "sftp.deleteHeadingCount": "Delete {count} remote entries?",
   "runTarget.label": "Remote session",
+  "runTarget.frameLabel": "Remote session: {name}",
   "runTarget.choose": "Choose the remote session engine (now: {name})",
   "runTarget.heading": "Engines",
   "runTarget.thisMachine": "localhost",

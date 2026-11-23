@@ -22,6 +22,8 @@ Only the terminals change: sessions and [workspaces](./workspace). Connections, 
 3. Open **Remote session** at the bottom of the sidebar and choose the host from **Add an engine…**.
 4. Choose the host in the list: the workspaces and sessions become that engine's, and the terminal heading says it runs there.
 
+While a remote session is chosen, every screen has a frame around the whole window and a tag with the connection name at the top edge. They go away when you switch back to localhost.
+
 Switching engines opens the session you last had open on that engine. If it has been closed, the session at the top of the sidebar opens instead (sessions in hidden workspaces are not picked).
 
 Which engine is chosen is saved as this machine's state, so it stays after a reload. Only the session you last had open is remembered by this browser tab alone: after a reload, the top of the sidebar opens first.

@@ -325,6 +325,41 @@ test("keeps this machine's split view while a remote session engine is shown", a
   expect(await panes.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-split-view-pane")))).toEqual(splitSessions);
 });
 
+test("frames the whole window and names the engine while a remote session is chosen, on every screen", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  const frame = page.locator("[data-remote-session-frame]");
+  await expect(frame).toHaveCount(0);
+
+  await chooseBastion(page);
+  await expect(frame.getByText("Remote session: bastion", { exact: true })).toBeVisible();
+  await expect(frame.getByText("bastion", { exact: true })).toBeHidden();
+  const viewport = page.viewportSize()!;
+  expect(await frame.boundingBox()).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
+  await openSection(page, "Connections");
+  await expect(frame).toBeVisible();
+  // The frame is only drawn: what is under its name tag can still be pressed.
+  await openSection(page, "Home");
+  await page.getByRole("button", { name: "Manage connections", exact: true }).click({ trial: true });
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await changeDisplayLanguage(page, "ja");
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/remote-frame-pc.png` });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator("[data-app-navigation]")).not.toBeInViewport();
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/remote-frame-phone.png` });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await changeDisplayLanguage(page, "en");
+  }
+
+  // A phone has room for the name only.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(frame.getByText("bastion", { exact: true })).toBeVisible();
+  await expect(frame.getByText("Remote session: bastion", { exact: true })).toBeHidden();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await chooseLocalhost(page);
+  await expect(frame).toHaveCount(0);
+});
+
 test("keeps the run-target switcher usable while the panel is shown", async ({ page, installation }) => {
   await stubRunTarget(page, { refusal: "locked" });
   await openApplication(page, installation);
