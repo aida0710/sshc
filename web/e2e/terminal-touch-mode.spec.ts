@@ -98,9 +98,13 @@ test("underlines every link a tap opens until Settings turns it off, and the mou
   const settings = page.getByRole("region", { name: "Terminal" });
   await settings.getByRole("tab", { name: "Behaviour", exact: true }).click();
   await settings.getByRole("checkbox", { name: "Always underline links" }).click();
-  await expect.poll(async () => (JSON.parse(await installation.read("sshc/metadata.json")) as {
-    presets: { interface?: { hideTouchLinkUnderlines?: boolean } }[];
-  }).presets[0]?.interface?.hideTouchLinkUnderlines).toBe(true);
+  // The settings file is written when the first setting is saved: until then there is nothing to read, which is
+  // not yet the answer either.
+  await expect.poll(async () => {
+    const saved = await installation.read("sshc/metadata.json").catch(() => null);
+    if (saved === null) return undefined;
+    return (JSON.parse(saved) as { presets: { interface?: { hideTouchLinkUnderlines?: boolean } }[] }).presets[0]?.interface?.hideTouchLinkUnderlines;
+  }).toBe(true);
   await openSection(page, "Terminal");
   await expect(printedPath).toBeVisible();
   await expect(lines).toHaveCount(0);
