@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject, useContext } from "react";
 import { shownFilePath } from "../android/shownFilePath";
 import type { FileNode, HostEntry, HostIdentity } from "../api/config";
 import { snippetsApi, type Snippet } from "../snippets/api";
@@ -9,6 +9,7 @@ import type { Section } from "../routing/sectionRoute";
 import { shortcutLabel } from "../keyconfig/shortcutLabel";
 import { Icon } from "../ui/icons";
 import type { TerminalSession } from "../api/terminalSessions";
+import { SessionEngineContext } from "../terminal/sessionDestination";
 import { terminalDisplayTitle, terminalSubtitle } from "../terminal/terminalPresentation";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";
@@ -116,6 +117,7 @@ export function CommandPalette({
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
+  const sessionEngine = useContext(SessionEngineContext);
   const compact = useMediaQuery(mobileViewportQuery);
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -165,7 +167,7 @@ export function CommandPalette({
     ...sessions.filter((session) => session.exited === undefined).map((session) => {
       const unread = unreadBySession.has(session.id);
       const status = t("terminal.connected");
-      const destination = terminalSubtitle(session, t);
+      const destination = terminalSubtitle(session, t, sessionEngine);
       return {
         id: `session:${session.id}`,
         kind: "session" as const,
@@ -200,7 +202,7 @@ export function CommandPalette({
       action: () => onNavigate(section),
     })),
     ...laterCommands.map(paletteItemOf),
-  ], [commands, laterCommands, files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessions, snippets, t, unreadBySession]);
+  ], [commands, laterCommands, files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessionEngine, sessions, snippets, t, unreadBySession]);
 
   // A destination leads the results whatever else it finds: it is only offered when it was typed whole.
   const directItems = useMemo<PaletteItem[]>(() => {

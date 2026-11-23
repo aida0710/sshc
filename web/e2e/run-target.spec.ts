@@ -840,6 +840,15 @@ test("saves a destination typed for a new session in the chosen engine's SSH con
   expect(savedHere).toEqual([]);
 });
 
+test("names a shell of the chosen engine after that engine, not localhost", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  const row = page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "web", exact: true });
+  await expect(row).toContainText("bastion");
+  await expect(row).not.toContainText("localhost");
+});
+
 test("opens a connection chosen on Home on the run target, which stays chosen", async ({ page, installation }) => {
   const sessions = [terminalSession("web", "web")];
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions });
