@@ -525,6 +525,23 @@
   font-display: block;
 }
 
+/* BIZ UDGothic draws the Japanese of the font that pairs it with JetBrains Mono. It has no italic design: the
+   browser slants the upright faces. Each file holds every glyph and is fetched only once that font is chosen. */
+@font-face {
+  font-family: "BIZ UDGothic";
+  src: url("/fonts/BIZUDGothic-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "BIZ UDGothic";
+  src: url("/fonts/BIZUDGothic-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
 /* The symbols Android's fonts lack (scripts/fonts/generate-terminal-symbols.py). The range keeps the browser from
    fetching the file for a terminal that never prints them, and leaves the cell's measure to the fonts before it. */
 @font-face {

@@ -120,6 +120,8 @@ The theme, the accent colour, the Home background, and reduce motion are preset 
 
 Configure the terminal color scheme, font, background, and tint under **Settings → Terminal**.
 
+The font is the device's monospace font, JetBrains Mono, or “JetBrains Mono + BIZ UDGothic”. JetBrains Mono and BIZ UDGothic ship with the application. “JetBrains Mono + BIZ UDGothic” draws Latin letters and symbols with JetBrains Mono and Japanese with BIZ UDGothic, a font made for reading Japanese. BIZ UDGothic has no italic design, so the browser slants Japanese letters for italic text.
+
 Theme and language controls are also available on vault create and unlock screens.
 
 ## Vault
