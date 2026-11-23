@@ -840,6 +840,35 @@ test("saves a destination typed for a new session in the chosen engine's SSH con
   expect(savedHere).toEqual([]);
 });
 
+test("opens the folder an SSH session on the chosen engine is in, in that engine's SFTP", async ({ page, installation }) => {
+  // warehouse is a connection only bastion has, so this machine's SFTP could not open it.
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [{ ...terminalSession("warehouse-ssh", "warehouse"), kind: "ssh", alias: "warehouse" }] });
+  await page.route("**/api/v1/engines/bastion/terminal/sessions/warehouse-ssh/stream", async (route) => {
+    await route.fulfill({ status: 201, json: { streamTicket: "warehouse-on-bastion" } });
+  });
+  // The shell on warehouse says where it is (OSC 7).
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => { socket.send(Buffer.from("\x1b]7;file://warehouse/srv/app\x07ops@warehouse:/srv/app$ ")); });
+  const sftpRequests: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.includes("/sftp/warehouse")) sftpRequests.push(path);
+  });
+  // bastion's answers for warehouse's files are not what this test looks at.
+  await page.route("**/api/v1/engines/bastion/sftp/warehouse/**", async (route) => {
+    await route.fulfill({ status: 404, contentType: "application/problem+json", json: { code: "sftp_not_found", message: "request rejected" } });
+  });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "warehouse", exact: true }).click();
+  await page.getByRole("button", { name: "More terminal actions" }).first().click();
+  await page.getByRole("menuitem", { name: "Open current directory in SFTP" }).click();
+
+  await expect(page.getByRole("heading", { name: "SFTP", exact: true })).toBeVisible();
+  await expect(page.getByText("This terminal link is no longer available.")).toHaveCount(0);
+  await expect.poll(() => sftpRequests.some((path) => path.startsWith("/api/v1/engines/bastion/sftp/warehouse"))).toBe(true);
+  expect(sftpRequests.filter((path) => !path.startsWith("/api/v1/engines/bastion/"))).toEqual([]);
+});
+
 test("names a shell of the chosen engine after that engine, not localhost", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
   await openApplication(page, installation);
