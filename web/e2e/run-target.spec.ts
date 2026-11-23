@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
+import { drawnRowFont, markTerminal, terminalKeyboard } from "./support/terminal";
 
 const localVersion = "v0.53.0";
 const remoteVersion = "v0.51.0";
@@ -367,6 +368,50 @@ test("frames the whole window and names the engine while a remote session is cho
   await page.setViewportSize({ width: 1280, height: 800 });
   await chooseLocalhost(page);
   await expect(frame).toHaveCount(0);
+});
+
+test("keeps this machine's terminal as it was while a remote session engine is shown", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Control+Equal");
+  await page.keyboard.press("Control+Equal");
+  const zoomed = (await drawnRowFont(page)).fontSize;
+  expect(zoomed).not.toBe("13px");
+  // The mark is on the terminal's own element: a terminal mounted again would not have it.
+  const mark = await markTerminal(page, "kept-through-the-switch");
+
+  await chooseBastion(page);
+  await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "web", exact: true })).toHaveAttribute("aria-current", "true");
+  // Behind bastion's terminal it is out of sight and out of reach.
+  await expect(mark).toBeHidden();
+  await chooseLocalhost(page);
+
+  await expect(mark).toBeVisible();
+  expect((await drawnRowFont(page)).fontSize).toBe(zoomed);
+});
+
+test("keeps what was being typed in a phone's text box while a remote session engine is shown", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApplication(page, installation);
+  const openNavigation = page.getByRole("button", { name: "Navigation", exact: true });
+  await openNavigation.click();
+  await openLocalShell(page);
+  const field = page.getByRole("textbox", { name: "Text to send to the terminal" });
+  await field.fill("half written text");
+
+  await openNavigation.click();
+  await chooseBastion(page);
+  await expect(page.locator("[data-remote-session-frame]")).toBeVisible();
+  await openNavigation.click();
+  await chooseLocalhost(page);
+
+  await expect(page.locator("[data-remote-session-frame]")).toHaveCount(0);
+  await expect(field).toHaveValue("half written text");
 });
 
 test("keeps the run-target switcher usable while the panel is shown", async ({ page, installation }) => {

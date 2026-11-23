@@ -20,7 +20,7 @@ const previewClass = {
   bottom: "inset-x-0 bottom-0 h-1/2",
 };
 
-export function TerminalSplitView({ splitView, sessions, retainedTerminals, renderTerminal }: {
+export function TerminalSplitView({ splitView, sessions, retainedTerminals, renderTerminal, behind = false }: {
   splitView: SplitViewController;
   sessions: TerminalSession[];
   // retainedTerminals is how many terminals shown recently stay hidden behind the panes.
@@ -28,6 +28,9 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
   // inPane is whether the session is one of the panes the section shows, not one kept hidden behind them (whether or
   // not the section itself is on the screen).
   renderTerminal: (session: TerminalSession, headerActions: ReactNode, inPane: boolean) => ReactNode;
+  // behind is whether these are the terminals of a run target kept behind the one shown (TerminalScreen). Its panes
+  // keep their places, and are marked as kept like the terminals behind the panes: none of them is on the screen.
+  behind?: boolean;
 }) {
   const t = useTranslate();
   const { state, compact, dispatch, selectSession } = splitView;
@@ -110,7 +113,7 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
               />
             ) : null;
             return (
-              <div key={sessionId} data-split-view-pane={kept ? undefined : sessionId} data-split-view-kept={kept ? sessionId : undefined}
+              <div key={sessionId} data-split-view-pane={kept || behind ? undefined : sessionId} data-split-view-kept={kept || behind ? sessionId : undefined}
                 data-pane-active={active} hidden={hidden}
                 style={singleVisible || kept ? { inset: 0 } : style}
                 className={`absolute min-h-0 min-w-0 flex-col ${compact ? "" : "p-1"} ${hidden ? "hidden" : "flex"}`}
