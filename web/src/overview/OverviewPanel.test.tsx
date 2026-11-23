@@ -72,6 +72,7 @@ describe("OverviewPanel", () => {
     const onOpenLocalShell = vi.fn();
     render(
       <OverviewPanel
+       runTarget={null}
         onAddConnection={onAddConnection}
         onOpenLocalShell={onOpenLocalShell}
         loadOverview={vi.fn().mockResolvedValue({ ...overview, hosts: [{ ...overview.hosts[0], identity: { ...overview.hosts[0]!.identity, alias: "" } }], groups: [], diagnostics: [], notices: [], pending: [] })}
@@ -101,6 +102,7 @@ describe("OverviewPanel", () => {
     let answerSync: (status: SyncStatus) => void = () => {};
     render(
       <OverviewPanel
+       runTarget={null}
         onAddConnection={vi.fn()}
         onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue(overview)}
@@ -118,7 +120,7 @@ describe("OverviewPanel", () => {
 
   it("puts the connection browser first and preserves attention and sync actions", async () => {
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
@@ -141,7 +143,7 @@ describe("OverviewPanel", () => {
   it("puts recent connections first, searches groups and launches only from the explicit action", async () => {
     const launch = vi.fn().mockResolvedValue({ session: { id: "session-1" } });
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({
@@ -184,7 +186,7 @@ describe("OverviewPanel", () => {
     const launch = vi.fn(() => new Promise<{ session: { id: string } }>((resolve) => { finish = resolve; }));
     const opened = vi.fn();
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
@@ -214,7 +216,7 @@ describe("OverviewPanel", () => {
     const launch = vi.fn();
     const navigateLocation = vi.fn();
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
@@ -240,7 +242,7 @@ describe("OverviewPanel", () => {
     const navigate = vi.fn();
     const loadOverview = vi.fn().mockResolvedValue(overview);
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={loadOverview}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
@@ -260,7 +262,7 @@ describe("OverviewPanel", () => {
   it("counts a line OpenSSH cannot read as a problem to fix in SSH Config", async () => {
     const navigate = vi.fn();
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue({
           ...overview,
           diagnostics: [{ severity: "warning", code: "unknown_directive", path: "config", line: 5, detail: "HostNmae" }],
@@ -281,7 +283,7 @@ describe("OverviewPanel", () => {
 
   it("does not ask for attention for a Host * that only explains how connections get their values", async () => {
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue({
           ...overview,
           diagnostics: [],
@@ -305,7 +307,7 @@ describe("OverviewPanel", () => {
   it("says what needs fixing and sends a group folder notice to Connections, with the button under the words", async () => {
     const navigate = vi.fn();
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue({
           ...overview,
           diagnostics: [],
@@ -334,7 +336,7 @@ describe("OverviewPanel", () => {
       .mockRejectedValueOnce(new Error("config_failed"))
       .mockResolvedValue({ ...overview, diagnostics: [] });
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={loadOverview}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
@@ -352,7 +354,7 @@ describe("OverviewPanel", () => {
 
   it("says connection history could not be read instead of showing none", async () => {
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue({ ...overview, diagnostics: [] })}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockRejectedValue(new Error("history_failed"))}
@@ -368,7 +370,7 @@ describe("OverviewPanel", () => {
   it("keeps sync accessible without showing an empty attention section", async () => {
     const navigate = vi.fn();
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue({ ...overview, diagnostics: [] })}
         loadSync={vi.fn().mockResolvedValue({ ...sync, configured: false })}
         loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
@@ -385,7 +387,7 @@ describe("OverviewPanel", () => {
   it("routes an interrupted write to History without showing a configuration action", async () => {
     const navigate = vi.fn();
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue({
           ...overview,
           diagnostics: [],
@@ -416,7 +418,7 @@ describe("OverviewPanel", () => {
   it("shows current targets for recent connections and reconnects from the action menu", async () => {
     const launch = vi.fn().mockResolvedValue({ session: { id: "session-1" } });
     render(
-      <OverviewPanel onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
+      <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}
         loadOverview={vi.fn().mockResolvedValue(overview)}
         loadSync={vi.fn().mockResolvedValue(sync)}
         loadRecent={vi.fn().mockResolvedValue({

@@ -1,8 +1,8 @@
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { aquariumWater } from "../terminal/emptyState/aquariumWater";
-import { AsciiArtCanvas } from "../terminal/emptyState/AsciiArtCanvas";
-import { emptyTerminalArtOf, emptyTerminalArts, withEmptyTerminalArt, type DrawnArt, type EmptyTerminalArt } from "../terminal/emptyState/emptyTerminalArt";
+import { aquariumWater } from "../overview/dashboard/aquariumWater";
+import { AsciiArtCanvas } from "../overview/dashboard/AsciiArtCanvas";
+import { emptyTerminalArtOf, emptyTerminalArts, withEmptyTerminalArt, type DrawnArt, type EmptyTerminalArt } from "../overview/dashboard/emptyTerminalArt";
 import { FieldRow } from "../ui/FieldRow";
 import { Icon } from "../ui/icons";
 import { Notice } from "../ui/surface";

@@ -84,9 +84,6 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
   const violations = watchForPolicyViolations(page);
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  const emptyState = page.getByRole("heading", { name: "No session is open" }).locator("..");
-  await expect(emptyState.locator("[data-sshc-brand-mark]")).toBeVisible();
-  await expect(emptyState).not.toContainText(">_");
   await openSessionList(page);
   await openLocalShell(page);
 
@@ -103,16 +100,27 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
   expect(violations).toEqual([]);
 });
 
-test("opens the new session picker from the empty state and starts a local shell from it", async ({ page, installation }) => {
+test("with no session open the terminal's address shows Home, and closing the last session goes there too", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSection(page, "Terminal");
-  const main = page.getByRole("main");
-  await main.getByRole("button", { name: /^Open a session/ }).click();
+  await page.goto(`${new URL(page.url()).origin}/terminal`);
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/u);
+  // The foot of Home says which machine new sessions open on.
+  await expect(page.getByRole("main").getByLabel("The machine new shells open on")).toBeVisible();
 
-  const dialog = page.getByRole("dialog", { name: "New session" });
-  await dialog.getByRole("button", { name: /^Local shell, localhost/ }).click();
-  await expect(dialog).toBeHidden();
-  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
+  await openSessionList(page);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toBeVisible();
+  await expect(page).toHaveURL(/\/terminal$/u);
+
+  await page.getByRole("list", { name: "Open sessions" }).getByRole("button", { name: /^Close / }).click();
+  await page.getByRole("dialog", { name: /^Close / }).getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/u);
+  // Home took the terminal's place in the history: Back does not come to an empty terminal.
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/terminal$/u);
 });
 
 test("keeps image-backed terminal editing free of stale glyphs", async ({ page, installation }) => {
@@ -418,7 +426,7 @@ test("shows an open session again after a reload instead of claiming there are n
   await expect(page.getByRole("heading", { name: "sshc" })).toBeVisible();
 
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
-  await expect(page.getByText("No session is open")).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeHidden();
 });
 
 test("applies the session limit set from the settings screen", async ({ page, installation }) => {

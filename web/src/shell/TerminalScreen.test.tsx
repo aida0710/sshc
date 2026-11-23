@@ -56,7 +56,7 @@ function Screen({ api, targets, connectedEngines = new Set() }: { api: TerminalS
   const terminalSessions = useTerminalSessions(api, t);
   const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget: targets.selected });
   return (
-    <TerminalScreen onNewSession={vi.fn()} onAddConnection={vi.fn()} onOpenSync={vi.fn()} onOpenConnection={vi.fn()} onShowConnections={vi.fn()}
+    <TerminalScreen
       visible
       terminalSessions={terminalSessions}
       activeSessionId={null}
@@ -224,7 +224,7 @@ function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: Ru
   useEffect(() => { void open({ kind: "ssh", alias: "db" }); }, [open]);
   const connectedEngines: ReadonlySet<string> = new Set();
   return (
-    <TerminalScreen onNewSession={vi.fn()} onAddConnection={vi.fn()} onOpenSync={vi.fn()} onOpenConnection={vi.fn()} onShowConnections={vi.fn()}
+    <TerminalScreen
       visible
       terminalSessions={terminalSessions}
       activeSessionId={null}
@@ -250,7 +250,6 @@ describe("TerminalScreen before the engine in use answers", () => {
     render(<Screen api={neverAnswers()} targets={targets} />);
     expect(await screen.findByRole("heading", { name: "Connecting to r100" })).toBeInTheDocument();
     expect(screen.getByText("0 s elapsed")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "No session is open" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Switch back to localhost" }));
     expect(targets.select).toHaveBeenCalledWith(null);
   });

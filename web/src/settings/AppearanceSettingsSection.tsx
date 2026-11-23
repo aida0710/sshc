@@ -33,7 +33,7 @@ function accentColorOnScreen(): string {
   return parseAccentColor(getComputedStyle(document.documentElement).getPropertyValue("--ui-accent")) ?? "#6550d0"; // palette-exempt
 }
 
-// The look of the app in the preset being edited: the theme, the accent colour, the art of the empty terminal and
+// The look of the app in the preset being edited: the theme, the accent colour, the art behind Home and
 // whether to reduce motion. While it is the preset this machine uses, the screen shows each choice at once; another
 // preset's choices only show on the machines that use it.
 export function AppearanceSettingsSection({ presetId, showHeading }: { presetId: string; showHeading: boolean }) {

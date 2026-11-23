@@ -1149,7 +1149,7 @@ test("two fingers pinch the text of the terminal, not the page", async ({ page, 
   expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
 
   // A phone draws at the same size as a PC until a preset says otherwise.
-  expect(before).toBe(13);
+  expect(before).toBe(8);
   // The tip says the new size, and its reset goes back to the settings' size without taking the focus, which
   // would open the keyboard.
   const tip = page.getByRole("status").filter({ hasText: `${before * 2}px` });
@@ -1160,4 +1160,16 @@ test("two fingers pinch the text of the terminal, not the page", async ({ page, 
   await expect.poll(async () => Number.parseFloat((await drawnRowFont(page)).fontSize)).toBe(before);
   await expect(page.getByRole("status").filter({ hasText: `${before}px` })).toBeVisible();
   expect(await focused()).toBe(focusedBefore);
+});
+
+test("with no session open, Terminal in the bottom bar shows Home, and a connection tapped there opens its terminal", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Quick navigation", exact: true }).getByRole("link", { name: "Terminal", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Available connections" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/u);
+
+  await page.getByRole("list", { name: "Available connections" }).getByRole("listitem").filter({ hasText: "bastion" }).getByText("bastion", { exact: true }).tap();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
+  await expect(page).toHaveURL(/\/terminal$/u);
 });

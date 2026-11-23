@@ -11,14 +11,14 @@ Open SSH and local shells in the same interface, with search, Quick Commands, an
 
 ## When no session is open
 
-While no session is open, the tiles **Open a session** and **Add connection** are shown. **Open a session** opens the same picker as **New session** in the sidebar, to choose a connection or a local shell. Until sync is set up, **Receive by sync** is shown too.
+While no session is open, Home is shown in place of the terminal: after the last session is closed, when Terminal is chosen in a phone's bottom bar, and when the [remote session](./remote-session) changes to an sshc engine with no session. While a remote session is being connected to, and when it refuses, the terminal says so.
 
-Below the tiles is what the sshc engine new shells open on can tell about itself. With a [remote session](./remote-session) chosen, it is that sshc engine.
+The foot of Home shows what the sshc engine new shells open on can tell about itself. With a remote session chosen, it is that sshc engine.
 
-- Activity: the terminal SSH connections per day. On a PC the recent connections are listed beside it, and choosing one opens it. It is left out until a connection has been opened
 - The machine: its name, operating system, CPU use, memory, and uptime. Values the operating system does not give are left out (macOS gives neither the CPU use nor the memory in use; FreeBSD and OpenBSD do not give the memory in use)
+- Activity: the terminal SSH connections per day. It is left out until a connection has been opened
 
-A moving picture is drawn behind them. Choose it under **Background with no session** in **Settings → Appearance**: network (the default), contours, globe, aquarium, or none. On a phone the picture is a banner above the tiles. It moves only while this screen is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
+A moving picture is drawn behind Home. Choose it under **Home background** in **Settings → Appearance**: network (the default), contours, globe, aquarium, or none. It moves only while Home is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
 
 The fish of the aquarium are the recent connections. The more a connection was opened over the last 30 days, the larger its fish, and on a PC each fish's connection name is written under it. Fish come to the mouse, and clicking an empty place (tapping, on a phone) drops food there that they come to eat. On a phone a fish's name shows only while it eats. The colours follow the terminal's colours.
 
@@ -230,7 +230,7 @@ Besides the configurable font size, pinching two fingers on a terminal, or turni
 - Changing the font size in the settings returns to the configured size.
 - When the size changes, the terminal shows the current size at its top right for about 3 seconds. While it differs from the configured size, a [Reset] button beside it returns to the configured size.
 - Pressing Ctrl in the middle of a scroll does not change the size. A trackpad keeps sending the scroll for a while after the fingers lift, and Ctrl+Space or the like may be pressed during it.
-- With the font size left blank in the settings, the text is 13 px on a phone and on a PC alike. To make it larger on a phone only, create a [preset](/en/reference/settings#presets) for the phone and set its font size.
+- With the font size left blank in the settings, the text is 8 px on a phone and on a PC alike. To make it larger on a phone only, create a [preset](/en/reference/settings#presets) for the phone and set its font size.
 
 ### Rendering and display
 

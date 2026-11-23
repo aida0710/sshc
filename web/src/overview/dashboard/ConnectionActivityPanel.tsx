@@ -2,7 +2,7 @@ import { useRef } from "react";
 import type { ConnectionHour } from "../../api/terminalOverview";
 import { useLanguage } from "../../i18n/context";
 import { connectionActivity, type ActivityLevel } from "./connectionActivity";
-import { OverviewPanel } from "./OverviewPanel";
+import { DashboardCard } from "./DashboardCard";
 import { useElementSize } from "./useElementSize";
 
 // A day is a 12px square with 4px between, so a week takes 16px of width.
@@ -36,7 +36,7 @@ export function ConnectionActivityPanel({ hours, now = new Date() }: { hours: re
     : t("terminal.overview.activityMonths", { from: month.format(activity.firstDay), to: month.format(now) });
 
   return (
-    <OverviewPanel
+    <DashboardCard
       icon="activity"
       title={t("terminal.overview.activity")}
       footer={<>
@@ -56,6 +56,6 @@ export function ConnectionActivityPanel({ hours, now = new Date() }: { hours: re
           ))}
         </div>
       </div>
-    </OverviewPanel>
+    </DashboardCard>
   );
 }

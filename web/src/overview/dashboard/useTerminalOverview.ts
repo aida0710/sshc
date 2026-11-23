@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { terminalOverviewApi, type ConnectionHistory, type MachineStatus } from "../../api/terminalOverview";
 
-// The machine is read again this often while the empty state is shown. Its CPU use is the average since the
+// The machine is read again this often while Home is shown. Its CPU use is the average since the
 // previous read, so this is also the span each value covers.
 const machineReadInterval = 5000;
 // The CPU uses kept for the small chart: the last minute and a quarter.
@@ -16,8 +16,9 @@ export type TerminalOverview = {
 };
 
 // useTerminalOverview reads the machine and the connection history of the engine new shells open on, and keeps
-// the machine up to date while the empty terminal is on screen: visible (no other page over it) and the page shown.
-export function useTerminalOverview(runTarget: string | null, visible: boolean): TerminalOverview {
+// the machine up to date while the page is shown. Home's effects are stopped while another section is over it
+// (KeptSections), so nothing is read then.
+export function useTerminalOverview(runTarget: string | null): TerminalOverview {
   const overviewApi = useMemo(() => terminalOverviewApi(runTarget), [runTarget]);
   const [machine, setMachine] = useState<MachineStatus | null>(null);
   const [cpuHistory, setCPUHistory] = useState<readonly number[]>([]);
@@ -40,7 +41,6 @@ export function useTerminalOverview(runTarget: string | null, visible: boolean):
   }, [overviewApi]);
 
   useEffect(() => {
-    if (!visible) return;
     let current = true;
     let timer: ReturnType<typeof setInterval> | undefined;
     const read = () => {
@@ -71,7 +71,7 @@ export function useTerminalOverview(runTarget: string | null, visible: boolean):
       pause();
       document.removeEventListener("visibilitychange", followVisibility);
     };
-  }, [overviewApi, visible]);
+  }, [overviewApi]);
 
   return { machine, cpuHistory, history };
 }

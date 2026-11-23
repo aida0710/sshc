@@ -1,5 +1,5 @@
 // What a person does on an art that answers to them: where the mouse is, and where they tapped or clicked. The art
-// lies behind the tiles and does not take events itself, so the page's events are read and placed on its cells.
+// lies behind Home and does not take events itself, so the page's events are read and placed on its cells.
 
 export type GridCell = { readonly column: number; readonly row: number };
 

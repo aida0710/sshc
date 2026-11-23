@@ -3,7 +3,6 @@ import type { TerminalAppearance, TerminalSettings } from "../api/settings";
 import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { resolveAppearance } from "../terminal/appearance";
-import { TerminalEmptyState } from "../terminal/TerminalEmptyState";
 import { TerminalSplitView } from "../terminal/splitView/TerminalSplitView";
 import { defaultRetainedTerminals } from "../terminal/splitView/retainedSessions";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
@@ -39,19 +38,7 @@ export function TerminalScreen({
   onOpenRemotePath,
   onOSC52Change,
   onOpenNavigation,
-  onNewSession,
-  onAddConnection,
-  onOpenSync,
-  onOpenConnection,
-  onShowConnections,
 }: {
-  // onNewSession opens the picker for a new session from the empty state.
-  onNewSession: () => void;
-  onAddConnection: () => void;
-  onOpenSync: () => void;
-  // onOpenConnection opens a session to a connection the empty state lists as used recently.
-  onOpenConnection: (alias: string) => void;
-  onShowConnections: () => void;
   // onOpenNavigation opens the sidebar from a phone's terminal top bar; undefined while the sidebar stays open.
   onOpenNavigation?: (() => void) | undefined;
   visible: boolean;
@@ -176,8 +163,6 @@ export function TerminalScreen({
         answers again. */}
     <div className={refusal === null ? "h-full" : "invisible h-full"} inert={refusal !== null}>
       <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} retainedTerminals={settings.retainedTerminals ?? defaultRetainedTerminals} renderTerminal={renderTerminal}
-        // Until the engine answers, it is not known to have no sessions.
-        emptyState={terminalSessions.loaded ? <TerminalEmptyState runTarget={runTarget} visible={visible} onNewSession={onNewSession} onAddConnection={onAddConnection} onOpenSync={onOpenSync} onOpenConnection={onOpenConnection} onShowConnections={onShowConnections} /> : null}
       />
     </div>
     {waitingForEngine ? (

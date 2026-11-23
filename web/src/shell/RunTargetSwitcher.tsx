@@ -29,7 +29,8 @@ export function RunTargetSwitcher({
   link: RunTargetLink;
   aliases: string[];
   hosts: HostEntry[];
-  // onShowTerminal shows the terminal area, where a refusal of the chosen engine is shown with what fixes it.
+  // onShowTerminal shows the terminal area, where the connection to the chosen engine and a refusal of it are
+  // shown, with what fixes it.
   onShowTerminal: () => void;
 }) {
   const t = useTranslate();
@@ -56,6 +57,9 @@ export function RunTargetSwitcher({
       return;
     }
     targets.select(alias);
+    // An engine on an SSH host takes a connection, which the terminal area follows: reaching the host, a refusal
+    // and what fixes it. Once it answers with no session, Home takes the terminal's place (useHomeWithoutSessions).
+    if (alias !== null) onShowTerminal();
   };
   // linkStateWords says what is happening to the chosen one; null when nothing needs saying.
   function linkStateWords(): string | null {
@@ -165,7 +169,12 @@ export function RunTargetSwitcher({
         returnFocusRef={triggerRef}
         onChoose={(alias) => {
           setPicking(false);
-          void targets.add(alias).then((added) => { if (added) setOpen(false); });
+          // The added engine becomes the chosen one, so the terminal area is shown as for a chosen one.
+          void targets.add(alias).then((added) => {
+            if (!added) return;
+            setOpen(false);
+            onShowTerminal();
+          });
         }}
         onClose={() => setPicking(false)}
       />

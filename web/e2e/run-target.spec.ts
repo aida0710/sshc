@@ -78,7 +78,7 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
     } else if (path.endsWith("/terminal/sessions")) {
       await route.fulfill({ json: { sessions, maxSessions: 50 } });
     } else if (path.endsWith("/terminal/machine")) {
-      // The empty terminal shows the run target's machine and its recent connections (terminalOverview.ts).
+      // Home shows the run target's machine and its connections per day (terminalOverview.ts).
       await route.fulfill({ json: { hostname: "bastion", os: "linux" } });
     } else if (path.endsWith("/terminal/connection-history")) {
       await route.fulfill({ json: { hours: [], recent: [] } });
@@ -342,8 +342,8 @@ test("hides the terminal behind the panel on a phone when the run target stops a
   const remote = await stubRunTarget(page, { refusal: "connectFailed", compatibleVersion: localVersion, sessions: [session] });
   await openApplication(page, installation);
   await page.locator("[data-app-header]").getByRole("button", { name: "Navigation", exact: true }).click();
+  // Choosing the engine shows the terminal area, with the session shown last on it.
   await chooseBastion(page);
-  await page.getByRole("list", { name: "Workspaces", exact: true }).getByRole("button", { name: /^web/ }).first().click();
   const composer = page.getByPlaceholder("Type text to send", { exact: true });
   await expect(composer).toBeVisible();
 
@@ -589,13 +589,14 @@ test("says a host is being reached while it does not answer, and going back to t
 
   await page.goto(`${new URL(page.url()).origin}/terminal`);
   await expect(page.getByRole("heading", { name: "Connecting to bastion", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No session is open" })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeHidden();
 
   // The browser's connections are freed as soon as this machine is chosen, so its requests do not queue behind them.
   const answered = page.waitForResponse("**/api/v1/terminal/sessions");
   await page.getByRole("button", { name: "Switch back to localhost" }).click();
   await answered;
   await expect(navigation.getByRole("button", { name: "Choose the remote session engine (now: localhost)" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No session is open" })).toBeVisible();
+  // This machine has no session, so Home takes the terminal's place.
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   await expect.poll(() => [...hostAnswers]).toContain(sessionsPath);
 });

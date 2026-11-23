@@ -30,9 +30,7 @@ describe("the Android app's wording", () => {
 
   it("rewords what the catalogue says of this machine", () => {
     expect(androidCatalogue("ja")["settings.thisMachine"]).toBe("このデバイス");
-    expect(androidCatalogue("ja")["start.openSessionNote"]).toBe("接続先かこのデバイスのシェルを選びます");
     expect(androidCatalogue("en")["settings.thisMachine"]).toBe("This device");
-    expect(androidCatalogue("en")["start.openSessionNote"]).toBe("Choose a connection or a shell on this device");
   });
 
   it("says that Android notifies about a waiting program, where a browser's wording says the browser does", () => {

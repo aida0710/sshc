@@ -134,10 +134,10 @@ describe("AppearanceSettingsSection", () => {
     expect(saved).toEqual([true]);
   });
 
-  it("draws the network behind the empty terminal until another art is chosen, and saves the one chosen", async () => {
+  it("draws the network behind Home until another art is chosen, and saves the one chosen", async () => {
     const server = fakeSettingsServer();
     renderSection();
-    const arts = screen.getByRole("radiogroup", { name: "Background with no session" });
+    const arts = screen.getByRole("radiogroup", { name: "Home background" });
     expect(within(arts).getByRole("radio", { name: "Network" })).toBeChecked();
 
     await userEvent.click(within(arts).getByRole("radio", { name: "None" }));

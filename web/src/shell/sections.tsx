@@ -141,6 +141,7 @@ export function SectionView(props: SectionViewProps) {
     return (
       <div className={pageScroller}>
         <OverviewPanel
+          runTarget={props.shell.runTarget}
           onNavigate={props.navigation.onNavigate}
           onNavigateLocation={props.navigation.onNavigateLocation}
           onSessionOpened={props.shell.onShowSession}
