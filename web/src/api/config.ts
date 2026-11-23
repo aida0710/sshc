@@ -1,5 +1,7 @@
 import { apiClient } from "./client";
 import { patchJSON, postJSON } from "./guards";
+import { readOptions, type ReadScope } from "./readScope";
+import { localApiBase } from "./remoteEngines";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -86,46 +88,53 @@ function validateHistory(value: unknown): HistoryEntry[] {
   return validateOpenAPISchema<components["schemas"]["HistoryList"]>("HistoryList", value).entries;
 }
 
-export const configApi = {
-  async overview(): Promise<Overview> {
-    return validateOverview(await apiClient.read("/api/v1/config/overview"));
-  },
-  async host(path: string, alias: string): Promise<HostDetail> {
-    const query = new URLSearchParams({ path, alias });
-    return validateHostDetail(await apiClient.read(`/api/v1/config/host?${query.toString()}`));
-  },
-  async file(path: string): Promise<FileContents> {
-    const query = new URLSearchParams({ path });
-    return validateFileContents(await apiClient.read(`/api/v1/config/file?${query.toString()}`));
-  },
-  async preview(request: EditRequest): Promise<SavePreview> {
-    return validateSavePreview(await postJSON<unknown>("/api/v1/config/preview", request));
-  },
-  async save(request: EditRequest): Promise<SaveResult> {
-    return validateSaveResult(await postJSON<unknown>("/api/v1/config/save", request));
-  },
-  async createConnection(request: CreateConnectionRequest): Promise<CreateConnectionResponse> {
-    return validateCreateConnectionResponse(await postJSON<unknown>("/api/v1/connections", request));
-  },
-  async updateConnection(request: UpdateConnectionRequest): Promise<SaveResult> {
-    return validateSaveResult(await patchJSON<unknown>("/api/v1/connections", request));
-  },
-  async renameGroup(from: string, to: string): Promise<SaveResult> {
-    return validateSaveResult(await postJSON<unknown>("/api/v1/config/groups/rename", { from, to }));
-  },
-  async deleteGroup(name: string, destination: string): Promise<SaveResult> {
-    return validateSaveResult(await postJSON<unknown>("/api/v1/config/groups/delete", { name, destination }));
-  },
-  async history(): Promise<HistoryEntry[]> {
-    return validateHistory(await apiClient.read("/api/v1/history"));
-  },
-  async restore(transactionId: string, path: string): Promise<SaveResult> {
-    return validateSaveResult(await postJSON<unknown>("/api/v1/history/restore", { transactionId, path }));
-  },
-  async pendingChanges(transactionId: string): Promise<PendingChanges> {
-    return validatePendingChanges(await apiClient.read(`/api/v1/history/pending/${encodeURIComponent(transactionId)}`));
-  },
-  async recover(transactionId: string, action: "complete" | "rollback"): Promise<void> {
-    await postJSON<unknown>("/api/v1/history/recover", { transactionId, action });
-  },
-};
+// createConfigApi is the SSH configuration API of the engine at base (engineApiBase). The reads of a run target end
+// with `reads` when the screen leaves it.
+export function createConfigApi(base: string, reads?: ReadScope) {
+  return {
+    async overview(): Promise<Overview> {
+      return validateOverview(await apiClient.read(`${base}/config/overview`, readOptions(reads)));
+    },
+    async host(path: string, alias: string): Promise<HostDetail> {
+      const query = new URLSearchParams({ path, alias });
+      return validateHostDetail(await apiClient.read(`${base}/config/host?${query.toString()}`));
+    },
+    async file(path: string): Promise<FileContents> {
+      const query = new URLSearchParams({ path });
+      return validateFileContents(await apiClient.read(`${base}/config/file?${query.toString()}`));
+    },
+    async preview(request: EditRequest): Promise<SavePreview> {
+      return validateSavePreview(await postJSON<unknown>(`${base}/config/preview`, request));
+    },
+    async save(request: EditRequest): Promise<SaveResult> {
+      return validateSaveResult(await postJSON<unknown>(`${base}/config/save`, request));
+    },
+    async createConnection(request: CreateConnectionRequest): Promise<CreateConnectionResponse> {
+      return validateCreateConnectionResponse(await postJSON<unknown>(`${base}/connections`, request));
+    },
+    async updateConnection(request: UpdateConnectionRequest): Promise<SaveResult> {
+      return validateSaveResult(await patchJSON<unknown>(`${base}/connections`, request));
+    },
+    async renameGroup(from: string, to: string): Promise<SaveResult> {
+      return validateSaveResult(await postJSON<unknown>(`${base}/config/groups/rename`, { from, to }));
+    },
+    async deleteGroup(name: string, destination: string): Promise<SaveResult> {
+      return validateSaveResult(await postJSON<unknown>(`${base}/config/groups/delete`, { name, destination }));
+    },
+    async history(): Promise<HistoryEntry[]> {
+      return validateHistory(await apiClient.read(`${base}/history`));
+    },
+    async restore(transactionId: string, path: string): Promise<SaveResult> {
+      return validateSaveResult(await postJSON<unknown>(`${base}/history/restore`, { transactionId, path }));
+    },
+    async pendingChanges(transactionId: string): Promise<PendingChanges> {
+      return validatePendingChanges(await apiClient.read(`${base}/history/pending/${encodeURIComponent(transactionId)}`));
+    },
+    async recover(transactionId: string, action: "complete" | "rollback"): Promise<void> {
+      await postJSON<unknown>(`${base}/history/recover`, { transactionId, action });
+    },
+  };
+}
+
+export const configApi = createConfigApi(localApiBase);
+

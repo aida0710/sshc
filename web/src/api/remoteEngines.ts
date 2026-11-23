@@ -58,6 +58,14 @@ export const remoteEnginesApi: RemoteEnginesApi = {
   },
 };
 
+// localApiBase is the API of this machine's engine. engineApiBase is the API of the engine a screen works with:
+// this machine's (runTarget null), or a run target's as this machine's engine forwards it. Only the routes this
+// machine's engine names are forwarded (registerRemoteEngineRoutes); what stays this machine's is never read with it.
+export const localApiBase = "/api/v1";
+export function engineApiBase(runTarget: string | null): string {
+  return runTarget === null ? localApiBase : enginePath(runTarget);
+}
+
 // engineTerminalBase is the terminal API of a run-target engine, as this
 // machine's engine forwards it; engineStreamPath is its terminal stream.
 export function engineTerminalBase(alias: string): string {

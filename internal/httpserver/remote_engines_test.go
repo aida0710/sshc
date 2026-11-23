@@ -43,8 +43,8 @@ func (f *fakeEngineDirectory) Connected(alias string) bool { return f.connected[
 func (f *fakeEngineDirectory) DialRunTargetLoopback(context.Context, string, int) (net.Conn, error) {
 	return nil, remoteengine.ErrNotAdded
 }
-func (f *fakeEngineDirectory) CallTerminalAPI(context.Context, string, remoteengine.TerminalCall) (remoteengine.TerminalAnswer, error) {
-	return remoteengine.TerminalAnswer{}, remoteengine.ErrNotAdded
+func (f *fakeEngineDirectory) CallAPI(context.Context, string, remoteengine.APICall) (remoteengine.APIAnswer, error) {
+	return remoteengine.APIAnswer{}, remoteengine.ErrNotAdded
 }
 func (f *fakeEngineDirectory) AddEngine(_ context.Context, alias string) error {
 	if f.addErr != nil {
@@ -78,7 +78,7 @@ func (f *fakeEngineDirectory) UnlockVault(_ context.Context, alias, passphrase s
 	f.unlocked = append(f.unlocked, alias)
 	return nil
 }
-func (f *fakeEngineDirectory) ForwardTerminalAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+func (f *fakeEngineDirectory) ForwardAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
 	f.forwarded = append(f.forwarded, alias+" "+remotePath)
 	w.WriteHeader(http.StatusOK)
 	return nil
@@ -140,6 +140,8 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodDelete, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},
 		{http.MethodGet, "/api/v1/engines/r100/terminal/machine", "r100 /api/v1/terminal/machine"},
 		{http.MethodGet, "/api/v1/engines/r100/terminal/connection-history", "r100 /api/v1/terminal/connection-history"},
+		{http.MethodGet, "/api/v1/engines/r100/config/overview", "r100 /api/v1/config/overview"},
+		{http.MethodGet, "/api/v1/engines/r100/connections/recent", "r100 /api/v1/connections/recent"},
 	} {
 		directory.forwarded = nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)
@@ -149,6 +151,30 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 	}
 	if recorder := send(t, engine, http.MethodGet, "/api/v1/engines/-oProxy/terminal/sessions", "", nil); recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unsafe alias = %d", recorder.Code)
+	}
+}
+
+// 同期、更新、設定、このマシンのセッション、スニペットは、リモートセッションを選んでいてもこのマシンのものである。
+// 取り次ぐ経路に入ると、画面の操作が実行先のマシンを変えてしまう。
+func TestWhatStaysThisMachinesIsNeverForwarded(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/engines/r100/sync/status"},
+		{http.MethodPost, "/api/v1/engines/r100/sync/push"},
+		{http.MethodGet, "/api/v1/engines/r100/update"},
+		{http.MethodPost, "/api/v1/engines/r100/update"},
+		{http.MethodGet, "/api/v1/engines/r100/settings"},
+		{http.MethodPut, "/api/v1/engines/r100/settings"},
+		{http.MethodGet, "/api/v1/engines/r100/session"},
+		{http.MethodDelete, "/api/v1/engines/r100/session"},
+		{http.MethodGet, "/api/v1/engines/r100/snippets"},
+	} {
+		directory.forwarded = nil
+		recorder := send(t, engine, tc.method, tc.path, "", nil)
+		if len(directory.forwarded) != 0 || (recorder.Code != http.StatusNotFound && recorder.Code != http.StatusMethodNotAllowed) {
+			t.Errorf("%s %s = %d, forwarded %v", tc.method, tc.path, recorder.Code, directory.forwarded)
+		}
 	}
 }
 

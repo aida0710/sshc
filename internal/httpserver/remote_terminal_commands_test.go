@@ -26,10 +26,10 @@ type relayToEngine struct {
 	credentials session.Credentials
 }
 
-func (r *relayToEngine) CallTerminalAPI(_ context.Context, _ string, call remoteengine.TerminalCall) (remoteengine.TerminalAnswer, error) {
+func (r *relayToEngine) CallAPI(_ context.Context, _ string, call remoteengine.APICall) (remoteengine.APIAnswer, error) {
 	recorder := sendKeyRequest(r.t, r.remote, r.credentials, call.Method, call.Path, call.Body, call.ActionToken)
 	body, _ := io.ReadAll(recorder.Result().Body)
-	return remoteengine.TerminalAnswer{Status: recorder.Code, Body: body}, nil
+	return remoteengine.APIAnswer{Status: recorder.Code, Body: body}, nil
 }
 
 // localEngineForRunTarget は、このマシンのエンジン（実行先の受け口と、このマシンのスニペット）を立てる。

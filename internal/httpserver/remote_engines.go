@@ -27,11 +27,11 @@ type RemoteEngineDirectory interface {
 	StartAction(ctx context.Context, alias string, action remoteengine.EngineAction) (uint64, error)
 	ActionLog(alias string, cursor uint64, limit int) (remoteengine.ActionLogRead, error)
 	UnlockVault(ctx context.Context, alias, passphrase string) error
-	ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
+	ForwardAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
 	// DialRunTargetLoopback は、実行先の 127.0.0.1:port へ、取り次ぎの SSH の接続の上で TCP を開く。
 	DialRunTargetLoopback(ctx context.Context, alias string, port int) (net.Conn, error)
-	// CallTerminalAPI は、このマシンのエンジン自身が、実行先のエンジンのターミナルの API へ送る。
-	CallTerminalAPI(ctx context.Context, alias string, call remoteengine.TerminalCall) (remoteengine.TerminalAnswer, error)
+	// CallAPI は、このマシンのエンジン自身が、実行先のエンジンのターミナルの API へ送る。
+	CallAPI(ctx context.Context, alias string, call remoteengine.APICall) (remoteengine.APIAnswer, error)
 	ForwardTerminalStream(w http.ResponseWriter, r *http.Request, alias string) error
 }
 
@@ -51,13 +51,14 @@ type RemoteEngineHandlers struct {
 	forwards *runTargetForwardRelays
 }
 
-// enginesPrefix は、実行先のエンジンの受け口の頭である。:alias のあとの /terminal… は、
-// 接続先のエンジンの /api/v1/terminal… へそのまま取り次ぐ。
+// enginesPrefix は、実行先のエンジンの受け口の頭である。:alias のあとの経路は、
+// 接続先のエンジンの /api/v1/… へそのまま取り次ぐ。
 const enginesPrefix = "/api/v1/engines"
 
 // registerRemoteEngineRoutes は、実行先のエンジンの受け口を登録する。取り次ぐのは、画面が
-// 使うターミナルの操作だけである。制御用の読み取りは取り次がない（画面が出さない）。経路は
-// 契約の検査がソースから読むので、一本ずつ書く。
+// リモートセッションの実行先のものとして出す操作だけで、ここに名指しで書いたものに限る。同期、
+// 更新、設定、このマシンのセッションは取り次がない（どれもこのマシンのものとして出す）。制御用の
+// 読み取りも取り次がない（画面が出さない）。経路は契約の検査がソースから読むので、一本ずつ書く。
 func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers) {
 	// 登録する受け口はどれも handlers の写しを持つので、共有する状態は登録の前に作る。
 	if handlers.commands == nil {
@@ -100,6 +101,9 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.PUT("/api/v1/engines/:alias/terminal/sessions/:id/workspace", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/sessions/:id/directory", handlers.ForwardTerminal)
 	engine.DELETE("/api/v1/engines/:alias/terminal/sessions/:id", handlers.ForwardTerminal)
+	// Home の接続先の一覧と最近の接続。
+	engine.GET("/api/v1/engines/:alias/config/overview", handlers.Forward)
+	engine.GET("/api/v1/engines/:alias/connections/recent", handlers.Forward)
 	engine.GET("/api/v1/engines/:alias/terminal/workspaces", handlers.ForwardTerminal)
 	engine.POST("/api/v1/engines/:alias/terminal/workspaces", handlers.ForwardTerminal)
 	engine.PATCH("/api/v1/engines/:alias/terminal/workspaces/:id", handlers.ForwardTerminal)
@@ -293,7 +297,21 @@ func (h RemoteEngineHandlers) ForwardTerminal(c *echo.Context) error {
 	if h.forwards.has(alias) {
 		return h.forwardWithLocalListens(c, alias, remotePath)
 	}
-	if err := h.Engines.ForwardTerminalAPI(c.Response(), c.Request(), alias, remotePath); err != nil {
+	if err := h.Engines.ForwardAPI(c.Response(), c.Request(), alias, remotePath); err != nil {
+		return remoteEngineProblem(c, err)
+	}
+	return nil
+}
+
+// Forward は、実行先のエンジンの、ターミナル以外の操作を取り次ぐ。このマシンのセッションと
+// CSRF は、ここへ届く前にこのマシンの規則で確かめてある。
+func (h RemoteEngineHandlers) Forward(c *echo.Context) error {
+	alias, ok := aliasParam(c)
+	if !ok {
+		return problem(c, http.StatusBadRequest, "unsafe_alias")
+	}
+	remotePath := "/api/v1" + strings.TrimPrefix(c.Request().URL.Path, enginesPrefix+"/"+alias)
+	if err := h.Engines.ForwardAPI(c.Response(), c.Request(), alias, remotePath); err != nil {
 		return remoteEngineProblem(c, err)
 	}
 	return nil
