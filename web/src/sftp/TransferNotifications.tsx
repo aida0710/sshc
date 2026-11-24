@@ -6,6 +6,7 @@ import { showBrowserNotification } from "../ui/browserNotifications";
 import { notifiesTransfersNatively } from "../android/native";
 import { type TransferNotice } from "./transferManager";
 import { sftpTransferProblemText } from "./sftpProblemText";
+import { IconButton } from "../ui/IconButton";
 
 export function notifyBackgroundTransfers(
   notices: readonly TransferNotice[],
@@ -59,14 +60,14 @@ export function TransferNotifications() {
           >
             <div className="flex items-start gap-2">
               <p className="min-w-0 grow text-sm">{message}</p>
-              <button
-                type="button"
-                className="pointer-events-auto text-xs text-ink-muted"
-                aria-label={t("sftp.notice.dismiss")}
+              <IconButton
+                label={t("sftp.notice.dismiss")}
+                size="compact"
                 onClick={() => sftpTransferManager.dismissNotice(notice.id)}
+                className="pointer-events-auto -my-1 -mr-1"
               >
                 <Icon name="close" className="size-3.5" />
-              </button>
+              </IconButton>
             </div>
           </div>
         );

@@ -12,6 +12,7 @@ import { sftpTransferProblemText } from "./sftpProblemText";
 import { Spinner } from "../ui/Spinner";
 import { usePendingResult } from "../ui/usePendingResult";
 import type { RunTransferControl } from "./useTransferControl";
+import { IconButton } from "../ui/IconButton";
 
 const statusLabelKeys: Record<DisplayedTransferStatus, MessageKey> = {
   queued: "sftp.manager.status.queued", running: "sftp.manager.status.running",
@@ -101,11 +102,10 @@ export function TransferJobRow({ job, waiting, processingStopped, maxReconnectAt
         {!sourceMissing && job.allowedActions.includes("resume") && job.status === "needs_overwrite" ? <JobAction label={t("sftp.overwrite")} icon="upload" tone="text-notice-ink" onClick={() => runControl(() => sftpTransferManager.overwrite(job.id))} /> : null}
         {job.allowedActions.includes("cancel") ? <JobAction label={t("sftp.cancel")} icon="close" tone="text-danger" onClick={() => runControl(() => sftpTransferManager.cancel(job.id))} /> : null}
         {job.allowedActions.includes("remove") ? <JobAction label={t("sftp.manager.remove")} icon="minus" onClick={() => runControl(() => sftpTransferManager.remove(job.id))} /> : null}
-        <button type="button" aria-label={t(detailsOpen ? "sftp.manager.hideDetails" : "sftp.manager.showDetails", { name: job.name })}
-          aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen((value) => !value)}
-          className="flex size-11 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-8 mobile-layout:size-11">
+        <IconButton label={t(detailsOpen ? "sftp.manager.hideDetails" : "sftp.manager.showDetails", { name: job.name })} size="panel"
+          aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen((value) => !value)}>
           <Icon name="chevronRight" className={`size-4 ${detailsOpen ? "rotate-90" : ""}`} />
-        </button>
+        </IconButton>
       </div>
     </div>
     <progress aria-label={t("sftp.manager.progress", { name: job.name })} className="block h-0.5 w-full accent-accent" max={total} value={job.transferredBytes} />

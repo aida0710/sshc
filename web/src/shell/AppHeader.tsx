@@ -4,6 +4,7 @@ import { useLanguage } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
 import { type RefObject } from "react";
+import { IconButton } from "../ui/IconButton";
 
 // A slot of the top bar shows only while it holds something shown. A kept section that is hidden (KeptSections)
 // leaves its way back and its actions in the slots, hidden with an inline display: none (PageChromePortal).
@@ -47,17 +48,17 @@ export function AppHeader({
     <header data-app-header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:hidden">
       <div ref={backSlotRef} data-page-back className={`flex shrink-0 items-center ${hiddenWithoutShownContent}`} />
       {/* The menu button gives way to a page's way back that is shown. */}
-      {navigationPinned ? null : <button
+      {navigationPinned ? null : <IconButton
         ref={navigationToggleRef}
-        type="button"
-        aria-label={t("shell.navigationToggle")}
+        label={t("shell.navigationToggle")}
+        size="bar"
         aria-expanded={navigationOpen}
         aria-controls={navigationId}
         onClick={onToggleNavigation}
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-hover hover:text-ink [[data-page-back]:has(>:not([style*='display:_none']))~&]:hidden"
+        className="[[data-page-back]:has(>:not([style*='display:_none']))~&]:hidden"
       >
         <Icon name="menu" className="h-4 w-4" />
-      </button>}
+      </IconButton>}
 
       <p className="min-w-0 flex-1 truncate text-sm font-semibold">
         {route.kind === "section" && route.section !== undefined

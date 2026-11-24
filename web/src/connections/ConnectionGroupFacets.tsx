@@ -12,6 +12,7 @@ import type { Scope } from "./ConnectionTree";
 import { buildGroupTree, decorateHosts, type GroupNode } from "./connectionTreeIndex";
 import type { ConnectionDrag } from "./useConnectionDrag";
 import { GroupFolderNotices } from "./GroupFolderNotices";
+import { IconButton } from "../ui/IconButton";
 
 // 220px は Settings のページの一覧の幅。この列は同じ位置に置く。
 const connectionGroupsWidth: ColumnWidth = { key: localStorageKeys.connectionGroupsWidth, fallback: 220, minimum: 112, maximum: 400 };
@@ -170,15 +171,10 @@ export function ConnectionGroupFacets({
       <div className="flex items-center justify-between gap-1 px-2 pb-2">
         <h2 className="text-xs font-medium text-ink-faint">{t("tree.byGroups")}</h2>
         {onCreateGroup === undefined ? null : (
-          <button
-            type="button"
-            aria-label={t("tree.newGroup")}
-            title={t("tree.newGroup")}
-            onClick={onCreateGroup}
-            className="-my-1 flex size-6 items-center justify-center rounded-sm text-ink-faint hover:bg-hover hover:text-ink max-xl:hidden"
-          >
+          <IconButton label={t("tree.newGroup")} size="compact" tone="faint" className="-my-1 max-xl:hidden"
+            onClick={onCreateGroup}>
             <Icon name="plus" className="size-3.5" />
-          </button>
+          </IconButton>
         )}
       </div>
       {onDeclareGroup === undefined ? null : (

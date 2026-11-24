@@ -5,6 +5,7 @@ import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { draggableCursor, dropTargetLook } from "../ui/dragAndDropLook";
 import { Icon } from "../ui/icons";
 import { sessionDragMimeType } from "./sessionDrag";
+import { IconButton } from "../ui/IconButton";
 
 // One workspace in the sidebar tree: opens and closes its sessions, starts a
 // session in it, holds its own actions, takes a session dragged onto it from
@@ -92,17 +93,16 @@ export function WorkspaceRow({
         ) : null}
         <span className={`shrink-0 text-2xs text-ink-faint ${revealOnHover}`}>{sessionCount}</span>
       </button>
-      <button
-        type="button"
-        data-touch-dense
-        aria-label={t("workspace.newSessionIn", { name })}
-        title={t("workspace.newSessionIn", { name })}
+      <IconButton
+        label={t("workspace.newSessionIn", { name })}
+        size="row"
+        dense
         disabled={!canOpenSession}
         onClick={onNewSession}
-        className={`flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5 ${revealOnHover}`}
+        className={revealOnHover}
       >
         <Icon name="plus" className="size-3.5" />
-      </button>
+      </IconButton>
       <ActionMenu
         label={t("workspace.actions", { name })}
         items={actions}

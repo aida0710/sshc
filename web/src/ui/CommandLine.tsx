@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { Icon } from "./icons";
 import { useClipboardCopy } from "./useClipboardCopy";
+import { IconButton } from "./IconButton";
 
 // CommandLine は、利用者がほかのマシンで打つコマンドを1行で見せ、そのままコピーできるようにする。
 // note は、そのコマンドで何が起きるかの短い説明。ブラウザがコピーを断ったときは、note の代わりにそのことを書く。
@@ -16,15 +17,10 @@ export function CommandLine({ command, note }: { command: string; note: string }
           {state === "failed" ? t("copy.refused") : note}
         </span>
       </span>
-      <button
-        type="button"
-        aria-label={label}
-        title={label}
-        onClick={copy}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
-      >
+      <IconButton label={label} size="toolbar"
+        onClick={copy}>
         <Icon name={state === "copied" ? "check" : "copy"} className="size-3.5" />
-      </button>
+      </IconButton>
       {/* 名前が変わっただけでは読み上げられないので、結果を別に知らせる。 */}
       <span aria-live="polite" className="sr-only">{state === "copied" ? t("copy.done") : state === "failed" ? t("copy.refused") : ""}</span>
     </div>
