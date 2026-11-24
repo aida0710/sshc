@@ -798,6 +798,18 @@
   height: var(--app-viewport-height, 100dvh);
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
+/* リモートセッションの名札（RemoteSessionFrame）の高さ。枠の太さ（3px）と名札の行の高さ（18px）を足した値。
+   スマホの組み方では、アプリはこの高さを上に空けて名札の下から始まる（remoteSessionTagRoom）。ダイアログも同じだけ
+   下げ、全画面のもの（SFTP のプレビューなど）の上の端に名札が重ならないようにする。 */
+:root {
+  --remote-session-tag-room: 21px;
+}
+:root:has([data-remote-session-frame]) .sshc-modal-frame {
+  @variant mobile-layout {
+    top: calc(var(--app-viewport-top, 0px) + var(--remote-session-tag-room));
+    height: calc(var(--app-viewport-height, 100dvh) - var(--remote-session-tag-room));
+  }
+}
 .sshc-modal-panel {
   min-height: 0;
   max-height: 100%;

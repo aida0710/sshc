@@ -394,6 +394,23 @@ test("frames the whole window and names the engine while a remote session is cho
   const tag = (await frame.locator("span").boundingBox())!;
   const header = (await page.locator("[data-app-header]").boundingBox())!;
   expect(header.y).toBeGreaterThanOrEqual(tag.y + tag.height);
+  // ダイアログを開いても名札は手前に出て、ダイアログは名札の下から始まる。スマホではアプリ全体が重なりの基準になり、
+  // その中に置いた名札は、body の直下に出るダイアログの下に隠れていた。
+  await page.keyboard.press("Control+k");
+  const dialogFrame = page.locator(".sshc-modal-frame");
+  await expect(dialogFrame).toBeVisible();
+  const tagInFront = await frame.evaluate((element: HTMLElement) => {
+    const name = element.querySelector("span")!;
+    const box = name.getBoundingClientRect();
+    // 枠は押す場所を持たない（pointer-events: none）ので、確かめる間だけ当たるようにする。
+    element.style.pointerEvents = "auto";
+    const front = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    element.style.pointerEvents = "";
+    return front === name;
+  });
+  expect(tagInFront).toBe(true);
+  expect((await dialogFrame.boundingBox())!.y).toBeGreaterThanOrEqual(tag.y + tag.height);
+  await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 1280, height: 800 });
   await chooseLocalhost(page);
   await expect(frame).toHaveCount(0);
