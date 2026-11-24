@@ -14,6 +14,9 @@ const sizes = {
   panel: "size-8",
   // 一覧の行の「…」のうち、行が高いもの。
   large: "size-9",
+  // SFTP のタブの中と横の操作。タブの高さ（30px）に合わせ、タブの字と並ぶようにする。
+  tab: "h-[30px] w-6",
+  tabWide: "h-[30px] w-7",
   bar: "size-11",
   barLarge: "size-12",
 } as const;
@@ -68,7 +71,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       title={label}
       {...(dense ? { "data-touch-dense": "" } : {})}
       {...(touchCompact ? { "data-touch-compact": "" } : {})}
-      className={`inline-flex shrink-0 items-center justify-center rounded-md transition-colors duration-150 ${sizes[size]} ${tones[tone]} ${grounds[ground]} ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-md transition-colors duration-150 ${sizes[size]} ${tones[tone]} ${grounds[ground]} ${className}`}
       {...rest}
     >
       {children}

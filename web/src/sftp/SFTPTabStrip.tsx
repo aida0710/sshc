@@ -212,7 +212,7 @@ export function SFTPTabStrip({
                 {labels.host === "" || hostOnly ? null : <span className={`block min-w-0 truncate text-2xs leading-3.5 text-ink-muted ${compact ? "mt-0.5 w-full" : "max-w-[50%] shrink-0"}`}>{labels.host}</span>}
               </button>
               {selected && onChangeHost !== undefined ? (
-                <IconButton label={t("sftp.host")} size={compact ? "bar" : "compact"} className="sshc-focus-inset"
+                <IconButton label={t("sftp.host")} size={compact ? "bar" : "tab"} className="sshc-focus-inset"
                   aria-haspopup="dialog"
                   data-value={tab.alias}
                   disabled={!canChangeHost(tab)}
@@ -226,12 +226,12 @@ export function SFTPTabStrip({
                   items={actions}
                   open={menuOpenFor === tab.id}
                   onOpenChange={(open) => setMenuOpenFor(open ? tab.id : null)}
-                  triggerSize={compact ? "bar" : "compact"}
+                  triggerSize={compact ? "bar" : "tab"}
                   iconClassName="size-3.5"
                 />
               ) : null}
               {closable ? (
-                <IconButton label={t("sftp.closeTab", { name: labels.name })} size={compact ? "bar" : "compact"} tone="danger" className="sshc-focus-inset"
+                <IconButton label={t("sftp.closeTab", { name: labels.name })} size={compact ? "bar" : "tab"} tone="danger" className="sshc-focus-inset"
                   onClick={(event) => onClose(tab, { skipConfirmation: event.shiftKey })}>
                   <Icon name="close" className={compact ? "size-4" : "size-3"} />
                 </IconButton>
@@ -240,7 +240,7 @@ export function SFTPTabStrip({
           );
         })}
       </div>
-      <IconButton label={t("sftp.newTab")} size={compact ? "bar" : "toolbar"} ground={compact ? "card" : "hover"}
+      <IconButton label={t("sftp.newTab")} size={compact ? "bar" : "tabWide"} ground={compact ? "card" : "hover"}
         disabled={addDisabled}
         onClick={onAdd}>
         <Icon name="plus" className={compact ? "size-5" : "size-4"} />
