@@ -186,10 +186,9 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   if (statusState.phase === "error") {
     return (
       <SyncPageFrame>
-        <Notice tone="danger">{statusState.message}</Notice>
-        <Button onClick={() => void reload()} className="self-start">
-          {t("shell.bootstrapRetry")}
-        </Button>
+        <Notice tone="danger" actions={<Button small onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>}>
+          {statusState.message}
+        </Notice>
       </SyncPageFrame>
     );
   }

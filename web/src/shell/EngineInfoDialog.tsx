@@ -11,7 +11,7 @@ import { CommandOutput } from "../ui/CommandOutput";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
-import { RunTargetProblemNotice } from "./RunTargetProblemNotice";
+import { RunTargetProblemNotice } from "../terminal/RunTargetProblemNotice";
 
 // engineActions are listed in the order the dialog offers them.
 const engineActions: RemoteEngineAction[] = ["update", "restart", "stop"];
@@ -79,11 +79,11 @@ export function EngineInfoDialog({
             </Button>
           ))}
         </div>
-        {info.actionProblem === "" ? null : <p role="alert" className="text-sm text-danger">{info.actionProblem}</p>}
+        {info.actionProblem === null ? null : <RunTargetProblemNotice problem={{ ...info.actionProblem, alias }} showAlias={false} />}
         {info.lastResult === null ? null : (
-          <p role="status" className={`text-sm ${info.lastResult.succeeded ? "text-ink" : "text-danger"}`}>
+          <Notice tone={info.lastResult.succeeded ? "success" : "danger"} compact>
             {info.lastResult.succeeded ? t(actionLabels[info.lastResult.action].done) : t("engineInfo.actionFailed")}
-          </p>
+          </Notice>
         )}
         <CommandOutput output={info.output} label={t("engineInfo.output")} />
         <div className="flex justify-end">

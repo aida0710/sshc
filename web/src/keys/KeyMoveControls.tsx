@@ -1,6 +1,6 @@
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import type { MoveOutcome, MoveTarget } from "./organizer";
 
 // ChosenKeysBar は、チェックした鍵をまとめてフォルダへ移すための帯である。
@@ -53,18 +53,20 @@ export function ChosenKeysBar({
 export function KeyMoveOutcomeNotice({ outcome }: { outcome: MoveOutcome }) {
   const t = useTranslate();
   return (
-    <div role="status" className="rounded-lg border border-line bg-card p-3 text-sm">
-      <p className="text-ink">{t("keys.moveMoved", { count: outcome.moved.length })}</p>
+    <Notice
+      tone={outcome.blocked.length + outcome.failed.length === 0 ? "success" : "danger"}
+      title={t("keys.moveMoved", { count: outcome.moved.length })}
+    >
       {outcome.blocked.map((entry) => (
-        <p key={entry.path} className="text-danger">
+        <p key={entry.path}>
           {t("keys.moveBlocked", { path: entry.path, reason: entry.blockers.join(" / ") })}
         </p>
       ))}
       {outcome.failed.map((path) => (
-        <p key={path} className="text-danger">
+        <p key={path}>
           {t("keys.moveFailed", { path })}
         </p>
       ))}
-    </div>
+    </Notice>
   );
 }

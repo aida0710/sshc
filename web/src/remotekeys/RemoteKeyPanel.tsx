@@ -363,8 +363,7 @@ export function RemoteKeyPanel({
             ))}
           </div>
           {unavoidable.length > 0 ? (
-            <div className="mt-3 rounded-inset bg-notice p-4 text-sm">
-              <h4 className="font-medium text-notice-ink">{t("rk.connectingRuns")}</h4>
+            <div className="mt-3"><Notice live={false} titleLevel={4} title={t("rk.connectingRuns")}>
               <ul className="mt-2 flex flex-col gap-2">
                 {unavoidable.map(({ alias, directive }) => (
                   <li key={`${alias}:${directive.path}:${directive.line}:${directive.keyword}`}>
@@ -375,8 +374,8 @@ export function RemoteKeyPanel({
                   </li>
                 ))}
               </ul>
-              <CheckboxField className="mt-2" label={t("rk.acknowledgeRuns")} checked={acknowledged} onChange={setAcknowledged} tone="notice" />
-            </div>
+              <CheckboxField className="mt-2" label={t("rk.acknowledgeRuns")} checked={acknowledged} onChange={setAcknowledged} />
+            </Notice></div>
           ) : null}
         </PageSection>
       ) : null}

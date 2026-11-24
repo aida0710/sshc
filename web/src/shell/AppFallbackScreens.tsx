@@ -8,7 +8,7 @@ import { EntryScreen } from "../ui/EntryScreen";
 import { Icon } from "../ui/icons";
 import { PageBoard } from "../ui/PageBoard";
 import { Spinner } from "../ui/Spinner";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { ErrorDiagnosticNotice } from "./ErrorDiagnosticNotice";
 
 function reloadHere() {
@@ -25,7 +25,7 @@ export function BootstrapErrorScreen({ failure, requestFailure, version, onClose
 }) {
   const t = useTranslate();
   return (
-    <EntryScreen heading={t("shell.title")} description={<p role="alert" className="text-danger">{t("shell.bootstrapFailed")}</p>}>
+    <EntryScreen heading={t("shell.title")} description={<Notice tone="danger">{t("shell.bootstrapFailed")}</Notice>}>
       <div className="flex flex-col gap-3.5">
         {requestFailure === null ? null : (
           <ErrorDiagnosticNotice diagnostic={requestFailure} version={version} onClose={onCloseFailure} />

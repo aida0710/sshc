@@ -4,6 +4,7 @@ import { Button } from "../ui/surface";
 import type { Job, Preview } from "./api";
 import { snippetProblemLabelKey, snippetStatusLabelKey } from "./snippetLabels";
 import { codeBlock } from "../ui/form";
+import { noticeFrameColours } from "../ui/noticeTones";
 
 // SnippetRunSection は、開いているスニペットを選んだホストでまとめて実行する節である。実行の前に、
 // ホストごとに展開したコマンドと経路を確認させ、実行中と終わった後はホストごとの出力を並べる。
@@ -57,7 +58,7 @@ export function SnippetRunSection({
         {t("snippets.preview")}
       </Button>
       {preview === null ? null : (
-        <section className="mt-4 min-w-0 rounded-inset bg-notice p-4">
+        <section className={`mt-4 min-w-0 rounded-inset border p-4 ${noticeFrameColours.notice}`}>
           <h4 className="text-sm font-semibold">{t("snippets.confirm")}</h4>
           {preview.targets.map((target) => (
             <div key={target.targetId} className="mt-2">
@@ -65,7 +66,7 @@ export function SnippetRunSection({
                 {target.target.alias} · {target.target.user}@{target.target.hostName}:{target.target.port}
               </p>
               {(target.target.route ?? []).map((hop, index) => (
-                <p key={`${hop.alias}-${index}`} className="mt-1 break-all text-xs text-notice-ink">
+                <p key={`${hop.alias}-${index}`} className="mt-1 break-all text-xs text-ink-muted">
                   {index + 1}. {hop.user}@{hop.hostName}:{hop.port}
                   {hop.proxyCommand === undefined || hop.proxyCommand === "" ? "" : ` · ProxyCommand: ${hop.proxyCommand}`}
                 </p>

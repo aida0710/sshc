@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { usePendingResult } from "./usePendingResult";
 import { control, dialogHeading, hintText } from "./form";
-import { Button } from "./surface";
+import { Button, Notice } from "./surface";
 import { ModalShell } from "./ModalShell";
 import { hasOnScreenKeyboard, type asciiTextEntry } from "./softKeyboard";
 
@@ -99,7 +99,7 @@ export function InputDialog({
           />
           {touched && validation !== "" ? <span id={errorId} role="alert" className="text-xs text-danger">{validation}</span> : null}
         </div>
-        {error === "" ? null : <p id={failureId} role="alert" className="text-sm text-danger">{error}</p>}
+        {error === "" ? null : <Notice tone="danger" id={failureId}>{error}</Notice>}
         <div className="flex justify-end gap-2">
           <Button disabled={submitting} onClick={onCancel}>{cancelLabel}</Button>
           <Button kind="primary" type="submit" busy={submitting}>{submitLabel}</Button>

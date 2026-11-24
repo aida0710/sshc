@@ -4,7 +4,7 @@ import type { Translate } from "../i18n/context";
 import { keepMachineState } from "../settings/machineState";
 import { interfaceState, useSettings } from "../settings/settingsStore";
 import { failureCode } from "../api/client";
-import { runTargetProblemText } from "./runTargetProblem";
+import { runTargetFailure, type RunTargetFailure } from "./runTargetProblem";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "./useRemoteVaultUnlock";
 import { useRunTargetUnread } from "./useRunTargetUnread";
 
@@ -37,12 +37,9 @@ export type RunTargetsState = {
   engineInfo: EngineInfoDialogState;
 };
 
-export type RunTargetProblem = {
-  // message は、失敗の理由の1文（接続名を含む）。
-  message: string;
+// RunTargetProblem は、どの接続先へのどの操作が失敗したか。［もう一度試す］で同じ操作をやり直すのに使う。
+export type RunTargetProblem = RunTargetFailure & {
   alias: string;
-  // code は、エンジンが断った語（remote_engine_not_running など）。知らせの形を決める。
-  code: string;
   action: "add" | "remove" | "openInNewTab";
 };
 
@@ -112,7 +109,7 @@ export function useRunTargets({
       setEngineInfoFor(alias);
       return;
     }
-    setProblem({ message: runTargetProblemText(translate, error, alias), alias, code: failureCode(error), action });
+    setProblem({ ...runTargetFailure(translate, error, alias), alias, action });
   }, [translate]);
 
   const add = useCallback(async (alias: string) => {

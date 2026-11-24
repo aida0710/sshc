@@ -1,7 +1,7 @@
 import { dialogHeading } from "./form";
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { ModalShell } from "./ModalShell";
-import { Button } from "./surface";
+import { Button, Notice } from "./surface";
 import { usePendingResult } from "./usePendingResult";
 
 // ConfirmDialog は、取り消せない操作の前に確かめる。
@@ -79,9 +79,7 @@ export function ConfirmDialog({
       </h2>
       <div id={bodyId} className="flex flex-col gap-3">{body}</div>
       {error === "" ? null : (
-        <p id={errorId} role="alert" className="text-sm text-danger">
-          {error}
-        </p>
+        <Notice tone="danger" id={errorId}>{error}</Notice>
       )}
       <div className="flex justify-end gap-2">
         <Button ref={cancelRef} disabled={locked} onClick={onCancel} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
