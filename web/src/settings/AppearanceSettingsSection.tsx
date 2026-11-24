@@ -8,9 +8,10 @@ import { useTheme } from "../theme/context";
 import { defaultTheme, isFirstDarkTheme, isTheme, themeAttributes, themeLabel, themes, type Theme } from "../theme/theme";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
-import { CustomAccentColor } from "./CustomAccentColor";
+import { ColorCodeInput } from "./ColorCodeInput";
 import { EmptyTerminalArtField } from "./EmptyTerminalArtField";
 import { ReduceMotionField } from "./ReduceMotionField";
+import { RemoteSessionColorField } from "./RemoteSessionColorField";
 import { SettingsSection } from "./SettingsSection";
 import { FieldRow } from "../ui/FieldRow";
 import { standardPresetId, updatePreset, useSettings, type SettingsPreset } from "./settingsStore";
@@ -33,8 +34,8 @@ function accentColorOnScreen(): string {
   return parseAccentColor(getComputedStyle(document.documentElement).getPropertyValue("--ui-accent")) ?? "#6550d0"; // palette-exempt
 }
 
-// The look of the app in the preset being edited: the theme, the accent colour, the art behind Home and
-// whether to reduce motion. While it is the preset this machine uses, the screen shows each choice at once; another
+// The look of the app in the preset being edited: the theme, the accent colour, the remote session frame colour,
+// the art behind Home and whether to reduce motion. While it is the preset this machine uses, the screen shows each choice at once; another
 // preset's choices only show on the machines that use it.
 export function AppearanceSettingsSection({ presetId, showHeading }: { presetId: string; showHeading: boolean }) {
   const t = useTranslate();
@@ -124,11 +125,20 @@ export function AppearanceSettingsSection({ presetId, showHeading }: { presetId:
             ))}
           </div>
           {customColor !== null ? (
-            <CustomAccentColor color={customColor} disabled={saving.busy} onPreview={previewCustomColor} onChoose={chooseColor} />
+            <ColorCodeInput
+              color={customColor}
+              disabled={saving.busy}
+              labels={{ picker: t("appearance.customColor"), code: t("appearance.customColorCode"), lowContrast: t("appearance.customColorLowContrast") }}
+              // 設定の板はサイドバーの色。
+              contrastAgainst="--ui-sidebar"
+              onPreview={previewCustomColor}
+              onChoose={chooseColor}
+            />
           ) : null}
           {saving.error === "" ? null : <div className="mt-4"><Notice tone="danger">{saving.error}</Notice></div>}
         </div>
       </FieldRow>
+      <RemoteSessionColorField presetId={presetId} />
       <EmptyTerminalArtField presetId={presetId} />
       <ReduceMotionField presetId={presetId} />
     </SettingsSection>

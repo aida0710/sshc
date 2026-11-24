@@ -15,7 +15,9 @@ export type RunTargetsState = {
   selected: string | null;
   problem: string;
   busy: boolean;
-  select: (alias: string | null) => void;
+  // select は、画面が使う sshc エンジンを替える。保存していない下書きがあって、それを残すと決めたときは替えずに
+  // false を返す（同じものを選んだときは true）。
+  select: (alias: string | null) => boolean;
   add: (alias: string) => Promise<boolean>;
   remove: (alias: string) => Promise<void>;
   openInNewTab: (alias: string) => Promise<void>;
@@ -81,9 +83,10 @@ export function useRunTargets({
   const unread = useRunTargetUnread({ api, selected, enabled: enabled && engines.length > 0 });
 
   const select = useCallback((alias: string | null) => {
-    if (alias !== selected && !mayChange()) return;
+    if (alias !== selected && !mayChange()) return false;
     setProblem("");
     keepMachineState("runTarget", alias ?? "");
+    return true;
   }, [mayChange, selected]);
 
   // report shows why a request about an engine failed. A different version is

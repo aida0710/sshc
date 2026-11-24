@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { HostEntry } from "../api/config";
+import type { HostEntry, HostIdentity } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { runTargetRefusalState, runTargetRefusalText } from "../terminal/runTargetProblem";
 import type { RunTargetLink } from "../terminal/useRunTargetLink";
@@ -27,6 +27,7 @@ export function RunTargetSwitcher({
   aliases,
   hosts,
   onShowTerminal,
+  onOpenConnectionSettings,
 }: {
   targets: RunTargetsState;
   link: RunTargetLink;
@@ -35,6 +36,8 @@ export function RunTargetSwitcher({
   // onShowTerminal shows the terminal area, where the connection to the chosen engine and a refusal of it are
   // shown, with what fixes it.
   onShowTerminal: () => void;
+  // onOpenConnectionSettings は、その sshc エンジンの接続先（このマシンの Connections）の設定を開く。色はそこで変える。
+  onOpenConnectionSettings: (identity: HostIdentity) => void;
 }) {
   const t = useTranslate();
   const [open, setOpen] = useState(false);
@@ -71,6 +74,8 @@ export function RunTargetSwitcher({
     const note = (chosen ? chosenState : null) ?? settledNote;
     // The note already says it could not connect; this adds why, when that is known.
     const refusalReason = chosen && link.refusal !== null ? runTargetRefusalText(t, link.refusal, name).reason : "";
+    // connection は、このマシンの SSH の設定にあるその接続先。消したものには、設定を開く項目を出さない。
+    const connection = alias === null ? undefined : hosts.find((host) => host.identity.alias === alias);
     return (
       <li key={alias ?? ""} className={`flex flex-wrap items-center gap-1 rounded-md ${chosen ? "bg-select-fill" : "hover:bg-hover"}`}>
         <button
@@ -103,6 +108,12 @@ export function RunTargetSwitcher({
             <button type="button" onClick={() => { setActionsFor(null); setOpen(false); targets.engineInfo.ask(alias); }} className={menuItemClass()}>
               {t("engineInfo.open")}
             </button>
+            {connection === undefined ? null : (
+              <button type="button" onClick={() => { setActionsFor(null); setOpen(false); onOpenConnectionSettings(connection.identity); }} className={menuItemClass()}>
+                {/* リモートセッションを選んでいる間、Connections はリモートの接続先を出すので、localhost に戻って開く。 */}
+                {t(targets.selected === null ? "runTarget.openConnectionSettings" : "runTarget.openConnectionSettingsLeaving")}
+              </button>
+            )}
             <button type="button" onClick={() => void targets.openInNewTab(alias)} className={menuItemClass()}>
               {t("runTarget.openInNewTab")}
             </button>

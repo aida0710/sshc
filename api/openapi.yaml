@@ -7094,6 +7094,9 @@ components:
         emptyTerminalArt: { type: string, enum: [none, network, contours, globe, aquarium] }
         # 画面のアニメーションを省くか。省略は OS の設定（prefers-reduced-motion）に従う。
         reduceMotion: { type: boolean }
+        # リモートセッションを選んでいる間の画面の枠と名札の色（#rrggbb、小文字）。接続先の色が先。
+        # 省略はさし色（accent）。
+        remoteSessionColor: { type: string, pattern: "^#[0-9a-f]{6}$" }
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
     # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:

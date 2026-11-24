@@ -83,6 +83,29 @@ func TestAnAccentThatIsNeitherAPresetNorAColourIsRefused(t *testing.T) {
 	}
 }
 
+func TestARemoteSessionColourIsStoredInThePresetAndReadBack(t *testing.T) {
+	service, _ := newTerminalService(t)
+
+	if err := editStandardPreset(t, service, func(preset *SettingsPreset) {
+		preset.Appearance = &AppearanceSettings{RemoteSessionColor: "#2f7fd8"}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if appearance := service.EffectiveSettings().Preset.Appearance; appearance == nil || appearance.RemoteSessionColor != "#2f7fd8" {
+		t.Fatalf("appearance = %+v, want the remote session colour #2f7fd8", appearance)
+	}
+}
+
+func TestARemoteSessionColourThatIsNotAColourIsRefused(t *testing.T) {
+	for _, colour := range []string{"orange", "#2F7FD8", "#2f7fd", "#2f7fd880"} {
+		err := validateAppearanceSettings(&AppearanceSettings{RemoteSessionColor: colour})
+		if !errors.Is(err, ErrMetadataAppearance) {
+			t.Fatalf("remote session colour %q: err = %v, want ErrMetadataAppearance", colour, err)
+		}
+	}
+}
+
 func TestAThemeNameThatIsNotAPlainWordIsRefused(t *testing.T) {
 	for _, theme := range []string{"Dark", "dark mode", "../dark", ""} {
 		err := validateAppearanceSettings(&AppearanceSettings{Theme: theme})

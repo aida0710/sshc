@@ -1,6 +1,6 @@
 import { useBindings } from "./keyconfig/presets";
 import { usePresetLibrarySync } from "./settings/presetLibrary";
-import { useSettingsSync } from "./settings/settingsStore";
+import { presetInUse, useSettings, useSettingsSync } from "./settings/settingsStore";
 import { useTerminalSettings } from "./settings/terminalSettings";
 import { opensInThisPage } from "./ui/linkClick";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
@@ -77,6 +77,8 @@ import { useShellLayers } from "./shell/useShellLayers";
 import type { AppActionContext, SessionShortcut } from "./shell/appActions";
 import { useAppShortcuts, type SessionShortcutRequest } from "./shell/useAppShortcuts";
 import { chooseRunTarget, runTargetChoices } from "./shell/runTargetChoice";
+import { remoteSessionColorOf, remoteSessionFrameColor } from "./theme/remoteSessionColor";
+import type { HostIdentity } from "./api/config";
 import { paneSessionIds, type PaneEdge } from "./terminal/splitView/layout";
 import { SplitRequestDialog } from "./terminal/splitView/SplitRequestDialog";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
@@ -140,6 +142,12 @@ export function App({
   // 一覧は、このマシンの接続先を並べる。このマシンを選んでいる間は、それは一度読んだ `declared` である。
   const declaredHere = useDeclaredConfig(state === "ready" && runTargets.selected !== null, section, configApi);
   const thisMachineDeclared = runTargets.selected === null ? declared : declaredHere;
+  // リモートセッションの枠と名札の色。その接続先（このマシンの Connections）の色、設定（Appearance）の色の順で、
+  // どちらも無ければさし色。
+  const settingsDocument = useSettings().document;
+  const remoteFrameColor = runTargets.selected === null
+    ? null
+    : remoteSessionFrameColor(thisMachineDeclared.hostColour.get(runTargets.selected), remoteSessionColorOf(presetInUse(settingsDocument)));
   const [desktopNavigationWidth, resizeDesktopNavigation] = useColumnWidth(navigationWidth);
   const [desktopNavigation, setDesktopNavigation] = useStoredValue(navigationShown);
   const {
@@ -316,6 +324,14 @@ export function App({
     navigate("Terminal");
   }, [closeNavigation, navigate]);
   const runTargetList = useMemo(() => runTargetChoices(runTargets.engines), [runTargets.engines]);
+  // リモートセッションの一覧から、その接続先（このマシンの Connections）の色などの設定を開く。リモートセッションを
+  // 選んでいる間、Connections はリモートの接続先を出すので、localhost に戻してから開く。保存していない下書きを残すと
+  // 決めて戻れなかったときは、開かない（リモートの同じ名前の接続先を開いてしまわないため）。
+  const openThisMachineConnectionSettings = useCallback((identity: HostIdentity) => {
+    if (runTargets.selected !== null && !runTargets.select(null)) return;
+    closeNavigation();
+    navigateLocation(connectionLocation({ path: identity.path, alias: identity.alias, panel: "Sshc", advanced: "Settings" }));
+  }, [runTargets, closeNavigation, navigateLocation]);
   const chooseRunTargetHere = useCallback(
     (alias: string | null) => chooseRunTarget({ targets: runTargets, link: runTargetLink, showTerminal: showTerminalArea }, alias),
     [runTargets, runTargetLink, showTerminalArea],
@@ -433,7 +449,7 @@ export function App({
   const app = (
     <EngineApisProvider apis={engineApis}>
     <div className={`sshc-app flex h-screen flex-col bg-canvas text-ink ${runTargets.selected === null ? "" : remoteSessionTagRoom}`} data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned} data-navigation-hidden={navigationHidden}>
-      {runTargets.selected === null ? null : <RemoteSessionFrame alias={runTargets.selected} />}
+      {runTargets.selected === null ? null : <RemoteSessionFrame alias={runTargets.selected} color={remoteFrameColor} />}
       <div
         ref={rechecked}
         className="contents"
@@ -547,6 +563,7 @@ export function App({
             aliases={declared.knownAliases}
             hosts={declared.hosts}
             engineChoices={{ aliases: thisMachineDeclared.knownAliases, hosts: thisMachineDeclared.hosts }}
+            onOpenConnectionSettings={openThisMachineConnectionSettings}
             onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
             directDestination={directDestination}
             onOpenCommandPalette={openPaletteFromNavigation}

@@ -26,8 +26,8 @@ var accentColorPattern = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 // 知らない名前は既定のテーマとして描くので、ここでは形だけを確かめる。
 var themeNamePattern = regexp.MustCompile(`^[a-z0-9-]{1,32}$`)
 
-// AppearanceSettings は、アプリの見た目（テーマ、さし色、セッションが無いときの絵、動きを減らすか）で
-// ある。プリセットに入る。
+// AppearanceSettings は、アプリの見た目（テーマ、さし色、セッションが無いときの絵、動きを減らすか、
+// リモートセッションの枠の色）である。プリセットに入る。
 type AppearanceSettings struct {
 	// Theme は、system（OS に合わせる）かテーマの名前である。空は既定のテーマ（画面の既定は dark）。
 	Theme string `json:"theme,omitempty"`
@@ -40,6 +40,9 @@ type AppearanceSettings struct {
 	// ReduceMotion は、画面のアニメーションを省くかである。nil は OS の設定（prefers-reduced-motion）に
 	// 従う。画面だけが読み、エンジンは使わない。
 	ReduceMotion *bool `json:"reduceMotion,omitempty"`
+	// RemoteSessionColor は、リモートセッションを選んでいる間の画面の枠と名札の色である（#rrggbb、小文字）。
+	// 接続先に色を付けていれば、そちらを使う。空はさし色（Accent）。画面だけが読む。
+	RemoteSessionColor string `json:"remoteSessionColor,omitempty"`
 }
 
 // validateAppearanceSettings は、形の合わないテーマの名前、知らないさし色や絵の名前、色として
@@ -56,6 +59,9 @@ func validateAppearanceSettings(settings *AppearanceSettings) error {
 	}
 	if settings.EmptyTerminalArt != "" && !slices.Contains(emptyTerminalArts, settings.EmptyTerminalArt) {
 		return fmt.Errorf("%w: empty terminal art %q", ErrMetadataAppearance, settings.EmptyTerminalArt)
+	}
+	if settings.RemoteSessionColor != "" && !accentColorPattern.MatchString(settings.RemoteSessionColor) {
+		return fmt.Errorf("%w: remote session color %q", ErrMetadataAppearance, settings.RemoteSessionColor)
 	}
 	return nil
 }

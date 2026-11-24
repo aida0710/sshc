@@ -7,12 +7,16 @@ import { narrowControl } from "../ui/form";
 import { asciiTextEntry } from "../ui/softKeyboard";
 import { Notice } from "../ui/surface";
 
-// CustomAccentColor is the row under the accent swatches while the custom accent is chosen: the system's
-// colour picker and the same colour as a code to type. Dragging in the picker shows the colour at once and
-// saves it when the picker is closed, so one choice is one save.
-export function CustomAccentColor({ color, disabled, onPreview, onChoose }: {
+// ColorCodeInput は、自分で決める色を選ぶ行: システムのカラーピッカーと、同じ色をコードで打つ欄。さし色と、
+// リモートセッションの枠の色が使う。ピッカーで動かしている間は onPreview で見せ、閉じたときに onChoose で
+// 保存するので、1回の選択が1回の保存になる。
+export function ColorCodeInput({ color, disabled, labels, contrastAgainst, onPreview, onChoose }: {
   color: string;
   disabled: boolean;
+  // labels は、ピッカーと打つ欄の名前と、背景と見分けにくい色のときに出す注意。
+  labels: { picker: string; code: string; lowContrast: string };
+  // contrastAgainst は、この色が見分けられないと困る背景の色の CSS 変数（--ui-sidebar など）。
+  contrastAgainst: string;
   onPreview: (color: string) => void;
   onChoose: (color: string) => void;
 }) {
@@ -39,14 +43,14 @@ export function CustomAccentColor({ color, disabled, onPreview, onChoose }: {
     return () => element.removeEventListener("change", commit);
   }, [onChoose]);
 
-  // The colour must stand out from the page it sits on in the theme on screen (the settings board is the
-  // sidebar colour). The probe carries that theme itself, so it reads the right colour in the same commit
-  // that changes the theme, before ThemeProvider has put the theme on <html>.
+  // The colour must stand out from the page it sits on in the theme on screen. The probe carries that theme
+  // itself, so it reads the right colour in the same commit that changes the theme, before ThemeProvider has put
+  // the theme on <html>.
   useEffect(() => {
     if (pageProbe.current === null) return;
-    const page = parseAccentColor(getComputedStyle(pageProbe.current).getPropertyValue("--ui-sidebar"));
+    const page = parseAccentColor(getComputedStyle(pageProbe.current).getPropertyValue(contrastAgainst));
     setLowContrast(page !== null && contrastRatio(color, page) < minimumAccentContrast);
-  }, [color, resolved]);
+  }, [color, resolved, contrastAgainst]);
 
   function commitTyped() {
     const parsed = parseAccentColor(typed);
@@ -65,7 +69,7 @@ export function CustomAccentColor({ color, disabled, onPreview, onChoose }: {
         <input
           ref={picker}
           type="color"
-          aria-label={t("appearance.customColor")}
+          aria-label={labels.picker}
           value={color}
           disabled={disabled}
           onChange={(event) => onPreview(event.target.value)}
@@ -73,7 +77,7 @@ export function CustomAccentColor({ color, disabled, onPreview, onChoose }: {
         />
         <input {...asciiTextEntry}
           type="text"
-          aria-label={t("appearance.customColorCode")}
+          aria-label={labels.code}
           aria-invalid={typedInvalid}
           value={typed}
           disabled={disabled}
@@ -86,7 +90,7 @@ export function CustomAccentColor({ color, disabled, onPreview, onChoose }: {
         />
       </div>
       {typedInvalid ? <p className="text-xs text-danger">{t("appearance.customColorInvalid")}</p> : null}
-      {lowContrast ? <Notice compact>{t("appearance.customColorLowContrast")}</Notice> : null}
+      {lowContrast ? <Notice compact>{labels.lowContrast}</Notice> : null}
     </div>
   );
 }

@@ -438,6 +438,57 @@ test("switches the remote session by name from the command search, by its number
   await expect(frame).toHaveCount(0);
 });
 
+// 枠の色は、その sshc エンジンの接続先（このマシンの Connections）の色。リモートセッションを選んでいる間、Connections は
+// リモートの接続先を出すので、一覧の［…］から開くと localhost に戻って、このマシンの接続先を開く。
+test("opens the settings of a remote session's connection on this machine from its menu, and frames the window in the colour given there", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  const frame = page.locator("[data-remote-session-frame]");
+  await expect(frame).toBeVisible();
+  const asked: string[] = [];
+  page.on("request", (request) => asked.push(new URL(request.url()).pathname));
+
+  await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
+  await page.getByRole("button", { name: "Actions for engine bastion", exact: true }).click();
+  await page.getByRole("button", { name: "Open connection settings (back to localhost)", exact: true }).click();
+  await expect(frame).toHaveCount(0);
+  await expect(page).toHaveURL(/\/connections\/servers\?.*host=bastion&panel=sshc/);
+  await page.getByLabel("Colour", { exact: true }).fill("#2f7fd8");
+  const save = page.getByRole("button", { name: "Save sshc-only settings", exact: true });
+  await save.click();
+  await expect(save).toBeHidden();
+  expect(asked.filter((path) => path.startsWith("/api/v1/engines/bastion/config"))).toEqual([]);
+
+  await chooseBastion(page);
+  await expect(frame).toHaveCSS("border-top-color", "rgb(47, 127, 216)");
+});
+
+// 接続先に色が無ければ、さし色。設定（Appearance）で決めた色があれば、そちら。
+test("frames the window in the accent colour, or in the colour chosen in Settings, for a connection with no colour", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  const frame = page.locator("[data-remote-session-frame]");
+  const accent = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--ui-accent)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  await expect(frame).toHaveCSS("border-top-color", accent);
+
+  await page.goto(new URL("/settings/appearance", page.url()).toString());
+  const field = page.getByRole("group", { name: "Remote session frame colour", exact: true });
+  await field.getByRole("button", { name: "Custom", exact: true }).click();
+  const code = page.getByLabel("Remote session frame colour code", { exact: true });
+  await code.fill("#22aa55");
+  await code.press("Enter");
+  await expect(frame).toHaveCSS("border-top-color", "rgb(34, 170, 85)");
+});
+
 test("keeps this machine's terminal as it was while a remote session engine is shown", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
   await openApplication(page, installation);

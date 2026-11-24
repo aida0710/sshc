@@ -5,6 +5,7 @@ import { act, render, renderHook, screen, waitFor, within } from "@testing-libra
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
+import type { HostEntry } from "../api/config";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
 import { engineActionLog } from "../testing/engineActionLog";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "../terminal/useRemoteVaultUnlock";
@@ -62,7 +63,7 @@ function incompatibleEngine() {
 function SwitcherWithDialogs({ state }: { state: RunTargetsState }) {
   const [openFor, setOpenFor] = useState<string | null>(null);
   const engineInfo = { openFor, ask: setOpenFor, close: () => setOpenFor(null) };
-  return <RunTargetSwitcher targets={{ ...state, engineInfo }} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />;
+  return <RunTargetSwitcher targets={{ ...state, engineInfo }} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />;
 }
 
 describe("useRemoteVaultUnlock", () => {
@@ -82,7 +83,7 @@ describe("useRunTargets", () => {
     const api = enginesApi();
     const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v1", api }));
     await waitFor(() => expect(result.current.engines).toEqual(["r100"]));
-    act(() => result.current.select("r100"));
+    act(() => { result.current.select("r100"); });
     expect(result.current.selected).toBe("r100");
     expect(currentSettings()?.state.interface?.runTarget).toBe("r100");
 
@@ -108,29 +109,29 @@ describe("RunTargetSwitcher says how the connection is going", () => {
   const chosen = targets({ selected: "r100" });
 
   it("names the run target as usual once it answered", () => {
-    render(<RunTargetSwitcher targets={chosen} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Choose the remote session engine (now: r100)" })).toHaveTextContent("Remote sessionr100");
   });
 
   it("says it is connecting while the host has not answered", () => {
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "connecting", connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "connecting", connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Choose the remote session engine (now: r100, Connecting)" })).toHaveTextContent("Connectingr100");
   });
 
   it("says the same while only the engine has not answered", () => {
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "awaitingEngine" })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "awaitingEngine" })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: /Connecting/ })).toBeInTheDocument();
   });
 
   it("says this machine is loading while its sessions are read", () => {
-    render(<RunTargetSwitcher targets={targets()} link={linkState({ phase: "loading" })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={targets()} link={linkState({ phase: "loading" })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Choose the remote session engine (now: localhost, Loading)" })).toHaveTextContent("Loadinglocalhost");
   });
 
   it("does not show a green mark for a host it cannot reach, and gives the reason in the list", async () => {
     const user = userEvent.setup();
     const refusal = new ApiError("remote_engine_unreachable", 502, { code: "remote_engine_unreachable", message: "request rejected" });
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     const trigger = screen.getByRole("button", { name: "Choose the remote session engine (now: r100, Can't connect)" });
     expect(trigger.querySelector("[data-link-mark]")).toHaveAttribute("data-link-mark", "failed");
     await user.click(trigger);
@@ -144,7 +145,7 @@ describe("RunTargetSwitcher says how the connection is going", () => {
     const refusal = new ApiError("remote_engine_vault_locked", 423, { code: "remote_engine_vault_locked", message: "request rejected" });
     const state = targets({ selected: "r100" });
     const onShowTerminal = vi.fn();
-    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal })} aliases={["r100"]} hosts={[]} onShowTerminal={onShowTerminal} />);
+    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal })} aliases={["r100"]} hosts={[]} onShowTerminal={onShowTerminal} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /Choose the remote session engine/ }));
     await user.click(screen.getByRole("button", { name: /^r100/ }));
     expect(state.vaultUnlock.ask).toHaveBeenCalledWith("r100");
@@ -157,7 +158,7 @@ describe("RunTargetSwitcher says how the connection is going", () => {
     const refusal = new ApiError("remote_engine_unreachable", 502, { code: "remote_engine_unreachable", message: "request rejected" });
     const state = targets({ selected: "r100" });
     const onShowTerminal = vi.fn();
-    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={onShowTerminal} />);
+    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={onShowTerminal} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /Choose the remote session engine/ }));
     await user.click(screen.getByRole("button", { name: /^r100/ }));
     expect(onShowTerminal).toHaveBeenCalledOnce();
@@ -166,13 +167,13 @@ describe("RunTargetSwitcher says how the connection is going", () => {
 
   it("names a locked Vault rather than a failed connection", () => {
     const refusal = new ApiError("remote_engine_vault_locked", 423, { code: "remote_engine_vault_locked", message: "request rejected" });
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: /Locked/ })).toBeInTheDocument();
   });
 
   it("marks the other run targets by whether this machine is connected to them", async () => {
     const user = userEvent.setup();
-    render(<RunTargetSwitcher targets={targets({ engines: ["r100", "nas"] })} link={linkState()} aliases={["r100", "nas"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={targets({ engines: ["r100", "nas"] })} link={linkState()} aliases={["r100", "nas"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /Choose the remote session engine/ }));
     expect(screen.getByRole("button", { name: /^r100/ })).toHaveTextContent("Connected");
     expect(screen.getByRole("button", { name: /^nas/ })).toHaveTextContent("Not connected");
@@ -184,7 +185,7 @@ describe("RunTargetSwitcher says how the connection is going", () => {
 describe("RunTargetSwitcher", () => {
   it("marks the switch and the engine whose terminals sent a notification nobody has seen", async () => {
     const user = userEvent.setup();
-    render(<RunTargetSwitcher targets={targets({ unread: new Set(["r100"]) })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={targets({ unread: new Set(["r100"]) })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     const trigger = screen.getByRole("button", { name: /^Choose the remote session engine/ });
     expect(within(trigger).getByText("Another engine has new notifications")).toBeInTheDocument();
     await user.click(trigger);
@@ -195,7 +196,7 @@ describe("RunTargetSwitcher", () => {
   it("chooses an engine from the list that opens upward", async () => {
     const user = userEvent.setup();
     const state = targets();
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     const list = screen.getByRole("list", { name: "Engines" });
     await user.click(within(list).getByRole("button", { name: /^r100/ }));
@@ -205,7 +206,7 @@ describe("RunTargetSwitcher", () => {
   it("offers opening the full screen in a new tab and removing an engine, not this machine", async () => {
     const user = userEvent.setup();
     const state = targets();
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     expect(screen.getAllByRole("button", { name: /^Actions for engine/ })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
@@ -213,6 +214,26 @@ describe("RunTargetSwitcher", () => {
     expect(state.openInNewTab).toHaveBeenCalledWith("r100");
     await user.click(screen.getByRole("button", { name: "Remove from the list" }));
     expect(state.remove).toHaveBeenCalledWith("r100");
+  });
+
+  // 色などの設定は、このマシンの Connections の接続先にある。リモートセッションを選んでいる間は localhost に戻って開くと言う。
+  it("opens the settings of the engine's connection on this machine, saying it goes back to localhost while a remote session is chosen", async () => {
+    const user = userEvent.setup();
+    const onOpenConnectionSettings = vi.fn();
+    const r100 = { identity: { path: "conf.d/20-lab.conf", alias: "r100" } } as HostEntry;
+    render(<RunTargetSwitcher targets={targets({ selected: "r100" })} link={linkState()} aliases={["r100"]} hosts={[r100]} onShowTerminal={vi.fn()} onOpenConnectionSettings={onOpenConnectionSettings} />);
+    await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
+    await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
+    await user.click(screen.getByRole("button", { name: "Open connection settings (back to localhost)" }));
+    expect(onOpenConnectionSettings).toHaveBeenCalledWith({ path: "conf.d/20-lab.conf", alias: "r100" });
+  });
+
+  it("does not offer the connection settings of an engine whose connection this machine no longer has", async () => {
+    const user = userEvent.setup();
+    render(<RunTargetSwitcher targets={targets()} link={linkState()} aliases={[]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
+    await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
+    expect(screen.queryByRole("button", { name: /^Open connection settings/ })).toBeNull();
   });
 
   it("shows the engine's version, Vault and sessions, and restarts it after saying its sessions end", async () => {
@@ -253,7 +274,7 @@ describe("RunTargetSwitcher", () => {
     });
     const vaultUnlock = vaultUnlockState({ unlockFor: "r100" });
     const status = vi.fn(async () => ({ alias: "r100", version: "v0.53.0", vault: true, unlocked: false, passwordless: false, sessions: 2 }));
-    render(<RunTargetSwitcher targets={targets({ api: enginesApi({ unlockVault, status }), vaultUnlock })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={targets({ api: enginesApi({ unlockVault, status }), vaultUnlock })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
 
     const dialog = screen.getByRole("dialog", { name: "Unlock the vault on r100" });
     const field = within(dialog).getByLabelText("Vault password for r100");
@@ -273,7 +294,7 @@ describe("RunTargetSwitcher", () => {
     const user = userEvent.setup();
     const status = vi.fn(async () => ({ alias: "r100", version: "v0.53.0", vault: false, unlocked: false, passwordless: false, sessions: 0 }));
     const state = targets({ api: enginesApi({ status }), vaultUnlock: vaultUnlockState({ unlockFor: "r100" }) });
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
 
     const dialog = await screen.findByRole("dialog", { name: "r100 has no vault" });
     await user.click(within(dialog).getByRole("button", { name: "Open its full screen in a new tab" }));
