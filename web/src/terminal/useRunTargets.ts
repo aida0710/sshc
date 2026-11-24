@@ -13,9 +13,11 @@ export type RunTargetsState = {
   engines: string[];
   // selected は、画面が使う sshc エンジン（Snippets・設定・同期・更新のほかの画面）。null はこのマシン。
   selected: string | null;
-  // problem は、足す・外す・別タブで開くが失敗した理由。次の操作まで残るので、dismissProblem で消せる。
-  problem: string;
+  // problem は、足す・外す・別タブで開くが失敗したこと。次の操作が済むまで残るので、dismissProblem で消せる。
+  problem: RunTargetProblem | null;
   dismissProblem: () => void;
+  // retryProblem は、失敗した操作を同じ接続先でやり直す。やり直している間も problem は残る。
+  retryProblem: () => Promise<void>;
   busy: boolean;
   // select は、画面が使う sshc エンジンを替える。保存していない下書きがあって、それを残すと決めたときは替えずに
   // false を返す（同じものを選んだときは true）。
@@ -33,6 +35,15 @@ export type RunTargetsState = {
   // engineInfo is the engine information dialog, from which an engine whose
   // version differs from this machine's is updated.
   engineInfo: EngineInfoDialogState;
+};
+
+export type RunTargetProblem = {
+  // message は、失敗の理由の1文（接続名を含む）。
+  message: string;
+  alias: string;
+  // code は、エンジンが断った語（remote_engine_not_running など）。知らせの形を決める。
+  code: string;
+  action: "add" | "remove" | "openInNewTab";
 };
 
 export type EngineInfoDialogState = {
@@ -63,7 +74,9 @@ export function useRunTargets({
   const [loaded, setLoaded] = useState(false);
   // The run target follows this machine's state, which choosing one here updates at once.
   const stored = interfaceState(useSettings().document, "runTarget");
-  const [problem, setProblem] = useState("");
+  // 前の失敗の知らせは、操作を始めたときには消さず、済んだか失敗したときに替える。［もう一度試す］の間に知らせが
+  // 消えて出直すと、押したボタンの待ちの印が見えず、フォーカスも外れ、開いた［直し方］も閉じるため。
+  const [problem, setProblem] = useState<RunTargetProblem | null>(null);
   const [busy, setBusy] = useState(false);
   const vaultUnlock = useRemoteVaultUnlock();
   const [engineInfoFor, setEngineInfoFor] = useState<string | null>(null);
@@ -86,28 +99,32 @@ export function useRunTargets({
 
   const select = useCallback((alias: string | null) => {
     if (alias !== selected && !mayChange()) return false;
-    setProblem("");
+    setProblem(null);
     keepMachineState("runTarget", alias ?? "");
     return true;
   }, [mayChange, selected]);
 
   // report shows why a request about an engine failed. A different version is
   // answered with the information dialog, whose Update fixes it.
-  const report = useCallback((error: unknown, alias: string) => {
-    if (failureCode(error) === "remote_engine_incompatible") setEngineInfoFor(alias);
-    else setProblem(runTargetProblemText(translate, error, alias));
+  const report = useCallback((error: unknown, alias: string, action: RunTargetProblem["action"]) => {
+    if (failureCode(error) === "remote_engine_incompatible") {
+      setProblem(null);
+      setEngineInfoFor(alias);
+      return;
+    }
+    setProblem({ message: runTargetProblemText(translate, error, alias), alias, code: failureCode(error), action });
   }, [translate]);
 
   const add = useCallback(async (alias: string) => {
-    setProblem("");
     setBusy(true);
     try {
       await api.add(alias);
       setEngines((current) => current.includes(alias) ? current : [...current, alias]);
+      setProblem(null);
       select(alias);
       return true;
     } catch (error) {
-      report(error, alias);
+      report(error, alias, "add");
       return false;
     } finally {
       setBusy(false);
@@ -115,33 +132,40 @@ export function useRunTargets({
   }, [api, report, select]);
 
   const remove = useCallback(async (alias: string) => {
-    setProblem("");
     try {
       const listed = await api.remove(alias);
       setEngines(listed.engines.map((engine) => engine.alias));
+      setProblem(null);
       if (stored === alias) select(null);
     } catch (error) {
-      report(error, alias);
+      report(error, alias, "remove");
     }
   }, [api, report, select, stored]);
 
   const openInNewTab = useCallback(async (alias: string) => {
-    setProblem("");
     // The tab is opened before the request so that the browser does not treat
     // it as a pop-up; the URL arrives when the relay is ready.
     const tab = window.open("", "_blank");
     try {
       const entrance = await api.open(alias);
+      setProblem(null);
       if (tab === null) window.location.assign(entrance.url);
       else tab.location.href = entrance.url;
     } catch (error) {
       tab?.close();
-      report(error, alias);
+      report(error, alias, "openInNewTab");
     }
   }, [api, report]);
 
-  const dismissProblem = useCallback(() => setProblem(""), []);
-  return { engines, selected, problem, dismissProblem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock, unread,
+  const dismissProblem = useCallback(() => setProblem(null), []);
+  const retryProblem = useCallback(async () => {
+    if (problem === null) return;
+    const { alias, action } = problem;
+    if (action === "add") await add(alias);
+    else if (action === "remove") await remove(alias);
+    else await openInNewTab(alias);
+  }, [add, openInNewTab, problem, remove]);
+  return { engines, selected, problem, dismissProblem, retryProblem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock, unread,
     engineInfo: { openFor: engineInfoFor, ask: setEngineInfoFor, close: closeEngineInfo },
   };
 }

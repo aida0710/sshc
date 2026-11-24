@@ -60,9 +60,19 @@ export function runTargetRefusalText(t: Translate, error: ApiError, alias: strin
       const key = connectFailureKey(error);
       return { heading: t("runTarget.connectFailedHeading", { alias }), reason: key === null ? "" : t(key, { alias }) };
     }
+    // 打つコマンドはパネルが RemoteEngineStartCommands で並べるので、理由の文は無い。
+    case "remote_engine_not_running":
+      return { heading: t("runTarget.notRunningHeading", { alias }), reason: "" };
     default:
       return { heading: unavailable, reason: runTargetProblemText(t, error, alias) };
   }
+}
+
+// runTargetRefusalCause は、一覧の行に、接続できない理由を1文で添える。どうすればよいか（打つコマンドなど）は
+// ターミナルの領域のパネルが言うので、ここでは言わない。
+export function runTargetRefusalCause(t: Translate, error: ApiError, alias: string): string {
+  if (error.code === "remote_engine_not_running") return t("runTarget.notRunningTitle");
+  return runTargetRefusalText(t, error, alias).reason;
 }
 
 // runTargetRefusalState names the state of a run target that refused in a word or two, for the run target switcher.

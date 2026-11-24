@@ -1,15 +1,16 @@
 import { useEffect, useId, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "./icons";
+import { noticeFrameColours } from "./noticeTones";
 
 // The colour of a card says what it waits for: a decision of the person (question), the engine working on it
 // (notice), or the person after it stopped (ended).
 export type NoticeTone = "question" | "notice" | "ended";
 
 const toneClasses: Record<NoticeTone, { frame: string; kicker: string }> = {
-  question: { frame: "border-accent/50 bg-[color-mix(in_srgb,var(--ui-accent)_10%,var(--ui-card))]", kicker: "text-accent" },
-  notice: { frame: "border-notice-line bg-[color-mix(in_srgb,var(--ui-notice-ink)_8%,var(--ui-card))]", kicker: "text-notice-ink" },
-  ended: { frame: "border-danger/45 bg-[color-mix(in_srgb,var(--ui-danger)_9%,var(--ui-card))]", kicker: "text-danger" },
+  question: { frame: noticeFrameColours.accent, kicker: "text-accent" },
+  notice: { frame: noticeFrameColours.notice, kicker: "text-notice-ink" },
+  ended: { frame: noticeFrameColours.danger, kicker: "text-danger" },
 };
 
 // A card's buttons are as tall as a finger needs on a phone.

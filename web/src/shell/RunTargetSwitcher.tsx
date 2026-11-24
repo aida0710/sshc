@@ -1,15 +1,15 @@
 import { useRef, useState } from "react";
 import type { HostEntry, HostIdentity } from "../api/config";
 import { useTranslate } from "../i18n/context";
-import { runTargetRefusalState, runTargetRefusalText } from "../terminal/runTargetProblem";
+import { runTargetRefusalCause, runTargetRefusalState } from "../terminal/runTargetProblem";
 import type { RunTargetLink } from "../terminal/useRunTargetLink";
 import type { RunTargetsState } from "../terminal/useRunTargets";
 import { Icon } from "../ui/icons";
 import { menuItemClass } from "../ui/menuStyle";
-import { Notice } from "../ui/surface";
 import { Spinner } from "../ui/Spinner";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { EngineInfoDialog } from "./EngineInfoDialog";
+import { RunTargetProblemNotice } from "./RunTargetProblemNotice";
 import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
 import { chooseRunTarget, runTargetChoices } from "./runTargetChoice";
@@ -73,7 +73,7 @@ export function RunTargetSwitcher({
     const settledNote = alias === null ? t("runTarget.thisMachineNote") : connected ? t("runTarget.stateConnected") : t("runTarget.stateNotConnected");
     const note = (chosen ? chosenState : null) ?? settledNote;
     // The note already says it could not connect; this adds why, when that is known.
-    const refusalReason = chosen && link.refusal !== null ? runTargetRefusalText(t, link.refusal, name).reason : "";
+    const refusalReason = chosen && link.refusal !== null ? runTargetRefusalCause(t, link.refusal, name) : "";
     // connection は、このマシンの SSH の設定にあるその接続先。消したものには、設定を開く項目を出さない。
     const connection = alias === null ? undefined : hosts.find((host) => host.identity.alias === alias);
     return (
@@ -146,7 +146,11 @@ export function RunTargetSwitcher({
           </button>
         </div>
       ) : null}
-      {targets.problem === "" ? null : <Notice tone="danger" compact onDismiss={targets.dismissProblem}>{targets.problem}</Notice>}
+      {targets.problem === null ? null : (
+        <div className="mb-2">
+          <RunTargetProblemNotice problem={targets.problem} onRetry={targets.retryProblem} onDismiss={targets.dismissProblem} />
+        </div>
+      )}
       <button
         ref={triggerRef}
         type="button"

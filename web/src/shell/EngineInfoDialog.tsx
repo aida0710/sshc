@@ -11,6 +11,7 @@ import { CommandOutput } from "../ui/CommandOutput";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
+import { RunTargetProblemNotice } from "./RunTargetProblemNotice";
 
 // engineActions are listed in the order the dialog offers them.
 const engineActions: RemoteEngineAction[] = ["update", "restart", "stop"];
@@ -70,7 +71,7 @@ export function EngineInfoDialog({
         {info.remoteVersion === null ? null : (
           <Notice tone="danger" compact>{t("engineInfo.incompatible", { alias })}</Notice>
         )}
-        {info.problem === "" ? null : <Notice tone="danger" compact>{info.problem}</Notice>}
+        {info.problem === null ? null : <RunTargetProblemNotice problem={{ ...info.problem, alias }} showAlias={false} />}
         <div className="flex flex-wrap gap-2">
           {engineActions.map((action) => (
             <Button key={action} kind={action === "update" ? "primary" : action === "stop" ? "danger" : "secondary"} disabled={busy} onClick={() => setConfirming(action)}>

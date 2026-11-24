@@ -1,5 +1,5 @@
 import { createRef } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Button, Card, Notice, Row } from "./surface";
@@ -96,6 +96,32 @@ describe("Notice", () => {
     render(<Notice tone="success">Saved.</Notice>);
     expect(screen.getByRole("status")).toHaveTextContent("Saved.");
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("puts what happened first, and keeps the details folded until they are opened", async () => {
+    const user = userEvent.setup();
+    render(
+      <Notice tone="danger" title="Could not sync." details={{ label: "More details", content: <code>sync_internal_failed</code> }}>
+        The other machine did not answer.
+      </Notice>,
+    );
+
+    const notice = screen.getByRole("alert");
+    expect(within(notice).getByText("Could not sync.")).toBeVisible();
+    expect(within(notice).getByText("The other machine did not answer.")).toBeVisible();
+    expect(within(notice).getByText("sync_internal_failed")).not.toBeVisible();
+    await user.click(within(notice).getByText("More details"));
+    expect(within(notice).getByText("sync_internal_failed")).toBeVisible();
+  });
+
+  it("can be hidden when it is given a way to hide", async () => {
+    const user = userEvent.setup();
+    const dismiss = vi.fn();
+    render(<Notice tone="danger" onDismiss={dismiss}>Could not remove r100.</Notice>);
+
+    await user.click(screen.getByRole("button", { name: "Hide this notice" }));
+
+    expect(dismiss).toHaveBeenCalledOnce();
   });
 });
 

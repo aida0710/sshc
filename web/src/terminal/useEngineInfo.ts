@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError } from "../api/client";
+import { ApiError, failureCode } from "../api/client";
 import type { RemoteEnginesApi, RemoteEngineStatus } from "../api/remoteEngines";
 import type { Translate } from "../i18n/context";
 import { runTargetProblemText } from "./runTargetProblem";
@@ -9,7 +9,8 @@ export type EngineInfoState = EngineActionState & {
   status: RemoteEngineStatus | null;
   // problem says why the status could not be read. The actions stay offered:
   // an incompatible engine is the one that needs updating.
-  problem: string;
+  // code は、エンジンが断った語。動いていないときは、知らせに接続先で打つコマンドを添える。
+  problem: { message: string; code: string } | null;
   // remoteVersion is the version of an engine refused as incompatible.
   remoteVersion: string | null;
 };
@@ -30,19 +31,19 @@ export function useEngineInfo({
   vaultRevision: number;
 }): EngineInfoState {
   const [status, setStatus] = useState<RemoteEngineStatus | null>(null);
-  const [problem, setProblem] = useState("");
+  const [problem, setProblem] = useState<EngineInfoState["problem"]>(null);
   const [remoteVersion, setRemoteVersion] = useState<string | null>(null);
 
   const readStatus = useCallback(async () => {
     try {
       setStatus(await api.status(alias));
-      setProblem("");
+      setProblem(null);
       setRemoteVersion(null);
     } catch (error) {
       setStatus(null);
       const incompatible = error instanceof ApiError && error.code === "remote_engine_incompatible";
       setRemoteVersion(incompatible ? error.problem?.detail ?? "" : null);
-      setProblem(incompatible ? "" : runTargetProblemText(translate, error, alias));
+      setProblem(incompatible ? null : { message: runTargetProblemText(translate, error, alias), code: failureCode(error) });
     }
   }, [alias, api, translate]);
 

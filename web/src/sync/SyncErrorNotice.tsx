@@ -1,15 +1,10 @@
-import { MoreDetails } from "../ui/MoreDetails";
+import { useTranslate } from "../i18n/context";
 import { Notice } from "../ui/surface";
 
 export function SyncErrorNotice({ message, code }: { message: string; code: string }) {
+  const t = useTranslate();
   if (message === "") return null;
-  return (
-    <Notice tone="danger">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span>{message}</span>
-        {/* The code is for a bug report or a search, not for reading first. */}
-        {code === "" ? null : <MoreDetails><code>{code}</code></MoreDetails>}
-      </div>
-    </Notice>
-  );
+  // The code is for a bug report or a search, not for reading first.
+  const details = code === "" ? undefined : { label: t("ui.moreDetails"), content: <code className="text-xs text-ink-muted">{code}</code> };
+  return <Notice tone="danger" details={details}>{message}</Notice>;
 }

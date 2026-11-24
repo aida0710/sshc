@@ -599,19 +599,34 @@ test("selects a newly added engine and shows it is incompatible in the terminal 
   await expect(panel.getByRole("button", { name: "Update bastion", exact: true })).toBeVisible();
 });
 
-// 足せなかった理由はサイドバーの一番下に出て、どの画面でも見えたまま次の操作まで残る。［×］で消せる。
-test("lets the reason an engine could not be added be dismissed from the sidebar", async ({ page, installation }) => {
+// 足せなかった理由はサイドバーの一番下に出て、どの画面でも見えたまま次の操作まで残る。接続先で打つコマンドは
+// ［直し方］に畳んである。［もう一度試す］で同じ接続先にもう一度頼み、［×］で消せる。
+test("says why an engine could not be added in the sidebar, with the fix folded, a retry and a way to hide it", async ({ page, installation }) => {
   await stubRunTarget(page, { added: false });
+  let additions = 0;
   await page.route("**/api/v1/engines", async (route) => {
     if (route.request().method() !== "POST") return route.fallback();
+    additions += 1;
     await route.fulfill({ status: 502, contentType: "application/problem+json", json: { code: "remote_engine_not_running", message: "request rejected" } });
   });
   await openApplication(page, installation);
   await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
   await page.getByRole("button", { name: "Add an engine…", exact: true }).click();
   await page.getByRole("dialog", { name: "Add the engine on an SSH host", exact: true }).getByRole("button", { name: /^bastion/ }).click();
-  const reason = page.getByRole("alert").filter({ hasText: "The sshc engine is not running on bastion." });
+  const reason = page.getByRole("alert").filter({ hasText: "The sshc engine is not running" });
   await expect(reason).toBeVisible();
+  await expect(reason.getByText("bastion", { exact: true })).toBeVisible();
+  const command = reason.getByText("sshc service install", { exact: true });
+  await expect(command).toBeHidden();
+  await reason.getByText("How to fix", { exact: true }).click();
+  await expect(command).toBeVisible();
+  await expect(reason.getByRole("button", { name: "Copy sshc open", exact: true })).toBeVisible();
+
+  await reason.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect.poll(() => additions).toBe(2);
+  await expect(reason).toBeVisible();
+  await expect(command).toBeVisible();
+
   await reason.getByRole("button", { name: "Hide this notice", exact: true }).click();
   await expect(reason).toHaveCount(0);
 });
