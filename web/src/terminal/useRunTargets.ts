@@ -11,8 +11,7 @@ import { useRunTargetUnread } from "./useRunTargetUnread";
 export type RunTargetsState = {
   // engines are the SSH hosts whose engine was added as a run target.
   engines: string[];
-  // selected is the run target whose terminals the sidebar and terminal show;
-  // null is this machine.
+  // selected は、画面が使う sshc エンジン（Snippets・設定・同期・更新のほかの画面）。null はこのマシン。
   selected: string | null;
   problem: string;
   busy: boolean;
@@ -39,8 +38,8 @@ export type EngineInfoDialogState = {
   close: () => void;
 };
 
-// useRunTargets holds the run targets: this machine and the engines on SSH
-// hosts it forwards terminals to. The choice is remembered by this browser.
+// useRunTargets は、リモートセッションに選べる sshc エンジンを持つ。このマシンと、このマシンのエンジンが
+// 画面の操作を取り次ぐ SSH の接続先のエンジンである。選んだものはこのマシンの状態として残る。
 export function useRunTargets({
   translate,
   enabled,

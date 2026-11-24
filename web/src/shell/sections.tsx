@@ -105,8 +105,8 @@ export type SectionViewProps = {
   shell: Shell;
   // declared is what the SSH configuration of the engine the screens work with declares.
   declared: Declared;
-  // thisMachineDeclared is what this machine's own SSH configuration declares, for the sections that stay this
-  // machine's while a remote session is chosen (SFTP and Snippets).
+  // thisMachineDeclared は、このマシンの SSH の設定が宣言するもの。リモートセッションを選んでいても
+  // このマシンのものを出す画面（Snippets）が使う。
   thisMachineDeclared: Declared;
   sftpTarget: SFTPTarget | null;
   onSftpTargetHandled: (request: number) => void;

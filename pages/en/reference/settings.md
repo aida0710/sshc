@@ -60,13 +60,15 @@ Desktop uses a device-local stable port so bookmarks and the installed web app k
 
 ## Keyboard shortcuts
 
-Open **Menu → Keyboard shortcuts** to assign command search, terminal search, copy/paste, previous/next prompt, text size (larger, smaller, reset), quick commands, new session, close session, previous/next connection, previous/next pane of a split, splitting right or below, showing or hiding the navigation, Home and SFTP. Click a binding and press a chord with Ctrl, Alt or Win (⌘ on a Mac), or a function key. Escape cancels; Tab moves to the next control.
+Open **Menu → Keyboard shortcuts** to assign command search, terminal search, copy/paste, previous/next prompt, text size (larger, smaller, reset), quick commands, new session, close session, previous/next connection, previous/next pane of a split, splitting right or below, showing or hiding the navigation, Home, SFTP, and switching the remote session (previous/next and by number). Click a binding and press a chord with Ctrl, Alt or Win (⌘ on a Mac), or a function key. Escape cancels; Tab moves to the next control.
 
 Duplicate bindings are rejected. Use **Clear** to disable an action.
 
 | Action | Default keys |
 |---|---|
 | Connection switching | Alt+PageDown / Alt+PageUp |
+| Previous/next remote session | Alt+Shift+PageDown / Alt+Shift+PageUp |
+| Remote session 1 to 9 (Command on a Mac) | Ctrl+1 to Ctrl+9 |
 | Text size (Command on a Mac) | Ctrl+= (also Ctrl+; on a JIS keyboard) for larger, Ctrl+- for smaller and Ctrl+0 to go back to the settings' size |
 | Moving to the previous/next prompt | Ctrl+Shift+Up / Down (Command+Up / Down on a Mac) |
 | New session, close session, the panes, splitting, quick commands and showing or hiding the navigation | None |
@@ -75,6 +77,7 @@ Some actions have no default keys because the ones other terminals use (Ctrl+Shi
 
 - Text size, like a pinch, changes only that terminal and is not saved.
 - Closing a session asks first, as its × does.
+- A remote session's number is its place in the **Remote session** list; the first is localhost. While there is no remote session with a number, its key goes to the program in the terminal, where Ctrl+3 to Ctrl+8 are control characters such as Escape.
 - When the shell marks its prompts through OSC 133 (shell integration), the prompt keys pass over long output to the prompt's line. On mobile, choose it from the terminal's **…** menu.
 - Copy, paste, terminal search, the prompt keys, text size and quick commands apply inside the terminal. Paste retains its normal confirmation and editing flow.
 

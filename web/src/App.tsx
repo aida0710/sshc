@@ -76,6 +76,7 @@ import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
 import type { AppActionContext, SessionShortcut } from "./shell/appActions";
 import { useAppShortcuts, type SessionShortcutRequest } from "./shell/useAppShortcuts";
+import { chooseRunTarget, runTargetChoices } from "./shell/runTargetChoice";
 import { paneSessionIds, type PaneEdge } from "./terminal/splitView/layout";
 import { SplitRequestDialog } from "./terminal/splitView/SplitRequestDialog";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
@@ -83,9 +84,6 @@ import { useFocusBackAfterInert } from "./ui/useFocusBackAfterInert";
 import { Icon } from "./ui/icons";
 
 const transferReconcileIntervalMs = 2_000;
-
-// What SFTP or Home asked of this machine's terminals while they ran on a run
-// target: a session to open there, or one Home opened there to show.
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -138,8 +136,8 @@ export function App({
   // The screens work with the engine chosen for the remote session: what the SSH configuration declares, too.
   const engineApis = useEngineApisOf(runTargets.selected, runTargets.vaultUnlock.revision);
   const declared = useDeclaredConfig(state === "ready", section, engineApis.config);
-  // The screens that stay this machine's while a remote session is chosen (SFTP, Snippets) list this machine's
-  // connections. With this machine chosen that is `declared`, read once.
+  // リモートセッションを選んでいてもこのマシンのものを出す Snippets と、リモートセッションに足す sshc エンジンを選ぶ
+  // 一覧は、このマシンの接続先を並べる。このマシンを選んでいる間は、それは一度読んだ `declared` である。
   const declaredHere = useDeclaredConfig(state === "ready" && runTargets.selected !== null, section, configApi);
   const thisMachineDeclared = runTargets.selected === null ? declared : declaredHere;
   const [desktopNavigationWidth, resizeDesktopNavigation] = useColumnWidth(navigationWidth);
@@ -312,6 +310,17 @@ export function App({
     ? null
     : (edge: PaneEdge) => requestSplit({ targetSessionId: splittableSessionId, edge }), [requestSplit, splittableSessionId]);
 
+  // ターミナルの領域を見せる。リモートセッションを切り替えたときの接続の経過は、そこに出る。
+  const showTerminalArea = useCallback(() => {
+    closeNavigation();
+    navigate("Terminal");
+  }, [closeNavigation, navigate]);
+  const runTargetList = useMemo(() => runTargetChoices(runTargets.engines), [runTargets.engines]);
+  const chooseRunTargetHere = useCallback(
+    (alias: string | null) => chooseRunTarget({ targets: runTargets, link: runTargetLink, showTerminal: showTerminalArea }, alias),
+    [runTargets, runTargetLink, showTerminalArea],
+  );
+
   const appActionContext: AppActionContext = {
     terminalFace,
     orderedSessions: terminalSessions.sessions,
@@ -323,6 +332,9 @@ export function App({
     openPalette,
     requestSession,
     toggleNavigation,
+    runTargets: runTargetList,
+    selectedRunTarget: runTargets.selected,
+    chooseRunTarget: chooseRunTargetHere,
   };
   useAppShortcuts({ enabled: state === "ready", shortcuts, ...appActionContext });
 
@@ -517,10 +529,7 @@ export function App({
               closeNavigation();
               navigate("Terminal");
             }}
-            onShowTerminal={() => {
-              closeNavigation();
-              navigate("Terminal");
-            }}
+            onShowTerminal={showTerminalArea}
             canSplitSession={(id) => id === activeSessionId ? splitBesideActive !== null : splitView.canSplit(id)}
             onSplitSession={(id, edge) => {
               if (activeSessionId === null) return;

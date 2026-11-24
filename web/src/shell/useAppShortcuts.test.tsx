@@ -21,6 +21,9 @@ function ShortcutHarness({ ready, openPalette }: { ready: boolean; openPalette: 
     openPalette,
     requestSession: ignoreSession,
     toggleNavigation: ignoreNavigation,
+    runTargets: [null],
+    selectedRunTarget: null,
+    chooseRunTarget: ignoreNavigation,
   });
   return <p>{ready ? "ready" : "starting"}</p>;
 }
@@ -94,6 +97,9 @@ describe("useAppShortcuts on the terminal screen", () => {
       openPalette: ignoreNavigation,
       requestSession,
       toggleNavigation,
+      runTargets: [null],
+      selectedRunTarget: null,
+      chooseRunTarget: ignoreNavigation,
     }));
     return { showSession, requestSession, toggleNavigation, splitBesideActive };
   }
@@ -137,5 +143,65 @@ describe("useAppShortcuts on the terminal screen", () => {
     const { toggleNavigation } = setUp([]);
     press("b");
     expect(toggleNavigation).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useAppShortcuts for the remote session", () => {
+  function setUp(runTargets: readonly (string | null)[], selectedRunTarget: string | null) {
+    const chooseRunTarget = vi.fn();
+    renderHook(() => useAppShortcuts({
+      enabled: true,
+      shortcuts: defaultBindings,
+      terminalFace: true,
+      orderedSessions: [],
+      activeSessionId: null,
+      panes: [],
+      splitBesideActive: null,
+      navigate: ignoreNavigation,
+      showSession: ignoreSession,
+      openPalette: ignoreNavigation,
+      requestSession: ignoreSession,
+      toggleNavigation: ignoreNavigation,
+      runTargets,
+      selectedRunTarget,
+      chooseRunTarget,
+    }));
+    return chooseRunTarget;
+  }
+  function press(init: KeyboardEventInit): KeyboardEvent {
+    const pressed = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    document.dispatchEvent(pressed);
+    return pressed;
+  }
+
+  // Slack のワークスペースと同じく、番号はリモートセッションの一覧の並び（1番目はこのマシン）。
+  it("chooses the remote session of the number pressed, this machine being the first", () => {
+    const chooseRunTarget = setUp([null, "bastion", "warehouse"], null);
+    press({ key: "2", ctrlKey: true });
+    press({ key: "3", metaKey: true });
+    press({ key: "1", ctrlKey: true });
+    expect(chooseRunTarget.mock.calls).toEqual([["bastion"], ["warehouse"], [null]]);
+  });
+
+  // Ctrl+3〜8 はターミナルでは制御文字（Ctrl+3 は ESC）。その番号のリモートセッションが無い間は取らない。
+  it("leaves the key of a number with no remote session to the terminal", () => {
+    const chooseRunTarget = setUp([null, "bastion"], null);
+    const pressed = press({ key: "3", ctrlKey: true });
+    expect(pressed.defaultPrevented).toBe(false);
+    expect(chooseRunTarget).not.toHaveBeenCalled();
+  });
+
+  it("leaves every remote session key to the terminal while there is only this machine", () => {
+    const chooseRunTarget = setUp([null], null);
+    const pressed = [press({ key: "1", ctrlKey: true }), press({ key: "PageDown", altKey: true, shiftKey: true })];
+    expect(pressed.map((event) => event.defaultPrevented)).toEqual([false, false]);
+    expect(chooseRunTarget).not.toHaveBeenCalled();
+  });
+
+  it("goes to the next and the previous remote session, going round at either end", () => {
+    const chooseRunTarget = setUp([null, "bastion", "warehouse"], "warehouse");
+    press({ key: "PageDown", altKey: true, shiftKey: true });
+    press({ key: "PageUp", altKey: true, shiftKey: true });
+    expect(chooseRunTarget.mock.calls).toEqual([[null], ["bastion"]]);
   });
 });

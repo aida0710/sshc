@@ -37,6 +37,8 @@ Changing the remote vault's master password and recovering a damaged vault are n
 3. Open **Remote session** at the bottom of the sidebar and choose the host from **Add an engine…**.
 4. Choose the host in the list: the workspaces and sessions become that engine's, and the terminal heading says it runs there.
 
+The keyboard switches too. By default Alt+Shift+PageDown / Alt+Shift+PageUp go to the next and previous one, and Ctrl+1 to Ctrl+9 (Command+1 to Command+9 on a Mac) to the first to ninth in the list; the first is localhost. Typing "remote session" in the command search lists them by connection name as well. Change the keys in **Settings → Keyboard shortcuts**.
+
 While a remote session is chosen, every screen has a frame around the whole window and a tag with the connection name at the top edge. They go away when you switch back to localhost.
 
 Switching engines keeps the terminals you were shown behind the new engine's. When you switch back, their scrollback, the size you zoomed the text to and what you were typing in a phone's text box are as you left them. What is kept is the terminals that were shown and as many more as the setting for terminals kept behind allows.
