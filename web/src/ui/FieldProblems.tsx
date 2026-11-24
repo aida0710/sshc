@@ -15,7 +15,8 @@ export function FieldProblems({ problems, className = "" }: { problems: readonly
     <div className={`flex flex-col gap-0.5 ${className}`}>
       {shown.map((problem) => (
         <p key={problem.id} id={problem.id} className={`text-xs leading-[18px] ${problem.tone === "notice" ? "text-notice-ink" : "text-danger"}`}>
-          {t("form.fieldProblem", { field: problem.field, problem: problem.text })}
+          {/* 文が欄の名前で始まるなら（「ポートは1〜65535の…」）、名前を重ねない。 */}
+          {problem.text.startsWith(problem.field) ? problem.text : t("form.fieldProblem", { field: problem.field, problem: problem.text })}
         </p>
       ))}
     </div>
