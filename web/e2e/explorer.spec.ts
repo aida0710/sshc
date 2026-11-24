@@ -14,7 +14,7 @@ test("shows the Include hierarchy and edits an included file", async ({ page, in
   await expect(codeFieldLines(editor)).toContainText('UnknownFutureDirective some "quoted value" 3');
 
   await appendCodeFieldText(editor, "Host printer\n\tHostName 198.51.100.30\n");
-  expect(await clickAndAwait(page, "Save file", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
 
   const after = await installation.read("conf.d/10-home.conf");
   expect(after).toContain('UnknownFutureDirective some "quoted value" 3');

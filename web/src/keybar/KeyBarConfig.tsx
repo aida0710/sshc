@@ -3,7 +3,9 @@ import { useTranslate } from "../i18n/context";
 import { maxKeyBarPresetNameLength, maxKeyBarPresets } from "../rules/keyBar.generated";
 import { LibraryPresetChooser } from "../settings/LibraryPresetChooser";
 import { refreshPresetLibraries } from "../settings/presetLibrary";
+import { useDraftPart, useSettingsDraft } from "../settings/settingsDraftContext";
 import { Icon } from "../ui/icons";
+import { sameContents } from "../ui/jsonContents";
 import { PageSection } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { Button, Notice } from "../ui/surface";
@@ -20,12 +22,17 @@ type Editing = { kind: "create" } | { kind: "edit"; slot: KeySlot };
 
 // KeyBarConfig arranges the phone's key bar of a settings preset (the one being edited): a tap selects a key
 // in the order shown, the buttons under it move it, and a tap on a key on offer puts it after the selected one.
-// Every change is saved at once, in the key bar preset the settings preset chose, or in a new one when it
-// chose the default layout or a built-in one.
-export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
+// Saving keeps the order in the key bar preset the settings preset chose, or in a new one when it chose the default
+// layout or a built-in one.
+export function KeyBarConfig({ presetId }: { presetId: string }) {
   const t = useTranslate();
-  const library = useKeyBarPresets(presetId);
-  const layout = useKeyBarLayout(presetId);
+  const { document } = useSettingsDraft();
+  const library = useKeyBarPresets(presetId, document);
+  const savedLayout = useKeyBarLayout(presetId, document);
+  // draft is the order as edited, or null while it is as saved.
+  const [draft, setDraft] = useState<KeyBarLayout | null>(null);
+  const layout = draft ?? savedLayout;
+  const edited = draft !== null && !sameContents(draft, savedLayout);
   const [selected, setSelected] = useState<KeySlot | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [error, setError] = useState("");
@@ -37,24 +44,35 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
   // Another key bar preset is another order: what was selected in the last one means nothing in it.
   useEffect(() => { setSelected(null); }, [library.selected, presetId]);
 
-  async function save(next: KeyBarLayout, nextSelected: KeySlot | null) {
+  useDraftPart({
+    dirty: edited,
+    save: async () => {
+      if (draft === null) return;
+      await saveKeyBarLayout(draft, builtIn === undefined ? t("keyBar.newPresetName") : t("keyBar.newPresetNameFrom", { name: builtIn.name }), presetId);
+      // What was changed while it was being saved is still to be saved.
+      setDraft((current) => current === draft ? null : current);
+      // Saving in a new key bar preset chooses it, which clears the selection; the order is the same one.
+      setSelected(selected);
+    },
+    discard: () => { setDraft(null); setSelected(null); setError(""); },
+  });
+
+  function change(next: KeyBarLayout, nextSelected: KeySlot | null) {
     setError("");
-    try {
-      await saveKeyBarLayout(next, builtIn === undefined ? t("keyBar.newPresetName") : t("keyBar.newPresetNameFrom", { name: builtIn.name }), presetId);
-      setSelected(nextSelected);
-    } catch { setError(t("keyBar.saveFailed")); }
+    setDraft(next);
+    setSelected(nextSelected);
   }
 
   function place(key: KeyBarKey) {
     const placed = insertKey(layout, slot, key);
     if (placed === null) { setError(t("keyBar.rowFull")); return; }
-    void save(placed.layout, placed.slot);
+    change(placed.layout, placed.slot);
   }
 
   function keepCustomKey(key: CustomKey) {
     const current = editing;
     setEditing(null);
-    if (current?.kind === "edit") void save(replaceKey(layout, current.slot, key), current.slot);
+    if (current?.kind === "edit") change(replaceKey(layout, current.slot, key), current.slot);
     else place(key);
   }
 
@@ -80,7 +98,8 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
           }}
           limits={{ presets: maxKeyBarPresets, nameLength: maxKeyBarPresetNameLength }}
           copyNamed={(id, name) => ({ id, name, ...layout })}
-          onReset={() => save(defaultKeyBarLayout, null)}
+          edited={edited}
+          onReset={() => change(defaultKeyBarLayout, null)}
           onError={setError}
         />
         <p className="mb-1.5 mt-3 text-xs text-ink-faint">{t("keyBar.orderHint")}</p>
@@ -89,20 +108,20 @@ export function KeyBarConfig({ presetId }: { presetId?: string } = {}) {
           <Button small disabled={unavailable || slot === null || slot.index === 0} onClick={() => {
             if (slot === null) return;
             const result = moveKey(layout, slot, -1);
-            void save(result.layout, result.slot);
+            change(result.layout, result.slot);
           }}><span className="inline-flex items-center gap-1"><Icon name="arrowLeft" className="size-3.5" />{t("keyBar.moveBack")}</span></Button>
           <Button small disabled={unavailable || slot === null || slot.index === layout[slot.row].length - 1} onClick={() => {
             if (slot === null) return;
             const result = moveKey(layout, slot, 1);
-            void save(result.layout, result.slot);
+            change(result.layout, result.slot);
           }}><span className="inline-flex items-center gap-1">{t("keyBar.moveForward")}<Icon name="arrowRight" className="size-3.5" /></span></Button>
-          <Button small disabled={unavailable || moved === null} onClick={() => { if (moved !== null) void save(moved.layout, moved.slot); }}>
+          <Button small disabled={unavailable || moved === null} onClick={() => { if (moved !== null) change(moved.layout, moved.slot); }}>
             {slot?.row === "moreKeys" ? t("keyBar.toKeys") : t("keyBar.toMore")}
           </Button>
           {selectedKey !== undefined && selectedKey.key === undefined && slot !== null ? (
             <Button small disabled={unavailable} onClick={() => setEditing({ kind: "edit", slot })}>{t("keyBar.edit")}</Button>
           ) : null}
-          <Button small disabled={unavailable || slot === null} onClick={() => { if (slot !== null) void save(removeKey(layout, slot), null); }}>
+          <Button small disabled={unavailable || slot === null} onClick={() => { if (slot !== null) change(removeKey(layout, slot), null); }}>
             {/* The small button sets its own text colour; the span gives removing the danger colour, as drawn. */}
             <span className="text-danger">{t("keyBar.remove")}</span>
           </Button>

@@ -62,11 +62,7 @@ export function ConnectionSummary({
       <header className="flex items-center gap-2.5">
         <OperatingSystemIcon os={state.detail.metadata.os || state.detail.metadata.detectedOS} look="accentTile" />
         <div className="min-w-0 flex-1">
-          {/* The unsaved badge moves under a long name instead of squeezing it. */}
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <h3 id="connection-summary-heading" className="min-w-0 max-w-full truncate text-base font-semibold text-ink" title={summary.alias}>{summary.alias}</h3>
-            {dirty ? <span className="shrink-0 rounded-sm bg-notice px-2 py-0.5 text-xs font-medium text-notice-ink">{t("conn.summaryUnsaved")}</span> : null}
-          </div>
+          <h3 id="connection-summary-heading" className="truncate text-base font-semibold text-ink" title={summary.alias}>{summary.alias}</h3>
           <p className="truncate font-mono text-xs text-ink-faint" title={summary.endpoint}>{summary.endpoint}</p>
         </div>
         {phoneActionsSlot === null ? headerActions : <PageChromePortal slot={phoneActionsSlot}>{headerActions}</PageChromePortal>}

@@ -6,6 +6,7 @@ import { sizedControl } from "../ui/form";
 import { InputDialog } from "../ui/InputDialog";
 import { Button, Notice } from "../ui/surface";
 import { newIdentifier } from "../ui/randomIdentifier";
+import { useSettingsDraft } from "./settingsDraftContext";
 import { standardPresetId, updateMachine, updatePresets, useSettings, type SettingsPreset } from "./settingsStore";
 
 // The limits the engine keeps to (application.MaxPresets and MaxPresetNameLength).
@@ -21,8 +22,9 @@ export function presetName(preset: SettingsPreset, standardName: string): string
 
 // PresetPicker chooses the preset the settings pages edit, says whether this machine uses it (or offers to
 // use it here), and holds the actions that add, rename and delete presets. The standard preset cannot be
-// renamed or deleted. It sits above the list of settings pages, and at the top of each preset page on a
-// phone, where that list is not shown (layout "bar").
+// renamed or deleted. The actions act at once on the saved presets, so they wait while there are unsaved
+// changes. It sits above the list of settings pages, and at the top of each preset page on a phone, where
+// that list is not shown (layout "bar").
 export function PresetPicker({ editing, onEdit, layout }: {
   editing: string;
   onEdit: (id: string) => void;
@@ -30,6 +32,7 @@ export function PresetPicker({ editing, onEdit, layout }: {
 }) {
   const t = useTranslate();
   const { document } = useSettings();
+  const { dirty } = useSettingsDraft();
   const [naming, setNaming] = useState<Naming | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [failure, setFailure] = useState("");
@@ -38,6 +41,8 @@ export function PresetPicker({ editing, onEdit, layout }: {
   const edited = presets.find((preset) => preset.id === editing) ?? presets[0] ?? { id: standardPresetId };
   const editedName = presetName(edited, t("settings.presetStandard"));
   const unavailable = document === null;
+  const blocked = unavailable || dirty;
+  const blockedReason = dirty ? t("settings.saveOrDiscardFirst") : undefined;
 
   async function name(value: string) {
     setFailure("");
@@ -74,9 +79,9 @@ export function PresetPicker({ editing, onEdit, layout }: {
   }
 
   const actions: ActionMenuItem[] = [
-    { label: t("settings.presetCreate"), onSelect: () => { setFailure(""); setNaming({ kind: "create" }); }, disabled: unavailable || presets.length >= maxPresets },
-    { label: t("settings.presetRename"), onSelect: () => { setFailure(""); setNaming({ kind: "rename", name: editedName }); }, disabled: unavailable || edited.id === standardPresetId },
-    { label: t("settings.presetDelete"), onSelect: () => setDeleting(true), tone: "danger", disabled: unavailable || edited.id === standardPresetId },
+    { label: t("settings.presetCreate"), onSelect: () => { setFailure(""); setNaming({ kind: "create" }); }, disabled: blocked || presets.length >= maxPresets, title: blockedReason },
+    { label: t("settings.presetRename"), onSelect: () => { setFailure(""); setNaming({ kind: "rename", name: editedName }); }, disabled: blocked || edited.id === standardPresetId, title: blockedReason },
+    { label: t("settings.presetDelete"), onSelect: () => setDeleting(true), tone: "danger", disabled: blocked || edited.id === standardPresetId, title: blockedReason },
   ];
   const select = (
     <select aria-label={t("settings.presetToEdit")} className={sizedControl("w-full min-w-0")} value={edited.id} disabled={unavailable}
@@ -86,7 +91,7 @@ export function PresetPicker({ editing, onEdit, layout }: {
   );
   const status = edited.id === inUse
     ? <span className="min-w-0 truncate whitespace-nowrap rounded-full bg-accent/15 px-2 text-xs leading-5 text-ink">{t("settings.presetInUse")}</span>
-    : <Button small disabled={unavailable} onClick={useHere}>{t("settings.presetUseHere")}</Button>;
+    : <Button small disabled={blocked} title={blockedReason} onClick={useHere}>{t("settings.presetUseHere")}</Button>;
   const menu = <ActionMenu label={t("settings.presetActions", { name: editedName })} items={actions}
     triggerSize="compact" />;
 

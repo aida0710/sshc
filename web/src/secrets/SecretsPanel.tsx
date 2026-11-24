@@ -11,6 +11,10 @@ import { PageHeader, PageStateFrame, phoneCardFrame } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
+import { useToast } from "../ui/useToast";
+import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
+import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { CredentialAddPanel } from "./CredentialAddPanel";
 import { CredentialEditPanel } from "./CredentialEditPanel";
@@ -32,6 +36,9 @@ type SecretsPanelProps = {
   kind: CredentialKind;
   api?: SecretsApi;
   onLock?: () => void;
+  // Used to ask before leaving while a credential has unsaved changes.
+  onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
+  onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 };
 
 // Each kind has a page of its own. title is the same English name as in Menu and the top bar; heading names
@@ -56,8 +63,11 @@ export function SecretsPanel({
   kind,
   api: apiOverride,
   onLock,
+  onNavigationBlockerChange,
+  onNavigateLocation,
 }: SecretsPanelProps) {
   const t = useTranslate();
+  const showToast = useToast();
   const engineApis = useEngineApis();
   const api = apiOverride ?? engineApis.secrets;
   const compact = useMediaQuery(mobileViewportQuery);
@@ -68,6 +78,14 @@ export function SecretsPanel({
   const [adding, setAdding] = useState(false);
   const [openPanel, setOpenPanel] = useState<{ rowId: string; panel: RowPanel } | null>(null);
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
+  // editDirty is whether the open edit panel has changes not saved yet; opening another or leaving drops them.
+  const [editDirty, setEditDirty] = useState(false);
+  const draftDiscard = useDraftDiscardConfirmation({
+    dirty: editDirty,
+    discard: () => setOpenPanel(null),
+    onNavigationBlockerChange,
+    onNavigateLocation,
+  });
 
   const reload = useCallback(async () => {
     try {
@@ -205,12 +223,15 @@ export function SecretsPanel({
                           onSaved={(list) => {
                             setCredentialList(list);
                             setError("");
+                            setOpenPanel(null);
+                            showToast(t("draft.saved"), { tone: "success" });
                           }}
-                          onClose={() => setOpenPanel(null)}
+                          onClose={() => draftDiscard.confirmBefore(() => setOpenPanel(null))}
+                          onDirtyChange={setEditDirty}
                         />
                       ) : null}
                       actions={{
-                        onOpenPanel: (next) => setOpenPanel(next === null ? null : { rowId: row.id, panel: next }),
+                        onOpenPanel: (next) => draftDiscard.confirmBefore(() => setOpenPanel(next === null ? null : { rowId: row.id, panel: next })),
                         onDelete: () => setPendingDeletion(deletionOf(row)),
                         onUnassignTOTP: (host) => void run(() => api.unassignCredential("totp", host), t("secrets.unassignTOTPFailed")),
                       }}
@@ -226,6 +247,9 @@ export function SecretsPanel({
         ) : null}
       </div>
 
+      {draftDiscard.confirming ? (
+        <DiscardDraftDialog id="credential-draft-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />
+      ) : null}
       {pendingDeletion === null ? null : (
         <ConfirmDialog
           id="secrets-delete-heading"

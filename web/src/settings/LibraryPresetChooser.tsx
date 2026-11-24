@@ -5,7 +5,8 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { sizedControl } from "../ui/form";
 import { InputDialog } from "../ui/InputDialog";
 import { newIdentifier } from "../ui/randomIdentifier";
-import { defaultPresetId, type LibraryPreset, type PresetLibrary } from "./presetLibrary";
+import { defaultPresetId, withPresetChoice, type LibraryPreset, type PresetLibrary } from "./presetLibrary";
+import { usePresetInterfaceEdit, useSettingsDraft } from "./settingsDraftContext";
 
 // LibraryPresetLabels are the words of one library: what its presets are called on screen (キーの割り当て,
 // キーの並び) keeps them apart from the settings presets above them.
@@ -24,20 +25,25 @@ type Naming = "copy" | "rename";
 
 // LibraryPresetChooser chooses the preset of a library that a settings preset uses, and holds the actions that
 // copy, rename, reset and delete the library's presets. The defaults and the built-in presets are not saved presets:
-// they can be copied, not renamed, reset or deleted.
-export function LibraryPresetChooser<Preset extends LibraryPreset>({ library, builtIn = [], settingsPresetId, labels, limits, copyNamed, onReset, onError }: {
+// they can be copied, not renamed, reset or deleted. The choice and resetting wait in the draft; copying, renaming and
+// deleting act at once on the saved presets, so they wait while there are unsaved changes.
+export function LibraryPresetChooser<Preset extends LibraryPreset>({ library, builtIn = [], settingsPresetId, labels, limits, copyNamed, edited, onReset, onError }: {
   library: PresetLibrary<Preset>;
   builtIn?: readonly Preset[];
-  settingsPresetId?: string | undefined;
+  settingsPresetId: string;
   labels: LibraryPresetLabels;
   limits: { presets: number; nameLength: number };
   // copyNamed makes a new preset holding what is shown now.
   copyNamed: (id: string, name: string) => Preset;
-  onReset: () => Promise<void>;
+  // edited is whether the preset chosen has changes that are not saved; choosing another gives them up.
+  edited: boolean;
+  onReset: () => void;
   onError: (message: string) => void;
 }) {
   const t = useTranslate();
-  const state = library.usePresets(settingsPresetId);
+  const draft = useSettingsDraft();
+  const editInterface = usePresetInterfaceEdit(settingsPresetId);
+  const state = library.usePresets(settingsPresetId, draft.document);
   const [naming, setNaming] = useState<Naming | null>(null);
   const [deleting, setDeleting] = useState(false);
   const unavailable = state.loading || state.busy || state.error;
@@ -61,18 +67,26 @@ export function LibraryPresetChooser<Preset extends LibraryPreset>({ library, bu
     });
   }
 
+  function choose(id: string) {
+    const select = () => editInterface(library.choice, (settings) => withPresetChoice(settings, library.choice, id));
+    if (edited) draft.confirmBeforeDiscarding(select);
+    else select();
+  }
+
+  const blocked = unavailable || draft.dirty;
+  const blockedReason = draft.dirty ? t("settings.saveOrDiscardFirst") : undefined;
   const actions: ActionMenuItem[] = [
-    { label: t("presetLibrary.duplicate"), onSelect: () => setNaming("copy"), disabled: unavailable || state.presets.length >= limits.presets },
-    { label: t("presetLibrary.rename"), onSelect: () => setNaming("rename"), disabled: unavailable || chosen === undefined },
-    { label: labels.reset, onSelect: () => void attempt(onReset), disabled: unavailable || chosen === undefined },
-    { label: t("presetLibrary.delete"), onSelect: () => setDeleting(true), tone: "danger", disabled: unavailable || chosen === undefined },
+    { label: t("presetLibrary.duplicate"), onSelect: () => setNaming("copy"), disabled: blocked || state.presets.length >= limits.presets, title: blockedReason },
+    { label: t("presetLibrary.rename"), onSelect: () => setNaming("rename"), disabled: blocked || chosen === undefined, title: blockedReason },
+    { label: labels.reset, onSelect: onReset, disabled: unavailable || chosen === undefined },
+    { label: t("presetLibrary.delete"), onSelect: () => setDeleting(true), tone: "danger", disabled: blocked || chosen === undefined, title: blockedReason },
   ];
 
   return (
     <div>
       <div className="flex min-w-0 items-center gap-2">
         <select aria-label={labels.name} className={sizedControl("w-full min-w-0 md:max-w-xs")} value={state.selected} disabled={unavailable}
-          onChange={(event) => void attempt(() => library.select(event.target.value, settingsPresetId))}>
+          onChange={(event) => choose(event.target.value)}>
           <option value={defaultPresetId}>{labels.defaultName}</option>
           {builtIn.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
           {state.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}

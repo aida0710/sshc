@@ -1,11 +1,11 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider, useTranslate, useLanguage } from "./context";
 import { en, ja } from "./messages";
 import { detectLocale } from "./locale";
 import { localStorageKeys } from "../ui/browserStorageKeys";
-import { resetSettingsForTests } from "../settings/settingsStore";
+import { resetSettingsForTests, updateGlobalSettings } from "../settings/settingsStore";
 import { fakeSettingsServer, settingsDocument } from "../testing/settingsServer";
 
 afterEach(() => {
@@ -15,7 +15,7 @@ afterEach(() => {
 
 function Probe() {
   const t = useTranslate();
-  const { locale, setLocale, followBrowser } = useLanguage();
+  const { locale, setLocale } = useLanguage();
   return (
     <>
       <p>{t("shell.starting")}</p>
@@ -23,9 +23,6 @@ function Probe() {
       <p>{`locale:${locale}`}</p>
       <button type="button" onClick={() => setLocale("ja")}>
         to japanese
-      </button>
-      <button type="button" onClick={followBrowser}>
-        follow the browser
       </button>
     </>
   );
@@ -234,18 +231,16 @@ describe("the synced language", () => {
     expect(window.localStorage.getItem(localStorageKeys.locale)).toBe("ja");
   });
 
-  it("follows the browser when asked, forgetting both the choice and the copy", async () => {
-    const user = userEvent.setup();
+  it("follows the browser once the settings drop the chosen language, forgetting the copy", async () => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
-    const server = fakeSettingsServer({ global: { language: "ja" } });
+    fakeSettingsServer({ global: { language: "ja" } });
     render(<LanguageProvider><Probe /></LanguageProvider>);
     expect(screen.getByText("locale:ja")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "follow the browser" }));
+    await act(() => updateGlobalSettings(({ language: _previous, ...settings }) => settings));
 
     expect(screen.getByText("locale:en")).toBeInTheDocument();
     expect(window.localStorage.getItem(localStorageKeys.locale)).toBeNull();
-    await waitFor(() => expect(server.document().global.language).toBeUndefined());
   });
 });
 

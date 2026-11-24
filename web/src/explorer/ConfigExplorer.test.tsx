@@ -289,7 +289,7 @@ describe("ConfigExplorer", () => {
     const editor = await screen.findByLabelText(/File text/);
     await user.clear(editor);
     await user.type(editor, "Host nas\n\tUser root\n");
-    await user.click(screen.getByRole("button", { name: "Save file" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledWith({
       kind: "file_raw",
@@ -299,7 +299,7 @@ describe("ConfigExplorer", () => {
     }));
   });
 
-  it("shows Save file working until the save is answered, and holds the other file actions meanwhile", async () => {
+  it("shows Save working until the save is answered, and holds the other file actions meanwhile", async () => {
     const user = userEvent.setup();
     let answer: () => void = () => undefined;
     vi.mocked(configApi.save).mockImplementation(() => new Promise((resolve) => {
@@ -311,7 +311,7 @@ describe("ConfigExplorer", () => {
 
     await user.click(await screen.findByRole("button", { name: "conf.d/10-home.conf" }));
     await user.type(await screen.findByLabelText(/File text/), "\tPort 2222\n");
-    const save = screen.getByRole("button", { name: "Save file" });
+    const save = screen.getByRole("button", { name: "Save" });
     await user.click(save);
 
     expect(save).toHaveAttribute("aria-busy", "true");

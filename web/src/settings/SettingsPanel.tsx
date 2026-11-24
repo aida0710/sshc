@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { KeyConfig } from "../keyconfig/KeyConfig";
 import { KeyBarConfig } from "../keybar/KeyBarConfig";
 import { settingsApi, type SettingsApi } from "../api/settings";
@@ -21,9 +21,12 @@ import { standardPresetId, useSettings } from "./settingsStore";
 import { PageHeader } from "../ui/page";
 import { PageBoard } from "../ui/PageBoard";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
-import { useSettingsSaved } from "./SettingsSaved";
 import { SettingScopeTag, type SettingScope } from "./SettingScopeTag";
-import { FieldSavedContext } from "../ui/fieldSaved";
+import { SettingsDraftProvider } from "./SettingsDraftProvider";
+import { useSettingsDraft } from "./settingsDraftContext";
+import { SettingsSaveBar } from "./SettingsSaveBar";
+import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
+import { isImeComposing } from "../ui/imeComposition";
 
 // Settings also change the master password, which belongs to the vault.
 export type SettingsPanelApi = SettingsApi & Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
@@ -42,12 +45,11 @@ type SettingsPanelProps = {
   terminalSessions?: SessionSettingsState;
   // onNavigatePage moves to another settings page from the list beside the card.
   onNavigatePage?: (path: string) => void;
+  // 保存していない変更があるあいだ、ほかの画面へ移る前に確かめるために使う。
+  onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
+  onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 };
 
-// The settings page is a list of independent sections; each owns its own
-// form, load and save. This component decides which of them to show, and
-// which preset the preset pages edit: the one chosen above the list of pages
-// (or, on a phone, above the page), at first the one this machine uses.
 // pageScopes is how far the settings of a page reach, by its group. A part of a page that reaches elsewhere
 // (the master password on the Vault page) says so on its own heading.
 const pageScopes: Record<SettingsGroup, SettingScope> = {
@@ -57,15 +59,34 @@ const pageScopes: Record<SettingsGroup, SettingScope> = {
   actions: "thisMachine",
 };
 
-export function SettingsPanel({
+// The settings page is a list of independent sections. What is changed in any of them waits in one draft
+// (SettingsDraftProvider) until Save in the bar at the bottom. This component decides which sections to show, and
+// which preset the preset pages edit: the one chosen above the list of pages (or, on a phone, above the page), at
+// first the one this machine uses.
+export function SettingsPanel({ onNavigationBlockerChange, onNavigateLocation, ...props }: SettingsPanelProps) {
+  return (
+    <SettingsDraftProvider onNavigationBlockerChange={onNavigationBlockerChange} onNavigateLocation={onNavigateLocation}>
+      <SettingsPages {...props} />
+    </SettingsDraftProvider>
+  );
+}
+
+// savesOnEnter says whether Enter in this field saves the page: the one-line fields. In a box of lines Enter starts a
+// line, and on a button or a list it is that control's own.
+function savesOnEnter(field: EventTarget): boolean {
+  return field instanceof HTMLInputElement && ["text", "number"].includes(field.type);
+}
+
+function SettingsPages({
   api = settingsPanelApi,
   page = "All",
   terminalSessions,
   onVaultChanged,
   passwordless = false,
   onNavigatePage,
-}: SettingsPanelProps) {
+}: Omit<SettingsPanelProps, "onNavigationBlockerChange" | "onNavigateLocation">) {
   const t = useTranslate();
+  const draft = useSettingsDraft();
   const compact = useMediaQuery(mobileViewportQuery);
   const settingsDocument = useSettings().document;
   // chosenPreset is the preset someone picked to edit; until then the preset pages edit the one this machine
@@ -82,30 +103,36 @@ export function SettingsPanel({
   // On a phone the list of pages is not shown, so a preset page carries the picker itself.
   const presetPickerOnPage = (compact || onNavigatePage === undefined) && (all || settingsPageMeta[page].group === "preset");
 
-  const saved = useSettingsSaved();
+  // A dialog opened from the page has its own fields and Enter; its events reach here through React's tree only.
+  function saveOnEnter(event: KeyboardEvent) {
+    if (event.key !== "Enter" || isImeComposing(event) || !savesOnEnter(event.target)) return;
+    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+    draft.save();
+  }
 
-  // The list of pages on the left and the open page as one card, as in the design. "Saved" shows under the row
-  // changed (FieldRow), or beside the page's name for a change outside the rows, and is announced once here.
+  // Another preset's settings are another draft.
+  const editPreset = (id: string) => draft.confirmBeforeDiscarding(() => setChosenPreset(id));
+
+  // The list of pages on the left and the open page as one card, as in the design.
   return (
-    <FieldSavedContext.Provider value={saved.fieldSaved}>
-    <div className="contents" onChangeCapture={saved.forgetRow} onClickCapture={saved.forgetRow}>
+    <div className="contents" onKeyDown={saveOnEnter}>
     <PageBoard
+      saveBar
       aside={onNavigatePage === undefined ? null : (
-        <SettingsNavigation current={all ? null : page} onNavigate={onNavigatePage} editingPreset={editingPreset} onEditPreset={setChosenPreset} />
+        <SettingsNavigation current={all ? null : page} onNavigate={onNavigatePage} editingPreset={editingPreset} onEditPreset={editPreset} />
       )}
       className={mobileTouchTargets}
     >
       <PageHeader
         title={t(pageTitle)}
-        meta={all ? (saved.besidePageName ? saved.text : undefined) : (
-          <span className="inline-flex min-w-0 max-w-full items-center gap-2.5">
+        meta={all ? undefined : (
+          // A long preset name is cut short inside this frame rather than widening the page.
+          <span className="inline-flex min-w-0 max-w-full items-center">
             <SettingScopeTag scope={pageScopes[settingsPageMeta[page].group]} presetId={editingPreset} />
-            {saved.besidePageName ? saved.text : null}
           </span>
         )}
         description={pageDescription === undefined ? undefined : t(pageDescription)} titleOnPhone />
-      <p role="status" className="sr-only">{saved.shown ? saved.text : ""}</p>
-      {presetPickerOnPage ? <PresetPicker layout="bar" editing={editingPreset} onEdit={setChosenPreset} /> : null}
+      {presetPickerOnPage ? <PresetPicker layout="bar" editing={editingPreset} onEdit={editPreset} /> : null}
       {shows("General") ? <GeneralSettingsSection showHeading={all} /> : null}
       {shows("Appearance") ? <AppearanceSettingsSection presetId={editingPreset} showHeading={all} /> : null}
       {shows("Terminal") ? <TerminalSettingsSection api={api} presetId={editingPreset} showHeading={all} /> : null}
@@ -131,8 +158,8 @@ export function SettingsPanel({
       ) : null}
       {shows("Machines") ? <MachinesSettingsSection showHeading={all} /> : null}
       {terminalSessions !== undefined && shows("Connections") ? <SessionSettingsSection terminalSessions={terminalSessions} showHeading={all} /> : null}
+      <SettingsSaveBar />
     </PageBoard>
     </div>
-    </FieldSavedContext.Provider>
   );
 }

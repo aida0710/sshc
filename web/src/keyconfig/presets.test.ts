@@ -1,13 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { apiClient } from "../api/client";
-import { presetInterfaceOf } from "../settings/presetInterface";
+import { presetInterfaceOf, updatePresetInterface } from "../settings/presetInterface";
+import { withPresetChoice } from "../settings/presetLibrary";
 import { currentSettings } from "../settings/settingsStore";
 import { fakeSettingsServer } from "../testing/settingsServer";
 import { defaultBindings } from "./bindings";
 import { currentBindings, refreshPresets, savePresetBindings, shortcutPresetLibrary, usePresets, type Preset } from "./presets";
 
-const { select: selectPreset, update: updatePresets } = shortcutPresetLibrary;
+const { update: updatePresets } = shortcutPresetLibrary;
+const selectPreset = (id: string) => updatePresetInterface((settings) => withPresetChoice(settings, "shortcutPreset", id));
 
 let remote: Preset[];
 let server: ReturnType<typeof fakeSettingsServer>;

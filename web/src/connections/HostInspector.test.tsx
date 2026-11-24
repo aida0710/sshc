@@ -54,7 +54,7 @@ function build(): HostDetail {
 
 // saveButton は、下書きに変更があるときだけ現れる保存ボタンである。
 function saveButton() {
-  return screen.queryByRole("button", { name: "Save sshc-only settings" });
+  return screen.queryByRole("button", { name: "Save" });
 }
 
 describe("HostInspector", () => {
@@ -163,7 +163,8 @@ describe("HostInspector", () => {
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
     await user.click(saveButton()!);
 
-    expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+    expect(saveButton()).toBeDisabled();
+    expect(saveButton()).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("button", { name: "Discard changes" })).toBeDisabled();
     expect(screen.getByLabelText("Remote text encoding")).toBeDisabled();
     await act(async () => finish());

@@ -10,7 +10,7 @@ import { Button, Notice } from "../ui/surface";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
 import { fieldsIn, forwardEnds, hasProxyJump, isForwardAddition } from "./advancedFields";
 import { draftResetKey } from "./draftResetKey";
-import { DraftSaveBar } from "./DraftSaveBar";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import { EditorSection } from "./EditorSection";
 import { HostBlockText } from "./HostBlockText";
 import { useDraftSave } from "./useDraftSave";
@@ -329,10 +329,8 @@ export function AdvancedSettings({
 
       {fieldDirty ? (
         <DraftSaveBar
-          saveLabel={t("host.saveChanges")}
           saving={saving}
           saveDisabled={fieldsDisabled}
-          discardDisabled={saving}
           onDiscard={discard}
           onSave={submitFieldEdits}
         />

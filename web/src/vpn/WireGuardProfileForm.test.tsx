@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -36,11 +36,11 @@ const savedProfile: VPNProfile = {
 
 function renderEditing(revealSecrets: (name: string) => Promise<VPNSecrets>) {
   const onSave = vi.fn().mockResolvedValue({ saved: true });
-  const onCancel = vi.fn();
+  const onClose = vi.fn();
   render(
-    <VPNProfileForm busy={false} editing={savedProfile} revealSecrets={revealSecrets} onSave={onSave} onCancel={onCancel} />,
+    <VPNProfileForm busy={false} editing={savedProfile} revealSecrets={revealSecrets} onSave={onSave} onClose={onClose} />,
   );
-  return { onSave, onCancel, form: screen.getByRole("region", { name: "Edit provider" }) };
+  return { onSave, onClose, form: screen.getByRole("region", { name: "Edit provider" }) };
 }
 
 function configField(form: HTMLElement) {
@@ -52,7 +52,7 @@ function editConfig(form: HTMLElement, text: string) {
 }
 
 describe("VPNProfileForm with WireGuard", () => {
-  it("shows the whole stored configuration file, keys included, and saves it as it is", async () => {
+  it("shows the whole stored configuration file, keys included, and offers nothing to save until it changes", async () => {
     const user = userEvent.setup();
     const revealSecrets = vi.fn().mockResolvedValue({ wireguardConfig: storedConfig });
     const { onSave, form } = renderEditing(revealSecrets);
@@ -61,9 +61,11 @@ describe("VPNProfileForm with WireGuard", () => {
     expect(revealSecrets).toHaveBeenCalledWith("provider");
     expect(within(form).getByText("VPN servers (Endpoint): vpn.example.jp")).toBeVisible();
     expect(within(form).getByText("DNS inside the VPN (DNS): 10.64.0.1")).toBeVisible();
-    await user.click(within(form).getByRole("button", { name: "Save" }));
+    expect(within(form).queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
 
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith(savedProfile, { wireguardConfig: storedConfig }));
+    editConfig(form, `${storedConfig}# office\n`);
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(savedProfile, { wireguardConfig: `${storedConfig}# office\n` }));
   });
 
   it("puts the keys of a profile saved before configuration files back into the text it shows", async () => {
@@ -96,19 +98,20 @@ describe("VPNProfileForm with WireGuard", () => {
     ));
   });
 
-  it("forgets the configuration file it took out when editing is cancelled", async () => {
+  it("forgets the configuration file it took out when the page lets the edit close", async () => {
     const user = userEvent.setup();
-    const { onCancel, form } = renderEditing(vi.fn().mockResolvedValue({ wireguardConfig: storedConfig }));
+    const { onClose, form } = renderEditing(vi.fn().mockResolvedValue({ wireguardConfig: storedConfig }));
     await waitFor(() => expect(configField(form)).toHaveValue(storedConfig));
 
-    await user.click(within(form).getByRole("button", { name: "Cancel" }));
+    await user.click(within(form).getByRole("button", { name: "Close" }));
+    expect(configField(form)).toHaveValue(storedConfig);
+    const [forget] = onClose.mock.calls[0] as [() => void];
+    act(() => forget());
 
-    expect(onCancel).toHaveBeenCalled();
     expect(configField(form)).toHaveValue("");
   });
 
   it("keeps the stored file when it could not be taken out and the field is left blank", async () => {
-    const user = userEvent.setup();
     const { onSave, form } = renderEditing(vi.fn().mockRejectedValue(
       new ApiError("vault_locked", 409, { code: "vault_locked", message: "request rejected" }),
     ));
@@ -116,9 +119,12 @@ describe("VPNProfileForm with WireGuard", () => {
     expect(await within(form).findByText(/^The stored secrets could not be taken out of the vault\./)).toBeVisible();
     expect(configField(form)).toHaveValue("");
     expect(within(form).getByText(/^Leave blank to keep the stored file\./)).toBeVisible();
-    await user.click(within(form).getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith(savedProfile, {}));
+    // A file put in and taken out again leaves nothing to save.
+    editConfig(form, storedConfig);
+    expect(within(form).getByRole("button", { name: "Save" })).toBeEnabled();
+    editConfig(form, "");
+    expect(within(form).queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it("names a directive that runs a command as soon as it is written", async () => {

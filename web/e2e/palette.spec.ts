@@ -26,7 +26,7 @@ test("searches hosts, config files and settings from the keyboard", async ({ pag
   await page.getByLabel("Name", { exact: true }).fill("Update packages");
   await replaceCodeFieldText(codeField(page, "Command"), "sudo apt update");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("Snippet saved.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved your changes.", { exact: true })).toBeVisible();
 
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" });

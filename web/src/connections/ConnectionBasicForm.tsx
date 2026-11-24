@@ -1,5 +1,5 @@
 import { useEngineApis } from "../shell/engineApis";
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type { Problem } from "../api/client";
 import type { HostDetail, UpdateConnectionRequest } from "../api/config";
 import { type ConnectionSecretsApi } from "./secretsApi";
@@ -15,7 +15,7 @@ import { BasicPrivateKeyField } from "./BasicPrivateKeyField";
 import { BasicTOTPSection } from "./BasicTOTPSection";
 import { ConnectionDestinationFields } from "./ConnectionDestinationFields";
 import { EditorSection } from "./EditorSection";
-import { DraftSaveBar } from "./DraftSaveBar";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import {
   clearedKeyPassphrase,
   clearedPasswordChoice,
@@ -66,6 +66,7 @@ export function ConnectionBasicForm({
   checks = null,
 }: ConnectionBasicFormProps) {
   const t = useTranslate();
+  const formId = useId();
   const engineApis = useEngineApis();
   const keys = keysOverride ?? engineApis.keys;
   const secretsApi = secretsOverride ?? engineApis.secrets;
@@ -226,7 +227,7 @@ export function ConnectionBasicForm({
   const file = detail.form.entry.file;
 
   return (
-    <form className="flex flex-col" onSubmit={submit}>
+    <form id={formId} className="flex flex-col" onSubmit={submit}>
       {secrets.error === "" || problem !== null ? null : <Notice tone="danger">{secrets.error}</Notice>}
 
       <fieldset disabled={disabled} className="contents">
@@ -271,13 +272,14 @@ export function ConnectionBasicForm({
       </EditorSection>
 
       {dirty ? <DraftSaveBar
+        form={formId}
         note={derived.needsVault
           ? t("conn.basicNeedVault")
           : !derived.passwordAllowed ? t("conn.basicPasswordBlocked") : ""}
-        saveLabel={t("conn.basicSave")}
         saving={saving}
         saveDisabled={!canSave}
-        discardDisabled={saving}
+        inputInvalid={!derived.valid}
+        discardDisabled={disabled}
         onDiscard={discardDraft}
       /> : null}
       </fieldset>

@@ -2,7 +2,7 @@ import { CodeField } from "../editor/CodeField";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Notice } from "../ui/surface";
-import { DraftSaveBar } from "./DraftSaveBar";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 
 type HostBlockTextProps = {
   raw: string;
@@ -42,7 +42,7 @@ export function HostBlockText({ raw, dirty, onChange, onBack, blockedByFields, d
         maxLines={40}
       />
       {dirty ? (
-        <DraftSaveBar saveLabel={t("host.saveBlock")} saving={saving} saveDisabled={disabled} discardDisabled={saving} onDiscard={onDiscard} onSave={onSave} />
+        <DraftSaveBar saving={saving} saveDisabled={disabled} onDiscard={onDiscard} onSave={onSave} />
       ) : null}
     </section>
   );

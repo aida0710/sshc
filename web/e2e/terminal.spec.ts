@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Installation, openApplication, openSection, openSettingsPage, shellSays, test, openLocalShell } from "./support/environment";
+import { saveBar, saveSettings } from "./support/saveBar";
 import { metadataSchemaVersion, standardPresetMetadata } from "./support/settings";
-import type { Locator, Page, Response } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import {
   drawnRowCount,
   drawnRowFont,
@@ -65,19 +66,6 @@ async function openLoadedTerminalSettings(page: Page): Promise<Locator> {
 
 async function openTerminalSettingsTab(region: Locator, name: "Display" | "Connection" | "Behaviour"): Promise<void> {
   await region.getByRole("tab", { name, exact: true }).click();
-}
-
-// saveTerminalSettings waits for the change just made to be saved. The page has no Save button: a choice is
-// saved once it rests, and a typed field when it is left, which Tab does.
-async function saveTerminalSettings(page: Page, region: Locator): Promise<Response> {
-  const responsePromise = page.waitForResponse((response) => {
-    const request = response.request();
-    return new URL(response.url()).pathname === "/api/v1/settings/presets/default" && request.method() === "PUT";
-  });
-  await region.page().keyboard.press("Tab");
-  const response = await responsePromise;
-  expect(response.ok()).toBe(true);
-  return response;
 }
 
 test("opens a local shell, runs a command and shows its output", async ({ page, installation }) => {
@@ -435,7 +423,7 @@ test("applies the session limit set from the settings screen", async ({ page, in
 
   const region = await openLoadedTerminalSettings(page);
   await region.getByLabel("Sessions open at once").fill("1");
-  const saved = await saveTerminalSettings(page, region);
+  const saved = await saveSettings(page);
   expect(saved.request().postDataJSON()).toEqual(expect.objectContaining({
     preset: expect.objectContaining({ terminal: expect.objectContaining({ maxSessions: 1 }) }),
   }));
@@ -471,7 +459,7 @@ test("starts local shells where the setting says", async ({ page, installation }
   const region = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(region, "Behaviour");
   await region.getByLabel("Starting directory").fill("~/workspace");
-  await saveTerminalSettings(page, region);
+  await saveSettings(page);
 
   await openSessionList(page);
   await openLocalShell(page);
@@ -900,7 +888,7 @@ test("can turn automatic selection copy off for an already open session", async 
   const settings = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(settings, "Behaviour");
   await settings.getByRole("checkbox", { name: "Copy selected text automatically" }).uncheck();
-  await saveTerminalSettings(page, settings);
+  await saveSettings(page);
 
   await reopenFirstSession(panel);
   await page.evaluate(() => navigator.clipboard.writeText("clipboard-sentinel"));
@@ -1151,7 +1139,7 @@ test("paints the terminal in the colour scheme that was chosen", async ({ page, 
   const settings = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(settings, "Display");
   await settings.getByLabel("Colour scheme").selectOption("dracula");
-  await saveTerminalSettings(page, settings);
+  await saveSettings(page);
 
   await reopenFirstSession(panel);
   await expect.poll(surface).toBe("#282a36");
@@ -1174,7 +1162,7 @@ test("loads the font it ships and hands it to the terminal", async ({ page, inst
   const settings = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(settings, "Display");
   await settings.getByLabel("Font family").selectOption("jetbrains-mono");
-  await saveTerminalSettings(page, settings);
+  await saveSettings(page);
 
   await reopenFirstSession(panel);
   await expect.poll(family).toContain("JetBrains Mono");
@@ -1214,7 +1202,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   await expect(thumbnail).toBeVisible();
   await expect.poll(async () => thumbnail.evaluate((node) => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   await library.getByRole("button", { name: "Use this image", exact: true }).click();
-  await saveTerminalSettings(page, settings);
+  await saveSettings(page);
 
   await reopenFirstSession(panel);
   const wiring = {
@@ -1228,10 +1216,9 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   const cleared = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(cleared, "Display");
   await cleared.getByRole("button", { name: "Clear", exact: true }).click();
-  const saved = await saveTerminalSettings(page, cleared);
+  const saved = await saveSettings(page);
   expect(saved.request().postDataJSON()).not.toHaveProperty("appearance");
-  // The settings page says a change was saved under the row it was made in.
-  await expect(cleared.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved your changes.", { exact: true })).toBeVisible();
 
   await reopenFirstSession(panel);
   await expect.poll(() => surfaceBackgroundImage(page)).toBe("none");
@@ -1293,9 +1280,10 @@ test("draws the terminals with the preset this machine uses", async ({ page, ins
   await region.getByLabel("Font size").fill("22");
   const presetSave = page.waitForResponse((response) =>
     new URL(response.url()).pathname.startsWith("/api/v1/settings/presets/") && response.request().method() === "PUT");
-  // Enter confirms a typed field as leaving it does.
+  // Enter in a one-line field saves as the button does.
   await region.getByLabel("Font size").press("Enter");
   expect((await presetSave).ok()).toBe(true);
+  await expect(saveBar(page)).toHaveCount(0);
   await page.getByRole("button", { name: "Use on this machine" }).click();
   await expect(page.getByText("In use here")).toBeVisible();
 

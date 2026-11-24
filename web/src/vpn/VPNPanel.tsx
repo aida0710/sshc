@@ -17,6 +17,7 @@ import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { usePendingAction } from "../ui/usePendingAction";
 import { usePolling } from "../ui/usePolling";
 import { describeVPNFieldError, vpnFieldErrorOf, type VPNFieldError } from "./vpnFieldErrors";
+import { useToast } from "../ui/useToast";
 import { VPNLogsDialog } from "./VPNLogsDialog";
 import { VPNProfileListHeader, VPNProfileRow, type VPNProfileRowAction } from "./VPNProfileRow";
 import { VPNProfileForm, type VPNProfileSaveResult } from "./VPNProfileForm";
@@ -48,6 +49,7 @@ export function VPNPanel({ api: apiOverride, onNavigationBlockerChange, onNaviga
   const engineApis = useEngineApis();
   const api = apiOverride ?? engineApis.vpn;
   const t = useTranslate();
+  const showToast = useToast();
   const operation = useAsyncOperation();
   const [overview, setOverview] = useState<VPNOverview | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState("");
@@ -228,10 +230,13 @@ export function VPNPanel({ api: apiOverride, onNavigationBlockerChange, onNaviga
   const updateProfile = useCallback(
     async (profile: VPNProfile, secrets: VPNSecrets) => {
       const result = await saveProfile(() => api.saveVPNProfile(profile, secrets));
-      if (result.saved) setEditingProfile("");
+      if (result.saved) {
+        setEditingProfile("");
+        showToast(t("draft.saved"), { tone: "success" });
+      }
       return result;
     },
-    [api, saveProfile],
+    [api, saveProfile, showToast, t],
   );
 
   // 経路の状態は、この画面の外でも変わる。画面を開いているあいだは読み直し、
@@ -325,7 +330,11 @@ export function VPNPanel({ api: apiOverride, onNavigationBlockerChange, onNaviga
                         editing={status.profile}
                         revealSecrets={api.revealVPNSecrets}
                         onSave={updateProfile}
-                        onCancel={() => setEditingProfile("")}
+                        onClose={(forget) => {
+                          const close = () => { forget(); setEditingProfile(""); };
+                          if (editFormDirty) draftDiscard.confirmBefore(close);
+                          else close();
+                        }}
                         onDirtyChange={setEditFormDirty}
                       />
                     ) : null}

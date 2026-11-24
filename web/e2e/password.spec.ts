@@ -15,7 +15,7 @@ test("stores a password for a host and never shows it again", async ({ page, ins
   const saved = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
   );
-  await page.getByRole("button", { name: "Save Basic settings" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   expect((await saved).status()).toBe(200);
 
   await expect(panel.getByLabel("Password", { exact: true }).locator("option:checked")).toHaveText("Password for this connection");
@@ -37,7 +37,7 @@ test("selecting a key removes the stored password assignment and returning to ag
   let panel = page.getByRole("region", { name: "Authentication" });
   await panel.getByLabel("Password", { exact: true }).selectOption("dedicated_password");
   await panel.getByRole("textbox", { name: "Connection password", exact: true }).fill("first e2e password");
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(200);
 
   await openSection(page, "Keys");
   await openKeyCreation(page);
@@ -56,7 +56,7 @@ test("selecting a key removes the stored password assignment and returning to ag
   await expect(panel.getByLabel("Password", { exact: true })).toHaveCount(0);
   await expect(panel.getByText(/will remove this connection's assignment/)).toBeVisible();
   const connectionURL = page.url();
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(200);
   await expect(page).toHaveURL(connectionURL);
   await expect(panel.getByText(/will remove this connection's assignment/)).toHaveCount(0);
   await expect(panel.getByLabel("Password", { exact: true })).toHaveCount(0);
@@ -66,7 +66,7 @@ test("selecting a key removes the stored password assignment and returning to ag
   await expect(panel.getByLabel("Password", { exact: true })).toBeVisible();
   await panel.getByLabel("Password", { exact: true }).selectOption("dedicated_password");
   await panel.getByRole("textbox", { name: "Connection password", exact: true }).fill("replacement e2e password");
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(200);
   expect(await installation.read("config")).not.toContain("IdentityFile");
   await expect(page.locator("body")).not.toContainText("replacement e2e password");
 });

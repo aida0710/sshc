@@ -7,6 +7,7 @@ import { sessionSlotsLeft } from "../terminal/sessions";
 import { PageBoard } from "../ui/PageBoard";
 import { lazyWithPreload } from "../ui/lazyWithPreload";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
+import { saveBarScrollRoom } from "../ui/saveBarSlot";
 import { useTranslate } from "../i18n/context";
 import { menuColumns } from "./menuEntries";
 import { MenuPanel } from "./MenuPanel";
@@ -114,7 +115,7 @@ export type SectionViewProps = {
 
 // pageScroller is what scrolls a page. On a phone the bottom bar floats over its end, so the end is padded
 // to scroll clear of the bar, and scrolling something into view (a form opened in a row) stops above it.
-const pageScroller = "h-full overflow-y-auto pb-(--mobile-navigation-inset) scroll-pb-(--mobile-navigation-inset)";
+const pageScroller = `h-full overflow-y-auto pb-(--mobile-navigation-inset) scroll-pb-(--mobile-navigation-inset) ${saveBarScrollRoom}`;
 
 export function SectionView(props: SectionViewProps) {
   if (props.section === "Terminal") {
@@ -186,7 +187,7 @@ export function SectionView(props: SectionViewProps) {
   return (
     <div className={pageScroller}>
       {/* Known Hosts puts its empty state in the middle of the card. */}
-      <PageBoard stretch={props.section === "Known Hosts"}>
+      <PageBoard saveBar stretch={props.section === "Known Hosts"}>
         <SectionPage {...props} />
       </PageBoard>
     </div>
@@ -262,7 +263,15 @@ function SectionPage({
         ? "key_passphrase"
         : "totp";
     // Locking another engine's Vault leaves this machine's as it is, so this machine's lock screen is not shown.
-    return <SecretsPanel key={shell.runTarget ?? ""} kind={kind} {...(shell.runTarget === null ? { onLock } : {})} />;
+    return (
+      <SecretsPanel
+        key={shell.runTarget ?? ""}
+        kind={kind}
+        {...(shell.runTarget === null ? { onLock } : {})}
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
+      />
+    );
   }
   if (section === "Settings") {
     return (
@@ -272,11 +281,13 @@ function SectionPage({
         onVaultChanged={onVaultChanged}
         passwordless={passwordless}
         onNavigatePage={(path) => navigation.onNavigateLocation(path)}
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
       />
     );
   }
   if (section === "Sync") {
-    return <SyncPanel />;
+    return <SyncPanel onNavigationBlockerChange={navigation.onNavigationBlockerChange} onNavigateLocation={onNavigateLocation} />;
   }
   if (section === "VPN") {
     return (

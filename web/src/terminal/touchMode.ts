@@ -1,4 +1,5 @@
-import { updatePresetInterface, usePresetInterface } from "../settings/presetInterface";
+import { updatePresetInterface, usePresetInterface, type InterfaceChange } from "../settings/presetInterface";
+import type { InterfaceSettings } from "../settings/settingsStore";
 import { useMediaQuery } from "../ui/useMediaQuery";
 
 // How terminals take touch. A touch terminal lays a layer of plain text over
@@ -16,14 +17,18 @@ export type FixedTouchMode = Exclude<TouchMode, "auto">;
 
 export const touchFirstQuery = "(hover: none) and (pointer: coarse)";
 
-// saveTouchMode keeps the choice in a preset (the one this machine uses when presetId is left out); "auto" is
-// the default and is not written.
-export function saveTouchMode(mode: TouchMode, presetId?: string): void {
-  void updatePresetInterface((settings) => ({ ...settings, touchMode: mode === "auto" ? undefined : mode }), presetId).catch(() => undefined);
+// withTouchMode is a preset's screen settings with the choice; "auto" is the default and is not written.
+export function withTouchMode(settings: InterfaceSettings, mode: TouchMode): InterfaceChange {
+  return { ...settings, touchMode: mode === "auto" ? undefined : mode };
 }
 
-export function useTouchMode(presetId?: string): TouchMode {
-  return usePresetInterface(presetId).touchMode ?? "auto";
+// saveTouchMode keeps the choice in the preset this machine uses, for a terminal's "…".
+export function saveTouchMode(mode: TouchMode): void {
+  void updatePresetInterface((settings) => withTouchMode(settings, mode)).catch(() => undefined);
+}
+
+export function useTouchMode(): TouchMode {
+  return usePresetInterface().touchMode ?? "auto";
 }
 
 // What "auto" picks now. The browser answers again when a 2-in-1 PC changes shape.

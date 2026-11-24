@@ -1,4 +1,5 @@
 import type { HostMetadata } from "../api/config";
+import { sortKeys } from "../ui/jsonContents";
 
 // sshcタブの下書き（接続ごとの HostMetadata）を比べ、組み立てるための関数。
 
@@ -7,19 +8,6 @@ import type { HostMetadata } from "../api/config";
 function isOmitted(value: unknown): boolean {
   return value === undefined || value === null || value === "" || value === 0 || value === false ||
     (Array.isArray(value) && value.length === 0);
-}
-
-// sortKeys は、オブジェクトのキーを名前順に並べ直した値を返す。項目を消して足し直すと
-// キーの順が変わるので、並べ直さないと同じ内容でも JSON が一致しない。
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([, item]) => item !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => [key, sortKeys(item)]),
-  );
 }
 
 // canonicalHostMetadata は、保存したときの内容を表す文字列である。保存すると同じ内容に

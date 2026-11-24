@@ -1,30 +1,26 @@
-import { Tag, tagClass } from "../ui/Tag";
+import { tagClass } from "../ui/Tag";
 import type { FileContents } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Button } from "../ui/surface";
 
 // ConfigFileHead は、開いているファイルの見出しの行である。状態の点・名前・編集できるかの札と、
-// ファイルとディレクトリの操作の「…」、プレビュー、保存のボタンを並べる。
+// ファイルとディレクトリの操作の「…」、プレビューのボタンを並べる。
 export function ConfigFileHead({
   file,
   modified,
   actions,
   previewing,
-  saving,
   busy,
   onPreview,
-  onSave,
 }: {
   file: FileContents;
   modified: boolean;
   actions: readonly ActionMenuItem[];
   previewing: boolean;
-  saving: boolean;
   // busy は、SSH Config のどれかの操作を待っている間である。終わるまでボタンを止める。
   busy: boolean;
   onPreview: () => void;
-  onSave: () => void;
 }) {
   const t = useTranslate();
   const name = file.file.path ?? file.file.absolute;
@@ -37,9 +33,6 @@ export function ConfigFileHead({
         <span className={tagClass("neutral")}>
           {file.editable ? t("explorer.editable") : t("explorer.readOnly")}
         </span>
-        {modified ? (
-          <Tag tone="warn">{t("explorer.unsaved")}</Tag>
-        ) : null}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <ActionMenu
@@ -49,9 +42,6 @@ export function ConfigFileHead({
         />
         <Button className="min-h-10 md:min-h-0" busy={previewing} disabled={busy} onClick={onPreview}>
           {t("explorer.preview")}
-        </Button>
-        <Button kind="primary" className="min-h-10 md:min-h-0" busy={saving} disabled={!file.editable || busy} onClick={onSave}>
-          {t("explorer.saveFile")}
         </Button>
       </div>
     </div>

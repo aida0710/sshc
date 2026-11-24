@@ -41,13 +41,6 @@ export type TerminalDraft = {
   runningCommandTitle: boolean;
 };
 
-export const initialTerminalDraft: TerminalDraft = {
-  startDirectory: "", localShellProfile: "", maxSessions: "", scrollback: "", browserScrollbackLines: "", retainedTerminals: "", fontSize: "",
-  palette: "", font: "", background: "", tint: undefined,
-  copyOnSelect: true, rightClickPaste: true, webgl: true, jisYenBackslash: false, composerEnterSends: false, ligatures: false, statusLine: true,
-  commandMarks: true, stickyCommand: true, commandScrollbarMarks: true, runningCommandTitle: true,
-};
-
 export function draftOf(settings: PresetTerminalSettings): TerminalDraft {
   const text = (value: number | undefined) => value === undefined ? "" : String(value);
   return {
@@ -98,18 +91,18 @@ const typedNumbers: TypedNumber[] = [
   { field: "fontSize", range: fontSizeRange, outOfRange: "terminal.fontSizeOutOfRange" },
 ];
 
-// firstUnusableNumber is the first typed number the engine would refuse, so the page can say which and what it
-// accepts before saving. A blank field is the default, and always usable.
-export function firstUnusableNumber(draft: TerminalDraft): TypedNumber | null {
-  return typedNumbers.find(({ field, range }) => {
+// unusableNumbers are the typed numbers the engine would refuse, so the page can say which and what it accepts
+// before saving. A blank field is the default, and always usable.
+export function unusableNumbers(draft: TerminalDraft): TypedNumber[] {
+  return typedNumbers.filter(({ field, range }) => {
     const value = numberOr(draft[field]);
     return value !== undefined && (Number.isNaN(value) || value < range.min || value > range.max);
-  }) ?? null;
+  });
 }
 
 // Turns the draft back into the preset's terminal settings, leaving out every field
 // that still has its default so the stored document says only what changed. The caller has
-// checked the numbers with firstUnusableNumber.
+// checked the numbers with unusableNumbers.
 export function settingsOf(draft: TerminalDraft): PresetTerminalSettings {
   const sessions = numberOr(draft.maxSessions);
   const replayBufferKiB = numberOr(draft.scrollback);

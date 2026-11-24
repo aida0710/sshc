@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { expect, openApplication, openSection, test, openLocalShell } from "./support/environment";
+import { saveEverything } from "./support/saveBar";
 import { terminalKeyboard } from "./support/terminal";
 
 test("edits shortcuts, keeps them after reload and uses them in a live terminal", async ({ page, context, installation }) => {
@@ -24,6 +25,7 @@ test("edits shortcuts, keeps them after reload and uses them in a live terminal"
   await assign("Paste", "Alt+v");
   await assign("Open Home", "Alt+h");
   await expect(page.getByRole("button", { name: "Assign shortcut: Open Home", exact: true })).toHaveText("Alt+H");
+  await saveEverything(page);
   await page.reload();
   await expect(page.getByRole("button", { name: "Assign shortcut: Command search", exact: true })).toHaveText("Alt+K");
   if (process.env.SSHC_SHORTCUTS_VISUAL_DIR !== undefined) {
@@ -115,6 +117,7 @@ test("opens a new session and closes the one shown from their shortcuts, asking 
     await page.keyboard.press(chord);
     await expect(page.getByRole("button", { name: `Assign shortcut: ${action}`, exact: true })).toHaveText(shown);
   }
+  await saveEverything(page);
   await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Terminal for / })).toContainText(/[$#%>]/);
   const rows = page.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
