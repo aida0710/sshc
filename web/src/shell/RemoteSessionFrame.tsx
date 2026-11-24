@@ -1,5 +1,7 @@
+import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useTranslate } from "../i18n/context";
+import { readableInkOn } from "../theme/accentColor";
 
 // スマホの組み方では、名札がヘッダーやターミナルの上のバーに重なるので、アプリの上にこの高さの余白を空ける。
 // 高さは index.css の --remote-session-tag-room で、ダイアログも同じだけ下げる。
@@ -10,10 +12,12 @@ export const remoteSessionTagRoom = "mobile-layout:pt-(--remote-session-tag-room
 // 読み上げには［リモートセッション］のボタンが同じことを伝えるので、ここは見た目だけにする。
 // body の直下に出す。スマホの組み方ではアプリ全体が position: fixed で重なりの基準になり、その中に置くと、
 // body の直下に出るダイアログ（ModalShell）の下に隠れるため。
-export function RemoteSessionFrame({ alias }: { alias: string }) {
+// color は枠と名札の色（remoteSessionFrameColor）。null はさし色（テーマの --ui-remote）。名札の文字は、その色の上で読める黒か白にする。
+export function RemoteSessionFrame({ alias, color }: { alias: string; color: string | null }) {
   const t = useTranslate();
+  const colors = color === null ? undefined : { "--ui-remote": color, "--ui-remote-ink": readableInkOn(color) } as CSSProperties;
   return createPortal(
-    <div aria-hidden="true" data-remote-session-frame={alias} className="pointer-events-none fixed inset-0 z-above-dialog border-[3px] border-remote">
+    <div aria-hidden="true" data-remote-session-frame={alias} style={colors} className="pointer-events-none fixed inset-0 z-above-dialog border-[3px] border-remote">
       <span className="absolute left-1/2 top-0 max-w-[70vw] -translate-x-1/2 truncate rounded-b-md bg-remote px-2.5 text-2xs font-semibold leading-[18px] text-remote-ink">
         {t("runTarget.frameLabel", { name: alias })}
       </span>

@@ -11,6 +11,8 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
   const [groups, setGroups] = useState<string[]>([]);
   const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
   const [hostVPN, setHostVPN] = useState<Map<string, string>>(new Map());
+  // hostColour は、接続先に付けた色（Connections の「色」）。リモートセッションの枠の色に使う。
+  const [hostColour, setHostColour] = useState<Map<string, string>>(new Map());
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
   const [hosts, setHosts] = useState<HostEntry[]>([]);
   const [files, setFiles] = useState<FileNode[]>([]);
@@ -24,6 +26,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
     const hostMetadata = overview.metadata.hosts ?? [];
     setHostAppearance(hostSettingByAlias(hostMetadata, (host) => host.appearance));
     setHostVPN(hostSettingByAlias(hostMetadata, (host) => host.vpn === "" ? undefined : host.vpn));
+    setHostColour(hostSettingByAlias(hostMetadata, (host) => host.colour === "" ? undefined : host.colour));
     setKnownAliases([
       ...new Set(
         overview.hosts
@@ -44,6 +47,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
     setGroups([]);
     setHostAppearance(new Map());
     setHostVPN(new Map());
+    setHostColour(new Map());
     setKnownAliases([]);
     setHosts([]);
     setFiles([]);
@@ -65,7 +69,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
   }, [enabled, section, readCount, adoptOverview, config]);
 
   return {
-    groups, hostAppearance, hostVPN, knownAliases, hosts, files, read,
+    groups, hostAppearance, hostVPN, hostColour, knownAliases, hosts, files, read,
     // adoptOverview takes an overview a section read after changing the connections, without leaving that section.
     adoptOverview,
     // readAgain is for a change made outside the sections.

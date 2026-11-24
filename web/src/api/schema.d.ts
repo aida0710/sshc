@@ -4621,6 +4621,7 @@ export interface components {
             /** @enum {string} */
             emptyTerminalArt?: "none" | "network" | "contours" | "globe" | "aquarium";
             reduceMotion?: boolean;
+            remoteSessionColor?: string;
         };
         TerminalAppearance: {
             palette?: string;

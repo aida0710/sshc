@@ -41,6 +41,12 @@ The keyboard switches too. By default Alt+Shift+PageDown / Alt+Shift+PageUp go t
 
 While a remote session is chosen, every screen has a frame around the whole window and a tag with the connection name at the top edge. They go away when you switch back to localhost.
 
+The colour of the frame and its tag is the first of these:
+
+1. The connection's colour: the **Colour** under **Display & terminal** of that connection in this machine's Connections. **Open connection settings** in the "…" of its row in **Remote session** opens it too. While a remote session is chosen, this switches back to localhost first, because Connections then shows the remote engine's connections
+2. **Remote session frame colour** under **Settings → Appearance**
+3. The accent colour
+
 Switching engines keeps the terminals you were shown behind the new engine's. When you switch back, their scrollback, the size you zoomed the text to and what you were typing in a phone's text box are as you left them. What is kept is the terminals that were shown and as many more as the setting for terminals kept behind allows.
 
 Switching engines opens the session you last had open on that engine. If it has been closed, the session at the top of the sidebar opens instead (sessions in hidden workspaces are not picked).
