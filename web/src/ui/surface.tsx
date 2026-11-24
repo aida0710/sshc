@@ -10,7 +10,6 @@ import { useTranslate } from "../i18n/context";
 import { describeControl } from "./describeControl";
 import { DisclosureSummary } from "./DisclosureSummary";
 import { Icon } from "./icons";
-import { noticeFrameColours } from "./noticeTones";
 import { dangerAction, dangerTextAction, hintText, primaryAction, secondaryAction, smallSecondaryAction } from "./form";
 import { segmentClass, segmentedStrip } from "./segmentedStyle";
 import { Spinner } from "./Spinner";
@@ -110,15 +109,18 @@ export function Row({
   );
 }
 
+// 知らせの枠と地。地は前からのもの（注意は黄色、失敗は地なし、済んだことは薄い緑）にする。ターミナルの知らせの枠の、
+// カードの色に意味の色を混ぜた地は、画面の中に置くと前の地より好まれなかった（2026-11-24、利用者）。
+// 失敗は地が無いので、枠の線を赤にして見分ける。
 const noticeToneFrames = {
-  notice: noticeFrameColours.notice,
-  danger: noticeFrameColours.danger,
-  success: noticeFrameColours.success,
+  notice: "border-notice-line bg-notice",
+  danger: "border-danger/45",
+  success: "border-live/40 bg-live/10",
 } as const;
 
 // Notice は、画面の中で、何かがうまくいかなかったこと、気にかけてほしいこと、今済んだこと（"success": 保存した、
-// 始めた、戻した）を知らせるただ1つの形。色は枠と地だけに付け、字は墨で読ませる（ターミナルの知らせの枠と同じ色。
-// noticeTones.ts）。"compact" は、詰まった一覧やサイドの区画に収める大きさ。
+// 始めた、戻した）を知らせるただ1つの形。意味の色は枠と地に付け、字は墨で読ませる（赤や琥珀の字の段落は読みにくい）。
+// "compact" は、詰まった一覧やサイドの区画に収める大きさ。
 // 1文で足りる知らせは children だけにする。2文以上になるときは、何が起きたかを title に、そのあとを children に書く。
 // details は、読んですぐには要らないもの（直し方、エラーの番号）で、最初は畳んでおく。常に見える長い説明を置かないため。
 // actions は、知らせについて取れる操作で、文の下、枠の中に置く。長い文が横から押し縮められないようにするため。

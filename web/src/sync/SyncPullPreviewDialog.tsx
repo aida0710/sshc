@@ -5,7 +5,6 @@ import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
 import { SyncErrorNotice } from "./SyncErrorNotice";
-import { noticeFrameColours } from "../ui/noticeTones";
 
 // 適用の失敗は、このダイアログの中に出す。背面の画面に出すとダイアログに隠れる。
 type SyncPullPreviewDialogProps = {
@@ -137,7 +136,7 @@ export function SyncPullPreviewDialog({
                 label={t("sync.confirmOverwrite")}
                 checked={acceptedRemovals}
                 onChange={onAcceptRemovals}
-                className={`rounded-inset border p-3 ${noticeFrameColours.notice}`}
+                className="rounded-inset border border-notice-line bg-notice p-3"
               />
             </>
           )}
