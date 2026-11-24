@@ -34,6 +34,21 @@ export const defaultBindings = {
   toggleNavigation: [],
   home: [],
   sftp: [],
+  // セッションの前後（Alt+PageDown／PageUp）に Shift を足した形。Slack のワークスペースの前後の Ctrl+Tab や
+  // ⌘+Shift+[ は、ブラウザがタブの切り替えに使うので取れない。
+  nextRunTarget: ["Alt+Shift+PageDown"],
+  previousRunTarget: ["Alt+Shift+PageUp"],
+  // Slack のワークスペースと同じ番号（Mac は ⌘、ほかは Ctrl）。Ctrl+3〜8 はターミナルでは制御文字になるが、
+  // その番号のリモートセッションが無い間は取らない（appActions）。
+  runTarget1: ["Ctrl+1", "Meta+1"],
+  runTarget2: ["Ctrl+2", "Meta+2"],
+  runTarget3: ["Ctrl+3", "Meta+3"],
+  runTarget4: ["Ctrl+4", "Meta+4"],
+  runTarget5: ["Ctrl+5", "Meta+5"],
+  runTarget6: ["Ctrl+6", "Meta+6"],
+  runTarget7: ["Ctrl+7", "Meta+7"],
+  runTarget8: ["Ctrl+8", "Meta+8"],
+  runTarget9: ["Ctrl+9", "Meta+9"],
 } satisfies Bindings;
 
 // shortcutKey names the chord a key press makes, or null when it is not one

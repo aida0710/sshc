@@ -12,6 +12,7 @@ import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { EngineInfoDialog } from "./EngineInfoDialog";
 import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
+import { chooseRunTarget, runTargetChoices } from "./runTargetChoice";
 
 // RunTargetSwitcher sits at the bottom of the sidebar and chooses whose
 // terminals the sidebar and the terminal show: this machine, or an engine on
@@ -48,18 +49,7 @@ export function RunTargetSwitcher({
   const chosenState = linkStateWords();
   const choose = (alias: string | null) => {
     setOpen(false);
-    // The chosen engine cannot be used: pressing it again goes to what fixes it. Its row already says why, and the
-    // panel that offers the actions is in the terminal area, out of sight from any other page. A locked Vault is
-    // unlocked here, in its own dialog.
-    if (alias !== null && alias === targets.selected && link.phase === "refused") {
-      if (link.refusal?.problem?.code === "remote_engine_vault_locked") targets.vaultUnlock.ask(alias);
-      else onShowTerminal();
-      return;
-    }
-    targets.select(alias);
-    // An engine on an SSH host takes a connection, which the terminal area follows: reaching the host, a refusal
-    // and what fixes it. Once it answers with no session, Home takes the terminal's place (useHomeWithoutSessions).
-    if (alias !== null) onShowTerminal();
+    chooseRunTarget({ targets, link, showTerminal: onShowTerminal }, alias);
   };
   // linkStateWords says what is happening to the chosen one; null when nothing needs saying.
   function linkStateWords(): string | null {
@@ -129,8 +119,7 @@ export function RunTargetSwitcher({
         <div className="absolute bottom-full left-1 right-1 z-20 mb-1 rounded-lg border border-line bg-card p-1.5 shadow-float">
           <p className="px-2 pb-1 pt-0.5 text-2xs font-semibold text-ink-faint">{t("runTarget.heading")}</p>
           <ul aria-label={t("runTarget.heading")} className="flex flex-col gap-0.5">
-            {row(null)}
-            {targets.engines.map((alias) => row(alias))}
+            {runTargetChoices(targets.engines).map((alias) => row(alias))}
           </ul>
           <div className="my-1 border-t border-line" />
           <button

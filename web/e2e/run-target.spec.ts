@@ -399,6 +399,28 @@ test("frames the whole window and names the engine while a remote session is cho
   await expect(frame).toHaveCount(0);
 });
 
+// スマホのようにキーボードが無ければ、コマンド検索から名前で選ぶ。番号は Slack のワークスペースと同じく、
+// リモートセッションの一覧の並び（1番目は localhost）。
+test("switches the remote session by name from the command search, by its number and to the next one", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  const frame = page.locator("[data-remote-session-frame]");
+
+  await page.keyboard.press("Control+k");
+  const palette = page.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" });
+  await palette.getByRole("searchbox").fill("remote session");
+  await palette.getByRole("option", { name: /Remote session: bastion/ }).click();
+  await expect(frame).toHaveText("Remote session: bastion");
+
+  await page.keyboard.press("Control+1");
+  await expect(frame).toHaveCount(0);
+  await page.keyboard.press("Control+2");
+  await expect(frame).toHaveText("Remote session: bastion");
+  // 最後の次は先頭に戻る。
+  await page.keyboard.press("Alt+Shift+PageDown");
+  await expect(frame).toHaveCount(0);
+});
+
 test("keeps this machine's terminal as it was while a remote session engine is shown", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
   await openApplication(page, installation);

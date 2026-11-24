@@ -5,6 +5,7 @@ import type { Section } from "../routing/sectionRoute";
 import { appActions, type AppActionContext } from "./appActions";
 import type { PaletteCommand } from "./CommandPalette";
 import { paletteActionCommands } from "./paletteActionCommands";
+import { paletteRunTargetCommands } from "./paletteRunTargetCommands";
 import { usePaletteSettingCommands } from "./usePaletteSettingCommands";
 import { usePendingTerminalAction } from "./usePendingTerminalAction";
 
@@ -43,7 +44,7 @@ export function usePaletteCommands({
   onStillUnlocked,
 }: PaletteCommandsOptions): { commands: PaletteCommand[]; laterCommands: PaletteCommand[] } {
   const t = useTranslate();
-  const { terminalFace, activeSessionId } = actionContext;
+  const { terminalFace, activeSessionId, runTargets, selectedRunTarget, chooseRunTarget } = actionContext;
   const runOnTerminal = usePendingTerminalAction({ terminalFace, activeSessionId, navigate });
   const settingCommands = usePaletteSettingCommands({ osc52Enabled, onOSC52Change });
   const commands: PaletteCommand[] = [
@@ -85,6 +86,7 @@ export function usePaletteCommands({
   const laterCommands: PaletteCommand[] = [
     // From the palette an action of the terminal screen shows that screen first.
     ...paletteActionCommands({ t, bindings, appActions: appActions({ ...actionContext, terminalFace: true }), hasSession: activeSessionId !== null, runOnTerminal }),
+    ...paletteRunTargetCommands({ t, bindings, runTargets, selectedRunTarget, chooseRunTarget }),
     ...(removeActiveFromSplit === null ? [] : [{
       id: "remove-from-split",
       label: t("splitView.remove"),

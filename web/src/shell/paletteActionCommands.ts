@@ -3,9 +3,12 @@ import { shortcutActions, type Bindings, type ShortcutAction } from "../keyconfi
 import { shortcutActionLabels } from "../keyconfig/shortcutActionLabels";
 import { terminalActionNames, type TerminalAction } from "../terminal/terminalActions";
 import type { PaletteCommand } from "./CommandPalette";
+import { runTargetNumberActions } from "./runTargetChoice";
 
 // The palette does not list the action that opens it, and lists SFTP among the commands it leads with.
-type ListedAction = Exclude<ShortcutAction, "palette" | "sftp">;
+// 番号でリモートセッションを切り替える操作は、リモートセッションごとの項目（paletteRunTargetCommands）にキーを載せる。
+type RunTargetNumberAction = (typeof runTargetNumberActions)[number];
+type ListedAction = Exclude<ShortcutAction, "palette" | "sftp" | RunTargetNumberAction>;
 
 // Words a person may type for an action, in either language whichever one the screen is in.
 const actionKeywords: Record<ListedAction, string> = {
@@ -28,6 +31,8 @@ const actionKeywords: Record<ListedAction, string> = {
   splitBelow: "split below down pane 下 分割 ペイン 並べる",
   toggleNavigation: "navigation sidebar menu toggle hide show ナビゲーション サイドバー メニュー 開閉",
   home: "home ホーム",
+  nextRunTarget: "next remote session engine switch 次 リモートセッション sshcエンジン 切り替え",
+  previousRunTarget: "previous remote session engine switch 前 リモートセッション sshcエンジン 切り替え",
 };
 
 function isTerminalAction(action: ShortcutAction): action is TerminalAction {
@@ -35,7 +40,7 @@ function isTerminalAction(action: ShortcutAction): action is TerminalAction {
 }
 
 function isListed(action: ShortcutAction): action is ListedAction {
-  return action !== "palette" && action !== "sftp";
+  return action !== "palette" && action !== "sftp" && !(runTargetNumberActions as readonly string[]).includes(action);
 }
 
 // paletteActionCommands are the shortcut actions that can act now, in the order of the settings page, each with

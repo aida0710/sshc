@@ -7131,7 +7131,7 @@ components:
         bindings:
           type: object
           additionalProperties: false
-          required: [palette, terminalSearch, copy, paste, previousPrompt, nextPrompt, increaseFontSize, decreaseFontSize, resetFontSize, quickCommands, newSession, closeSession, nextSession, previousSession, nextPane, previousPane, splitRight, splitBelow, toggleNavigation, home, sftp]
+          required: [palette, terminalSearch, copy, paste, previousPrompt, nextPrompt, increaseFontSize, decreaseFontSize, resetFontSize, quickCommands, newSession, closeSession, nextSession, previousSession, nextPane, previousPane, splitRight, splitBelow, toggleNavigation, home, sftp, nextRunTarget, previousRunTarget, runTarget1, runTarget2, runTarget3, runTarget4, runTarget5, runTarget6, runTarget7, runTarget8, runTarget9]
           properties:
             palette: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             terminalSearch: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
@@ -7154,6 +7154,17 @@ components:
             toggleNavigation: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             home: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
             sftp: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            nextRunTarget: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            previousRunTarget: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            runTarget1: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            runTarget2: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            runTarget3: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            runTarget4: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            runTarget5: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            runTarget6: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            runTarget7: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            runTarget8: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            runTarget9: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
     # スマホのキーバーの1つのキー。用意したキー（key）か、自作のキー（label と text）のどちらか一方。
     # 名前の一覧と上限の正本は internal/validate/keybar.go。
     KeyBarKey:

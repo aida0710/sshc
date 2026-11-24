@@ -76,6 +76,7 @@ import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
 import type { AppActionContext, SessionShortcut } from "./shell/appActions";
 import { useAppShortcuts, type SessionShortcutRequest } from "./shell/useAppShortcuts";
+import { chooseRunTarget, runTargetChoices } from "./shell/runTargetChoice";
 import { paneSessionIds, type PaneEdge } from "./terminal/splitView/layout";
 import { SplitRequestDialog } from "./terminal/splitView/SplitRequestDialog";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
@@ -312,6 +313,17 @@ export function App({
     ? null
     : (edge: PaneEdge) => requestSplit({ targetSessionId: splittableSessionId, edge }), [requestSplit, splittableSessionId]);
 
+  // ターミナルの領域を見せる。リモートセッションを切り替えたときの接続の経過は、そこに出る。
+  const showTerminalArea = useCallback(() => {
+    closeNavigation();
+    navigate("Terminal");
+  }, [closeNavigation, navigate]);
+  const runTargetList = useMemo(() => runTargetChoices(runTargets.engines), [runTargets.engines]);
+  const chooseRunTargetHere = useCallback(
+    (alias: string | null) => chooseRunTarget({ targets: runTargets, link: runTargetLink, showTerminal: showTerminalArea }, alias),
+    [runTargets, runTargetLink, showTerminalArea],
+  );
+
   const appActionContext: AppActionContext = {
     terminalFace,
     orderedSessions: terminalSessions.sessions,
@@ -323,6 +335,9 @@ export function App({
     openPalette,
     requestSession,
     toggleNavigation,
+    runTargets: runTargetList,
+    selectedRunTarget: runTargets.selected,
+    chooseRunTarget: chooseRunTargetHere,
   };
   useAppShortcuts({ enabled: state === "ready", shortcuts, ...appActionContext });
 
@@ -517,10 +532,7 @@ export function App({
               closeNavigation();
               navigate("Terminal");
             }}
-            onShowTerminal={() => {
-              closeNavigation();
-              navigate("Terminal");
-            }}
+            onShowTerminal={showTerminalArea}
             canSplitSession={(id) => id === activeSessionId ? splitBesideActive !== null : splitView.canSplit(id)}
             onSplitSession={(id, edge) => {
               if (activeSessionId === null) return;
