@@ -94,7 +94,7 @@ export function KeysScreen({
   const engineApis = useEngineApis();
   const api = apiOverride ?? engineApis.keys;
   const secrets = secretsOverride ?? engineApis.secrets;
-  const engineOS = useEngineOS(true, about);
+  const engineOS = useEngineOS({ runTarget: engineApis.runTarget, about });
   const [rowPanel, setRowPanel] = useState<KeyRowPanelState | null>(null);
   // The form to create a key, opened from the heading's button.
   const [creating, setCreating] = useState(false);

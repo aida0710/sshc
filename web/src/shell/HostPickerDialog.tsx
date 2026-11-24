@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { HostEntry } from "../api/config";
-import { recentConnectionsApi, type RecentConnection } from "../api/recentConnections";
+import type { RecentConnection } from "../api/recentConnections";
 import { useLanguage } from "../i18n/context";
 import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
 import { parseDirectDestination } from "../connections/directDestination";
@@ -13,6 +13,7 @@ import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { isImeComposing } from "../ui/imeComposition";
 import { literalTextEntry } from "../ui/softKeyboard";
 import type { DirectDestinationActions } from "./useDirectDestinationActions";
+import { useEngineApis } from "./engineApis";
 
 type HostChoice = { alias: string; group: string; hostName: string; user: string };
 
@@ -31,7 +32,6 @@ type RowProps = {
   choose: () => void;
 };
 
-const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
 const noHosts: HostEntry[] = [];
 const noLocal: LocalChoice[] = [];
 
@@ -53,7 +53,7 @@ export function HostPickerDialog({
   hosts = noHosts,
   value = "",
   local = noLocal,
-  loadRecent = loadDefaultRecent,
+  loadRecent: loadRecentOverride,
   initialFocus,
   returnFocusRef,
   direct,
@@ -67,6 +67,7 @@ export function HostPickerDialog({
   hosts?: HostEntry[];
   value?: string;
   local?: LocalChoice[];
+  // loadRecent は、最近使った接続先を読む。省くと、画面が使う sshc エンジンのもの（useEngineApis）を読む。
   loadRecent?: () => Promise<{ connections: RecentConnection[] }>;
   // initialFocus is where focus lands when the picker opens. Left out, it is the search on a PC and Close on a
   // phone, where focusing the search would raise the keyboard over the list the person came to pick from.
@@ -79,6 +80,8 @@ export function HostPickerDialog({
   onClose: () => void;
 }) {
   const { t, locale } = useLanguage();
+  const { recentConnections } = useEngineApis();
+  const loadRecent = useMemo(() => loadRecentOverride ?? (() => recentConnections.recentConnections()), [loadRecentOverride, recentConnections]);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"recent" | "groups">("groups");
   const [recent, setRecent] = useState<RecentConnection[]>([]);

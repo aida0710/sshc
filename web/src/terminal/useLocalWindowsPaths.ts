@@ -1,11 +1,11 @@
 import { useEngineOS } from "../about/useEngineOS";
 import type { TerminalSession } from "../api/terminalSessions";
 
-// Browser OS and terminal output do not identify the filesystem we preview.
-// Only this engine's local reader is known to accept native Windows paths;
-// a run target is previewed through SSH/SFTP instead.
+// ブラウザの OS とターミナルの出力からは、プレビューが読むファイルの場所が分からない。シェルのファイルは、
+// そのシェルを動かす sshc エンジンが自分のマシンのものとして読み、Windows のエンジンだけが Windows のパスを受け付ける。
+// SSH のセッションは接続先のファイルを SFTP で読むので、Windows のパスは使わない。
 export function useLocalWindowsPaths(kind: TerminalSession["kind"], runTarget: string | undefined): boolean {
-  const localShell = kind === "shell" && runTarget === undefined;
-  const os = useEngineOS(localShell);
-  return localShell && os === "windows";
+  const shell = kind === "shell";
+  const os = useEngineOS({ enabled: shell, runTarget: runTarget ?? null });
+  return shell && os === "windows";
 }

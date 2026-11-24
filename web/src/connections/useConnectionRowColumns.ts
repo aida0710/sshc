@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import type { HostEntry } from "../api/config";
-import { recentConnectionsApi, type RecentConnectionList } from "../api/recentConnections";
+import type { RecentConnectionList } from "../api/recentConnections";
+import { useEngineApis } from "../shell/engineApis";
 import { useLanguage } from "../i18n/context";
 import { formatDateTime } from "../ui/format";
 import { useLoad } from "../ui/useLoad";
@@ -13,9 +14,10 @@ const noRecentConnections: RecentConnectionList = { connections: [] };
 // open from it (enabled false), nothing is read.
 export function useConnectionRowColumns(enabled: boolean): ((host: HostEntry) => RowColumns) | undefined {
   const { t, locale } = useLanguage();
+  const { recentConnections } = useEngineApis();
   const loadRecent = useCallback(
-    () => (enabled ? recentConnectionsApi.recentConnections() : Promise.resolve(noRecentConnections)),
-    [enabled],
+    () => (enabled ? recentConnections.recentConnections() : Promise.resolve(noRecentConnections)),
+    [enabled, recentConnections],
   );
   const recent = useLoad(loadRecent);
   const lastConnectedByAlias = useMemo(() => {
