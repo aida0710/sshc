@@ -2173,6 +2173,7 @@ export const en = {
   "duration.hours": "{hours}h",
   "duration.days": "{days}d",
   "duration.hoursMinutes": "{hours}h {minutes}m",
+  "form.fieldProblem": "{field}: {problem}",
   "copy.button": "Copy {label}",
   "copy.done": "Copied.",
   "copy.refused": "The browser refused to write to the clipboard.",

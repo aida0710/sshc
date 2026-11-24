@@ -4,6 +4,7 @@ import { FieldRow, FieldRowNote, editorContainer } from "../ui/FieldRow";
 import { control, Field, hintText } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { PasswordInput } from "../ui/PasswordField";
+import { FieldProblems } from "../ui/FieldProblems";
 import { Button, Notice } from "../ui/surface";
 import { authenticationNeedsVault, noProxyJump, type CreateConnectionAuthenticationKind, type CreateConnectionDraft, type CreationPrerequisite } from "./createConnectionDraft";
 import { ConnectionVaultUnlock } from "./ConnectionVaultUnlock";
@@ -30,14 +31,19 @@ type CreateConnectionPaneProps = CreateConnectionFormOptions & {
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
 };
 
-// FieldProblem は、離れた欄の値の問題を、その欄の下に出す。フォーカスが次の欄へ移ったときに出るので、
-// alert にはしない（移った先の操作を読み上げで遮らないため）。
-function FieldProblem({ text }: { text: string }) {
-  return text === "" ? null : <p className="mt-1 text-xs text-danger">{text}</p>;
-}
 
 // CreateConnectionPane は、Connections の右の欄で開く新しい接続の欄である。入力のためにほかの操作を止める
 // モーダルにはせず、一覧やグループはそのまま触れる。作成するまで設定ファイルには何も書かない。
+type ProblemField = "alias" | "hostName" | "user" | "port";
+
+// 問題の文の id。新しい接続先の欄は画面に1組だけなので、入力欄の id と同じく決まった名前にする。
+const problemIds: Record<ProblemField, string> = {
+  alias: "create-connection-name-problem",
+  hostName: "create-connection-hostname-problem",
+  user: "create-connection-user-problem",
+  port: "create-connection-port-problem",
+};
+
 export function CreateConnectionPane({
   onCancel,
   onCreateGroup,
@@ -56,6 +62,8 @@ export function CreateConnectionPane({
   const { defaultJump } = form;
   // 欄の問題は、その欄から一度離れたあとで出す。打っている途中には出さない。
   const visibleProblem = (field: keyof typeof fieldErrors) => (touched.has(field) ? fieldErrors[field] : "");
+  // 問題の文は欄を並べたまとまりの下に出す（FieldProblems）。欄は、文が出ているときだけ aria-describedby でそれを指す。
+  const problemId = (field: ProblemField) => (visibleProblem(field) === "" ? undefined : problemIds[field]);
 
   function cancel() {
     form.clearSecrets();
@@ -104,10 +112,10 @@ export function CreateConnectionPane({
                   onChange={(event) => form.setAlias(event.target.value)}
                   onBlur={() => form.touch("alias")}
                   aria-invalid={visibleProblem("alias") !== ""}
+                  aria-describedby={problemId("alias")}
                   className={control}
                 />
               </Field>
-              <FieldProblem text={visibleProblem("alias")} />
             </div>
             <div>
               <Field label={t("conn.createGroup")}>
@@ -122,6 +130,7 @@ export function CreateConnectionPane({
               )}
             </div>
           </div>
+          <FieldProblems className="mt-1.5" problems={[{ id: problemIds.alias, field: t("conn.createName"), text: visibleProblem("alias") }]} />
         </EditorSection>
 
         <EditorSection title={t("conn.createConnectionSection")}>
@@ -135,10 +144,10 @@ export function CreateConnectionPane({
                   onChange={(event) => form.setHostName(event.target.value)}
                   onBlur={() => form.touch("hostName")}
                   aria-invalid={visibleProblem("hostName") !== ""}
+                  aria-describedby={problemId("hostName")}
                   className={`${control} font-mono`}
                 />
               </Field>
-              <FieldProblem text={visibleProblem("hostName")} />
             </div>
             <div>
               <Field label={t("conn.createUser")}>
@@ -149,10 +158,10 @@ export function CreateConnectionPane({
                   onChange={(event) => form.setUser(event.target.value)}
                   onBlur={() => form.touch("user")}
                   aria-invalid={visibleProblem("user") !== ""}
+                  aria-describedby={problemId("user")}
                   className={`${control} font-mono`}
                 />
               </Field>
-              <FieldProblem text={visibleProblem("user")} />
             </div>
             <div>
               <Field label={t("conn.createPort")}>
@@ -166,10 +175,10 @@ export function CreateConnectionPane({
                   onChange={(event) => form.setPort(event.target.value)}
                   onBlur={() => form.touch("port")}
                   aria-invalid={visibleProblem("port") !== ""}
+                  aria-describedby={problemId("port")}
                   className={`${control} font-mono`}
                 />
               </Field>
-              <FieldProblem text={visibleProblem("port")} />
             </div>
             <div className="col-span-full">
               <Field label={t("advanced.jumpVia")}>
@@ -181,6 +190,14 @@ export function CreateConnectionPane({
               </Field>
             </div>
           </div>
+          <FieldProblems
+            className="mt-1.5"
+            problems={[
+              { id: problemIds.hostName, field: t("conn.createHostName"), text: visibleProblem("hostName") },
+              { id: problemIds.user, field: t("conn.createUser"), text: visibleProblem("user") },
+              { id: problemIds.port, field: t("conn.createPort"), text: visibleProblem("port") },
+            ]}
+          />
           {defaultUser === "" && defaultPort === "" && defaultJump === "" ? null : (
             <p className={`mt-1.5 ${hintText}`}>{t("conn.createGroupDefaults", { group: values.group })}</p>
           )}

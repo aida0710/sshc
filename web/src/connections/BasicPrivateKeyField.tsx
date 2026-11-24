@@ -48,7 +48,7 @@ export function BasicPrivateKeyField({
       <FieldRow
         density="editor"
         label={t("conn.basicPrivateKey")}
-        warning={serverKeyError || undefined}
+        error={serverKeyError || undefined}
         hint={keyState === "custom"
           ? t("conn.basicCustomKey", { path: customKey })
           : keyState === "complex"

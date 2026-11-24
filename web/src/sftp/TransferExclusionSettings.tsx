@@ -26,7 +26,7 @@ export function TransferExclusionSettings({ patterns, onCommit }: {
     <FieldRow
       label={<>{t("sftp.manager.exclusionsLabel")}<small className="mt-[3px] block text-xs font-normal leading-[17px] text-ink-faint">{t("sftp.manager.exclusionsLabelNote")}</small></>}
       hint={t("sftp.manager.exclusionsSyntax")}
-      warning={valid ? undefined : t("sftp.manager.exclusionsInvalid")}
+      error={valid ? undefined : t("sftp.manager.exclusionsInvalid")}
       interactiveChildren
     >
       <PatternsEditor

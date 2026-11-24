@@ -2171,6 +2171,7 @@ export const ja = {
   "duration.hours": "{hours}時間",
   "duration.days": "{days}日",
   "duration.hoursMinutes": "{hours}時間{minutes}分",
+  "form.fieldProblem": "{field}：{problem}",
   "copy.button": "{label}をコピー",
   "copy.done": "コピーしました。",
   "copy.refused": "ブラウザがクリップボードへの書き込みを拒否しました。",
