@@ -15,7 +15,10 @@ export type RunTargetsState = {
   selected: string | null;
   // problem は、足す・外す・別タブで開くが失敗した理由。次の操作まで残るので、dismissProblem で消せる。
   problem: string;
+  // problemAbout は、problem がどの接続先のどの失敗か。知らせの形を決め、［もう一度試す］で同じ操作をやり直すのに使う。
+  problemAbout: RunTargetProblemAbout | null;
   dismissProblem: () => void;
+  retryProblem: () => void;
   busy: boolean;
   // select は、画面が使う sshc エンジンを替える。保存していない下書きがあって、それを残すと決めたときは替えずに
   // false を返す（同じものを選んだときは true）。
@@ -34,6 +37,8 @@ export type RunTargetsState = {
   // version differs from this machine's is updated.
   engineInfo: EngineInfoDialogState;
 };
+
+export type RunTargetProblemAbout = { alias: string; code: string; action: "add" | "remove" | "openInNewTab" };
 
 export type EngineInfoDialogState = {
   // openFor is the run target the dialog is open for.
@@ -64,6 +69,7 @@ export function useRunTargets({
   // The run target follows this machine's state, which choosing one here updates at once.
   const stored = interfaceState(useSettings().document, "runTarget");
   const [problem, setProblem] = useState("");
+  const [problemAbout, setProblemAbout] = useState<RunTargetProblemAbout | null>(null);
   const [busy, setBusy] = useState(false);
   const vaultUnlock = useRemoteVaultUnlock();
   const [engineInfoFor, setEngineInfoFor] = useState<string | null>(null);
@@ -93,9 +99,12 @@ export function useRunTargets({
 
   // report shows why a request about an engine failed. A different version is
   // answered with the information dialog, whose Update fixes it.
-  const report = useCallback((error: unknown, alias: string) => {
+  const report = useCallback((error: unknown, alias: string, action: RunTargetProblemAbout["action"]) => {
     if (failureCode(error) === "remote_engine_incompatible") setEngineInfoFor(alias);
-    else setProblem(runTargetProblemText(translate, error, alias));
+    else {
+      setProblem(runTargetProblemText(translate, error, alias));
+      setProblemAbout({ alias, code: failureCode(error), action });
+    }
   }, [translate]);
 
   const add = useCallback(async (alias: string) => {
@@ -107,7 +116,7 @@ export function useRunTargets({
       select(alias);
       return true;
     } catch (error) {
-      report(error, alias);
+      report(error, alias, "add");
       return false;
     } finally {
       setBusy(false);
@@ -121,7 +130,7 @@ export function useRunTargets({
       setEngines(listed.engines.map((engine) => engine.alias));
       if (stored === alias) select(null);
     } catch (error) {
-      report(error, alias);
+      report(error, alias, "remove");
     }
   }, [api, report, select, stored]);
 
@@ -136,12 +145,19 @@ export function useRunTargets({
       else tab.location.href = entrance.url;
     } catch (error) {
       tab?.close();
-      report(error, alias);
+      report(error, alias, "openInNewTab");
     }
   }, [api, report]);
 
-  const dismissProblem = useCallback(() => setProblem(""), []);
-  return { engines, selected, problem, dismissProblem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock, unread,
+  const dismissProblem = useCallback(() => { setProblem(""); setProblemAbout(null); }, []);
+  const retryProblem = useCallback(() => {
+    if (problemAbout === null) return;
+    const { alias, action } = problemAbout;
+    if (action === "add") void add(alias);
+    else if (action === "remove") void remove(alias);
+    else void openInNewTab(alias);
+  }, [add, openInNewTab, problemAbout, remove]);
+  return { engines, selected, problem, problemAbout, dismissProblem, retryProblem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock, unread,
     engineInfo: { openFor: engineInfoFor, ask: setEngineInfoFor, close: closeEngineInfo },
   };
 }
