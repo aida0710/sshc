@@ -13,6 +13,10 @@ import { EngineInfoDialog } from "./EngineInfoDialog";
 import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
 import { chooseRunTarget, runTargetChoices } from "./runTargetChoice";
+import { recentConnectionsApi } from "../api/recentConnections";
+
+// リモートセッションに足す sshc エンジンは、このマシンの接続先から選ぶ。最近使ったものも、このマシンのものを出す。
+const loadThisMachineRecent = () => recentConnectionsApi.recentConnections();
 
 // RunTargetSwitcher はサイドバーの一番下にあり、画面が使う sshc エンジンを選ぶ。このマシンか、このマシンの
 // エンジンが取り次ぐ SSH の接続先のエンジンである。Snippets・設定・同期・更新は、どれを選んでもこのマシンのもの。
@@ -153,6 +157,7 @@ export function RunTargetSwitcher({
         heading={t("runTarget.addHeading")}
         aliases={aliases}
         hosts={hosts}
+        loadRecent={loadThisMachineRecent}
         returnFocusRef={triggerRef}
         onChoose={(alias) => {
           setPicking(false);

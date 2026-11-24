@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { recentConnectionsApi, type RecentConnection } from "../api/recentConnections";
+import { useEffect, useMemo, useState } from "react";
+import type { RecentConnection } from "../api/recentConnections";
+import { useEngineApis } from "../shell/engineApis";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { localHostAlias } from "./localHost";
@@ -7,14 +8,16 @@ import { localHostAlias } from "./localHost";
 // How many recent connections the empty pane offers besides this machine. More are in the picker.
 const quickRecentCount = 4;
 
-// SFTPQuickHosts lets an empty pane open this machine or a recently used connection with one press, without
-// going through the picker first. Only connections that still exist are offered.
-export function SFTPQuickHosts({ aliases, onChoose, loadRecent = () => recentConnectionsApi.recentConnections() }: {
+// SFTPQuickHosts は、空のペインから、SFTP が使う sshc エンジンのマシン（localhost）か、そのエンジンで最近使った
+// 接続先を、接続先の選択を通さずに1回で開く。今もある接続先だけを出す。
+export function SFTPQuickHosts({ aliases, onChoose, loadRecent: loadRecentOverride }: {
   aliases: readonly string[];
   onChoose: (alias: string) => void;
   loadRecent?: () => Promise<{ connections: RecentConnection[] }>;
 }) {
   const t = useTranslate();
+  const { recentConnections } = useEngineApis();
+  const loadRecent = useMemo(() => loadRecentOverride ?? (() => recentConnections.recentConnections()), [loadRecentOverride, recentConnections]);
   const [recent, setRecent] = useState<string[]>([]);
   useEffect(() => {
     let active = true;

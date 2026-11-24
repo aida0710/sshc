@@ -23,7 +23,7 @@ const updateOutput = [
 // refuses from when the test says it does.
 type Refusal = "version" | "unreachable" | "connectFailed" | "locked";
 
-async function stubRunTarget(page: Page, { added = true, refusal = "version", compatibleVersion, sessions = [] }: { added?: boolean; refusal?: Refusal; compatibleVersion?: string; sessions?: unknown[] } = {}) {
+async function stubRunTarget(page: Page, { added = true, refusal = "version", compatibleVersion, sessions = [], recentConnections = [] }: { added?: boolean; refusal?: Refusal; compatibleVersion?: string; sessions?: unknown[]; recentConnections?: unknown[] } = {}) {
   let fixed = compatibleVersion !== undefined;
   const actions: unknown[] = [];
   const commandPreviews: unknown[] = [];
@@ -144,7 +144,7 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
         { line: 1, digest: "d".repeat(64), marker: "", hosts: ["only-bastion-knows.example"], hashed: false, keyType: "ssh-ed25519", fingerprint: "SHA256:bastionbastionbastionbastionbastionbastion12", comment: "" },
       ] } });
     } else if (path.endsWith("/connections/recent")) {
-      await route.fulfill({ json: { connections: [] } });
+      await route.fulfill({ json: { connections: recentConnections } });
     } else {
       throw new Error(`Unexpected remote engine request: ${path}`);
     }
@@ -758,6 +758,28 @@ test("lists the chosen engine's connections in Connections and for a new session
   const choice = page.getByRole("dialog");
   await expect(choice.getByRole("button", { name: /warehouse/ })).toBeVisible();
   await expect(choice.getByRole("button", { name: /\bnas\b/ })).toHaveCount(0);
+});
+
+// 最近使った接続先は、接続した sshc エンジンが覚えている。このマシンはまだどこにも接続していない。
+test("offers the chosen engine's recently used connections for a new session and in Connections, not this machine's", async ({ page, installation }) => {
+  await stubRunTarget(page, {
+    compatibleVersion: localVersion,
+    sessions: [terminalSession("web", "web")],
+    recentConnections: [{ alias: "warehouse", hostName: "10.0.0.20", user: "ops", port: "22", lastConnectedAt: "2026-11-20T09:30:00Z" }],
+  });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: "New session", exact: true }).click();
+  const choice = page.getByRole("dialog");
+  await expect(choice.getByRole("tab", { name: "Recent", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(choice.getByRole("button", { name: /warehouse/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await openSection(page, "Connections");
+  const connections = page.getByRole("region", { name: "Connections", exact: true });
+  await expect(connections.getByText(/^Last connected /)).toHaveCount(1);
 });
 
 test("asks the chosen engine, not this machine, for the Vault, the SSH keys and the VPN", async ({ page, installation }) => {
