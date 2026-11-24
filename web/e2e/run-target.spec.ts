@@ -599,6 +599,23 @@ test("selects a newly added engine and shows it is incompatible in the terminal 
   await expect(panel.getByRole("button", { name: "Update bastion", exact: true })).toBeVisible();
 });
 
+// 足せなかった理由はサイドバーの一番下に出て、どの画面でも見えたまま次の操作まで残る。［×］で消せる。
+test("lets the reason an engine could not be added be dismissed from the sidebar", async ({ page, installation }) => {
+  await stubRunTarget(page, { added: false });
+  await page.route("**/api/v1/engines", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    await route.fulfill({ status: 502, contentType: "application/problem+json", json: { code: "remote_engine_not_running", message: "request rejected" } });
+  });
+  await openApplication(page, installation);
+  await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
+  await page.getByRole("button", { name: "Add an engine…", exact: true }).click();
+  await page.getByRole("dialog", { name: "Add the engine on an SSH host", exact: true }).getByRole("button", { name: /^bastion/ }).click();
+  const reason = page.getByRole("alert").filter({ hasText: "The sshc engine is not running on bastion." });
+  await expect(reason).toBeVisible();
+  await reason.getByRole("button", { name: "Hide this notice", exact: true }).click();
+  await expect(reason).toHaveCount(0);
+});
+
 test("uses a compatible engine of another version without a panel", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: remoteVersion });
   await openApplication(page, installation);

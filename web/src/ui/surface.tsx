@@ -6,7 +6,9 @@ import {
   type ReactNode,
   useId,
 } from "react";
+import { useTranslate } from "../i18n/context";
 import { describeControl } from "./describeControl";
+import { Icon } from "./icons";
 import { dangerAction, dangerTextAction, hintText, primaryAction, secondaryAction, smallSecondaryAction } from "./form";
 import { segmentClass, segmentedStrip } from "./segmentedStyle";
 import { Spinner } from "./Spinner";
@@ -123,19 +125,37 @@ export function Notice({
   tone = "notice",
   compact = false,
   actions,
+  onDismiss,
 }: {
   children: ReactNode;
   tone?: keyof typeof noticeToneClasses;
   compact?: boolean;
   actions?: ReactNode;
+  // onDismiss は、知らせを消す。失敗した操作の結果のように、次の操作まで残る知らせに付け、右上に［×］を出す。
+  // 今の状態を表す知らせ（読めない、ロック中など）には付けない。状態が変われば消えるため。
+  onDismiss?: () => void;
 }) {
+  const t = useTranslate();
   const spacing = compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm";
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
       className={`rounded-inset border ${spacing} ${noticeToneClasses[tone]}`}
     >
-      <div className="flex items-center gap-2">{children}</div>
+      <div className="flex items-center gap-2">
+        {children}
+        {onDismiss === undefined ? null : (
+          <button
+            type="button"
+            aria-label={t("terminal.noticeDismiss")}
+            title={t("terminal.noticeDismiss")}
+            onClick={onDismiss}
+            className="-my-1 -mr-1 ml-auto flex size-6 shrink-0 items-center justify-center self-start rounded-md opacity-80 hover:bg-hover hover:opacity-100 mobile-layout:size-9"
+          >
+            <Icon name="close" className="size-3.5" />
+          </button>
+        )}
+      </div>
       {actions === undefined ? null : <div className={`flex flex-wrap items-center gap-2 ${compact ? "mt-1.5" : "mt-2"}`}>{actions}</div>}
     </div>
   );

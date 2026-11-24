@@ -146,7 +146,7 @@ export function RunTargetSwitcher({
           </button>
         </div>
       ) : null}
-      {targets.problem === "" ? null : <Notice tone="danger" compact>{targets.problem}</Notice>}
+      {targets.problem === "" ? null : <Notice tone="danger" compact onDismiss={targets.dismissProblem}>{targets.problem}</Notice>}
       <button
         ref={triggerRef}
         type="button"

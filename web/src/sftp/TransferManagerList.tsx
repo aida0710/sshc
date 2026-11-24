@@ -227,7 +227,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
         </div>
         {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover"><Icon name="close" className="size-4" /></button> : null}
       </div>
-      {controlProblem !== "" ? <div className="mx-2.5 mb-2"><Notice tone="danger" compact><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={dismissProblem} className="shrink-0 text-ink-muted hover:text-ink"><Icon name="close" className="size-3.5" /></button></Notice></div> : null}
+      {controlProblem !== "" ? <div className="mx-2.5 mb-2"><Notice tone="danger" compact onDismiss={dismissProblem}>{controlProblem}</Notice></div> : null}
       {compactViewport && jobs.length === 0 ? <p className="p-6 text-center text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</p> : null}
       {collapsed || jobs.length === 0 ? null : <div id={`${headingId}-jobs`} style={compactViewport ? undefined : { height: queueHeight }} className={`space-y-1.5 overflow-auto overscroll-contain px-2.5 pb-2.5 ${compactViewport ? "min-h-0 flex-1 pt-2" : ""}`}>
         <TransferBatchList batches={batches} waiting={waiting} processingStopped={processingStopped}

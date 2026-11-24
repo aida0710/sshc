@@ -18,6 +18,8 @@ export type TerminalWorkspacesState = {
   workspaces: TerminalWorkspace[];
   maxWorkspaces: number;
   problem: string;
+  // dismissProblem は、利用者が［×］で problem を消す。problem は次の操作まで残るので、消す手段を持たせる。
+  dismissProblem: () => void;
   create: (name: string) => Promise<TerminalWorkspace | null>;
   update: (id: string, change: UpdateTerminalWorkspaceRequest) => Promise<boolean>;
   remove: (id: string) => Promise<boolean>;
@@ -138,7 +140,8 @@ export function useTerminalWorkspaces({
     return true;
   }, [api, listGeneration, reload, run]);
 
-  return { workspaces, maxWorkspaces, problem, create, update, remove, move };
+  const dismissProblem = useCallback(() => setProblem(""), []);
+  return { workspaces, maxWorkspaces, problem, dismissProblem, create, update, remove, move };
 }
 
 function workspaceProblemKey(code: string): MessageKey {

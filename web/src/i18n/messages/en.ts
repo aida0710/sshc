@@ -440,7 +440,6 @@ export const en = {
   "sftp.manager.controlChanged": "The transfer state changed. The list has been refreshed.",
   "sftp.manager.cleanupFailed": "The remote temporary file could not be removed. Check the connection and try again.",
   "sftp.manager.controlFailed": "The transfer could not be controlled. Check the connection and try again.",
-  "sftp.manager.dismissError": "Dismiss error",
   "sftp.manager.items": "Transfer files",
   "sftp.manager.folder": "Folder",
   "sftp.manager.upload": "Upload",

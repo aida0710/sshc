@@ -31,6 +31,8 @@ export type TerminalSessionsState = {
   maxSessions: number;
   busy: boolean;
   problem: string;
+  // dismissProblem は、利用者が［×］で problem を消す。problem は次の操作まで残るので、消す手段を持たせる。
+  dismissProblem: () => void;
   // remoteRefusal is why the run target's engine refused to list its sessions;
   // null while it lists them. remoteRefusalAt is when it last refused.
   remoteRefusal: ApiError | null;
@@ -97,6 +99,7 @@ export function useTerminalSessions(
   const setProblem = useCallback((text: string) => {
     setOperationProblem((current) => current.api === api ? { api, text } : current);
   }, [api]);
+  const dismissProblem = useCallback(() => setProblem(""), [setProblem]);
   const [listFailure, setListFailure] = useState<{ api: TerminalSessionsApi; error: ApiError; at: Date } | null>(null);
   // The terminal area must never attribute the previous engine's refusal
   // to the newly selected one, even before the reset effect has run.
@@ -458,7 +461,7 @@ export function useTerminalSessions(
 
   return {
     sessions: loaded ? sessions : noSessions,
-    maxSessions, busy, problem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
+    maxSessions, busy, problem, dismissProblem, remoteRefusal, remoteRefusalAt, opening: pendingOpens > 0, loaded, restoreOffer,
     rename, unpinTitle, open, openEach, reconnect, stopReconnect, answerHostKey, answerPasswordSave, close, closeAll, refresh, markExited,
     programStateChanged, moveSession,
   };
