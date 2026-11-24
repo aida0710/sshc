@@ -14,11 +14,9 @@ import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
 import { chooseRunTarget, runTargetChoices } from "./runTargetChoice";
 
-// RunTargetSwitcher sits at the bottom of the sidebar and chooses whose
-// terminals the sidebar and the terminal show: this machine, or an engine on
-// an SSH host that this machine's engine forwards to. Settings and SFTP stay
-// this machine's whichever is chosen. It stays in view on every page, so it also says how the connection to the chosen
-// one is going.
+// RunTargetSwitcher はサイドバーの一番下にあり、画面が使う sshc エンジンを選ぶ。このマシンか、このマシンの
+// エンジンが取り次ぐ SSH の接続先のエンジンである。Snippets・設定・同期・更新は、どれを選んでもこのマシンのもの。
+// どの画面でも見えているので、選んだものへの接続の経過もここに出す。
 export function RunTargetSwitcher({
   targets,
   link,

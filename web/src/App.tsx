@@ -85,9 +85,6 @@ import { Icon } from "./ui/icons";
 
 const transferReconcileIntervalMs = 2_000;
 
-// What SFTP or Home asked of this machine's terminals while they ran on a run
-// target: a session to open there, or one Home opened there to show.
-
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
   health: () => Promise<HealthResponse>;
@@ -139,8 +136,8 @@ export function App({
   // The screens work with the engine chosen for the remote session: what the SSH configuration declares, too.
   const engineApis = useEngineApisOf(runTargets.selected, runTargets.vaultUnlock.revision);
   const declared = useDeclaredConfig(state === "ready", section, engineApis.config);
-  // The screens that stay this machine's while a remote session is chosen (SFTP, Snippets) list this machine's
-  // connections. With this machine chosen that is `declared`, read once.
+  // リモートセッションを選んでいてもこのマシンのものを出す Snippets と、リモートセッションに足す sshc エンジンを選ぶ
+  // 一覧は、このマシンの接続先を並べる。このマシンを選んでいる間は、それは一度読んだ `declared` である。
   const declaredHere = useDeclaredConfig(state === "ready" && runTargets.selected !== null, section, configApi);
   const thisMachineDeclared = runTargets.selected === null ? declared : declaredHere;
   const [desktopNavigationWidth, resizeDesktopNavigation] = useColumnWidth(navigationWidth);
