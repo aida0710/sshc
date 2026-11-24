@@ -4,7 +4,7 @@ import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { sizedControl } from "../ui/form";
 import { InputDialog } from "../ui/InputDialog";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { newIdentifier } from "../ui/randomIdentifier";
 import { standardPresetId, updateMachine, updatePresets, useSettings, type SettingsPreset } from "./settingsStore";
 
@@ -101,7 +101,7 @@ export function PresetPicker({ editing, onEdit, layout }: {
         <span className="grow" />
         {layout === "list" ? menu : null}
       </div>
-      {failure === "" || naming !== null ? null : <p role="alert" className="text-xs text-danger">{failure}</p>}
+      {failure === "" || naming !== null ? null : <Notice tone="danger" compact>{failure}</Notice>}
       {naming === null ? null : (
         <InputDialog
           id="preset-name"

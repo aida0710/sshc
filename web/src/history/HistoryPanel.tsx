@@ -14,6 +14,7 @@ import { formatDateTime } from "../ui/format";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { historyOperationLabelKey, historyStatusLabelKey, restorableFileName, shownHistoryPaths } from "./historyLabels";
 import { PendingChangeDialog } from "./PendingChangeDialog";
+import { noticeFrameColours } from "../ui/noticeTones";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -106,12 +107,12 @@ export function HistoryPanel() {
       {message === "" ? null : <Notice tone="success">{message}</Notice>}
 
       {pending.length === 0 ? null : (
-        <section aria-labelledby="pending-heading" className="rounded-inset bg-notice">
+        <section aria-labelledby="pending-heading" className={`rounded-inset border ${noticeFrameColours.notice}`}>
           <header className="flex items-center gap-2 border-b border-notice-line px-4 py-3">
             <span className="flex size-[30px] items-center justify-center rounded-md bg-card text-notice-ink">
               <Icon name="history" className="size-4" />
             </span>
-            <h3 id="pending-heading" className="text-sm font-semibold text-notice-ink">{t("history.interrupted")}</h3>
+            <h3 id="pending-heading" className="text-sm font-semibold text-ink">{t("history.interrupted")}</h3>
           </header>
           <div className="divide-y divide-notice-line">
             {pending.map((item) => (

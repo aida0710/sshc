@@ -125,14 +125,20 @@ const noticeToneFrames = {
 export function Notice({
   children,
   title,
+  titleLevel,
   tone = "notice",
   compact = false,
   details,
   actions,
   onDismiss,
+  id,
+  live = true,
 }: {
   children?: ReactNode;
   title?: string | undefined;
+  // titleLevel は、title を見出し（h3〜h5）にし、知らせをその見出しの節にする。一覧や入力欄を持ち、ページの中で
+  // 節のように読ませる箱（実行される設定の一覧、手で確かめる鍵など）に付ける。
+  titleLevel?: 3 | 4 | 5 | undefined;
   tone?: keyof typeof noticeToneFrames;
   compact?: boolean;
   details?: { label: string; content: ReactNode } | undefined;
@@ -140,18 +146,27 @@ export function Notice({
   // onDismiss は、知らせを消す。失敗した操作の結果のように、次の操作まで残る知らせに付け、右上に［×］を出す。
   // 今の状態を表す知らせ（読めない、ロック中など）には付けない。状態が変われば消えるため。
   onDismiss?: (() => void) | undefined;
+  // id は、ダイアログや入力欄がこの知らせを説明として指すときに付ける。
+  id?: string | undefined;
+  // live は、出たときに読み上げるか。最初から置いてある注意の箱や、ダイアログの説明として読まれる文は false にする。
+  live?: boolean;
 }) {
   const t = useTranslate();
+  const titleId = useId();
   const spacing = compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm";
   const below = compact ? "mt-1.5" : "mt-2";
+  const Frame = titleLevel === undefined ? "div" : "section";
+  const Title = titleLevel === undefined ? "p" : (`h${titleLevel}` as const);
   return (
-    <div
-      role={tone === "danger" ? "alert" : "status"}
+    <Frame
+      id={id}
+      role={!live ? undefined : tone === "danger" ? "alert" : "status"}
+      aria-labelledby={titleLevel === undefined ? undefined : titleId}
       className={`rounded-inset border text-ink ${spacing} ${noticeToneFrames[tone]}`}
     >
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1 break-words">
-          {title === undefined ? null : <p className="font-semibold">{title}</p>}
+          {title === undefined ? null : <Title id={titleId} className="font-semibold">{title}</Title>}
           {title === undefined || children === undefined ? children : <div className="text-ink-muted">{children}</div>}
         </div>
         {onDismiss === undefined ? null : (
@@ -173,7 +188,7 @@ export function Notice({
         </details>
       )}
       {actions === undefined ? null : <div className={`flex flex-wrap items-center gap-2 ${below}`}>{actions}</div>}
-    </div>
+    </Frame>
   );
 }
 

@@ -9,7 +9,7 @@ import { menuItemClass } from "../ui/menuStyle";
 import { Spinner } from "../ui/Spinner";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { EngineInfoDialog } from "./EngineInfoDialog";
-import { RunTargetProblemNotice } from "./RunTargetProblemNotice";
+import { RunTargetProblemNotice } from "../terminal/RunTargetProblemNotice";
 import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
 import { chooseRunTarget, runTargetChoices } from "./runTargetChoice";

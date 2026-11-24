@@ -3,7 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { control, dialogHeading, hintText } from "../ui/form";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { symbolicModeToOctal } from "./transfers";
 import type { SFTPPermissionsModel } from "./useSFTPPermissions";
 import type { PermissionsIntent } from "./permissionsIntent";
@@ -95,7 +95,7 @@ function PermissionsForm({ intent, permissions, returnFocusRef }: {
         <input type="checkbox" checked={recursive} disabled={permissions.planning} onChange={(event) => setRecursive(event.target.checked)} />
         {t("sftp.chmodRecurseOption")}
       </label> : null}
-      {validation || permissions.problem ? <p role="alert" className="text-sm text-danger">{validation || permissions.problem}</p> : null}
+      {validation || permissions.problem ? <Notice tone="danger">{validation || permissions.problem}</Notice> : null}
       <div className="flex justify-end gap-2">
         <Button onClick={permissions.cancel}>{t("sftp.cancel")}</Button>
         <Button kind="primary" type="submit" disabled={permissions.planning}>{t(permissions.planning ? "sftp.chmodPlanning" : "sftp.chmodReview")}</Button>

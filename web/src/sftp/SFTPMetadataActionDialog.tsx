@@ -2,7 +2,7 @@ import { useId, useRef, useState, type RefObject } from "react";
 import { useTranslate } from "../i18n/context";
 import { ModalShell } from "../ui/ModalShell";
 import { control, dialogHeading, hintText } from "../ui/form";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import type { MetadataIntent, SFTPMetadataActionsModel } from "./useSFTPMetadataActions";
 
 // SFTP v3 encodes numeric owner IDs as unsigned 32-bit integers.
@@ -60,7 +60,7 @@ function MetadataForm({ intent, actions, returnFocusRef }: {
         <label className="block text-sm">{t("sftp.uid")}<input ref={initialFocus} className={control} inputMode="numeric" value={uid} disabled={actions.acting} onChange={(event) => setUID(event.target.value)} /></label>
         <label className="block text-sm">{t("sftp.gid")}<input className={control} inputMode="numeric" value={gid} disabled={actions.acting} onChange={(event) => setGID(event.target.value)} /></label>
       </> : <label className="block text-sm">{t("sftp.linkTarget")}<input ref={intent.kind === "changeSymlink" ? initialFocus : undefined} className={control} value={target} maxLength={maxSymlinkTargetCharacters} disabled={actions.acting} onChange={(event) => setTarget(event.target.value)} /></label>}
-      {validation || actions.problem ? <p role="alert" className="text-sm text-danger">{validation || actions.problem}</p> : null}
+      {validation || actions.problem ? <Notice tone="danger">{validation || actions.problem}</Notice> : null}
       <div className="flex justify-end gap-2">
         <Button disabled={actions.acting} onClick={actions.cancel}>{t("sftp.cancel")}</Button>
         <Button kind="primary" type="submit" disabled={actions.acting}>{t(intent.kind === "createSymlink" ? "sftp.create" : "sftp.apply")}</Button>

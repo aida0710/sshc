@@ -452,7 +452,7 @@ describe("EngineInfoDialog", () => {
     await within(dialog).findByText("v0.51.0");
     await user.click(within(dialog).getByRole("button", { name: "Update" }));
     await user.click(within(screen.getByRole("dialog", { name: "Update sshc on r100?" })).getByRole("button", { name: "Update" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("failed");
+    expect(await within(dialog).findByText("sshc on that host failed. Check its output.")).toBeInTheDocument();
     expect(within(dialog).getByText(/Cannot connect to r100/)).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Update" })).toBeEnabled();
   });

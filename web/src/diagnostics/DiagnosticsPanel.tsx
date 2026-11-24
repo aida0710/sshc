@@ -194,9 +194,8 @@ export function DiagnosticsPanel({ api: apiOverride, host, hosts = [] }: Diagnos
 
       {hasResults ? <div className="flex flex-col border-t border-line">
       {directives.length > 0 ? (
-        <section className="mt-5 rounded-inset bg-notice px-4 py-4 text-sm">
-          <h3 className="font-medium text-notice-ink">{t("diag.canRunCommand")}</h3>
-          <p className="text-ink-muted">{t("conn.analysisTokenWarning")}</p>
+        <div className="mt-5"><Notice live={false} titleLevel={3} title={t("diag.canRunCommand")}>
+          <p>{t("conn.analysisTokenWarning")}</p>
           <ul className="mt-2 flex flex-col gap-1">
             {directives.map((directive) => (
               <li key={`${directive.path}:${directive.line}:${directive.keyword}`}>
@@ -211,7 +210,7 @@ export function DiagnosticsPanel({ api: apiOverride, host, hosts = [] }: Diagnos
               </li>
             ))}
           </ul>
-        </section>
+        </Notice></div>
       ) : null}
 
 
@@ -254,9 +253,8 @@ export function DiagnosticsPanel({ api: apiOverride, host, hosts = [] }: Diagnos
 
 
       {effective && effective.complexities.length > 0 ? (
-        <section className="my-3 rounded-inset bg-notice px-4 py-4 text-sm">
-          <h3 className="font-medium text-notice-ink">{t("diag.notSimple")}</h3>
-          <p className="text-ink-muted">{t("diag.notSimpleDetail")}</p>
+        <div className="my-3"><Notice live={false} titleLevel={3} title={t("diag.notSimple")}>
+          <p>{t("diag.notSimpleDetail")}</p>
           <ul className="mt-2 flex flex-col gap-1">
             {effective.complexities.map((note, index) => (
               <li key={`${note.code}-${note.path}-${note.line}-${index}`}>
@@ -267,7 +265,7 @@ export function DiagnosticsPanel({ api: apiOverride, host, hosts = [] }: Diagnos
               </li>
             ))}
           </ul>
-        </section>
+        </Notice></div>
       ) : null}
 
       {reach || auth ? <div className="grid border-t border-line md:grid-cols-2 md:divide-x md:divide-line">

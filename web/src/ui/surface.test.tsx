@@ -114,6 +114,24 @@ describe("Notice", () => {
     expect(within(notice).getByText("sync_internal_failed")).toBeVisible();
   });
 
+  it("stays quiet when it is a warning placed with the page, and can be named by a dialog", () => {
+    render(<Notice live={false} id="purge-warning">Purging cannot be undone.</Notice>);
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(document.getElementById("purge-warning")).toHaveTextContent("Purging cannot be undone.");
+  });
+
+  it("makes its title a heading of its own section when it holds a list", () => {
+    render(
+      <Notice live={false} titleLevel={4} title="Commands this connection runs">
+        <ul><li>ProxyCommand nc %h %p</li></ul>
+      </Notice>,
+    );
+
+    expect(screen.getByRole("heading", { level: 4, name: "Commands this connection runs" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Commands this connection runs" })).toHaveTextContent("ProxyCommand nc %h %p");
+  });
+
   it("can be hidden when it is given a way to hide", async () => {
     const user = userEvent.setup();
     const dismiss = vi.fn();

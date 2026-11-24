@@ -80,7 +80,7 @@ describe("useEngineAction", () => {
     const { result } = renderAction(enginesApi(actionLog));
     await act(async () => { await result.current.run("update"); });
     expect(result.current.lastResult).toEqual({ action: "update", succeeded: false });
-    expect(result.current.actionProblem).toBe("");
+    expect(result.current.actionProblem).toBeNull();
   });
 
   it("says only why an action ended without the host's sshc running to the end", async () => {
@@ -89,7 +89,7 @@ describe("useEngineAction", () => {
     await act(async () => { await result.current.run("update"); });
     expect(result.current.lastResult).toBeNull();
     expect(result.current.running).toBeNull();
-    expect(result.current.actionProblem).toBe("runTarget.notInstalled");
+    expect(result.current.actionProblem?.message).toBe("runTarget.notInstalled");
   });
 
   it("says another action is running when the engine refuses to start one, and follows nothing", async () => {
@@ -97,7 +97,7 @@ describe("useEngineAction", () => {
     const control = vi.fn().mockRejectedValue(new ApiError("remote_engine_action_running", 409, null));
     const { result } = renderAction(enginesApi(actionLog, control));
     await act(async () => { await result.current.run("restart"); });
-    expect(result.current.actionProblem).toBe("runTarget.actionRunning");
+    expect(result.current.actionProblem?.message).toBe("runTarget.actionRunning");
     expect(result.current.running).toBeNull();
     await nextPoll();
     expect(actionLog).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe("useEngineAction", () => {
     expect(result.current.running).toBe("update");
     await nextPoll();
     expect(result.current.running).toBeNull();
-    expect(result.current.actionProblem).toBe("runTarget.actionLogLost");
+    expect(result.current.actionProblem?.message).toBe("runTarget.actionLogLost");
   });
 
   it("stops following when a later action replaced the one it started", async () => {
@@ -121,6 +121,6 @@ describe("useEngineAction", () => {
     await act(async () => { await result.current.run("update"); });
     expect(result.current.lastResult).toBeNull();
     expect(result.current.running).toBeNull();
-    expect(result.current.actionProblem).toBe("runTarget.actionLogLost");
+    expect(result.current.actionProblem?.message).toBe("runTarget.actionLogLost");
   });
 });

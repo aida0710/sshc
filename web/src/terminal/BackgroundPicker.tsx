@@ -9,7 +9,7 @@ import { Icon } from "../ui/icons";
 import { InputDialog } from "../ui/InputDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { usePendingAction } from "../ui/usePendingAction";
 import { BackgroundCapacity } from "./BackgroundCapacity";
 import { BackgroundCard } from "./BackgroundCard";
@@ -237,7 +237,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
             saving={library.running === "capacity"}
             onSave={() => void saveCapacity()}
           />
-          {problem === "" ? null : <p role="alert" className="text-xs text-danger">{problem}</p>}
+          {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-line bg-toolbar px-4 py-3">
           <button type="button" className="text-sm text-ink-muted transition-colors duration-150 hover:text-ink" onClick={() => setDraft("")}>{t("terminal.backgroundUseNone")}</button>

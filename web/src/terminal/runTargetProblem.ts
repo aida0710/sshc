@@ -3,6 +3,20 @@ import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { terminalProblemKey } from "./sessions";
 
+// RunTargetFailure は、リモートセッションの sshc エンジンについての失敗。message は理由の1文（接続名を含む）で、
+// code はエンジンが断った語。code で知らせの形を決める（動いていないときに直し方を添えるなど）。
+export type RunTargetFailure = { message: string; code: string };
+
+// runTargetFailure は、エンジンへの要求が断られた error から RunTargetFailure を作る。
+export function runTargetFailure(t: Translate, error: unknown, alias: string): RunTargetFailure {
+  return { message: runTargetProblemText(t, error, alias), code: failureCode(error) };
+}
+
+// runTargetFailureOfCode は、接続先での操作が終わった理由の語だけから RunTargetFailure を作る。
+export function runTargetFailureOfCode(t: Translate, code: string, alias: string): RunTargetFailure {
+  return { message: runTargetFailureText(t, code, alias), code };
+}
+
 // runTargetProblemText says why an engine on an SSH host could not be added,
 // opened or reached, with what to do about it on that host.
 export function runTargetProblemText(t: Translate, error: unknown, alias: string): string {

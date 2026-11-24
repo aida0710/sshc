@@ -2,6 +2,7 @@ import type { PasswordVaultStatus } from "../api/vault";
 import { useTranslate } from "../i18n/context";
 import { PasswordField } from "../ui/PasswordField";
 import { Button } from "../ui/surface";
+import { noticeFrameColours } from "../ui/noticeTones";
 
 // ConnectionVaultUnlock asks for the master password before a connection that keeps a password in the vault
 // is saved: it unlocks the vault, or creates it, asking for the password twice only then. Creating a
@@ -27,8 +28,8 @@ export function ConnectionVaultUnlock({
 }) {
   const t = useTranslate();
   return (
-    <div className="flex flex-col gap-2.5 rounded-inset bg-notice p-3">
-      <p className="text-xs leading-[18px] text-notice-ink">
+    <div className={`flex flex-col gap-2.5 rounded-inset border p-3 ${noticeFrameColours.notice}`}>
+      <p className="text-xs leading-[18px] text-ink">
         {t(vault.exists ? "conn.vaultLockedBeforeSave" : "conn.vaultMissingBeforeSave")}
       </p>
       <PasswordField label={t("conn.createMasterPassword")} value={masterPassword} onChange={onMasterPasswordChange} />
