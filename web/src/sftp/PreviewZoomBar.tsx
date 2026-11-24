@@ -20,6 +20,7 @@ export function PreviewZoomBar({ scale, placement, onZoomIn, onZoomOut, onFit }:
     // A press on the bar is not the start of a drag on the picture under it.
     <div role="group" aria-label={t("sftp.previewZoom")} data-preview-chrome onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}
       className={`absolute right-2 z-10 flex items-center rounded-full border border-line bg-card/90 p-0.5 shadow-pane ${placement === "top" ? "top-2 mobile-layout:top-24" : "bottom-2"}`}>
+      {/* icon-button-exempt: 画像の上の丸い拡大の帯の中のボタン。帯に合わせて丸い。 */}
       <button type="button" className={button} aria-label={t("sftp.previewZoomOut")} title={t("sftp.previewZoomOut")} disabled={scale <= 1} onClick={onZoomOut}>
         <Icon name="zoomOut" className="size-4" />
       </button>
@@ -27,6 +28,7 @@ export function PreviewZoomBar({ scale, placement, onZoomIn, onZoomOut, onFit }:
         aria-label={t("sftp.previewZoomFit", { percent })} title={t("sftp.previewZoomFit", { percent })} disabled={scale === 1} onClick={onFit}>
         {percent}
       </button>
+      {/* icon-button-exempt: 画像の上の丸い拡大の帯の中のボタン。帯に合わせて丸い。 */}
       <button type="button" className={button} aria-label={t("sftp.previewZoomIn")} title={t("sftp.previewZoomIn")} disabled={scale >= maxPreviewScale} onClick={onZoomIn}>
         <Icon name="zoomIn" className="size-4" />
       </button>

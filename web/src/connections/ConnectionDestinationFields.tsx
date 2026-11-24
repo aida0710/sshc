@@ -95,6 +95,7 @@ function DestinationInput({ name, entry, problem, numeric = false }: {
           </span>
         )}
         {canReset ? (
+          // icon-button-exempt: 入力欄の中、高さいっぱいに重ねる戻すボタン（右の角だけ丸め、載せたときだけ出す）。
           <button
             type="button"
             data-touch-compact

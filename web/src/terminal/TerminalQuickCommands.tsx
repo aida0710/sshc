@@ -12,7 +12,8 @@ import { describeSnippetFailure } from "../snippets/snippetFailure";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { SnippetVariableInputs } from "../snippets/SnippetVariableInputs";
 import { Button, Notice } from "../ui/surface";
-import { codeBlock, control, iconAction } from "../ui/form";
+import { codeBlock, control } from "../ui/form";
+import { IconButton } from "../ui/IconButton";
 
 type Prepared = {
   command: string;
@@ -289,14 +290,9 @@ export function TerminalQuickCommands({
         <h3 className="grow text-sm font-semibold">
           {t("terminal.quickCommands")}
         </h3>
-        <button
-          type="button"
-          aria-label={t("terminal.quickCommandsClose")}
-          className={`${iconAction} size-8`}
-          onClick={onClose}
-        >
+        <IconButton label={t("terminal.quickCommandsClose")} size="panel" onClick={onClose}>
           <Icon name="close" className="size-3.5" />
-        </button>
+        </IconButton>
       </div>
       {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
       {terminalSelectionSaved ? (

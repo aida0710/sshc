@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Button } from "../ui/surface";
+import { IconButton } from "../ui/IconButton";
 
 type SelectionBarProps = {
   count: number;
@@ -49,9 +50,9 @@ export function SelectionBar({ count, placement, onConnect, connectProblem, onMo
           <Icon name="delete" className="size-4" />
         </Button>
         {placement === "top" ? (
-          <button type="button" aria-label={t("tree.clearSelection")} onClick={onClear} className="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink">
+          <IconButton label={t("tree.clearSelection")} size="panel" onClick={onClear}>
             <Icon name="close" className="size-4" />
-          </button>
+          </IconButton>
         ) : null}
       </div>
     </div>

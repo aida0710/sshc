@@ -12,6 +12,7 @@ import { Button, Card, Notice } from "../ui/surface";
 import { useToast } from "../ui/useToast";
 import { DraftSaveBar } from "./DraftSaveBar";
 import { defaultFields, draftOf, groupFrom, repeatedFieldKeywords } from "./groupSettingsDraft";
+import { IconButton } from "../ui/IconButton";
 
 type GroupEditorProps = {
   group: GroupMetadata;
@@ -106,7 +107,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
         <ActionMenu
           label={t("tree.groupActions", { name: group.name })}
           items={actions}
-          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+          triggerSize="large"
         />
       </header>
 
@@ -140,14 +141,10 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
           {draft.other.map((setting, index) => (
             <li key={`${setting.keyword}-${index}`} className="flex items-center gap-2 rounded-md bg-surface-subtle px-2 py-1.5 font-mono text-xs text-ink">
               <span title={`${setting.keyword} ${formatDirectiveValues(setting.keyword, setting.values) ?? ""}`} className="min-w-0 flex-1 truncate">{`${setting.keyword} ${formatDirectiveValues(setting.keyword, setting.values) ?? ""}`}</span>
-              <button
-                type="button"
-                aria-label={t("groupEditor.removeOther", { keyword: setting.keyword })}
-                onClick={() => setDraft({ ...draft, other: draft.other.filter((_, position) => position !== index) })}
-                className="flex size-7 items-center justify-center rounded-md text-ink-faint hover:text-danger"
-              >
+              <IconButton label={t("groupEditor.removeOther", { keyword: setting.keyword })} size="toolbar" tone="danger" ground="none"
+                onClick={() => setDraft({ ...draft, other: draft.other.filter((_, position) => position !== index) })}>
                 <Icon name="close" className="size-3.5" />
-              </button>
+              </IconButton>
             </li>
           ))}
         </ul>

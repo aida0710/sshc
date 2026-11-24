@@ -68,6 +68,7 @@ import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
 import { isTypingElsewhere } from "./terminalFocus";
+import { IconButton } from "../ui/IconButton";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -558,29 +559,25 @@ export function TerminalView({
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
       <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} runTarget={runTarget} onOpenNavigation={onOpenNavigation}>
         {mobile ? null : (
-          <button
-            type="button"
-            aria-label={t("terminal.search")}
-            title={t("terminal.search")}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover"
-            onClick={search.toggle}
-          >
+          <IconButton label={t("terminal.search")} size="toolbar" tone="faint" className="focus:bg-hover"
+            onClick={search.toggle}>
             <Icon name="search" className="size-[15px]" />
-          </button>
+          </IconButton>
         )}
         {mobile && notices.severity !== null ? (
           <TerminalNoticesButton severity={notices.severity} expanded={notices.mobileOpen} onToggle={notices.toggleMobile} buttonRef={notices.buttonRef} />
         ) : null}
-        <button
+        <IconButton
           ref={overflowTrigger}
-          type="button"
-          aria-label={t("terminal.moreActions")}
+          label={t("terminal.moreActions")}
+          size={mobile ? "bar" : "toolbar"}
+          tone="faint"
           aria-expanded={overflowOpen}
-          className={`flex shrink-0 items-center justify-center text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover rounded-md ${mobile ? "size-11" : "size-7"}`}
+          className="focus:bg-hover"
           onClick={() => setOverflowOpen((current) => !current)}
         >
           <Icon name="moreHorizontal" className={mobile ? "size-5" : "size-4"} />
-        </button>
+        </IconButton>
         {headerActions}
         {overflowOpen ? (
           <TerminalOverflowMenu

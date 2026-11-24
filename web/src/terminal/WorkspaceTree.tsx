@@ -32,6 +32,7 @@ import {
   type WorkspacePlace,
 } from "./workspaceGrouping";
 import { useWorkspaceReorderDrag } from "./useWorkspaceReorderDrag";
+import { IconButton } from "../ui/IconButton";
 
 type WorkspaceTreeProps = {
   workspaces: TerminalWorkspacesState;
@@ -259,21 +260,15 @@ export function WorkspaceTree({
             {t("terminal.unreadCount", { count: String(unreadInOrder.length) })}
           </button>
         )}
-        <button
-          type="button"
-          data-touch-dense
-          aria-label={t("workspace.create")}
-          title={t("workspace.create")}
+        <IconButton label={t("workspace.create")} size="row" dense
           disabled={workspaces.maxWorkspaces > 0 && workspaces.workspaces.length >= workspaces.maxWorkspaces}
-          onClick={() => setNameRequest({ kind: "create" })}
-          className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5"
-        >
+          onClick={() => setNameRequest({ kind: "create" })}>
           <Icon name="plus" className="size-3.5" />
-        </button>
+        </IconButton>
         <ActionMenu
           label={t("workspace.headingActions")}
           items={headingActions}
-          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5"
+          triggerSize="row"
           triggerTouchDense
           iconClassName="size-3.5"
         />

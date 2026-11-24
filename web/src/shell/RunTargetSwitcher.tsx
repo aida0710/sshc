@@ -14,6 +14,7 @@ import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
 import { chooseRunTarget, runTargetChoices } from "./runTargetChoice";
 import { recentConnectionsApi } from "../api/recentConnections";
+import { IconButton } from "../ui/IconButton";
 
 // リモートセッションに足す sshc エンジンは、このマシンの接続先から選ぶ。最近使ったものも、このマシンのものを出す。
 const loadThisMachineRecent = () => recentConnectionsApi.recentConnections();
@@ -90,15 +91,11 @@ export function RunTargetSwitcher({
           <span className={`shrink-0 text-2xs ${chosen && link.phase === "refused" ? "text-danger" : "text-ink-faint"}`}>{note}</span>
         </button>
         {alias === null ? null : (
-          <button
-            type="button"
-            aria-label={t("runTarget.actions", { alias })}
+          <IconButton label={t("runTarget.actions", { alias })} size="compact"
             aria-expanded={actionsFor === alias}
-            onClick={() => setActionsFor((currentAlias) => currentAlias === alias ? null : alias)}
-            className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-6"
-          >
+            onClick={() => setActionsFor((currentAlias) => currentAlias === alias ? null : alias)}>
             <Icon name="moreHorizontal" className="size-3.5" />
-          </button>
+          </IconButton>
         )}
         {refusalReason === "" ? null : (
           <p className="basis-full break-words px-2 pb-1 text-2xs leading-4 text-danger">{refusalReason}</p>

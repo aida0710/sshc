@@ -162,7 +162,8 @@ export function VPNProfileRow({
           <ActionMenu
             label={t("vpn.rowActions", { name })}
             items={menu}
-            triggerClassName={`flex size-10 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink @2xl:size-7 ${revealOnHover}`}
+            triggerSize="toolbar"
+            triggerClassName={revealOnHover}
           />
         )}
       </div>

@@ -84,6 +84,7 @@ import { SplitRequestDialog } from "./terminal/splitView/SplitRequestDialog";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
 import { useFocusBackAfterInert } from "./ui/useFocusBackAfterInert";
 import { Icon } from "./ui/icons";
+import { IconButton } from "./ui/IconButton";
 
 const transferReconcileIntervalMs = 2_000;
 
@@ -506,15 +507,10 @@ export function App({
           {navigationHidden ? (
             // The column the hidden navigation leaves (hiddenNavigationWidth): only the button that shows it again.
             <div className="flex justify-center pt-3">
-              <button
-                type="button"
-                aria-label={t("shell.navigationShow")}
-                title={t("shell.navigationShow")}
-                onClick={toggleNavigation}
-                className="grid size-8 place-items-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
-              >
+              <IconButton label={t("shell.navigationShow")} size="panel"
+                onClick={toggleNavigation}>
                 <Icon name="navigationShow" className="size-4" />
-              </button>
+              </IconButton>
             </div>
           ) : null}
           <AppNavigation

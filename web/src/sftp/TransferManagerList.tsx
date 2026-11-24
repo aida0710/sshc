@@ -17,6 +17,7 @@ import { type ManagedTransferJob } from "./transferManager";
 import { getTransferQueueSummary } from "./transferQueueSummaryModel";
 import { TransferQueueSummary } from "./TransferQueueSummary";
 import { useTransferControl } from "./useTransferControl";
+import { IconButton } from "../ui/IconButton";
 
 const minQueueHeight = 96;
 const maxQueueHeight = 560;
@@ -195,26 +196,27 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
         {collapsed && summary.totalBytes > 0 ? <progress className="hidden w-28 sm:block" max={summary.totalBytes} value={summary.transferredBytes} /> : null}
         {collapsed ? null : (
         <>
-          <button
-          type="button"
+          <IconButton
           aria-pressed={processingStopped}
-          aria-label={t(processingStopped ? "sftp.manager.startProcessing" : "sftp.manager.stopProcessing")}
+          label={t(processingStopped ? "sftp.manager.startProcessing" : "sftp.manager.stopProcessing")}
           onClick={() => void runControl(async () => {
             // Stopping is this machine's state, not a transfer setting; the queue's next listing shows it.
             await setTransfersStopped(!processingStopped);
             await sftpTransferManager.reconcile();
           })}
-          className={`flex size-11 shrink-0 items-center justify-center rounded-md md:size-8 mobile-layout:size-11 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-hover focus:bg-select-fill`}
+          size="panel"
+          tone="plain"
+          className={`${processingStopped ? "text-notice-ink" : "text-ink-muted"} focus:bg-select-fill`}
         >
           <Icon name={processingStopped ? "play" : "pause"} className="size-4" />
-        </button>
+        </IconButton>
         </>
         )}
-        {onNavigateLocation === undefined ? null : <button type="button" aria-label={t("sftp.manager.settings")} title={t("sftp.manager.settings")} onClick={openSettings} className="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-8 mobile-layout:size-11"><Icon name="settings" className="size-4" /></button>}
+        {onNavigateLocation === undefined ? null : <IconButton label={t("sftp.manager.settings")} size="panel" onClick={openSettings}><Icon name="settings" className="size-4" /></IconButton>}
         <div ref={menuRoot} className="relative ml-auto">
-          {hasMenuActions ? <button ref={menuTrigger} type="button" aria-label={t("sftp.manager.actions")} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)} className="flex size-11 items-center justify-center rounded-md md:size-8 mobile-layout:size-11 text-ink-muted hover:bg-hover hover:text-ink focus:bg-select-fill">
+          {hasMenuActions ? <IconButton label={t("sftp.manager.actions")} size="panel" className="focus:bg-select-fill" ref={menuTrigger} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>
             <Icon name="moreHorizontal" className="size-4" />
-          </button> : null}
+          </IconButton> : null}
           {menuOpen ? (
             <div ref={menuPanel} role="menu" aria-label={t("sftp.manager.actions")} className={`absolute right-0 z-20 w-48 ${menuSurface} ${compactViewport ? "top-full mt-1" : "bottom-full mb-1"}`}>
               {canPause ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.pauseAll()); }} className={menuItemClass()}>{t("sftp.manager.pauseAll")}</button> : null}
@@ -225,7 +227,7 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
             </div>
           ) : null}
         </div>
-        {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover"><Icon name="close" className="size-4" /></button> : null}
+        {compactViewport ? <IconButton ref={closeSheet} label={t("sftp.manager.close")} size="bar" onClick={dismissSheet}><Icon name="close" className="size-4" /></IconButton> : null}
       </div>
       {controlProblem !== "" ? <div className="mx-2.5 mb-2"><Notice tone="danger" compact onDismiss={dismissProblem}>{controlProblem}</Notice></div> : null}
       {compactViewport && jobs.length === 0 ? <p className="p-6 text-center text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</p> : null}

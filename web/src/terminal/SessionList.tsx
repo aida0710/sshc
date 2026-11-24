@@ -22,6 +22,7 @@ import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { useShiftKeyHeld } from "../ui/useShiftKeyHeld";
 import { SessionCloseConfirmation } from "./SessionCloseConfirmation";
 import { isImeComposing } from "../ui/imeComposition";
+import { IconButton } from "../ui/IconButton";
 
 type SessionListProps = {
   sessions: TerminalSession[];
@@ -309,11 +310,8 @@ export function SessionList({
                   {renaming === session.id ? null : <div className={`flex shrink-0 items-center gap-0.5 desktop-layout:absolute desktop-layout:right-1.5 desktop-layout:top-[2px] desktop-layout:rounded-md ${
                     isSelected ? "desktop-layout:bg-select-fill" : "desktop-layout:bg-hover"
                   } ${menuFor === session.id ? "" : revealOnHoverAtPcSize}`}>
-                    <button
-                      type="button"
+                    <IconButton label={t("terminal.rowMenu", { title: session.title })} size="row" dense className="relative focus:bg-select-fill"
                       data-session-menu-trigger
-                      data-touch-dense
-                      aria-label={t("terminal.rowMenu", { title: session.title })}
                       aria-expanded={menuFor === session.id}
                       onClick={(event) => {
                         menuTriggerRef.current = event.currentTarget;
@@ -322,26 +320,19 @@ export function SessionList({
                           return;
                         }
                         setMenuFor(session.id);
-                      }}
-                      className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill md:size-5"
-                    >
+                      }}>
                       <Icon name="moreHorizontal" className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      data-touch-dense
-                      aria-label={t("terminal.closeSession", { title: session.title })}
+                    </IconButton>
+                    <IconButton label={t("terminal.closeSession", { title: session.title })} size="row" dense className="relative focus:bg-select-fill"
                       onClick={(event) => {
                         if (session.exited !== undefined || event.shiftKey || shiftPressed) {
                           onClose(session.id);
                           return;
                         }
                         setClosing(session);
-                      }}
-                      className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill md:size-5"
-                    >
+                      }}>
                       <Icon name="close" className="size-3.5" />
-                    </button>
+                    </IconButton>
                   </div>}
                 </div>
                 {menuFor === session.id ? (

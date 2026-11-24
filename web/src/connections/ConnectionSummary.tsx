@@ -44,7 +44,7 @@ export function ConnectionSummary({
       <ActionMenu
         label={t("conn.connectionActions")}
         items={actions}
-        triggerClassName="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+        triggerSize="panel"
       />
     </>
   );

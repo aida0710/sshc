@@ -13,6 +13,7 @@ import { Icon } from "./icons";
 import { dangerAction, dangerTextAction, hintText, primaryAction, secondaryAction, smallSecondaryAction } from "./form";
 import { segmentClass, segmentedStrip } from "./segmentedStyle";
 import { Spinner } from "./Spinner";
+import { IconButton } from "./IconButton";
 
 type CardElement = "div" | "section" | "article" | "dl" | "ul";
 
@@ -172,15 +173,10 @@ export function Notice({
           {title === undefined || children === undefined ? children : <div className="text-ink-muted">{children}</div>}
         </div>
         {onDismiss === undefined ? null : (
-          <button
-            type="button"
-            aria-label={t("terminal.noticeDismiss")}
-            title={t("terminal.noticeDismiss")}
-            onClick={onDismiss}
-            className="-my-1 -mr-1 ml-auto flex size-6 shrink-0 items-center justify-center self-start rounded-md opacity-80 hover:bg-hover hover:opacity-100 mobile-layout:size-9"
-          >
+          <IconButton label={t("terminal.noticeDismiss")} size="compact" className="-my-1 -mr-1 ml-auto self-start"
+            onClick={onDismiss}>
             <Icon name="close" className="size-3.5" />
-          </button>
+          </IconButton>
         )}
       </div>
       {details === undefined ? null : (

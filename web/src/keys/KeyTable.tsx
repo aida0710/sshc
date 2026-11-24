@@ -159,7 +159,8 @@ export function KeyTable({
                     <ActionMenu
                       label={t("keys.rowActions", { path: item.relativePath })}
                       items={menu}
-                      triggerClassName={`ml-auto flex size-10 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink @xl/keytable:size-7 ${isSelected ? "" : revealOnHover}`}
+                      triggerSize="toolbar"
+                      triggerClassName={`ml-auto ${isSelected ? "" : revealOnHover}`}
                     />
                   )}
                 </td>

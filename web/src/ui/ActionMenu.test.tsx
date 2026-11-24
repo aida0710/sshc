@@ -10,7 +10,7 @@ function ControlledMenu({ onSelect }: { onSelect: () => void }) {
     <>
       {/* 右クリックの代わり。呼び手が開閉を持つときに、ボタンの外から開けることを確かめる。 */}
       <button type="button" onClick={() => setOpen(true)}>Open from outside</button>
-      <ActionMenu label="Actions for nas" items={[{ label: "Rename", onSelect }]} open={open} onOpenChange={setOpen} triggerClassName="" />
+      <ActionMenu label="Actions for nas" items={[{ label: "Rename", onSelect }]} open={open} onOpenChange={setOpen} triggerSize="toolbar" />
     </>
   );
 }
@@ -18,7 +18,7 @@ function ControlledMenu({ onSelect }: { onSelect: () => void }) {
 describe("ActionMenu", () => {
   it("opens from its own button and runs the chosen action", async () => {
     const onSelect = vi.fn();
-    render(<ActionMenu label="Actions for nas" items={[{ label: "Rename", onSelect }]} triggerClassName="" />);
+    render(<ActionMenu label="Actions for nas" items={[{ label: "Rename", onSelect }]} triggerSize="toolbar" />);
     await userEvent.click(screen.getByRole("button", { name: "Actions for nas" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     expect(onSelect).toHaveBeenCalledOnce();

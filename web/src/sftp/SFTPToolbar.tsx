@@ -9,9 +9,9 @@ import { SFTPPathShortcuts } from "./SFTPPathShortcuts";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 import { isImeComposing } from "../ui/imeComposition";
-import { iconAction } from "../ui/form";
 import { useAndroidBackStop } from "../ui/useAndroidBackStop";
 import { literalTextEntry } from "../ui/softKeyboard";
+import { IconButton } from "../ui/IconButton";
 
 // Navigation uses one row; on phones selection or search replaces that row.
 // The workspace tab already identifies the source, so its picker stays hidden here.
@@ -101,8 +101,7 @@ export function SFTPToolbar({
         onKeyDown={(event) => { if (!isImeComposing(event) && event.key === "Escape") cancelEdit(); }}
         className={`min-w-0 flex-1 rounded-md border border-control-line bg-control px-2 font-mono ${mobile ? "h-12 text-base" : "h-9 text-sm"}`} />
       <Button type="submit" disabled={navigationDisabled}>{t("sftp.go")}</Button>
-      <button type="button" aria-label={t("sftp.cancel")} onClick={cancelEdit}
-        className={`${iconAction} min-h-11 min-w-11`}><Icon name="close" className="size-4" /></button>
+      <IconButton label={t("sftp.cancel")} size="bar" onClick={cancelEdit}><Icon name="close" className="size-4" /></IconButton>
     </form>
   ) : mobile ? (
     <button type="button" data-testid="sftp-current-path" data-path={path}
@@ -123,8 +122,7 @@ export function SFTPToolbar({
               className="sshc-focus-inset max-w-28 truncate rounded-md px-1 py-1.5 text-ink-muted hover:bg-hover hover:text-ink" title={crumb.path}>{crumb.label}</button>}
         </span>)}
       </nav>
-      <button type="button" aria-label={labels.editPath} title={labels.editPath} disabled={navigationDisabled} onClick={() => setPathEditing(true)}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-ink"><Icon name="edit" className="size-3.5" /></button>
+      <IconButton label={labels.editPath} size="toolbar" tone="faint" disabled={navigationDisabled} onClick={() => setPathEditing(true)}><Icon name="edit" className="size-3.5" /></IconButton>
     </div>
   );
 
@@ -146,19 +144,16 @@ export function SFTPToolbar({
       <div className={bandClassName}>
         {hostPicker}
         {content ?? <>
-          <button type="button" aria-label={t(mobile ? "sftp.parentDirectory" : "sftp.back")} title={t(mobile ? "sftp.parentDirectory" : "sftp.back")}
-            disabled={busy || locked || (mobile ? !canParent : !browser.canBack)} onClick={() => { if (mobile) onParent?.(); else void browser.back(); }}
-            className={`flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover ${mobile ? "size-12" : "size-7"}`}>
+          <IconButton label={t(mobile ? "sftp.parentDirectory" : "sftp.back")} size={mobile ? "barLarge" : "toolbar"}
+            disabled={busy || locked || (mobile ? !canParent : !browser.canBack)} onClick={() => { if (mobile) onParent?.(); else void browser.back(); }}>
             <Icon name={mobile ? "arrowUp" : "arrowLeft"} className={mobile ? "size-4" : "size-[15px]"} />
-          </button>
-          {mobile ? null : <button type="button" aria-label={t("sftp.forward")} title={t("sftp.forward")}
-            disabled={busy || locked || !browser.canForward} onClick={() => void browser.forward()}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover"><Icon name="arrowRight" className="size-[15px]" /></button>}
+          </IconButton>
+          {mobile ? null : <IconButton label={t("sftp.forward")} size="toolbar"
+            disabled={busy || locked || !browser.canForward} onClick={() => void browser.forward()}><Icon name="arrowRight" className="size-[15px]" /></IconButton>}
           {pathField}
           <VPNProfileChip name={vpnProfile} className="max-w-24 truncate" />
-          {mobile || pathEditing ? null : <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")}
-            disabled={navigationDisabled} onClick={refresh}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover"><Icon name="sync" className="size-[15px]" /></button>}
+          {mobile || pathEditing ? null : <IconButton label={t("sftp.refreshDirectory")} size="toolbar"
+            disabled={navigationDisabled} onClick={refresh}><Icon name="sync" className="size-[15px]" /></IconButton>}
           {pathEditing ? null : <>{leading}<div className="flex shrink-0 items-center gap-1">{actions}</div></>}
         </>}
       </div>

@@ -45,7 +45,7 @@ export function ConfigFileHead({
         <ActionMenu
           label={t("explorer.fileActions", { path: name })}
           items={actions}
-          triggerClassName="flex size-8 items-center justify-center rounded-md text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink"
+          triggerSize="panel"
         />
         <Button className="min-h-10 md:min-h-0" busy={previewing} disabled={busy} onClick={onPreview}>
           {t("explorer.preview")}

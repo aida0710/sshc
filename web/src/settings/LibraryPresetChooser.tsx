@@ -78,7 +78,7 @@ export function LibraryPresetChooser<Preset extends LibraryPreset>({ library, bu
           {state.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
         </select>
         <ActionMenu label={t("presetLibrary.actions", { name: chosenName })} items={actions}
-          triggerClassName="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-7" />
+          triggerSize="toolbar" />
       </div>
       {chosen === undefined ? <p className="mt-1.5 text-xs leading-[18px] text-ink-faint">{labels.unsavedHint(chosenName)}</p> : null}
       {naming === null ? null : (

@@ -20,6 +20,7 @@ import { hasOnScreenKeyboard, literalTextEntry } from "../ui/softKeyboard";
 import { parseDirectDestination } from "../connections/directDestination";
 import type { DirectDestinationActions } from "./useDirectDestinationActions";
 import { searchPalette } from "./paletteSearch";
+import { IconButton } from "../ui/IconButton";
 
 // A command is something the palette performs, rather than somewhere it goes.
 export type PaletteCommand = {
@@ -285,9 +286,9 @@ export function CommandPalette({
             />
           </label>
           {compact ? (
-            <button type="button" aria-label={t("palette.close")} title={t("palette.close")} onClick={onClose} className="flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-surface hover:text-ink">
+            <IconButton label={t("palette.close")} size="panel" ground="surface" onClick={onClose}>
               <Icon name="close" className="size-4" />
-            </button>
+            </IconButton>
           ) : <kbd className="border border-line px-1.5 py-0.5 font-mono text-3xs text-ink-muted">Esc</kbd>}
         </div>
         <div id="command-palette-results" role="listbox" aria-label={t("palette.results")} className="min-h-0 overflow-y-auto p-1.5">
@@ -311,21 +312,16 @@ export function CommandPalette({
                 )}
               </button>
               {item.host === undefined ? null : (
-                <button
-                  type="button"
-                  aria-label={t("palette.openHostSettings", { alias: item.host.alias })}
-                  title={t("home.openConnectionSettings")}
+                <IconButton label={t("palette.openHostSettings", { alias: item.host.alias })} size="large" ground="surface" className="absolute right-1.5 top-1/2 -translate-y-1/2"
                   onMouseEnter={() => setSelected(index)}
                   onClick={() => {
                     const host = item.host;
                     if (host === undefined) return;
                     onClose();
                     onOpenHostSettings(host);
-                  }}
-                  className="absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted hover:bg-surface hover:text-ink"
-                >
+                  }}>
                   <Icon name="settings" className="size-4" />
-                </button>
+                </IconButton>
               )}
             </div>
           ))}

@@ -6,7 +6,7 @@ import { commandSnippets } from "../../snippets/snippetKind";
 import { describeTerminalCommandFailure, terminalCommandProblemText } from "./terminalCommandProblem";
 import { Button, Notice, Segmented } from "../../ui/surface";
 import { ModalShell } from "../../ui/ModalShell";
-import { codeBlock, control, iconAction } from "../../ui/form";
+import { codeBlock, control } from "../../ui/form";
 import { SnippetVariableInputs } from "../../snippets/SnippetVariableInputs";
 import {
   terminalCommandApi,
@@ -16,6 +16,7 @@ import {
   type TerminalCommandRequest,
 } from "./commandApi";
 import { literalTextEntry } from "../../ui/softKeyboard";
+import { IconButton } from "../../ui/IconButton";
 
 export type WorkspaceCommandTarget = {
   targetId: string;
@@ -193,16 +194,9 @@ export function WorkspaceCommandCenter({
               {t("workspace.broadcastDescription")}
             </p>
           </div>
-          <button
-            ref={closeButton}
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-            aria-label={t("workspace.commandClose")}
-            className={`${iconAction} size-8`}
-          >
+          <IconButton ref={closeButton} label={t("workspace.commandClose")} size="panel" disabled={busy} onClick={onClose}>
             <Icon name="close" className="size-4" />
-          </button>
+          </IconButton>
         </div>
         {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
         <div className="grid gap-3 lg:grid-cols-[minmax(18rem,0.9fr)_minmax(20rem,1.1fr)]">
