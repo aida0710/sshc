@@ -230,7 +230,7 @@ describe("ConnectionBasicForm", () => {
     const first = renderForm({
       problem: { code: "connection_hostname_invalid", message: "invalid host" },
     });
-    expect(screen.getByText("Enter a DNS name, IPv4 address, or unbracketed IPv6 address.")).toBeInTheDocument();
+    expect(screen.getByText("Host name or IP address: Enter a DNS name, IPv4 address, or unbracketed IPv6 address.")).toBeInTheDocument();
     first.unmount();
 
     const second = renderForm({

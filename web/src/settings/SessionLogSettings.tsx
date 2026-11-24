@@ -48,7 +48,7 @@ function SessionLogRulesField({ rules, save }: {
     <FieldRow
       label={t("settings.sessionLogRulesLabel")}
       hint={t("settings.sessionLogRulesHint")}
-      warning={valid ? undefined : t("settings.sessionLogRulesInvalid")}
+      error={valid ? undefined : t("settings.sessionLogRulesInvalid")}
       interactiveChildren
     >
       <CodeField

@@ -109,7 +109,7 @@ export function SnippetEditor({
             <FieldRow
               label={t("snippets.waitSeconds")}
               hint={t("snippets.waitSecondsHint")}
-              warning={validWaitSeconds(draft.waitSeconds) ? undefined : t("snippets.waitSecondsRange", { max: maxWaitSeconds })}
+              error={validWaitSeconds(draft.waitSeconds) ? undefined : t("snippets.waitSecondsRange", { max: maxWaitSeconds })}
             >
               <span className="flex items-center gap-2">
                 {/* An empty field is 0, which the engine takes for the default, shown as the placeholder. */}

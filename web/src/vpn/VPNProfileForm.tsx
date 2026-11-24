@@ -162,7 +162,7 @@ export function VPNProfileForm({
       <FieldRow
         label={label}
         hint={t(stored.has(key) && draft.secrets[key] === "" ? "vpn.secretKeepHint" : "vpn.secretHint")}
-        warning={errorFor(`secrets.${key}`)}
+        error={errorFor(`secrets.${key}`)}
         interactiveChildren
       >
         <PasswordInput
@@ -210,7 +210,7 @@ export function VPNProfileForm({
 
   const fields = (
     <>
-      <FieldRow label={t("vpn.name")} {...(editing === undefined ? {} : { hint: t("vpn.nameFixedHint") })} warning={errorFor("name")}>
+      <FieldRow label={t("vpn.name")} {...(editing === undefined ? {} : { hint: t("vpn.nameFixedHint") })} error={errorFor("name")}>
         <input
           className={control}
           value={draft.name}
@@ -219,7 +219,7 @@ export function VPNProfileForm({
           onChange={(event) => edit("name")(event.target.value)}
         />
       </FieldRow>
-      <FieldRow label={t("vpn.backend")} warning={errorFor("backend")}>
+      <FieldRow label={t("vpn.backend")} error={errorFor("backend")}>
         <select
           className={`${control} lg:w-[220px]`}
           value={draft.backend}
@@ -233,13 +233,13 @@ export function VPNProfileForm({
         </select>
       </FieldRow>
       {draft.backend === "openvpn" || draft.backend === "wireguard" ? null : (
-        <FieldRow label={t("vpn.server")} warning={errorFor(`${section}.server`)}>
+        <FieldRow label={t("vpn.server")} error={errorFor(`${section}.server`)}>
           <input {...asciiTextEntry} className={control} value={draft.server} onChange={(event) => edit("server")(event.target.value)} />
         </FieldRow>
       )}
       {/* WireGuard の DNS は、設定ファイルの DNS の行で書く。 */}
       {draft.backend === "wireguard" ? null : (
-        <FieldRow label={t("vpn.dns")} hint={t("vpn.dnsHint")} warning={errorFor("dns")}>
+        <FieldRow label={t("vpn.dns")} hint={t("vpn.dnsHint")} error={errorFor("dns")}>
           <input {...asciiTextEntry} className={control} value={draft.resolvers} onChange={(event) => edit("resolvers")(event.target.value)} />
         </FieldRow>
       )}
@@ -257,10 +257,10 @@ export function VPNProfileForm({
         />
       ) : draft.backend === "openconnect" ? (
         <>
-          <FieldRow label={t("vpn.username")} warning={errorFor("openconnect.username")}>
+          <FieldRow label={t("vpn.username")} error={errorFor("openconnect.username")}>
             <input {...asciiTextEntry} className={control} value={draft.username} onChange={(event) => edit("username")(event.target.value)} />
           </FieldRow>
-          <FieldRow label={t("vpn.protocol")} hint={t("vpn.protocolHint")} warning={errorFor("openconnect.protocol")}>
+          <FieldRow label={t("vpn.protocol")} hint={t("vpn.protocolHint")} error={errorFor("openconnect.protocol")}>
             <select className={control} value={draft.protocol} onChange={(event) => edit("protocol")(event.target.value)}>
               {openConnectProtocols.map((protocol) => (
                 <option key={protocol} value={protocol}>
@@ -272,7 +272,7 @@ export function VPNProfileForm({
           <FieldRow
             label={t("vpn.serverCertificate")}
             hint={t("vpn.serverCertificateHint")}
-            warning={errorFor("openconnect.serverCertificate")}
+            error={errorFor("openconnect.serverCertificate")}
           >
             <input {...asciiTextEntry}
               className={control}
@@ -281,7 +281,7 @@ export function VPNProfileForm({
             />
           </FieldRow>
           {secretField("openconnectPassword", t("vpn.password"))}
-          <FieldRow label={t("vpn.secondFactor")} hint={t("vpn.secondFactorHint")} warning={errorFor("openconnect.secondFactor")}>
+          <FieldRow label={t("vpn.secondFactor")} hint={t("vpn.secondFactorHint")} error={errorFor("openconnect.secondFactor")}>
             <select
               className={control}
               value={draft.secondFactor}
@@ -293,7 +293,7 @@ export function VPNProfileForm({
             </select>
           </FieldRow>
           {draft.secondFactor === "approve" ? (
-            <FieldRow label={t("vpn.approvalWord")} hint={t("vpn.approvalWordHint")} warning={errorFor("openconnect.approvalWord")}>
+            <FieldRow label={t("vpn.approvalWord")} hint={t("vpn.approvalWordHint")} error={errorFor("openconnect.approvalWord")}>
               <input {...asciiTextEntry}
                 className={control}
                 value={draft.approvalWord}
@@ -324,15 +324,15 @@ export function VPNProfileForm({
         <IKEv2ProfileFields draft={draft} errorFor={errorFor} onEdit={edit} secretField={secretField} />
       ) : (
         <>
-          <FieldRow label={t("vpn.username")} warning={errorFor("l2tp.username")}>
+          <FieldRow label={t("vpn.username")} error={errorFor("l2tp.username")}>
             <input {...asciiTextEntry} className={control} value={draft.username} onChange={(event) => edit("username")(event.target.value)} />
           </FieldRow>
           {secretField("l2tpPassword", t("vpn.password"))}
           {secretField("ipsecPsk", t("vpn.psk"))}
-          <FieldRow label={t("vpn.ike")} hint={t("vpn.proposalsHint")} warning={errorFor("l2tp.ike")}>
+          <FieldRow label={t("vpn.ike")} hint={t("vpn.proposalsHint")} error={errorFor("l2tp.ike")}>
             <input {...asciiTextEntry} className={control} value={draft.ike} onChange={(event) => edit("ike")(event.target.value)} />
           </FieldRow>
-          <FieldRow label={t("vpn.esp")} hint={t("vpn.proposalsHint")} warning={errorFor("l2tp.esp")}>
+          <FieldRow label={t("vpn.esp")} hint={t("vpn.proposalsHint")} error={errorFor("l2tp.esp")}>
             <input {...asciiTextEntry} className={control} value={draft.esp} onChange={(event) => edit("esp")(event.target.value)} />
           </FieldRow>
         </>
