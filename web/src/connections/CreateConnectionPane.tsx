@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { FieldRow, FieldRowNote, editorContainer } from "../ui/FieldRow";
@@ -5,6 +6,7 @@ import { control, Field, hintText } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { PasswordInput } from "../ui/PasswordField";
 import { FieldProblems } from "../ui/FieldProblems";
+import { scrollFade, useScrollGoesOn } from "../ui/useScrollGoesOn";
 import { Button, Notice } from "../ui/surface";
 import { authenticationNeedsVault, noProxyJump, type CreateConnectionAuthenticationKind, type CreateConnectionDraft, type CreationPrerequisite } from "./createConnectionDraft";
 import { ConnectionVaultUnlock } from "./ConnectionVaultUnlock";
@@ -78,6 +80,10 @@ export function CreateConnectionPane({
     onOpenPrerequisite?.(section, draft);
   }
 
+  // フォームはボタンの帯の上で流れる。下に続きがあるあいだ、フォームの下の端をぼかす。
+  const scrollArea = useRef<HTMLDivElement>(null);
+  const formGoesOn = useScrollGoesOn(scrollArea, "bottom");
+
   const passwordNeedsVault = form.vault !== null && !form.vault.unlocked && authenticationNeedsVault(values.authentication);
 
   return (
@@ -87,7 +93,7 @@ export function CreateConnectionPane({
       className={`${editorContainer} flex min-h-0 flex-1 flex-col`}
     >
       {/* 縦に流れる枠は横のはみ出しも切る。欄のフォーカスの枠（外へ4px）が欠けないよう、左右に同じだけ余白を取る。 */}
-      <div className="-mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1">
+      <div ref={scrollArea} className={`-mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1 ${formGoesOn ? scrollFade.bottom : ""}`}>
         <header className="mb-3.5 flex items-center gap-2.5">
           <span aria-hidden="true" className="flex size-[34px] shrink-0 items-center justify-center rounded-inset bg-select-fill text-accent">
             <Icon name="plus" className="size-[17px]" />
@@ -275,8 +281,9 @@ export function CreateConnectionPane({
         </EditorSection>
       </div>
 
-      {/* 欄が狭いときは、作成できない理由をボタンの上の1行に出す。 */}
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
+      {/* 欄が狭いときは、作成できない理由をボタンの上の1行に出す。帯の上には線を引かない。フォームの節の区切りの線と
+          2本並んで見えるため（2026-11-25、利用者）。下に続きがあることは、フォームの下の端をぼかして示す。 */}
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pt-3">
         {form.disabledReason === "" ? null : (
           <p className={`basis-full @sm/editor:mr-auto @sm/editor:basis-0 @sm/editor:grow ${hintText}`}>{form.disabledReason}</p>
         )}
