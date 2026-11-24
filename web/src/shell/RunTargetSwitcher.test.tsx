@@ -206,7 +206,7 @@ describe("RunTargetSwitcher", () => {
   it("lets the reason an engine could not be added be dismissed", async () => {
     const user = userEvent.setup();
     const state = targets({ problem: "The sshc engine is not running on r100." });
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Hide this notice" }));
     expect(state.dismissProblem).toHaveBeenCalledOnce();
   });
