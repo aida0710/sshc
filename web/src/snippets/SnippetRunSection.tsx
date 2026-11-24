@@ -4,7 +4,6 @@ import { Button } from "../ui/surface";
 import type { Job, Preview } from "./api";
 import { snippetProblemLabelKey, snippetStatusLabelKey } from "./snippetLabels";
 import { codeBlock } from "../ui/form";
-import { noticeFrameColours } from "../ui/noticeTones";
 
 // SnippetRunSection は、開いているスニペットを選んだホストでまとめて実行する節である。実行の前に、
 // ホストごとに展開したコマンドと経路を確認させ、実行中と終わった後はホストごとの出力を並べる。
@@ -58,7 +57,7 @@ export function SnippetRunSection({
         {t("snippets.preview")}
       </Button>
       {preview === null ? null : (
-        <section className={`mt-4 min-w-0 rounded-inset border p-4 ${noticeFrameColours.notice}`}>
+        <section className="mt-4 min-w-0 rounded-inset bg-notice p-4">
           <h4 className="text-sm font-semibold">{t("snippets.confirm")}</h4>
           {preview.targets.map((target) => (
             <div key={target.targetId} className="mt-2">

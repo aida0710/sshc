@@ -26,7 +26,6 @@ import { usePendingAction } from "../ui/usePendingAction";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { useToast } from "../ui/useToast";
 import { asciiTextEntry } from "../ui/softKeyboard";
-import { noticeFrameColours } from "../ui/noticeTones";
 
 type KnownHostsPanelProps = {
   // runTarget is the engine whose known_hosts this is; null is this machine. The panel is mounted anew for another
@@ -335,7 +334,7 @@ export function KnownHostsPanel({ runTarget = null, api: apiOverride }: KnownHos
         ) : null}
 
         {adding ? (
-          <div className={`mt-3 flex flex-col gap-3 rounded-inset border p-4 text-sm ${noticeFrameColours.notice}`}>
+          <div className="mt-3 flex flex-col gap-3 rounded-inset bg-notice p-4 text-sm">
             <div>
               <h4 className="font-semibold text-ink">{t("kh.addHeading")}</h4>
               <p className="text-ink-muted">{t("kh.addExplain", { host: adding.host })}</p>

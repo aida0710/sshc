@@ -16,7 +16,6 @@ import {
   type TerminalCommandRequest,
 } from "./commandApi";
 import { literalTextEntry } from "../../ui/softKeyboard";
-import { noticeFrameColours } from "../../ui/noticeTones";
 
 export type WorkspaceCommandTarget = {
   targetId: string;
@@ -320,7 +319,7 @@ export function WorkspaceCommandCenter({
           </div>
         </div>
         {prepared === null ? null : (
-          <section className={`rounded-inset border p-3 ${noticeFrameColours.notice}`}>
+          <section className="rounded-inset border border-notice-line bg-notice p-3">
             <h3 className="text-sm font-semibold">
               {t("workspace.previewHeading")}
             </h3>
