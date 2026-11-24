@@ -146,7 +146,11 @@ export function RunTargetSwitcher({
           </button>
         </div>
       ) : null}
-      {targets.problem === "" ? null : <RunTargetProblemNotice targets={targets} />}
+      {targets.problem === null ? null : (
+        <div className="mb-2">
+          <RunTargetProblemNotice problem={targets.problem} onRetry={targets.retryProblem} onDismiss={targets.dismissProblem} />
+        </div>
+      )}
       <button
         ref={triggerRef}
         type="button"

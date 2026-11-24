@@ -33,7 +33,7 @@ function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi
 
 function targets(overrides: Partial<RunTargetsState> = {}): RunTargetsState {
   return {
-    engines: ["r100"], selected: null, problem: "", problemAbout: null, dismissProblem: vi.fn(), retryProblem: vi.fn(), busy: false,
+    engines: ["r100"], selected: null, problem: null, dismissProblem: vi.fn(), retryProblem: vi.fn(async () => undefined), busy: false,
     select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
     api: enginesApi(), localVersion: "v0.53.0", vaultUnlock: vaultUnlockState(),
     engineInfo: { openFor: null, ask: vi.fn(), close: vi.fn() },
@@ -98,9 +98,45 @@ describe("useRunTargets", () => {
     const api = enginesApi({ open });
     const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v0.53.0", api }));
     await act(async () => { await result.current.openInNewTab("r100"); });
-    expect(result.current.problem).toBe("");
+    expect(result.current.problem).toBeNull();
     expect(result.current.engineInfo.openFor).toBe("r100");
     expect(closeTab).toHaveBeenCalled();
+  });
+
+  it("keeps the reason while the failed addition is tried again, and forgets it once the engine is added", async () => {
+    fakeSettingsServer();
+    let answer = () => {};
+    const add = vi.fn()
+      .mockRejectedValueOnce(new ApiError("remote_engine_not_running", 502, null))
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { answer = resolve; }));
+    const api = enginesApi({ add });
+    const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v0.53.0", api }));
+    await act(async () => { await result.current.add("r200"); });
+    expect(result.current.problem).toMatchObject({ alias: "r200", code: "remote_engine_not_running", action: "add" });
+
+    let retried = Promise.resolve();
+    act(() => { retried = result.current.retryProblem(); });
+    expect(add).toHaveBeenLastCalledWith("r200");
+    expect(result.current.problem).not.toBeNull();
+    await act(async () => { answer(); await retried; });
+    expect(result.current.problem).toBeNull();
+    expect(result.current.selected).toBe("r200");
+  });
+
+  it.each([
+    ["remove", "remove"],
+    ["openInNewTab", "open"],
+  ] as const)("tries a failed %s again on the same engine", async (action, method) => {
+    vi.spyOn(window, "open").mockReturnValue({ close: vi.fn(), location: {} } as unknown as Window);
+    const failing = vi.fn().mockRejectedValue(new ApiError("remote_engine_unreachable", 502, null));
+    const api = enginesApi({ [method]: failing });
+    const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v0.53.0", api }));
+    await act(async () => { await result.current[action]("r100"); });
+    expect(result.current.problem).toMatchObject({ alias: "r100", action });
+
+    await act(async () => { await result.current.retryProblem(); });
+    expect(failing).toHaveBeenCalledTimes(2);
+    expect(failing).toHaveBeenLastCalledWith("r100");
   });
 
 });
@@ -203,9 +239,43 @@ describe("RunTargetSwitcher", () => {
     expect(state.select).toHaveBeenCalledWith("r100");
   });
 
+  const notRunning = { message: "The sshc engine is not running on r100.", alias: "r100", code: "remote_engine_not_running", action: "add" } as const;
+
+  it("says the engine is not running and folds the commands that start it under How to fix", async () => {
+    const user = userEvent.setup();
+    render(<RunTargetSwitcher targets={targets({ problem: notRunning })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    const notice = screen.getByRole("alert");
+    expect(within(notice).getByText("The sshc engine is not running")).toBeVisible();
+    expect(within(notice).getByText("r100")).toBeVisible();
+    expect(within(notice).getByText("sshc service install")).not.toBeVisible();
+    await user.click(within(notice).getByText("How to fix"));
+    expect(within(notice).getByText("sshc service install")).toBeVisible();
+    expect(within(notice).getByText("sshc open")).toBeVisible();
+  });
+
+  it("shows another reason as it is", () => {
+    const problem = { message: "The SSH server on r100 does not allow forwarding.", alias: "r100", code: "remote_engine_forwarding_refused", action: "add" } as const;
+    render(<RunTargetSwitcher targets={targets({ problem })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("The SSH server on r100 does not allow forwarding.");
+    expect(screen.queryByText("How to fix")).not.toBeInTheDocument();
+  });
+
+  it("shows it is waiting while the failed step is tried again", async () => {
+    const user = userEvent.setup();
+    let finish = () => {};
+    const retryProblem = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<RunTargetSwitcher targets={targets({ problem: notRunning, retryProblem })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    const tryAgain = screen.getByRole("button", { name: "Try again" });
+    await user.click(tryAgain);
+    expect(retryProblem).toHaveBeenCalledOnce();
+    expect(tryAgain).toHaveAttribute("aria-busy", "true");
+    await act(async () => { finish(); });
+    expect(tryAgain).not.toHaveAttribute("aria-busy");
+  });
+
   it("lets the reason an engine could not be added be dismissed", async () => {
     const user = userEvent.setup();
-    const state = targets({ problem: "The sshc engine is not running on r100." });
+    const state = targets({ problem: notRunning });
     render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Hide this notice" }));
     expect(state.dismissProblem).toHaveBeenCalledOnce();
@@ -335,6 +405,18 @@ describe("EngineInfoDialog", () => {
     expect(within(dialog).getAllByText("Version")).toHaveLength(1);
     expect(within(dialog).getByText("v0.53.0")).toBeInTheDocument();
     expect(within(dialog).getByText("Vault")).toBeInTheDocument();
+  });
+
+  it("says the engine is not running with the commands that start it, without naming the host again", async () => {
+    const user = userEvent.setup();
+    const status = vi.fn().mockRejectedValue(new ApiError("remote_engine_not_running", 502, null));
+    render(<EngineInfoDialog alias="r100" targets={targets({ api: enginesApi({ status }) })} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog", { name: "Engine on r100" });
+    const notice = await within(dialog).findByRole("alert");
+    expect(within(notice).getByText("The sshc engine is not running")).toBeVisible();
+    expect(within(notice).queryByText("r100")).not.toBeInTheDocument();
+    await user.click(within(notice).getByText("How to fix"));
+    expect(within(notice).getByText("sshc service install")).toBeVisible();
   });
 
   it("names the sessions on the run target that stopping it ends, and keeps to the count when they cannot be read", async () => {

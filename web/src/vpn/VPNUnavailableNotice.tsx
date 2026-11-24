@@ -10,14 +10,10 @@ export function VPNUnavailableNotice({ overview }: { overview: VPNOverview }) {
   const t = useTranslate();
   const reason = overview.unavailable === undefined ? t("vpn.unavailable") : t(vpnRefusalMessages[overview.unavailable]);
   const detail = overview.detail ?? "";
+  if (detail === "") return <Notice>{reason}</Notice>;
   return (
-    <Notice>
-      <span className="flex min-w-0 flex-col gap-1">
-        <span>{reason}</span>
-        {detail === "" ? null : (
-          <span className="break-words text-xs opacity-80">{t("vpn.unavailableDetail", { detail })}</span>
-        )}
-      </span>
+    <Notice title={reason}>
+      <span className="text-xs">{t("vpn.unavailableDetail", { detail })}</span>
     </Notice>
   );
 }

@@ -92,7 +92,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi, sessions = term
         <div className="grid grid-cols-[minmax(0,1fr)] gap-3 text-sm text-ink-muted">
           {currentState === null ? null : <p role="status" className="[overflow-wrap:anywhere]">{currentState}</p>}
           <FactRows facts={updateFacts} />
-          {checkFailure === "" ? null : <Notice tone="danger"><span className="grid gap-1"><span>{t("update.checkFailed")}</span><span className="break-words">{checkFailure}</span></span></Notice>}
+          {checkFailure === "" ? null : <Notice tone="danger" title={t("update.checkFailed")}>{checkFailure}</Notice>}
           {reason === undefined ? null : <p>{t(updateMessage(reason))}</p>}
           <div className="flex flex-wrap items-baseline gap-4">
             <Button disabled={checking} onClick={() => { void checkUpdate(); }}>{t(checking ? "about.checking" : "about.check")}</Button>

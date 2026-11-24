@@ -42,7 +42,7 @@ function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi
 
 function runTargets(selected: string | null, api = enginesApi()): RunTargetsState {
   return {
-    engines: ["r100"], selected, problem: "", problemAbout: null, dismissProblem: vi.fn(), retryProblem: vi.fn(), busy: false,
+    engines: ["r100"], selected, problem: null, dismissProblem: vi.fn(), retryProblem: vi.fn(async () => undefined), busy: false,
     select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
     api, localVersion: "v0.54.0",
     vaultUnlock: { unlockFor: null, revision: 0, ask: vi.fn(), close: vi.fn(), unlocked: vi.fn() },
@@ -89,8 +89,11 @@ async function renderRefused(error: ApiError, targets = runTargets("r100")) {
   return { panel, terminalSessions, targets };
 }
 
+// buttonNames は、パネルの操作のボタンの名前。接続先で打つコマンドのコピーのボタンは数えない。
 function buttonNames(panel: HTMLElement): string[] {
-  return within(panel).getAllByRole("button").map((button) => button.textContent ?? "");
+  return within(panel).getAllByRole("button")
+    .filter((button) => !(button.getAttribute("aria-label") ?? "").startsWith("Copy "))
+    .map((button) => button.textContent ?? "");
 }
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -99,8 +102,7 @@ describe("TerminalScreen while the run target refuses its session list", () => {
   it.each([
     ["remote_engine_unreachable", undefined, "Could not connect to r100",
       "The remote sshc engine cannot be reached. Reconnect, or switch back to localhost."],
-    ["remote_engine_not_running", undefined, "Could not connect to r100",
-      "The sshc engine is not running on r100. Start it there with sshc service install or sshc open."],
+    ["remote_engine_not_running", undefined, "The sshc engine on r100 is not running", "Run one of these on that host:"],
     ["remote_engine_connect_failed", "host_key_unknown", "Could not connect to r100 over SSH",
       "The host key of r100 has not been confirmed. Connect to r100 once from a terminal first."],
     ["remote_engine_connect_failed", "host_key_changed", "Could not connect to r100 over SSH",
@@ -116,6 +118,12 @@ describe("TerminalScreen while the run target refuses its session list", () => {
     expect(buttonNames(panel)).toEqual(["Reconnect now", "Switch back to localhost", "Details", "Engine information…"]);
     expect(within(panel).getByText("Tries again 2 s after each attempt ends")).toBeInTheDocument();
     expect(panel.querySelector("time")).not.toBeNull();
+  });
+
+  it("lists the commands that start a stopped engine, each with its own copy button", async () => {
+    const { panel } = await renderRefused(refusal("remote_engine_not_running"));
+    expect(within(panel).getByRole("button", { name: "Copy sshc service install" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Copy sshc open" })).toBeInTheDocument();
   });
 
   it("is not a dialog, so the rest of the page stays usable", async () => {

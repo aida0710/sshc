@@ -8,7 +8,9 @@ import {
 } from "react";
 import { useTranslate } from "../i18n/context";
 import { describeControl } from "./describeControl";
+import { DisclosureSummary } from "./DisclosureSummary";
 import { Icon } from "./icons";
+import { noticeFrameColours } from "./noticeTones";
 import { dangerAction, dangerTextAction, hintText, primaryAction, secondaryAction, smallSecondaryAction } from "./form";
 import { segmentClass, segmentedStrip } from "./segmentedStyle";
 import { Spinner } from "./Spinner";
@@ -108,42 +110,50 @@ export function Row({
   );
 }
 
-const noticeToneClasses = {
-  notice: "border-notice-line bg-notice text-notice-ink",
-  danger: "border-control-line text-danger",
-  success: "border-live/40 bg-live/10 text-live",
+const noticeToneFrames = {
+  notice: noticeFrameColours.notice,
+  danger: noticeFrameColours.danger,
+  success: noticeFrameColours.success,
 } as const;
 
-// Notice is the one way a panel tells the user something went wrong, needs
-// attention, or has just been done ("success": saved, started, restored).
-// "compact" fits it into dense lists and side panes. actions are what the user
-// can do about it; they sit inside the frame, under the words, as the design
-// asks, so a long message is never squeezed beside them. A close button that
-// only dismisses the notice stays in children, at the end of the line.
+// Notice は、画面の中で、何かがうまくいかなかったこと、気にかけてほしいこと、今済んだこと（"success": 保存した、
+// 始めた、戻した）を知らせるただ1つの形。色は枠と地だけに付け、字は墨で読ませる（ターミナルの知らせの枠と同じ色。
+// noticeTones.ts）。"compact" は、詰まった一覧やサイドの区画に収める大きさ。
+// 1文で足りる知らせは children だけにする。2文以上になるときは、何が起きたかを title に、そのあとを children に書く。
+// details は、読んですぐには要らないもの（直し方、エラーの番号）で、最初は畳んでおく。常に見える長い説明を置かないため。
+// actions は、知らせについて取れる操作で、文の下、枠の中に置く。長い文が横から押し縮められないようにするため。
 export function Notice({
   children,
+  title,
   tone = "notice",
   compact = false,
+  details,
   actions,
   onDismiss,
 }: {
-  children: ReactNode;
-  tone?: keyof typeof noticeToneClasses;
+  children?: ReactNode;
+  title?: string | undefined;
+  tone?: keyof typeof noticeToneFrames;
   compact?: boolean;
+  details?: { label: string; content: ReactNode } | undefined;
   actions?: ReactNode;
   // onDismiss は、知らせを消す。失敗した操作の結果のように、次の操作まで残る知らせに付け、右上に［×］を出す。
   // 今の状態を表す知らせ（読めない、ロック中など）には付けない。状態が変われば消えるため。
-  onDismiss?: () => void;
+  onDismiss?: (() => void) | undefined;
 }) {
   const t = useTranslate();
   const spacing = compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm";
+  const below = compact ? "mt-1.5" : "mt-2";
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
-      className={`rounded-inset border ${spacing} ${noticeToneClasses[tone]}`}
+      className={`rounded-inset border text-ink ${spacing} ${noticeToneFrames[tone]}`}
     >
       <div className="flex items-center gap-2">
-        {children}
+        <div className="min-w-0 flex-1 break-words">
+          {title === undefined ? null : <p className="font-semibold">{title}</p>}
+          {title === undefined || children === undefined ? children : <div className="text-ink-muted">{children}</div>}
+        </div>
         {onDismiss === undefined ? null : (
           <button
             type="button"
@@ -156,7 +166,13 @@ export function Notice({
           </button>
         )}
       </div>
-      {actions === undefined ? null : <div className={`flex flex-wrap items-center gap-2 ${compact ? "mt-1.5" : "mt-2"}`}>{actions}</div>}
+      {details === undefined ? null : (
+        <details className={below}>
+          <DisclosureSummary className="text-ink-muted">{details.label}</DisclosureSummary>
+          <div className={below}>{details.content}</div>
+        </details>
+      )}
+      {actions === undefined ? null : <div className={`flex flex-wrap items-center gap-2 ${below}`}>{actions}</div>}
     </div>
   );
 }
