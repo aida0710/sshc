@@ -278,8 +278,8 @@ export function WorkspaceTree({
           iconClassName="size-3.5"
         />
       </div>
-      {terminalSessions.problem === "" ? null : <Notice tone="danger" compact>{terminalSessions.problem}</Notice>}
-      {workspaces.problem === "" ? null : <Notice tone="danger" compact>{workspaces.problem}</Notice>}
+      {terminalSessions.problem === "" ? null : <Notice tone="danger" compact onDismiss={terminalSessions.dismissProblem}>{terminalSessions.problem}</Notice>}
+      {workspaces.problem === "" ? null : <Notice tone="danger" compact onDismiss={workspaces.dismissProblem}>{workspaces.problem}</Notice>}
       <ul aria-label={t("workspace.heading")} className="flex flex-col gap-0.5">
         {groups.map(({ workspace, sessions: members }, index) => {
           const name = workspaceDisplayName(t, workspace);

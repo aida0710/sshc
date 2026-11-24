@@ -13,7 +13,9 @@ export type RunTargetsState = {
   engines: string[];
   // selected は、画面が使う sshc エンジン（Snippets・設定・同期・更新のほかの画面）。null はこのマシン。
   selected: string | null;
+  // problem は、足す・外す・別タブで開くが失敗した理由。次の操作まで残るので、dismissProblem で消せる。
   problem: string;
+  dismissProblem: () => void;
   busy: boolean;
   // select は、画面が使う sshc エンジンを替える。保存していない下書きがあって、それを残すと決めたときは替えずに
   // false を返す（同じものを選んだときは true）。
@@ -138,7 +140,8 @@ export function useRunTargets({
     }
   }, [api, report]);
 
-  return { engines, selected, problem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock, unread,
+  const dismissProblem = useCallback(() => setProblem(""), []);
+  return { engines, selected, problem, dismissProblem, busy, select, add, remove, openInNewTab, api, localVersion, vaultUnlock, unread,
     engineInfo: { openFor: engineInfoFor, ask: setEngineInfoFor, close: closeEngineInfo },
   };
 }

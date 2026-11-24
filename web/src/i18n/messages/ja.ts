@@ -444,7 +444,6 @@ export const ja = {
   "sftp.manager.controlChanged": "転送状態が変わりました。最新の状態に更新しました。",
   "sftp.manager.cleanupFailed": "リモートの一時ファイルを削除できませんでした。接続を確認して、もう一度お試しください。",
   "sftp.manager.controlFailed": "転送を操作できませんでした。接続を確認して、もう一度お試しください。",
-  "sftp.manager.dismissError": "エラーを閉じる",
   "sftp.manager.items": "転送ファイル",
   "sftp.manager.folder": "フォルダ",
   "sftp.manager.upload": "アップロード",

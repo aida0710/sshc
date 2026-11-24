@@ -42,7 +42,7 @@ function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi
 
 function runTargets(selected: string | null, api = enginesApi()): RunTargetsState {
   return {
-    engines: ["r100"], selected, problem: "", busy: false,
+    engines: ["r100"], selected, problem: "", dismissProblem: vi.fn(), busy: false,
     select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
     api, localVersion: "v0.54.0",
     vaultUnlock: { unlockFor: null, revision: 0, ask: vi.fn(), close: vi.fn(), unlocked: vi.fn() },
