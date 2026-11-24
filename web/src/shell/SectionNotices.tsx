@@ -3,6 +3,7 @@ import type { CreateConnectionDraft } from "../connections/createConnectionDraft
 import { useTranslate } from "../i18n/context";
 import type { Section } from "../routing/sectionRoute";
 import { Button } from "../ui/surface";
+import { noticeBand } from "../ui/noticeTones";
 
 // The sections a connection being created sends the person to for what it
 // still needs (a key); there the draft waits with a way back.
@@ -64,7 +65,7 @@ function SectionNotice({
   return (
     <div
       role={status ? "status" : undefined}
-      className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink"
+      className={`flex shrink-0 items-center gap-3 px-4 py-2 text-sm ${noticeBand("notice")}`}
     >
       {children}
       <Button className="shrink-0" onClick={onAction}>

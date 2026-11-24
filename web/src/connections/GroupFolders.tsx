@@ -6,6 +6,7 @@ import { sectionHeading } from "../ui/form";
 import { Icon, type IconName } from "../ui/icons";
 import { connectionFilesOf, keyFilesOf } from "./groupFolderContents";
 import { useKeyItems } from "./useKeyItems";
+import { NoteLine } from "../ui/NoteLine";
 
 type GroupFoldersProps = {
   group: GroupView;
@@ -28,7 +29,7 @@ export function GroupFolders({ group, hosts, keys }: GroupFoldersProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         <Folder icon="groups" path={`${group.directory}/`}>
           {!group.directoryPresent ? (
-            <p className="text-xs text-notice-ink">{t("groupFolders.missing")}</p>
+            <NoteLine live={false}>{t("groupFolders.missing")}</NoteLine>
           ) : files.length === 0 ? (
             <p className="text-xs text-ink-faint">{t("groupFolders.noConnections")}</p>
           ) : files.map((file) => (
@@ -42,7 +43,7 @@ export function GroupFolders({ group, hosts, keys }: GroupFoldersProps) {
           {keyItems.kind === "loading" ? (
             <p className="text-xs text-ink-faint">{t("groupFolders.keysLoading")}</p>
           ) : keyItems.kind === "failed" ? (
-            <p className="text-xs text-notice-ink">{t("groupFolders.keysFailed")}</p>
+            <NoteLine live={false}>{t("groupFolders.keysFailed")}</NoteLine>
           ) : keyFiles.length === 0 ? (
             <p className="text-xs text-ink-faint">{t("groupFolders.noKeys")}</p>
           ) : keyFiles.map((file) => (

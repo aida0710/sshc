@@ -21,6 +21,7 @@ import type {
 import { describeBlocker, noteLabels } from "./labels";
 import { usePendingResult } from "../ui/usePendingResult";
 import { literalTextEntry } from "../ui/softKeyboard";
+import { NoteLine } from "../ui/NoteLine";
 
 // どのフォームも、送った操作が終わるまで submission.pending で送信のボタンを busy にする。
 // 待つ間はボタンが押せないが、入力欄の Enter からの二度目の送信も onSubmit で止める。
@@ -438,9 +439,7 @@ export function RelocateResult({
         </p>
       )}
       {result.notes.map((note) => (
-        <p key={note} className="text-notice-ink">
-          {note in noteLabels ? t(noteLabels[note]!) : note}
-        </p>
+        <NoteLine key={note} live={false}>{note in noteLabels ? t(noteLabels[note]!) : note}</NoteLine>
       ))}
       <div>
         <Button onClick={onClose}>{t("keys.close")}</Button>

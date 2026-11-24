@@ -14,6 +14,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   Clock,
   CloudUpload,
   Columns2,
@@ -90,6 +91,8 @@ const shapes = {
   config: FileCog,
   groups: Folder,
   folder: Folder,
+  // failure は、1行の失敗の知らせの印（NoteLine）。注意の三角と形を変え、色だけで見分けなくてよいようにする。
+  failure: CircleAlert,
   file: File,
   openFile: FolderOpen,
   image: Image,

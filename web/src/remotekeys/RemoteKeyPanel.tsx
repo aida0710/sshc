@@ -20,6 +20,7 @@ import { RemoteKeyHostPicker } from "./RemoteKeyHostPicker";
 import { RemoteKeyPlanCard } from "./RemoteKeyPlanCard";
 import { unavoidableDirectives } from "../diagnostics/executableDirectives";
 import { literalTextEntry } from "../ui/softKeyboard";
+import { NoteLine } from "../ui/NoteLine";
 
 // 公開鍵をリモートホストの authorized_keys へ登録する画面。「1. 公開鍵」で鍵を、「2. 接続先」で
 // ホストを選び、［登録内容を確認］で sshcエンジンが設定から求めた登録内容（接続しない）を見せて
@@ -388,7 +389,7 @@ export function RemoteKeyPanel({
                 <span className="font-mono font-medium">{result.alias}</span>
                 <div>
                   {result.response === undefined ? (
-                    <p className="text-danger">{result.error}</p>
+                    <NoteLine tone="danger" live={false}>{result.error}</NoteLine>
                   ) : (
                     <>
                       <p>{result.response.outcome in outcomeLabels

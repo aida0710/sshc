@@ -1,5 +1,6 @@
 import { useTranslate } from "../i18n/context";
 import type { KeyInventoryResponse } from "./api";
+import { Icon } from "../ui/icons";
 
 // KeyInventoryProblems は、種類を判定できなかったファイルと、設定が指している
 // のに見つからない鍵を並べる。一覧から黙って外さないためである。
@@ -9,7 +10,8 @@ export function KeyInventoryProblems({ inventory }: { inventory: KeyInventoryRes
     <>
       {inventory.unreadable.length > 0 && (
         <section aria-labelledby="unreadable-heading" className="flex flex-col gap-2 border-t border-line pt-5">
-          <h3 id="unreadable-heading" className="text-sm font-semibold text-notice-ink">
+          <h3 id="unreadable-heading" className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <Icon name="warning" className="size-4 text-notice-ink" />
             {t("keys.unreadableHeading")}
           </h3>
           <p className="text-sm text-ink-muted">{t("keys.unreadableNote")}</p>
@@ -24,7 +26,8 @@ export function KeyInventoryProblems({ inventory }: { inventory: KeyInventoryRes
       )}
       {inventory.unresolvedReferences.length > 0 && (
         <section aria-labelledby="unresolved-heading" className="flex flex-col gap-2 border-t border-line pt-5">
-          <h3 id="unresolved-heading" className="text-sm font-semibold text-notice-ink">
+          <h3 id="unresolved-heading" className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <Icon name="warning" className="size-4 text-notice-ink" />
             {t("keys.unresolvedHeading")}
           </h3>
           <ul className="text-sm text-ink-muted">

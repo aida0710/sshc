@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from "react";
 import { describeControl } from "./describeControl";
+import { NoteLine } from "./NoteLine";
 
 // The border keeps the stronger control line: appearance.spec holds it to a 2.5:1 contrast, so a field
 // is found without its label.
@@ -108,7 +109,7 @@ export function Field({
       )}
       {hint === undefined ? null : <span id={hintId} className={hintText}>{hint}</span>}
       {!hasError ? null : (
-        <span id={errorId} role="alert" className="text-xs text-danger">{error}</span>
+        <NoteLine tone="danger" id={errorId}>{error}</NoteLine>
       )}
     </div>
   );

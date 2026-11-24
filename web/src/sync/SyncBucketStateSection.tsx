@@ -8,6 +8,7 @@ import { PanelState } from "../ui/PanelState";
 import { Button } from "../ui/surface";
 import { formatStorageBytes } from "./SyncResultCard";
 import type { BucketStatusState } from "./useSyncRemoteState";
+import { NoteLine } from "../ui/NoteLine";
 
 // History entries shown before "show all" is asked for.
 const collapsedHistoryCount = 5;
@@ -92,9 +93,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
               })}
             </p>
             {bucketState.value.historyTruncated ? (
-              <p className="mt-2 text-xs text-notice-ink">
-                {t("sync.bucketHistoryTruncated")}
-              </p>
+              <NoteLine live={false} className="mt-2">{t("sync.bucketHistoryTruncated")}</NoteLine>
             ) : null}
             {bucketState.value.history.length === 0 ? (
               <p className={`mt-2 ${hintText}`}>

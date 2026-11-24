@@ -4,6 +4,7 @@ import { control, dialogHeading, hintText } from "./form";
 import { Button, Notice } from "./surface";
 import { ModalShell } from "./ModalShell";
 import { hasOnScreenKeyboard, type asciiTextEntry } from "./softKeyboard";
+import { NoteLine } from "./NoteLine";
 
 // InputDialog は、名前など1つの値を尋ねる。
 //
@@ -97,7 +98,7 @@ export function InputDialog({
             onChange={(event) => setValue(event.target.value)}
             className={control}
           />
-          {touched && validation !== "" ? <span id={errorId} role="alert" className="text-xs text-danger">{validation}</span> : null}
+          {touched && validation !== "" ? <NoteLine tone="danger" id={errorId}>{validation}</NoteLine> : null}
         </div>
         {error === "" ? null : <Notice tone="danger" id={failureId}>{error}</Notice>}
         <div className="flex justify-end gap-2">

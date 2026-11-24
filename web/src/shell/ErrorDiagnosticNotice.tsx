@@ -3,6 +3,7 @@ import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { CopyButton } from "../ui/CopyButton";
 import type { RequestFailureDiagnostic } from "../api/client";
 import { workspaceRefusalMessages } from "../api/workspaceRefusals";
+import { noticeBand } from "../ui/noticeTones";
 
 export function diagnosticReport(version: string, diagnostic: RequestFailureDiagnostic): string {
   const lines = [
@@ -30,12 +31,12 @@ export function ErrorDiagnosticNotice({
   return (
     <section
       aria-labelledby="request-failure-heading"
-      className="shrink-0 border-b border-danger/40 bg-danger/5 px-4 py-3"
+      className={`shrink-0 px-4 py-3 ${noticeBand("danger")}`}
     >
       <div className="mx-auto flex max-w-5xl flex-col gap-2">
         <div className="flex items-start gap-3">
           <div className="min-w-0 grow">
-            <h2 id="request-failure-heading" className="text-sm font-semibold text-danger">
+            <h2 id="request-failure-heading" className="text-sm font-semibold text-ink">
               {t("diagnostic.requestFailed")}
             </h2>
             <p className="mt-1 text-xs leading-5 text-ink-muted">

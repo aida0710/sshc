@@ -5,6 +5,7 @@ import { control, hintText } from "../ui/form";
 import { Button } from "../ui/surface";
 import { usePendingAction } from "../ui/usePendingAction";
 import { asciiTextEntry } from "../ui/softKeyboard";
+import { NoteLine } from "../ui/NoteLine";
 
 // ConnectionAction は、見出しの「…」から開いて、入力してから書き込む操作である。複製と削除は入力が要らないので
 // ここには無い（複製はすぐ行い、削除は ConfirmDialog で確かめる）。
@@ -109,7 +110,7 @@ export function ConnectionActionPanel({
       <fieldset disabled={disabled || pending.running !== null} className="contents">
         {form.body}
         {form.hint === "" ? null : <p className={hintText}>{form.hint}</p>}
-        {disabled ? <p className="text-xs text-notice-ink">{t("conn.manageDraftBlocked")}</p> : null}
+        {disabled ? <NoteLine live={false}>{t("conn.manageDraftBlocked")}</NoteLine> : null}
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>{t("conn.actionCancel")}</Button>
           <Button kind="primary" disabled={!form.ready} busy={pending.running === action} onClick={() => submit(form.run)}>{form.submitLabel}</Button>

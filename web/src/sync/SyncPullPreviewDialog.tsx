@@ -128,6 +128,7 @@ export function SyncPullPreviewDialog({
               <p className={hintText}>
                 {t("sync.wouldRemove", { count: preview.removed.length })}
               </p>
+              {/* notice-colour-exempt: 消えるファイルの一覧（差分の色） */}
               <ul className="flex flex-col gap-1 font-mono text-xs text-danger">
                 {preview.removed.map((path) => (
                   <li key={path}>{path}</li>

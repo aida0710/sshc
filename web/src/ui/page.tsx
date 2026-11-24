@@ -78,6 +78,7 @@ export function SummaryStats({ children, className = "", ...rest }: ComponentPro
 // such a count out at 0, since nothing asks for a look then.
 export function SummaryStat({ label, value, attention = false }: { label: string; value: string | number; attention?: boolean }) {
   return (
+    /* notice-colour-exempt: 数の札の色 */
     <div className={`inline-flex h-[30px] items-center gap-2 rounded-md px-3 text-xs ${attention ? "bg-notice text-notice-ink" : "bg-well text-ink-muted"}`}>
       <dt>{label}</dt>
       <dd className={`font-mono text-ui font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</dd>

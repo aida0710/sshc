@@ -3,6 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { describeAlgorithm, describeKeyKind, noteLabels } from "./labels";
 import { certificateLines } from "./KeyTable";
 import type { KeyItem } from "./api";
+import { NoteLine } from "../ui/NoteLine";
 
 // KeyInspector is the details pane of a key chosen in the table: what the row has no room for, with the
 // public key and certificate files that go with a private key (related).
@@ -54,6 +55,7 @@ export function KeyInspector({ item, related, now }: { item: KeyItem; related: K
                     {file.certificate === undefined ? null : (
                       <ul className="mt-0.5 [overflow-wrap:anywhere] text-xs text-ink-muted">
                         {certificateLines(file.certificate, now, t).map((line) => (
+                          /* notice-colour-exempt: 期限の切れた鍵の行の色 */
                           <li key={line.text} className={line.expired ? "text-danger" : undefined}>{line.text}</li>
                         ))}
                       </ul>
@@ -67,9 +69,9 @@ export function KeyInspector({ item, related, now }: { item: KeyItem; related: K
       </dl>
 
       {item.notes.length === 0 ? null : (
-        <ul className="flex flex-col gap-1 text-xs text-notice-ink">
+        <ul className="flex flex-col gap-1">
           {item.notes.map((note) => (
-            <li key={note}>{note in noteLabels ? t(noteLabels[note]!) : note}</li>
+            <li key={note}><NoteLine live={false}>{note in noteLabels ? t(noteLabels[note]!) : note}</NoteLine></li>
           ))}
         </ul>
       )}
@@ -77,6 +79,7 @@ export function KeyInspector({ item, related, now }: { item: KeyItem; related: K
       {item.certificate === undefined ? null : (
         <ul className="flex flex-col gap-1 [overflow-wrap:anywhere] text-xs text-ink-muted">
           {certificateLines(item.certificate, now, t).map((line) => (
+            /* notice-colour-exempt: 期限の切れた鍵の行の色 */
             <li key={line.text} className={line.expired ? "text-danger" : undefined}>
               {line.text}
             </li>

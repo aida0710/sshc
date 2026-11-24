@@ -17,6 +17,7 @@ import {
 } from "./commandApi";
 import { literalTextEntry } from "../../ui/softKeyboard";
 import { noticeFrameColours } from "../../ui/noticeTones";
+import { NoteLine } from "../../ui/NoteLine";
 
 export type WorkspaceCommandTarget = {
   targetId: string;
@@ -371,7 +372,7 @@ export function WorkspaceCommandCenter({
                     )}
                   </p>
                   {result.problem ? (
-                    <p className="mt-1 text-xs text-danger">{terminalCommandProblemText(t, result.problem)}</p>
+                    <NoteLine tone="danger" live={false} className="mt-1">{terminalCommandProblemText(t, result.problem)}</NoteLine>
                   ) : null}
                 </div>
               ))}

@@ -6,6 +6,7 @@ import { Icon } from "../ui/icons";
 import { asciiTextEntry } from "../ui/softKeyboard";
 import type { BasicFieldState } from "./basicFields";
 import { inheritsValue, resetValue, typedValue, type DraftField } from "./basicFormDraft";
+import { NoteLine } from "../ui/NoteLine";
 
 type DestinationName = "hostName" | "user" | "port";
 
@@ -90,7 +91,7 @@ function DestinationInput({ name, entry, numeric = false }: { name: DestinationN
           </button>
         ) : null}
       </span>
-      {warning === "" ? null : <span id={errorId} aria-live="polite" className="text-xs leading-[18px] text-notice-ink">{warning}</span>}
+      {warning === "" ? null : <NoteLine id={errorId}>{warning}</NoteLine>}
     </div>
   );
 }

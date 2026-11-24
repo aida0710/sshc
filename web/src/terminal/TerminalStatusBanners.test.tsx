@@ -65,7 +65,7 @@ it("says a lost SSH connection ended the session, in red, rather than exit statu
   render(<TerminalStatusBanners session={lost} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
 
   const message = screen.getByText("The SSH connection was lost.");
-  expect(message).toHaveClass("text-danger");
+  expect(message.closest("[data-tone]")).toHaveAttribute("data-tone", "danger");
   expect(screen.queryByText(/status -1/)).toBeNull();
 });
 
@@ -99,17 +99,17 @@ it("never shows the engine's unknown exit status as a status", () => {
 it("shows a clean exit quietly and a failed one in red", () => {
   const exitedWith = (code: number): TerminalSession => ({ ...session, state: "exited", exited: { code, signal: "", at: "2026-10-28T09:00:00Z" } });
   const { rerender } = render(<TerminalStatusBanners session={exitedWith(0)} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
-  expect(screen.getByText(/exited with status 0/)).toHaveClass("text-ink-muted");
+  expect(screen.getByText(/exited with status 0/).closest("[data-tone]")).toHaveAttribute("data-tone", "neutral");
 
   rerender(<TerminalStatusBanners session={exitedWith(3)} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
-  expect(screen.getByText(/exited with status 3/)).toHaveClass("text-danger");
+  expect(screen.getByText(/exited with status 3/).closest("[data-tone]")).toHaveAttribute("data-tone", "danger");
 });
 
 it("says in red that a session ended as soon as it opened, even with status 0", () => {
   const rightAway: TerminalSession = { ...session, state: "exited", exited: { code: 0, signal: "", at: "2026-08-14T09:00:00.080Z" } };
   render(<TerminalStatusBanners session={rightAway} problem="" link={{ phase: "live" }} onLinkNow={() => undefined} onLinkStop={() => undefined} />);
 
-  expect(screen.getByText(/exited with status 0 as soon as it started/)).toHaveClass("text-danger");
+  expect(screen.getByText(/exited with status 0 as soon as it started/).closest("[data-tone]")).toHaveAttribute("data-tone", "danger");
 });
 
 it("says a reconnect waits for the network instead of counting down", () => {

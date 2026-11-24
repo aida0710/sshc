@@ -13,6 +13,7 @@ import { NewGroupField } from "./NewGroupField";
 import { useCreateConnectionForm, type CreateConnectionFormOptions } from "./useCreateConnectionForm";
 import { useReportDirty } from "./useReportDirty";
 import { asciiTextEntry, hasOnScreenKeyboard } from "../ui/softKeyboard";
+import { NoteLine } from "../ui/NoteLine";
 
 const authenticationChoices: readonly [CreateConnectionAuthenticationKind, MessageKey][] = [
   ["identity_file", "conn.createIdentityFile"],
@@ -33,7 +34,7 @@ type CreateConnectionPaneProps = CreateConnectionFormOptions & {
 // FieldProblem は、離れた欄の値の問題を、その欄の下に出す。フォーカスが次の欄へ移ったときに出るので、
 // alert にはしない（移った先の操作を読み上げで遮らないため）。
 function FieldProblem({ text }: { text: string }) {
-  return text === "" ? null : <p className="mt-1 text-xs text-danger">{text}</p>;
+  return text === "" ? null : <NoteLine tone="danger" live={false} className="mt-1">{text}</NoteLine>;
 }
 
 // CreateConnectionPane は、Connections の右の欄で開く新しい接続の欄である。入力のためにほかの操作を止める

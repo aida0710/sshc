@@ -3,6 +3,7 @@ import type { MessageKey } from "../i18n/messages";
 import { control } from "../ui/form";
 import { Button } from "../ui/surface";
 import { literalTextEntry } from "../ui/softKeyboard";
+import { NoteLine } from "../ui/NoteLine";
 
 // ConfigPathTask は、~/.ssh の中のパスを1つ入れて行う操作である。［ファイルを作成］と「…」のメニューから始める。
 export type ConfigPathTask = "createFile" | "createDirectory" | "deleteDirectory" | "rename";
@@ -68,7 +69,7 @@ export function ConfigPathForm({
         </Button>
         <Button className="min-h-10 md:min-h-0" onClick={onCancel}>{t("explorer.cancelPathTask")}</Button>
       </div>
-      {problem === "" ? null : <p id="config-path-problem" role="alert" className="text-xs text-danger">{problem}</p>}
+      {problem === "" ? null : <NoteLine tone="danger" id="config-path-problem">{problem}</NoteLine>}
       <p id="config-path-note" className="text-xs leading-[18px] text-ink-faint">{t(texts.note)}</p>
     </form>
   );

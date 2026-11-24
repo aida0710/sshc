@@ -75,6 +75,7 @@ function VersionCard({ label, version, differs }: { label: string; version: stri
   return (
     <div className="min-w-0 rounded-md border border-line px-3 py-2">
       <p className="truncate text-xs text-ink-muted">{label}</p>
+      {/* notice-colour-exempt: 違うバージョンの値の色 */}
       <p className={`truncate font-mono text-sm ${differs ? "text-danger" : "text-ink"}`}>{version}</p>
     </div>
   );

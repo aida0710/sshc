@@ -2,12 +2,12 @@ import { useTranslate } from "../i18n/context";
 import { ConnectionVaultUnlock } from "./ConnectionVaultUnlock";
 import { CheckboxField, control } from "../ui/form";
 import { FieldRow, FieldRowNote } from "../ui/FieldRow";
-import { Icon } from "../ui/icons";
 import { PasswordInput } from "../ui/PasswordField";
 import { Notice } from "../ui/surface";
 import { eligibilityText } from "./eligibilityText";
 import type { BasicDraft, BasicFormDerived, PasswordAction } from "./basicFormDraft";
 import type { ConnectionSecretsModel } from "./useConnectionSecrets";
+import { NoteLine } from "../ui/NoteLine";
 
 // The choices that assign a password. While one is chosen, what stands in the way of using it is shown.
 const assigningActions: readonly PasswordAction[] = ["dedicated_password", "saved_password", "new_shared_password"];
@@ -130,15 +130,5 @@ export function BasicPasswordSection({
         </FieldRowNote>
       ) : null}
     </>
-  );
-}
-
-// NoteLine is one warning under a row: a marked, coloured line rather than a box.
-function NoteLine({ tone = "notice", children }: { tone?: "notice" | "danger"; children: string }) {
-  return (
-    <p role={tone === "danger" ? "alert" : "status"} className={`flex gap-1.5 text-xs leading-[18px] ${tone === "danger" ? "text-danger" : "text-notice-ink"}`}>
-      <Icon name="warning" className="mt-0.5 size-3.5 shrink-0" />
-      <span>{children}</span>
-    </p>
   );
 }

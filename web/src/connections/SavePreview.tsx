@@ -6,6 +6,7 @@ import { useTranslate } from "../i18n/context";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { Notice as Band } from "../ui/surface";
 import { NoticeList } from "./NoticeList";
+import { NoteLine } from "../ui/NoteLine";
 
 function DiffView({ lines }: { lines: DiffLine[] }) {
   return (
@@ -33,7 +34,7 @@ function FileDiffView({ diff }: { diff: FileDiff }) {
         {diff.created === true ? t("preview.newFile") : ""}
       </h4>
       {diff.truncated === true ? (
-        <p className="text-xs text-notice-ink">{t("preview.tooLarge")}</p>
+        <NoteLine live={false}>{t("preview.tooLarge")}</NoteLine>
       ) : null}
       <DiffView lines={diff.lines} />
     </section>

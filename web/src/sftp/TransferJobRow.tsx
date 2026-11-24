@@ -12,6 +12,7 @@ import { sftpTransferProblemText } from "./sftpProblemText";
 import { Spinner } from "../ui/Spinner";
 import { usePendingResult } from "../ui/usePendingResult";
 import type { RunTransferControl } from "./useTransferControl";
+import { NoteLine } from "../ui/NoteLine";
 
 const statusLabelKeys: Record<DisplayedTransferStatus, MessageKey> = {
   queued: "sftp.manager.status.queued", running: "sftp.manager.status.running",
@@ -112,7 +113,7 @@ export function TransferJobRow({ job, waiting, processingStopped, maxReconnectAt
     {detailsOpen ? <div id={detailsId} className="space-y-2 bg-toolbar/30 px-3 py-3 text-xs">
       <TransferJobRoute job={job} />
       <TransferExclusionSummary patterns={job.excludePatterns ?? []} />
-      {hasProblem ? <p className={displayedStatus === "failed" ? "text-danger" : "text-notice-ink"}>{sftpTransferProblemText(t, job.problem)}</p> : null}
+      {hasProblem ? <NoteLine tone={displayedStatus === "failed" ? "danger" : "notice"} live={false}>{sftpTransferProblemText(t, job.problem)}</NoteLine> : null}
     </div> : null}
   </li>;
 }

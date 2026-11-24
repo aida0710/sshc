@@ -11,3 +11,9 @@ export const noticeFrameColours = {
   // 済んだこと。
   success: "border-live/40 bg-[color-mix(in_srgb,var(--ui-live)_8%,var(--ui-card))]",
 } as const;
+
+// noticeBand は、区画の上に端から端まで渡す帯（ターミナルの上の帯、画面の上の共通のエラー）の色。形は細い帯のまま、
+// カードと同じ地を敷き、線は下にだけ引く。字は墨にする。
+export function noticeBand(tone: keyof typeof noticeFrameColours): string {
+  return `border-b text-ink ${noticeFrameColours[tone]}`;
+}

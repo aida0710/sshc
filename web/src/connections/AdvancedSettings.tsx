@@ -17,6 +17,7 @@ import { useDraftSave } from "./useDraftSave";
 import { useReportDirty } from "./useReportDirty";
 import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
 import { unsavedJumpHops } from "./jumpHops";
+import { NoteLine } from "../ui/NoteLine";
 
 type AdvancedSettingsProps = {
   detail: HostDetail;
@@ -307,7 +308,7 @@ export function AdvancedSettings({
                   />
                   {removeButton(field)}
                 </div>
-                {warning === "" ? null : <p className="mt-1 text-xs text-notice-ink">{warning}</p>}
+                {warning === "" ? null : <NoteLine live={false} className="mt-1">{warning}</NoteLine>}
               </li>
             );
           })}

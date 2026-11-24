@@ -6,6 +6,7 @@ import { Button } from "../ui/surface";
 import { literalTextEntry } from "../ui/softKeyboard";
 import { keyBarLabelForbiddenPattern, keyBarTextForbiddenPattern, maxKeyBarLabelLength, maxKeyBarTextLength } from "../rules/keyBar.generated";
 import type { KeyBarKey } from "./keySequences";
+import { NoteLine } from "../ui/NoteLine";
 
 // CustomKey is a key the person makes: what it shows and what it sends.
 export type CustomKey = { label: string; text: string; enter?: boolean };
@@ -53,20 +54,18 @@ export function CustomKeyDialog({ initial, onSubmit, onCancel }: {
           <input {...literalTextEntry} id="custom-key-label" ref={labelRef} value={label} className={`${control} font-mono`}
             aria-invalid={touched && problem.label !== ""} aria-describedby="custom-key-label-hint"
             onChange={(event) => setLabel(event.target.value)} />
-          <span id="custom-key-label-hint" role={touched && problem.label !== "" ? "alert" : undefined}
-            className={touched && problem.label !== "" ? "text-xs text-danger" : hintText}>
-            {touched && problem.label !== "" ? problem.label : t("keyBar.customLabelHint", { max: String(maxKeyBarLabelLength) })}
-          </span>
+          {touched && problem.label !== ""
+            ? <NoteLine tone="danger" id="custom-key-label-hint">{problem.label}</NoteLine>
+            : <span id="custom-key-label-hint" className={hintText}>{t("keyBar.customLabelHint", { max: String(maxKeyBarLabelLength) })}</span>}
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="custom-key-text" className="text-xs font-medium tracking-wide text-ink-muted">{t("keyBar.customText")}</label>
           <textarea {...literalTextEntry} id="custom-key-text" rows={3} value={text} className={`${control} min-h-20 font-mono`}
             aria-invalid={touched && problem.text !== ""} aria-describedby="custom-key-text-hint"
             onChange={(event) => setText(event.target.value)} />
-          <span id="custom-key-text-hint" role={touched && problem.text !== "" ? "alert" : undefined}
-            className={touched && problem.text !== "" ? "text-xs text-danger" : hintText}>
-            {touched && problem.text !== "" ? problem.text : t("keyBar.customTextHint")}
-          </span>
+          {touched && problem.text !== ""
+            ? <NoteLine tone="danger" id="custom-key-text-hint">{problem.text}</NoteLine>
+            : <span id="custom-key-text-hint" className={hintText}>{t("keyBar.customTextHint")}</span>}
         </div>
         <label className="flex items-center gap-2 text-sm text-ink">
           <input type="checkbox" className="size-[15px] shrink-0 accent-accent" checked={enter} onChange={(event) => setEnter(event.target.checked)} />

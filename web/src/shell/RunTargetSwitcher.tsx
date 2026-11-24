@@ -14,6 +14,7 @@ import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
 import { chooseRunTarget, runTargetChoices } from "./runTargetChoice";
 import { recentConnectionsApi } from "../api/recentConnections";
+import { NoteLine } from "../ui/NoteLine";
 
 // リモートセッションに足す sshc エンジンは、このマシンの接続先から選ぶ。最近使ったものも、このマシンのものを出す。
 const loadThisMachineRecent = () => recentConnectionsApi.recentConnections();
@@ -101,7 +102,7 @@ export function RunTargetSwitcher({
           </button>
         )}
         {refusalReason === "" ? null : (
-          <p className="basis-full break-words px-2 pb-1 text-2xs leading-4 text-danger">{refusalReason}</p>
+          <NoteLine tone="danger" live={false} className="basis-full px-2 pb-1">{refusalReason}</NoteLine>
         )}
         {alias === null || actionsFor !== alias ? null : (
           <div className="basis-full pb-1 pl-5">

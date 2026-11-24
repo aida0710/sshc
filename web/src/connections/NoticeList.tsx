@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { noticeFrameColours } from "../ui/noticeTones";
+import { NoteLine } from "../ui/NoteLine";
 
 const noticeKeys: Record<string, MessageKey> = {
   complex_external_rule: "notice.complex_external_rule",
@@ -62,8 +63,8 @@ export function NoticeList({ notices, collapsible = false }: { notices: Notice[]
   const list = (
     <ul className="flex flex-col gap-1">
       {notices.map((notice, index) => (
-        <li key={`${notice.code}-${notice.path ?? ""}-${notice.line ?? 0}-${index}`} className={`text-xs ${collapsible ? "text-ink-muted" : "text-notice-ink"}`}>
-          <NoticeText notice={notice} />
+        <li key={`${notice.code}-${notice.path ?? ""}-${notice.line ?? 0}-${index}`}>
+          {collapsible ? <span className="text-xs text-ink-muted"><NoticeText notice={notice} /></span> : <NoteLine live={false}><NoticeText notice={notice} /></NoteLine>}
         </li>
       ))}
     </ul>

@@ -12,6 +12,7 @@ export function UpdateActivityLog({ entries }: { entries: UpdateActivityEntry[] 
     <div role="log" aria-label={t("about.activity")} className="rounded-inset border border-line px-3 py-2 text-xs">
       <ol className="grid grid-cols-[minmax(0,1fr)] gap-1">
         {entries.map((entry) => (
+          /* notice-colour-exempt: 記録の行の状態の色 */
           <li key={entry.id} className={`flex gap-3 ${entry.tone === "danger" ? "text-danger" : "text-ink-muted"}`}>
             <time dateTime={entry.at.toISOString()} className="shrink-0 tabular-nums">{formatTimeOfDay(entry.at, locale)}</time>
             <span className="min-w-0 [overflow-wrap:anywhere]">{t(entry.message, entry.values)}</span>

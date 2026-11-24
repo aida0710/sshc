@@ -9,6 +9,7 @@ import { PasswordInput } from "../ui/PasswordField";
 import { Notice } from "../ui/surface";
 import { customKeyId, type BasicDraft, type BasicFormDerived, type KeySelection } from "./basicFormDraft";
 import type { ConnectionSecretsModel } from "./useConnectionSecrets";
+import { NoteLine } from "../ui/NoteLine";
 
 // Which private key the connection uses, and, for an encrypted key the vault
 // can hold a passphrase for, the passphrase itself.
@@ -74,9 +75,7 @@ export function BasicPrivateKeyField({
       {preferredKey !== null && identityFileChange?.action === "set" &&
       identityFileChange.keyId === preferredKey.privateKeyId ? (
         <FieldRowNote density="editor">
-          <p className="text-xs text-notice-ink">
-            {t("conn.basicGeneratedKeyStaged", { path: preferredKey.privateRelativePath })}
-          </p>
+          <NoteLine live={false}>{t("conn.basicGeneratedKeyStaged", { path: preferredKey.privateRelativePath })}</NoteLine>
         </FieldRowNote>
       ) : null}
 

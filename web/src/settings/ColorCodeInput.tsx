@@ -6,6 +6,7 @@ import { themeAttributes } from "../theme/theme";
 import { narrowControl } from "../ui/form";
 import { asciiTextEntry } from "../ui/softKeyboard";
 import { Notice } from "../ui/surface";
+import { NoteLine } from "../ui/NoteLine";
 
 // ColorCodeInput は、自分で決める色を選ぶ行: システムのカラーピッカーと、同じ色をコードで打つ欄。さし色と、
 // リモートセッションの枠の色が使う。ピッカーで動かしている間は onPreview で見せ、閉じたときに onChoose で
@@ -89,7 +90,7 @@ export function ColorCodeInput({ color, disabled, labels, contrastAgainst, onPre
           className={`${narrowControl} font-mono`}
         />
       </div>
-      {typedInvalid ? <p className="text-xs text-danger">{t("appearance.customColorInvalid")}</p> : null}
+      {typedInvalid ? <NoteLine tone="danger" live={false}>{t("appearance.customColorInvalid")}</NoteLine> : null}
       {lowContrast ? <Notice compact>{labels.lowContrast}</Notice> : null}
     </div>
   );

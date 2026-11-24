@@ -1,6 +1,7 @@
 import { useContext, useId, type ReactNode, type SyntheticEvent } from "react";
 import { describeControl } from "./describeControl";
 import { FieldSavedContext, isChangeEvent } from "./fieldSaved";
+import { NoteLine } from "./NoteLine";
 
 // The two columns of a form: the names, then the controls. FieldRowNote lines up with the second. The names'
 // column fits twelve characters, so names such as 現在のマスターパスワード do not break mid-word. Other
@@ -83,7 +84,7 @@ export function FieldRow({
     <div data-field-row className={look.row} onChangeCapture={noteChange} onClickCapture={noteChange}>
       {interactiveChildren ? <div className={look.pair}>{name}{control}</div> : <label className={look.pair}>{name}{control}</label>}
       {hint === undefined ? null : <span id={hintId} className={`text-xs leading-[18px] text-ink-faint ${look.second}`}>{hint}</span>}
-      {warning === undefined ? null : <span id={warningId} aria-live="polite" className={`text-xs leading-[18px] text-notice-ink ${look.second}`}>{warning}</span>}
+      {warning === undefined ? null : <NoteLine id={warningId} className={look.second}>{warning}</NoteLine>}
       {actions === undefined ? null : <div className={`flex flex-wrap gap-2 ${look.second}`}>{actions}</div>}
       {/* Under the row, for a moment, once a change made in it was saved (a page that saves at once, FieldSaved).
           The page announces it once for screen readers, so this is only seen. */}

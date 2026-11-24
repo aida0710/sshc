@@ -11,6 +11,7 @@ import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
 import { asciiTextEntry, hasOnScreenKeyboard } from "../ui/softKeyboard";
+import { NoteLine } from "../ui/NoteLine";
 
 type ForwardApi = Pick<TerminalSessionsApi, "startTerminalForward" | "stopTerminalForward">;
 type SaveApi = Pick<typeof configApi, "overview" | "host" | "save">;
@@ -142,7 +143,7 @@ export function TerminalPortForwards({
                       </div>
                       <p className="mt-1 break-all font-mono text-xs text-ink-muted">{forwardAddress(forward, t)}</p>
                       {forward.temporary || forward.kind === "agent" ? null : <p className={`mt-1 ${hintText}`}>{t("terminal.forwardSavedStopHint")}</p>}
-                      {forward.problem === "" ? null : <p role="alert" className="mt-1 text-xs text-danger">{describeForwardProblem(t, forward.problem)}</p>}
+                      {forward.problem === "" ? null : <NoteLine tone="danger" className="mt-1">{describeForwardProblem(t, forward.problem)}</NoteLine>}
                       {forward.problem === "" ? null : <p className={`mt-1 ${hintText}`}>{t("terminal.forwardRetryHint")}</p>}
                     </div>
                     <div className="flex shrink-0 gap-2">

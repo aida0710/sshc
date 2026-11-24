@@ -138,9 +138,9 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
 // CheckLine は、確認の結果の1行：通ったかの印、結果の文、宛先や認証の方法。
 function CheckLine({ passed, text, detail = "" }: { passed: boolean; text: string; detail?: string }) {
   return (
-    <p role="status" className={`flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs leading-[18px] ${passed ? "text-success" : "text-notice-ink"}`}>
+    <p role="status" className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs leading-[18px] text-ink">
       <span className="flex items-baseline gap-1.5">
-        <Icon name={passed ? "check" : "warning"} className="size-3.5 shrink-0 translate-y-0.5" />
+        <Icon name={passed ? "check" : "warning"} className={`size-3.5 shrink-0 translate-y-0.5 ${passed ? "text-success" : "text-notice-ink"}`} />
         {text}
       </span>
       {detail === "" ? null : <span className="font-mono text-xs text-ink-faint">{detail}</span>}

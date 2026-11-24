@@ -9,6 +9,7 @@ import { Button, Notice } from "../ui/surface";
 import { formatStorageBytes } from "./SyncResultCard";
 import { syncHistoryRelationLabelKeys } from "./syncMessageKeys";
 import type { HistoryState } from "./useSyncRemoteState";
+import { NoteLine } from "../ui/NoteLine";
 
 type SyncHistorySectionProps = {
   busy: boolean;
@@ -74,16 +75,10 @@ export function SyncHistorySection({
           </p>
           {historyState.value.historyTruncated ||
           historyState.value.downloadTruncated ? (
-            <p className="mt-1 text-xs text-notice-ink">
-              {t("sync.historyTruncated")}
-            </p>
+            <NoteLine live={false} className="mt-1">{t("sync.historyTruncated")}</NoteLine>
           ) : null}
           {historyState.value.skipped > 0 ? (
-            <p className="mt-1 text-xs text-notice-ink">
-              {t("sync.historySkipped", {
-                count: historyState.value.skipped,
-              })}
-            </p>
+            <NoteLine live={false} className="mt-1">{t("sync.historySkipped", { count: historyState.value.skipped })}</NoteLine>
           ) : null}
 
           <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">

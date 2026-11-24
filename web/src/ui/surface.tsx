@@ -14,6 +14,7 @@ import { noticeFrameColours } from "./noticeTones";
 import { dangerAction, dangerTextAction, hintText, primaryAction, secondaryAction, smallSecondaryAction } from "./form";
 import { segmentClass, segmentedStrip } from "./segmentedStyle";
 import { Spinner } from "./Spinner";
+import { NoteLine } from "./NoteLine";
 
 type CardElement = "div" | "section" | "article" | "dl" | "ul";
 
@@ -102,9 +103,7 @@ export function Row({
         <p id={hintId} className={`px-3 pb-2 ${hintText}`}>{hint}</p>
       )}
       {warning === undefined ? null : (
-        <p role="status" className="px-3 pb-2 text-xs text-notice-ink">
-          {warning}
-        </p>
+        <NoteLine className="px-3 pb-2">{warning}</NoteLine>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import { Icon } from "../ui/icons";
 import { Button } from "../ui/surface";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
 import { groupSegmentProblem } from "./groupNameRules";
+import { NoteLine } from "../ui/NoteLine";
 
 type NewGroupFieldProps = {
   groupNames: readonly string[];
@@ -86,7 +87,7 @@ export function NewGroupField({ groupNames, onCreate, onCreated }: NewGroupField
         <Button busy={busy} disabled={name === ""} onClick={() => void create()}>{t("groupDialog.create")}</Button>
         <Button disabled={busy} onClick={close}>{t("groupDialog.cancel")}</Button>
       </div>
-      {problem === "" ? null : <p role="alert" className="text-xs text-danger">{problem}</p>}
+      {problem === "" ? null : <NoteLine tone="danger">{problem}</NoteLine>}
     </div>
   );
 }

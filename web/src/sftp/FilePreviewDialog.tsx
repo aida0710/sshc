@@ -7,6 +7,7 @@ import { FilePreviewHeader } from "./FilePreviewHeader";
 import { useFilePreview } from "./useFilePreview";
 import { usePreviewDownload } from "./usePreviewDownload";
 import { usePreviewStepping } from "./usePreviewStepping";
+import { noticeBand } from "../ui/noticeTones";
 
 function baseName(path: string): string {
   const components = path.split("/").filter(Boolean);
@@ -59,7 +60,7 @@ export function FilePreviewDialog({
         overlay={overlay}
         onClose={onClose}
       />
-      {problem === "" ? null : <p role="alert" className={`px-3 py-2 text-xs text-danger ${overlay ? "" : "border-b border-line"}`}>{problem}</p>}
+      {problem === "" ? null : <p role="alert" className={`px-3 py-2 text-xs ${noticeBand("danger")}`}>{problem}</p>}
     </>
   );
 

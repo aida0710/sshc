@@ -7,6 +7,7 @@ import { Button } from "../ui/surface";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { summarizeConnection, type ConnectionSavedState } from "./connectionSavedState";
 import type { RefreshState } from "./pageState";
+import { NoteLine } from "../ui/NoteLine";
 
 type ConnectionSummaryProps = {
   state: ConnectionSavedState;
@@ -71,7 +72,7 @@ export function ConnectionSummary({
         </div>
         {phoneActionsSlot === null ? headerActions : <PageChromePortal slot={phoneActionsSlot}>{headerActions}</PageChromePortal>}
       </header>
-      {blocked ? <p id={reasonId} className="mt-3 text-xs text-notice-ink">{blockedReason()}</p> : null}
+      {blocked ? <NoteLine id={reasonId} live={false} className="mt-3">{blockedReason()}</NoteLine> : null}
     </section>
   );
 }

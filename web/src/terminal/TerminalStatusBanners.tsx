@@ -9,12 +9,18 @@ import { useReconnectCountdown } from "./useReconnectCountdown";
 import type { HostKeyAnswer } from "../shell/useHostKeyAnswer";
 import type { SessionRecovery } from "./useSessionRecovery";
 import { Button } from "../ui/surface";
+import { noticeBand } from "../ui/noticeTones";
 
 // 帯は、ターミナルの上に1行ずつ重なる。共通の Notice のように操作を文の下に置くと、帯ごとに1行増えて
 // ターミナルの行が減るので、操作は文の右に並べ、ボタンは知らせの中に置く低いボタン（Button small）にする。
-const notice = "shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink";
+const notice = `shrink-0 px-3 py-1.5 text-xs ${noticeBand("notice")}`;
 // スマホの組み方では、指で押せるように帯のボタンを少し高くする。
 const bannerButton = "shrink-0 mobile-layout:min-h-8";
+
+// endedBadly は、終わったセッションの帯を失敗の色にするか。接続が切れた、失敗した、0以外で終わった、開いてすぐ終わった、のとき。
+function endedBadly(session: TerminalSession): boolean {
+  return session.problem !== "" || exitedAbnormally(session);
+}
 
 function StreamLinkMessage({ link }: { link: Exclude<StreamLink, { phase: "live" }> }) {
   const t = useTranslate();
@@ -146,8 +152,12 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
         </div>
       )}
       {!rows.has("ended") || session.exited === undefined ? null : (
-        <div role={session.problem === "" ? "status" : "alert"} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-card px-3 py-1.5 text-xs">
-          <p className={`min-w-0 grow ${session.problem !== "" || exitedAbnormally(session) ? "text-danger" : "text-ink-muted"}`}>
+        <div
+          role={session.problem === "" ? "status" : "alert"}
+          data-tone={endedBadly(session) ? "danger" : "neutral"}
+          className={`flex shrink-0 flex-wrap items-center gap-2 px-3 py-1.5 text-xs ${endedBadly(session) ? noticeBand("danger") : "border-b border-line bg-card text-ink-muted"}`}
+        >
+          <p className="min-w-0 grow">
             {session.problem === "" ? exitText(t, session.exited, session) : t(terminalProblemKey(session.problem))}
           </p>
           {session.kind !== "ssh" || session.alias === undefined || recovery?.reconnect === undefined ? null : (

@@ -104,7 +104,7 @@ export function SnippetRunSection({
                   <pre className={`mt-1 max-h-40 ${codeBlock}`}>{result.stdout}</pre>
                 ) : null}
                 {result.stderr ? (
-                  <pre className="mt-1 max-h-40 overflow-auto rounded-md bg-danger/10 p-2 text-xs text-danger">{result.stderr}</pre>
+                  <pre className={`mt-1 max-h-40 overflow-auto rounded-md border p-2 text-xs text-ink ${noticeFrameColours.danger}`}>{result.stderr}</pre>
                 ) : null}
               </div>
             );
