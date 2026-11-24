@@ -17,7 +17,6 @@ import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
 import type { RemoteEntry } from "./api";
 import { formatBytes } from "../ui/format";
-import { iconAction } from "../ui/form";
 import { entryKind, movable } from "./entryKind";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
 import { SFTPActionSheet } from "./SFTPActionSheet";
@@ -57,6 +56,7 @@ import { isImeComposing } from "../ui/imeComposition";
 import { menuItemClass, menuSurface } from "../ui/menuStyle";
 import { SFTPQuickHosts } from "./SFTPQuickHosts";
 import { literalTextEntry } from "../ui/softKeyboard";
+import { IconButton } from "../ui/IconButton";
 
 const noHosts: HostEntry[] = [];
 
@@ -528,20 +528,15 @@ export function SFTPPanel({
             ? { path: t("sftp.local.path"), editPath: t("sftp.local.editPath"), input: t("sftp.local.pathInput") }
             : { path: t("sftp.path"), editPath: t("sftp.editPath"), input: t("sftp.path") }}
           leading={can?.terminal && onOpenTerminal !== undefined ? (
-            <button
-              type="button"
-              aria-label={t("sftp.openTerminalHere")}
-              title={t("sftp.openTerminalHere")}
+            <IconButton label={t("sftp.openTerminalHere")} size={mobileInteraction ? "barLarge" : "large"}
               disabled={busy || dirty || !connected || path === ""}
-              onClick={() => void onOpenTerminal(alias, path)}
-              className={`${iconAction} ${mobileInteraction ? "size-12" : "size-9"}`}
-            >
+              onClick={() => void onOpenTerminal(alias, path)}>
               <Icon name="terminal" className="size-4" />
-            </button>
+            </IconButton>
           ) : null}
           actions={<>
-            {mobileInteraction ? <button type="button" aria-label={t(search.searching ? "sftp.search.stop" : "sftp.mobile.search")} aria-expanded={search.mobileSearchOpen} disabled={!search.searching && (busy || !connected)} onClick={() => { if (search.searching) search.cancelSearch(); else search.setMobileSearchOpen((value) => !value); }} className={`flex shrink-0 items-center justify-center rounded-md active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"} ${search.mobileSearchOpen || search.filter !== "" ? "text-accent" : "text-ink-muted"}`}><Icon name="search" className="size-5" /></button> : null}
-            <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup={mobileInteraction ? "dialog" : "menu"} aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className={`${iconAction} active:bg-select-fill ${mobileInteraction ? "size-12" : "size-9"}`}><Icon name="moreHorizontal" className="size-5" /></button>
+            {mobileInteraction ? <IconButton label={t(search.searching ? "sftp.search.stop" : "sftp.mobile.search")} size={mobileInteraction ? "barLarge" : "large"} tone="plain" ground="none" className={`active:bg-select-fill ${search.mobileSearchOpen || search.filter !== "" ? "text-accent" : "text-ink-muted"}`} aria-expanded={search.mobileSearchOpen} disabled={!search.searching && (busy || !connected)} onClick={() => { if (search.searching) search.cancelSearch(); else search.setMobileSearchOpen((value) => !value); }}><Icon name="search" className="size-5" /></IconButton> : null}
+            <IconButton label={t("sftp.mobile.actions")} size={mobileInteraction ? "barLarge" : "large"} className="active:bg-select-fill" aria-haspopup={mobileInteraction ? "dialog" : "menu"} aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)}><Icon name="moreHorizontal" className="size-5" /></IconButton>
           </>}
         />
       {!mobileInteraction && menu?.kind === "folder" ? <div ref={menuPanel} role="menu" aria-label={t("sftp.mobile.actions")} className={`absolute right-0 top-full z-20 max-h-[70dvh] w-60 overflow-y-auto ${menuSurface}`}><SFTPMenuActionList actions={folderMenuActions()} /></div> : null}
@@ -550,7 +545,7 @@ export function SFTPPanel({
       {problem === "" || listingFailed ? null : <Notice tone="danger">{problem}</Notice>}
       {transfers.exclusionNotice === "" ? null : <Notice compact>{transfers.exclusionNotice}</Notice>}
       {searchOptionsOpen && can?.search ? <ModalShell labelledBy={`${headingId}-search-options`} onDismiss={() => setSearchOptionsOpen(false)} closeOnOutside panelClassName="w-full max-w-md p-4">
-        <div className="flex items-center justify-between gap-2"><h3 id={`${headingId}-search-options`} className="font-medium">{t("sftp.search.mode")}</h3><button type="button" aria-label={t("sftp.close")} onClick={() => setSearchOptionsOpen(false)} className="flex size-12 items-center justify-center rounded-md text-ink-muted"><Icon name="close" className="size-5" /></button></div>
+        <div className="flex items-center justify-between gap-2"><h3 id={`${headingId}-search-options`} className="font-medium">{t("sftp.search.mode")}</h3><IconButton label={t("sftp.close")} size="barLarge" ground="none" onClick={() => setSearchOptionsOpen(false)}><Icon name="close" className="size-5" /></IconButton></div>
         <SFTPSearchControls search={search} disabled={busy || dirty} mobile />
       </ModalShell> : null}
       {search.search === null ? null : (
@@ -564,9 +559,9 @@ export function SFTPPanel({
         <p role="status" className="flex items-center gap-3 rounded-md border border-line bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
           <span title={actions.undo.label} className="min-w-0 grow truncate">{actions.undo.label}</span>
           <button type="button" disabled={busy} onClick={() => void actions.undo?.run()} className={`shrink-0 rounded-md text-accent transition-colors duration-150 hover:bg-hover ${mobileInteraction ? "min-h-12 px-2" : "px-1.5"}`}>{t("sftp.undo")}</button>
-          <button type="button" aria-label={t("sftp.dismissUndo")} onClick={actions.dismissUndo} className={`${iconAction} ${mobileInteraction ? "size-12" : "size-6"}`}>
+          <IconButton label={t("sftp.dismissUndo")} size={mobileInteraction ? "barLarge" : "compact"} onClick={actions.dismissUndo}>
             <Icon name="close" className={mobileInteraction ? "size-5" : "size-3"} />
-          </button>
+          </IconButton>
         </p>
       )}
 
@@ -584,9 +579,9 @@ export function SFTPPanel({
           <div ref={menuRoot} hidden={mobileInteraction || !connected} className={mobileInteraction || !connected ? "hidden" : "relative flex shrink-0 items-center gap-1 border-b border-line px-3 py-1.5"}>
             {selectedEntries.length > 0 && !(mobileInteraction && search.mobileSearchOpen) ? (
               <>
-                <button type="button" aria-label={t("sftp.clearSelection")} onClick={list.clearSelection} className={`${iconAction} ${mobileInteraction ? "size-12" : "size-10 md:size-7"}`}>
+                <IconButton label={t("sftp.clearSelection")} size={mobileInteraction ? "barLarge" : "toolbar"} onClick={list.clearSelection}>
                   <Icon name="close" className={mobileInteraction ? "size-5" : "size-3.5"} />
-                </button>
+                </IconButton>
                 <span title={selectionLabel} className={`min-w-0 grow truncate font-medium text-ink ${mobileInteraction ? "text-sm" : "text-xs"}`}>
                   {selectedEntry === null
                     ? t("sftp.selectedCountSize", {
@@ -603,49 +598,36 @@ export function SFTPPanel({
                 {compactViewport || !can?.details ? null : <button type="button" disabled={busy} onClick={showDetails} className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.details")}</button>}
                 {compactViewport && !local ? null : <button type="button" disabled={busy || !transferableSelection || !transfers.canTransferOut} title={transfers.canTransferOut ? undefined : t("sftp.local.connectRemote")} onClick={() => void transfers.transferOut(selectedEntries)} className={`shrink-0 rounded-md text-ink-muted hover:bg-hover hover:text-ink ${mobileInteraction ? "min-h-12 px-3 text-sm" : "px-2 py-1 text-xs"}`}>{transferOutLabel}</button>}
                 {compactViewport || selectedEntry === null || !can?.rename ? null : <button type="button" disabled={busy} onClick={actions.renameSelection} className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink">{t("sftp.rename")}</button>}
-                <button
-                  type="button"
-                  aria-label={selectionMenuLabel()}
+                <IconButton label={selectionMenuLabel()} size={mobileInteraction ? "barLarge" : "toolbar"} className="focus:bg-select-fill"
                   aria-haspopup="menu"
                   aria-expanded={!mobileInteraction && menu?.kind === "selected"}
-                  onClick={(event) => toggleMenu("selected", event.currentTarget)}
-                  className={`${iconAction} focus:bg-select-fill ${mobileInteraction ? "size-12" : "size-11 md:size-7"}`}
-                >
+                  onClick={(event) => toggleMenu("selected", event.currentTarget)}>
                   <Icon name="moreHorizontal" className={mobileInteraction ? "size-5" : "size-4"} />
-                </button>
+                </IconButton>
               </>
             ) : (
             <>
             {can?.createDirectory || can?.browserUpload ? (
-              <button
-                type="button"
-                aria-label={t("sftp.createActions")}
+              <IconButton label={t("sftp.createActions")} size="toolbar" className="focus:bg-select-fill"
                 aria-haspopup="menu"
                 aria-expanded={!mobileInteraction && menu?.kind === "create"}
                 disabled={busy || !connected}
-                onClick={(event) => toggleMenu("create", event.currentTarget)}
-                className={`${iconAction} size-10 focus:bg-select-fill md:size-7`}
-              >
+                onClick={(event) => toggleMenu("create", event.currentTarget)}>
                 <Icon name="plus" className="size-4" />
-              </button>
+              </IconButton>
             ) : null}
             <label className="relative min-w-24 max-w-52 grow">
               <span className="sr-only">{t("sftp.filter")}</span>
               <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
               {filterInput}
             </label>
-            {can?.search ? <button type="button" aria-label={t("sftp.search.mode")} title={t("sftp.search.mode")} disabled={!connected || dirty} onClick={() => setSearchOptionsOpen(true)} className={`${iconAction} size-10 md:size-7`}><Icon name="settings" className="size-4" /></button> : null}
+            {can?.search ? <IconButton label={t("sftp.search.mode")} size="toolbar" disabled={!connected || dirty} onClick={() => setSearchOptionsOpen(true)}><Icon name="settings" className="size-4" /></IconButton> : null}
             {can?.search ? (
-              <button
-                type="button"
-                aria-label={t(search.searching ? "sftp.search.stop" : "sftp.searchBelow")}
-                title={t(search.searching ? "sftp.search.stop" : "sftp.searchBelow")}
+              <IconButton label={t(search.searching ? "sftp.search.stop" : "sftp.searchBelow")} size="toolbar" className="focus:bg-select-fill"
                 disabled={!search.searching && (busy || !connected || search.filter.trim() === "")}
-                onClick={() => { if (search.searching) search.cancelSearch(); else void search.runSearch(); }}
-                className={`${iconAction} size-10 focus:bg-select-fill md:size-7`}
-              >
+                onClick={() => { if (search.searching) search.cancelSearch(); else void search.runSearch(); }}>
                 <Icon name="search" className="size-4" />
-              </button>
+              </IconButton>
             ) : null}
             </>
             )}

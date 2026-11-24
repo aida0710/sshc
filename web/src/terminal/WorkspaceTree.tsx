@@ -268,7 +268,7 @@ export function WorkspaceTree({
         <ActionMenu
           label={t("workspace.headingActions")}
           items={headingActions}
-          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5"
+          triggerSize="row"
           triggerTouchDense
           iconClassName="size-3.5"
         />

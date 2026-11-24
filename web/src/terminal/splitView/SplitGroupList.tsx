@@ -78,7 +78,9 @@ function SplitGroupRow({ group, members, selected, unreadBySession, seenProgramS
         <ActionMenu
           label={t("splitView.groupActions", { name })}
           items={[{ label: t("splitView.dissolve"), onSelect: onDissolve }]}
-          triggerClassName="ml-1 flex size-9 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-ink md:size-6"
+          triggerSize="compact"
+          triggerTone="faint"
+          triggerClassName="ml-1"
           iconClassName="size-3.5"
         />
       </div>

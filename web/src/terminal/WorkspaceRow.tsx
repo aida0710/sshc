@@ -106,7 +106,8 @@ export function WorkspaceRow({
       <ActionMenu
         label={t("workspace.actions", { name })}
         items={actions}
-        triggerClassName={`flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-5 ${revealOnHover}`}
+        triggerSize="row"
+        triggerClassName={revealOnHover}
         triggerTouchDense
         iconClassName="size-3.5"
       />

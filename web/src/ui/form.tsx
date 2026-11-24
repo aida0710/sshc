@@ -48,10 +48,6 @@ export const dangerAction =
 export const dangerTextAction =
   "whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-danger transition-colors duration-150 hover:bg-danger/10";
 
-// iconAction is a button that shows only an icon, such as closing a panel. The caller adds its size.
-export const iconAction =
-  "inline-flex shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink";
-
 // codeBlock is a command or its output shown as code. The caller adds how tall it may grow and whether long
 // lines wrap.
 export const codeBlock = "overflow-auto rounded-md bg-code-bg p-2 text-xs text-code-fg";

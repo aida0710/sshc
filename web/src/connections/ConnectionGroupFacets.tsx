@@ -146,7 +146,7 @@ export function ConnectionGroupFacets({
                 items={items}
                 open={openMenu === menuKey}
                 onOpenChange={(open) => setOpenMenu(open ? menuKey : null)}
-                triggerClassName="flex size-6 items-center justify-center rounded-sm text-ink-muted hover:bg-hover hover:text-ink"
+                triggerSize="compact"
                 iconClassName="size-3.5"
               />
             </div>

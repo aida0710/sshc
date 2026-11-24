@@ -414,7 +414,7 @@ export function KnownHostsPanel({ runTarget = null, api: apiOverride }: KnownHos
                   </button>
                   <ActionMenu
                     label={t("kh.entryActions", { host })}
-                    triggerClassName="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+                    triggerSize="bar"
                     items={[{
                       label: t("kh.delete"),
                       tone: "danger",

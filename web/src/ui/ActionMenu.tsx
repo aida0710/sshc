@@ -5,6 +5,7 @@ import { menuItemClass, menuSurface } from "./menuStyle";
 import { useAnchoredMenu } from "./useAnchoredMenu";
 import { useDismissibleLayer } from "./useDismissibleLayer";
 import { useMenuKeyboard } from "./useMenuKeyboard";
+import { IconButton, type IconButtonGround, type IconButtonSize, type IconButtonTone } from "./IconButton";
 
 // revealOnHover は、行やカードの「…」を、載せられる PC の画面（hover-reveal）では乗せたとき（とキーボードで
 // 触れたとき）だけ出し、それ以外（スマホの組み方、タッチだけの画面）では常に出すための class である。行やカードの
@@ -37,8 +38,12 @@ type ActionMenuProps = {
   // The accessible name of the "…" button, naming the thing the actions act on.
   label: string;
   items: readonly ActionMenuItem[];
-  // Where the button sits decides its size and background.
-  triggerClassName: string;
+  // 「…」のボタンの大きさと色（IconButton）。置く場所の行や板に合わせる。
+  triggerSize: IconButtonSize;
+  triggerTone?: IconButtonTone;
+  triggerGround?: IconButtonGround;
+  // triggerClassName は、乗せたときだけ出す、選んだ行の色など、置く場所の見せ方を足す。
+  triggerClassName?: string;
   // triggerTouchDense は、ボタンの押す場所を、詰めた一覧の高さ 36px・幅 44px にする（index.css の data-touch-dense）。
   // 付けなければ、ふつうの 44px 四方になる。
   triggerTouchDense?: boolean;
@@ -52,7 +57,7 @@ type ActionMenuProps = {
 // the temporary layer contract of useDismissibleLayer and the keys of
 // useMenuKeyboard, and is portaled so that a card's rounded corners or a
 // scrolling list do not clip it.
-export function ActionMenu({ label, items, triggerClassName, triggerTouchDense = false, iconClassName = "size-4", open: controlledOpen, onOpenChange }: ActionMenuProps) {
+export function ActionMenu({ label, items, triggerSize, triggerTone = "muted", triggerGround = "hover", triggerClassName = "", triggerTouchDense = false, iconClassName = "size-4", open: controlledOpen, onOpenChange }: ActionMenuProps) {
   const [ownOpen, setOwnOpen] = useState(false);
   const open = controlledOpen ?? ownOpen;
   const setOpen = (next: boolean | ((current: boolean) => boolean)) => {
@@ -84,18 +89,20 @@ export function ActionMenu({ label, items, triggerClassName, triggerTouchDense =
 
   return (
     <div ref={rootRef} className="relative shrink-0">
-      <button
+      <IconButton
         ref={triggerRef}
-        type="button"
-        {...(triggerTouchDense ? { "data-touch-dense": "" } : {})}
-        aria-label={label}
+        label={label}
+        size={triggerSize}
+        tone={triggerTone}
+        ground={triggerGround}
+        dense={triggerTouchDense}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
         className={triggerClassName}
       >
         <Icon name="moreHorizontal" className={iconClassName} />
-      </button>
+      </IconButton>
       {open ? createPortal(
         <div ref={menuRef} role="menu" className={`fixed z-50 w-56 overflow-y-auto ${menuSurface}`}>
           {items.map((item) => (

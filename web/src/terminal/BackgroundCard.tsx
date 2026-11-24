@@ -28,7 +28,10 @@ export function BackgroundCard({ background, chosen, onChoose, onRename, onDelet
       <div className="absolute right-2 top-2">
         <ActionMenu
           label={t("terminal.backgroundActions", { name: background.name })}
-          triggerClassName="flex size-8 items-center justify-center rounded-md bg-canvas/80 text-ink shadow-card hover:bg-card"
+          triggerSize="panel"
+          triggerTone="plain"
+          triggerGround="none"
+          triggerClassName="bg-canvas/80 text-ink shadow-card hover:bg-card"
           items={[
             { label: t("terminal.backgroundRenameAction"), onSelect: onRename },
             { label: t("terminal.backgroundDeleteAction"), onSelect: onDelete, tone: "danger" },

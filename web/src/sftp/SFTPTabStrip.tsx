@@ -7,6 +7,7 @@ import { draggableCursor } from "../ui/dragAndDropLook";
 import { localHostAlias } from "./localHost";
 import { maxTabsPerPane, type PaneSide, type SFTPPane, type SFTPTab } from "./sftpPanes";
 import { carriesTab, sftpTabMimeType } from "./SFTPTabDropTarget";
+import { IconButton } from "../ui/IconButton";
 
 export function tabElementId(tabId: string): string {
   return `sftp-tab-${tabId}`;
@@ -34,10 +35,6 @@ function tabLabels(tab: SFTPTab, unnamed: string, localName: string) {
 const tabLayout = {
   compact: "min-h-11 flex-col justify-center",
   regular: "min-h-[30px] items-center gap-1.5 mobile-layout:min-h-10",
-};
-const controlSize = {
-  compact: "min-h-11 w-11",
-  regular: "min-h-[30px] w-6 mobile-layout:min-h-10 mobile-layout:w-8",
 };
 // On a wide screen the selected tab takes the colour of the path bar under it, so the two read as one piece.
 const stripLook = {
@@ -215,18 +212,13 @@ export function SFTPTabStrip({
                 {labels.host === "" || hostOnly ? null : <span className={`block min-w-0 truncate text-2xs leading-3.5 text-ink-muted ${compact ? "mt-0.5 w-full" : "max-w-[50%] shrink-0"}`}>{labels.host}</span>}
               </button>
               {selected && onChangeHost !== undefined ? (
-                <button
-                  type="button"
-                  aria-label={t("sftp.host")}
+                <IconButton label={t("sftp.host")} size={compact ? "bar" : "compact"} className="sshc-focus-inset"
                   aria-haspopup="dialog"
                   data-value={tab.alias}
-                  title={t("sftp.chooseHostHeading")}
                   disabled={!canChangeHost(tab)}
-                  onClick={() => onChangeHost(tab)}
-                  className={`sshc-focus-inset flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink ${controlSize[size]}`}
-                >
+                  onClick={() => onChangeHost(tab)}>
                   <Icon name="chevronRight" className="size-3.5 rotate-90" />
-                </button>
+                </IconButton>
               ) : null}
               {selected && actions !== undefined ? (
                 <ActionMenu
@@ -234,33 +226,25 @@ export function SFTPTabStrip({
                   items={actions}
                   open={menuOpenFor === tab.id}
                   onOpenChange={(open) => setMenuOpenFor(open ? tab.id : null)}
-                  triggerClassName={`flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink ${controlSize[size]}`}
+                  triggerSize={compact ? "bar" : "compact"}
                   iconClassName="size-3.5"
                 />
               ) : null}
               {closable ? (
-                <button
-                  type="button"
-                  aria-label={t("sftp.closeTab", { name: labels.name })}
-                  onClick={(event) => onClose(tab, { skipConfirmation: event.shiftKey })}
-                  className={`sshc-focus-inset flex shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-danger ${controlSize[size]}`}
-                >
+                <IconButton label={t("sftp.closeTab", { name: labels.name })} size={compact ? "bar" : "compact"} tone="danger" className="sshc-focus-inset"
+                  onClick={(event) => onClose(tab, { skipConfirmation: event.shiftKey })}>
                   <Icon name="close" className={compact ? "size-4" : "size-3"} />
-                </button>
+                </IconButton>
               ) : null}
             </span>
           );
         })}
       </div>
-      <button
-        type="button"
-        aria-label={t("sftp.newTab")}
+      <IconButton label={t("sftp.newTab")} size={compact ? "bar" : "toolbar"} ground={compact ? "card" : "hover"}
         disabled={addDisabled}
-        onClick={onAdd}
-        className={`flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:text-ink ${compact ? "hover:bg-card/50 min-h-11 w-11" : "min-h-[30px] w-7 hover:bg-hover mobile-layout:min-h-10 mobile-layout:w-10"}`}
-      >
+        onClick={onAdd}>
         <Icon name="plus" className={compact ? "size-5" : "size-4"} />
-      </button>
+      </IconButton>
       {trailing}
     </div>
   );

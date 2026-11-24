@@ -196,7 +196,7 @@ function MachineRow({ machine, document, onChange, onRename, onChooseLogFolder, 
       </StackedNamedCell>
       <div className="col-start-2 row-start-1 @2xl/machines:col-start-auto @2xl/machines:row-start-auto">
         <ActionMenu label={t("settings.machineActions", { name })}
-          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-7"
+          triggerSize="toolbar"
           items={[
           { label: t("settings.machineRename"), onSelect: onRename },
           {

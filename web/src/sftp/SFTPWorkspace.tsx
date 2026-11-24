@@ -26,6 +26,7 @@ import {
   activeTab, addTab, allTabs, blankTab, canSplit, changeTabView, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab, swapPanes,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
+import { IconButton } from "../ui/IconButton";
 
 // Why closing a tab waits for a confirmation, and what the dialog names.
 type CloseTabIntent =
@@ -374,11 +375,10 @@ export function SFTPWorkspace({
   const boardFrame = "rounded-lg border border-line bg-sidebar shadow-pane";
   const boardLook = `overflow-hidden ${boardFrame}`;
   const compactComparisonButton = canCompare ? (
-    <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
-      onClick={requestComparison}
-      className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded-md text-sm text-ink-muted hover:bg-card/50 hover:text-ink">
+    <IconButton label={t("sftp.compare.heading")} size="barLarge" ground="card"
+      onClick={requestComparison}>
       <Icon name="arrowLeftRight" className="size-5" />
-    </button>
+    </IconButton>
   ) : null;
 
   function renderPane(pane: SFTPPane, index: number) {

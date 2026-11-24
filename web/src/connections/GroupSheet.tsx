@@ -76,7 +76,7 @@ export function GroupSheet({ groups, total, ungrouped, active, onChoose, onCreat
           <ActionMenu
             label={t("tree.groupActions", { name: label })}
             items={menu}
-            triggerClassName="flex size-11 items-center justify-center rounded-md text-ink-muted hover:bg-hover"
+            triggerSize="bar"
           />
         )}
       </li>

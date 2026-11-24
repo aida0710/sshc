@@ -107,7 +107,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
         <ActionMenu
           label={t("tree.groupActions", { name: group.name })}
           items={actions}
-          triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+          triggerSize="large"
         />
       </header>
 

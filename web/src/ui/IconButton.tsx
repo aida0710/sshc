@@ -36,13 +36,15 @@ const grounds = {
 } as const;
 
 export type IconButtonSize = keyof typeof sizes;
+export type IconButtonTone = keyof typeof tones;
+export type IconButtonGround = keyof typeof grounds;
 
 type IconButtonProps = {
   // label は、読み上げの名前と、載せたときの吹き出し。字の無いボタンなので必ず要る。
   label: string;
   size: IconButtonSize;
-  tone?: keyof typeof tones;
-  ground?: keyof typeof grounds;
+  tone?: IconButtonTone;
+  ground?: IconButtonGround;
   // dense は、詰めた一覧の行の中のボタン。スマホの組み方で高さを 36px にする（index.css の data-touch-dense）。
   dense?: boolean;
   // touchCompact は、入力欄の中に重ねるボタンのように、スマホでも描いた大きさのままにするもの（data-touch-compact）。
