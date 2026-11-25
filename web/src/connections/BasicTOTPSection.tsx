@@ -3,6 +3,7 @@ import { control } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import type { BasicDraft, BasicFormDerived, TOTPAction } from "./basicFormDraft";
 import type { ConnectionSecretsModel } from "./useConnectionSecrets";
+import { PanelState } from "../ui/PanelState";
 
 // The one-time-password secret the vault answers with for this host, as one select: what is assigned now
 // (or nothing), and the ways to change it.
@@ -19,13 +20,13 @@ export function BasicTOTPSection({ draft, derived, secrets, onEdit }: {
     // The vault is unlocked from the password row above.
     return (
       <FieldRow density="editor" label={label} interactiveChildren>
-        <p className="pt-1.5 text-ui text-ink-faint">
-          {credentialOptionsStatus === "failed"
-            ? t("conn.basicCredentialOptionsFailed")
-            : secrets.loading || credentialOptionsStatus === "loading"
-              ? t("conn.createLoadingOptions")
-              : t("conn.basicTOTPNeedsVault")}
-        </p>
+        {credentialOptionsStatus !== "failed" && (secrets.loading || credentialOptionsStatus === "loading")
+          ? <PanelState layout="line" tone="loading" title={t("conn.createLoadingOptions")} className="pt-1.5" />
+          : (
+            <p className="pt-1.5 text-ui text-ink-faint">
+              {credentialOptionsStatus === "failed" ? t("conn.basicCredentialOptionsFailed") : t("conn.basicTOTPNeedsVault")}
+            </p>
+          )}
       </FieldRow>
     );
   }

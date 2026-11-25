@@ -6,6 +6,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
 import { useLoad } from "../ui/useLoad";
 import { ActionArea } from "../ui/ActionArea";
+import { PanelState } from "../ui/PanelState";
 
 // engine が経路を用意した記録と、コンテナの直近の出力を見せる。繋がらないときに
 // 最初に見る場所で、利用者に docker を直接叩かせないためにある。秘密は engine の
@@ -44,9 +45,9 @@ export function VPNLogsDialog({
       {failure !== "" ? (
         <Notice tone="danger">{failure}</Notice>
       ) : lines === null ? (
-        <p className={hintText}>{t("vpn.logsLoading")}</p>
+        <PanelState layout="line" tone="loading" title={t("vpn.logsLoading")} />
       ) : lines.trim() === "" ? (
-        <p className={hintText}>{t("vpn.logsEmpty")}</p>
+        <PanelState layout="line" tone="empty" title={t("vpn.logsEmpty")} />
       ) : (
         <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md border border-line bg-surface-subtle p-3 text-xs text-ink">
           {lines}

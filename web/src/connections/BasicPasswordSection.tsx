@@ -7,6 +7,7 @@ import { Notice } from "../ui/surface";
 import { eligibilityText } from "./eligibilityText";
 import type { BasicDraft, BasicFormDerived, PasswordAction } from "./basicFormDraft";
 import type { ConnectionSecretsModel } from "./useConnectionSecrets";
+import { PanelState } from "../ui/PanelState";
 
 // The choices that assign a password. While one is chosen, what stands in the way of using it is shown.
 const assigningActions: readonly PasswordAction[] = ["dedicated_password", "saved_password", "new_shared_password"];
@@ -61,9 +62,9 @@ export function BasicPasswordSection({
             onOpen={onOpenVault}
           />
         ) : (
-          <p className="pt-1.5 text-ui text-ink-faint">
-            {credentialOptionsStatus === "failed" ? t("conn.basicCredentialOptionsFailed") : t("conn.createLoadingOptions")}
-          </p>
+          credentialOptionsStatus === "failed"
+            ? <p className="pt-1.5 text-ui text-ink-faint">{t("conn.basicCredentialOptionsFailed")}</p>
+            : <PanelState layout="line" tone="loading" title={t("conn.createLoadingOptions")} className="pt-1.5" />
         )}
       </FieldRow>
     );

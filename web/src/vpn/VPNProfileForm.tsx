@@ -33,6 +33,7 @@ import { openConnectProducts, openConnectProtocols, vpnProfileFieldError } from 
 import { vpnSecretsFieldError, type VPNSecretKey } from "./vpnSecretRules";
 import { useVPNSecretsReveal } from "./useVPNSecretsReveal";
 import { asciiTextEntry } from "../ui/softKeyboard";
+import { PanelState } from "../ui/PanelState";
 
 // VPNプロファイルを作成する、または保存済みのプロファイルを編集するフォーム。接続先は
 // 持たない（プロファイルを付けた接続の HostName と Port が接続先になる）。作成は画面の節として、
@@ -375,7 +376,7 @@ export function VPNProfileForm({
   return (
     <InlineEditor heading={heading}>
       <p className={hintText}>{t("vpn.editHint")}</p>
-      {reveal?.state === "revealing" ? <p className={hintText}>{t("vpn.secretsRevealing")}</p> : null}
+      {reveal?.state === "revealing" ? <PanelState layout="line" tone="loading" title={t("vpn.secretsRevealing")} /> : null}
       {reveal?.state === "failed" ? <Notice>{t("vpn.secretsRevealFailed", { reason: reveal.reason })}</Notice> : null}
       <div className="mt-1">{fields}</div>
       <ActionArea>

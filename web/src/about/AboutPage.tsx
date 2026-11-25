@@ -19,6 +19,7 @@ import { UpdateActivityLog } from "./UpdateActivityLog";
 import { UpdateOutput } from "./UpdateOutput";
 import { useUpdateActivity } from "./useUpdateActivity";
 import { useUpdateOutput } from "./useUpdateOutput";
+import { PanelState } from "../ui/PanelState";
 
 type AboutPageProps = { api?: AboutApi; updates?: UpdateApi; sessions?: Pick<TerminalSessionsApi, "terminalSessions"> };
 
@@ -87,7 +88,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi, sessions = term
     <section aria-labelledby="about-heading" className="flex flex-col gap-[22px]">
       <PageHeader title={t("section.about")} headingId="about-heading" />
       <PageSection heading={t("about.build")}>
-        {aboutLoad.state === "failed" ? <Notice tone="danger">{t("about.loadFailed")}</Notice> : about === null ? <p role="status" className="text-sm text-ink-muted">{t("about.loading")}</p> : <BuildDetails about={about} />}
+        {aboutLoad.state === "failed" ? <Notice tone="danger">{t("about.loadFailed")}</Notice> : about === null ? <PanelState layout="line" tone="loading" title={t("about.loading")} /> : <BuildDetails about={about} />}
       </PageSection>
       <PageSection heading={t("about.updates")} headingId="about-update-heading">
         <div className="grid grid-cols-[minmax(0,1fr)] gap-3 text-sm text-ink-muted">

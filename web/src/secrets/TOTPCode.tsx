@@ -1,10 +1,10 @@
 import type { TOTPCodeSet } from "../api/credentials";
 import { useTranslate } from "../i18n/context";
-import { hintText } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { Button } from "../ui/surface";
 import { useClipboardCopy } from "../ui/useClipboardCopy";
 import type { TOTPCodes } from "./useTOTPCodes";
+import { PanelState } from "../ui/PanelState";
 
 // 保存済みワンタイムパスワードの、いま有効なコードと、その前後のコード。
 
@@ -72,7 +72,7 @@ function CountdownRing({ remaining, period, label }: { remaining: number; period
 export function TOTPCurrentCode({ name, codes }: { name: string; codes: TOTPCodes }) {
   const t = useTranslate();
   if (codes.state === "failed") return <Button onClick={codes.retry}>{t("secrets.totpRetry")}</Button>;
-  if (codes.state === "loading") return <p className={hintText}>{t("secrets.totpLoading")}</p>;
+  if (codes.state === "loading") return <PanelState layout="line" tone="loading" title={t("secrets.totpLoading")} />;
   return (
     <span className="flex items-center gap-2">
       <CopyableCode code={codes.codes.current} label={t("secrets.totpCopyCurrent", { name })} className="text-2xl font-semibold leading-7 text-ink" />

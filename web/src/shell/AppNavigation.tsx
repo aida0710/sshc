@@ -146,6 +146,7 @@ export function AppNavigation({
       }`}
     >
       <div data-navigation-heading className="mb-1.5 shrink-0">
+        {/* loading-line-exempt: 画面に出さず、読み上げだけに伝える状態の文。 */}
         <p role="status" data-session-status className="sr-only">
           {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
         </p>

@@ -16,6 +16,7 @@ import { NewGroupField } from "./NewGroupField";
 import { useCreateConnectionForm, type CreateConnectionFormOptions } from "./useCreateConnectionForm";
 import { useReportDirty } from "./useReportDirty";
 import { asciiTextEntry, hasOnScreenKeyboard } from "../ui/softKeyboard";
+import { PanelState } from "../ui/PanelState";
 
 const authenticationChoices: readonly [CreateConnectionAuthenticationKind, MessageKey][] = [
   ["identity_file", "conn.createIdentityFile"],
@@ -210,7 +211,7 @@ export function CreateConnectionPane({
         </EditorSection>
 
         <EditorSection title={t("conn.createAuthenticationSection")}>
-          {form.loading ? <p className={`mb-1.5 ${hintText}`}>{t("conn.createLoadingOptions")}</p> : null}
+          {form.loading ? <PanelState layout="line" tone="loading" title={t("conn.createLoadingOptions")} className="mb-1.5" /> : null}
           <div>
             <FieldRow density="editor" label={t("conn.createAuthenticationMethod")}>
               <select

@@ -6,6 +6,7 @@ import { sectionHeading } from "../ui/form";
 import { Icon, type IconName } from "../ui/icons";
 import { connectionFilesOf, keyFilesOf } from "./groupFolderContents";
 import { useKeyItems } from "./useKeyItems";
+import { PanelState } from "../ui/PanelState";
 
 type GroupFoldersProps = {
   group: GroupView;
@@ -40,7 +41,7 @@ export function GroupFolders({ group, hosts, keys }: GroupFoldersProps) {
         </Folder>
         <Folder icon="keys" path={`${group.keyDirectory}/`}>
           {keyItems.kind === "loading" ? (
-            <p className="text-xs text-ink-faint">{t("groupFolders.keysLoading")}</p>
+            <PanelState layout="line" tone="loading" title={t("groupFolders.keysLoading")} />
           ) : keyItems.kind === "failed" ? (
             <p className="text-xs text-notice-ink">{t("groupFolders.keysFailed")}</p>
           ) : keyFiles.length === 0 ? (

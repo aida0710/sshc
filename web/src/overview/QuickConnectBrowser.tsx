@@ -174,8 +174,10 @@ export function QuickConnectBrowser({
               {server.duplicateAlias ? <span role="img" aria-label={t("browser.duplicateAlias")} className="text-notice-ink"><Icon name="warning" className="size-3.5" /></span> : null}
             </span>
             <span className="mt-0.5 block truncate font-mono text-xs text-ink-faint" title={target}>{target}</span>
+            {/* loading-line-exempt: 接続先のカードの状態の行（下の「接続中…」）を読み上げる枠。 */}
             <span aria-live="polite">
               {opening ? (
+                // loading-line-exempt: 接続先のカードの状態の行。読み込みではなく、接続していることをカードの中で言う。
                 <span className="mt-1 flex items-center gap-1.5 text-2xs text-ink-muted">
                   <Spinner className="size-3" />
                   {t("home.opening")}

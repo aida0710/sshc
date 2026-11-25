@@ -8,6 +8,7 @@ import { PageSectionFrame } from "../ui/page";
 import { useSettingsDraft } from "./settingsDraftContext";
 import type { SettingsPreset } from "./settingsStore";
 import { useTypedSetting, type ParsedSetting } from "./useTypedSetting";
+import { PanelState } from "../ui/PanelState";
 
 type AutoLock = NonNullable<SettingsPreset["vaultAutoLock"]>;
 type IdleAutoLock = { mode: "idle"; value: number; unit: "minutes" | "hours" };
@@ -76,7 +77,7 @@ export function VaultAutoLockSection({ presetId, passwordless }: {
           </FieldRow>
         ) : null}
         {notice === null ? null : <div className="mt-2"><Notice>{t(notice)}</Notice></div>}
-        {loaded ? null : <p role="status" className="mt-2 text-sm text-ink-muted">{t("settings.vaultAutoLockLoading")}</p>}
+        {loaded ? null : <PanelState layout="line" tone="loading" title={t("settings.vaultAutoLockLoading")} className="mt-2" />}
       </section>
     </PageSectionFrame>
   );

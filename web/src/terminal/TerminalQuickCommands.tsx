@@ -14,6 +14,7 @@ import { SnippetVariableInputs } from "../snippets/SnippetVariableInputs";
 import { Button, Notice } from "../ui/surface";
 import { codeBlock, control } from "../ui/form";
 import { IconButton } from "../ui/IconButton";
+import { PanelState } from "../ui/PanelState";
 
 type Prepared = {
   command: string;
@@ -330,7 +331,7 @@ export function TerminalQuickCommands({
         </Button>
       )}
       {busy && snippets.length === 0 ? (
-        <p className="text-xs text-ink-muted">{t("palette.loading")}</p>
+        <PanelState layout="line" tone="loading" title={t("palette.loading")} />
       ) : snippets.length === 0 ? (
         <p className="text-xs text-ink-muted">{t("snippets.empty")}</p>
       ) : (

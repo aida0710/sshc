@@ -9,6 +9,7 @@ import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { Button, Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useLoad } from "../ui/useLoad";
+import { PanelState } from "../ui/PanelState";
 
 type CredentialEditPanelProps = {
   kind: CredentialKind;
@@ -44,7 +45,7 @@ export function CredentialEditPanel({ kind, name, api, onSaved, onClose, onDirty
       </div>
       {revealed.state === "loading" ? (
         <>
-          <p aria-live="polite" className={hintText}>{t("secrets.revealing")}</p>
+          <PanelState layout="line" tone="loading" title={t("secrets.revealing")} />
           <CloseButton onClose={onClose} />
         </>
       ) : (

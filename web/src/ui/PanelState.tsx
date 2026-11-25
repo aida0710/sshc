@@ -10,6 +10,11 @@ const toneClasses: Record<PanelStateTone, string> = {
   failed: "text-danger",
 };
 
+// PanelStateLayout は、答えを出す形。block は区画の中身の代わりに、真ん中に大きく出す。line は、画面のほかの部分は
+// 出ていて、一部（コードの値、選択肢、記録など）だけを待つ・無い・読めないときの1行で、補足の字と同じ大きさにする
+// （2026-11-25、「読み込み中…」の1行が場所ごとに字の大きさ・色・回る印の有無で違っていたのをそろえた）。
+export type PanelStateLayout = "block" | "line";
+
 // One shape for the three answers a panel can give instead of content: it is
 // still coming, there is none, or it could not be fetched. Panels differ in
 // what they load, not in how they say these three things. While it is still
@@ -20,6 +25,7 @@ export function PanelState({
   detail,
   action,
   icon,
+  layout = "block",
   className = "",
 }: {
   tone: PanelStateTone;
@@ -27,8 +33,22 @@ export function PanelState({
   detail?: string;
   action?: ReactNode;
   icon?: ReactNode;
+  layout?: PanelStateLayout;
   className?: string;
 }) {
+  if (layout === "line") {
+    // すぐ終わる読み込みでは出さない（sshc-slow-status は少し待ってから出す）。待っていることは回る印で示す。
+    return (
+      <p
+        role={tone === "failed" ? "alert" : "status"}
+        aria-busy={tone === "loading"}
+        className={`flex items-center gap-1.5 text-xs ${toneClasses[tone]} ${tone === "loading" ? "sshc-slow-status" : ""} ${className}`}
+      >
+        {tone === "loading" ? <Spinner className="size-3" /> : null}
+        <span className="min-w-0">{title}</span>
+      </p>
+    );
+  }
   return (
     <div
       role={tone === "failed" ? "alert" : "status"}
