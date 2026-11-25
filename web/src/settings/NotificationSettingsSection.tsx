@@ -102,12 +102,9 @@ export function NotificationSettingsSection({ presetId, showHeading }: { presetI
             {t(permissionMessage(permission, notificationsComeFromAndroid()))}
           </p>
         )}
+        {/* 許可されていることは上の文が言うので、操作の下には失敗だけを出す。 */}
         {permission === "default" || permission === "granted" || request.error !== "" ? (
-          <ActionArea status={request.error === ""
-            ? (permission === "granted"
-                ? <Notice tone="success">{t("terminal.browserNotificationsEnabled")}</Notice>
-                : undefined)
-            : <Notice tone="danger">{request.error}</Notice>}
+          <ActionArea status={request.error === "" ? undefined : <Notice tone="danger">{request.error}</Notice>}
           >
             {permission === "default" || permission === "granted" ? (
               <Button

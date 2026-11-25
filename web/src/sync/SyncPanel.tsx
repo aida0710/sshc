@@ -105,7 +105,6 @@ export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNav
   const operation = useSyncOperation(t, syncRefusals, syncPathRefusals);
   const {
     resultView,
-    notice,
     error,
     errorCode,
     busy,
@@ -256,11 +255,6 @@ export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNav
       {/* 強制送信と適用のダイアログは、同じ失敗を自分の中に出す。背面にも出すと、
           スクリーンリーダーが同じ文を 2 回読み上げる。 */}
       {forcePushOpen || preview !== null ? null : <SyncErrorNotice message={error} code={errorCode} />}
-      {notice === "" ? null : (
-        <p role="status" className="text-sm text-ink-muted">
-          {notice}
-        </p>
-      )}
       {revealed === "" ? null : (
         <Notice tone="notice">
           <span className="block">{t("sync.keyShownOnce")}</span>

@@ -14,6 +14,7 @@ import { formatDateTime } from "../ui/format";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { historyOperationLabelKey, historyStatusLabelKey, restorableFileName, shownHistoryPaths } from "./historyLabels";
 import { PendingChangeDialog } from "./PendingChangeDialog";
+import { useToast } from "../ui/useToast";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -34,7 +35,8 @@ export function HistoryPanel() {
   // was attempted, so "nothing was written" would not be an answer.
   const [problem, setProblem] = useState<Problem | null>(null);
   const [readFailed, setReadFailed] = useState(false);
-  const [message, setMessage] = useState("");
+  // 戻した・片付けた結果はトーストで知らせる（済んだ操作の結果は、画面に出し続けない）。
+  const showToast = useToast();
   const [inspected, setInspected] = useState<PendingTransaction | null>(null);
 
   const reload = useCallback(async () => {
@@ -62,7 +64,7 @@ export function HistoryPanel() {
   async function restore(transactionId: string, path: string) {
     try {
       await configApi.restore(transactionId, path);
-      setMessage(t("history.restored", { path: restorableFileName(path, t) }));
+      showToast(t("history.restored", { path: restorableFileName(path, t) }), { tone: "success" });
       setProblem(null);
       await reload();
     } catch (error) {
@@ -73,7 +75,7 @@ export function HistoryPanel() {
   async function recover(transactionId: string, action: "complete" | "rollback") {
     try {
       await configApi.recover(transactionId, action);
-      setMessage(t(action === "complete" ? "history.completedTransaction" : "history.rolledBack"));
+      showToast(t(action === "complete" ? "history.completedTransaction" : "history.rolledBack"), { tone: "success" });
       setProblem(null);
       await reload();
     } catch (error) {
@@ -103,7 +105,6 @@ export function HistoryPanel() {
         <Notice tone="danger">{saveProblemMessage(problem, t)}</Notice>
       )}
       {readFailed ? <Notice tone="danger">{t("history.readFailed")}</Notice> : null}
-      {message === "" ? null : <Notice tone="success">{message}</Notice>}
 
       {pending.length === 0 ? null : (
         <section aria-labelledby="pending-heading" className="rounded-inset bg-notice">
