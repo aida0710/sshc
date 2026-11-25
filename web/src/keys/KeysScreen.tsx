@@ -1,3 +1,4 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState, type DragEvent } from "react";
 import {
   useAgentForm,
@@ -8,7 +9,7 @@ import {
 } from "./forms";
 import { useKeyPassphrases } from "./useKeyPassphrases";
 import { useKeyOperation } from "./useKeyOperation";
-import { keySecretsApi, type KeySecretsApi } from "./secretsApi";
+import { type KeySecretsApi } from "./secretsApi";
 import { KeyTable, type KeyRowActions } from "./KeyTable";
 import {
   AgentForm,
@@ -31,7 +32,7 @@ import { Icon } from "../ui/icons";
 import { PageHeader, PageSection, PageSectionFrame, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
 import { StartTiles } from "../ui/StartTiles";
 import { PanelState } from "../ui/PanelState";
-import { keysApi, type KeyItem, type KeysApi, type RelocateKeyResponse } from "./api";
+import { type KeyItem, type KeysApi, type RelocateKeyResponse } from "./api";
 import type {
   GeneratedPrivateKeyHandoff,
   GeneratedPublicKeyHandoff,
@@ -82,15 +83,18 @@ export function KeysScreen({
   onOpenSync,
   onInspector,
   onShowInspector,
-  api = keysApi,
+  api: apiOverride,
   groups = [],
-  secrets = keySecretsApi,
+  secrets: secretsOverride,
   onAssignGeneratedKey,
   onInstallGeneratedKey,
   about = aboutApi,
 }: KeysScreenProps) {
   const t = useTranslate();
-  const engineOS = useEngineOS(true, about);
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.keys;
+  const secrets = secretsOverride ?? engineApis.secrets;
+  const engineOS = useEngineOS({ runTarget: engineApis.runTarget, about });
   const [rowPanel, setRowPanel] = useState<KeyRowPanelState | null>(null);
   // The form to create a key, opened from the heading's button.
   const [creating, setCreating] = useState(false);

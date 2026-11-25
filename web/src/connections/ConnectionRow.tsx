@@ -128,7 +128,7 @@ export function ConnectionRow({
             items={menuItems}
             open={menuOpen}
             onOpenChange={onMenuOpenChange}
-            triggerClassName="flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+            triggerSize="panel"
           />
         </div>
       )}

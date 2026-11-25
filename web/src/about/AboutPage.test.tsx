@@ -58,7 +58,8 @@ describe("AboutPage", () => {
     let finish: (status: UpdateStatus) => void = () => {};
     vi.mocked(update.checkUpdate).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     render(<StrictMode><UpdateBadge api={update} /><AboutPage api={api} updates={update} /></StrictMode>);
-    const check = await screen.findByRole("button", { name: "Checking…" });
+    const check = await screen.findByRole("button", { name: "Check for updates" });
+    await waitFor(() => expect(check).toHaveAttribute("aria-busy", "true"));
     expect(check).toBeDisabled();
     // The stored result is not shown as the answer until the check returns.
     expect(screen.queryByText(/is the latest/)).not.toBeInTheDocument();
@@ -110,7 +111,8 @@ describe("AboutPage", () => {
     let failCheck: (reason: Error) => void = () => {};
     vi.mocked(update.checkUpdate).mockImplementation(() => new Promise((_, reject) => { failCheck = reject; }));
     await userEvent.click(screen.getByRole("button", { name: "Check for updates" }));
-    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Check for updates" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Check for updates" })).toBeDisabled();
     expect(screen.queryByText(/is the latest/)).not.toBeInTheDocument();
     await act(async () => failCheck(new Error("offline")));
     expect(screen.getByText("Could not check for the latest release. The sshc engine did not return a result.")).toBeVisible();
@@ -169,7 +171,7 @@ describe("AboutPage", () => {
     let finish: (status: UpdateStatus) => void = () => {};
     vi.mocked(update.checkUpdate).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     render(<AboutPage api={api} updates={update} />);
-    await screen.findByRole("button", { name: "Checking…" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Check for updates" })).toHaveAttribute("aria-busy", "true"));
     expect(screen.queryByText("failed hours ago")).not.toBeInTheDocument();
     expect(screen.queryByText(/Could not check for the latest release/)).not.toBeInTheDocument();
 

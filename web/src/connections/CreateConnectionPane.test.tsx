@@ -255,7 +255,10 @@ describe("CreateConnectionPane", () => {
     await chooseAuthentication(user, "Encrypted password for this connection");
     await user.type(screen.getByLabelText("Connection name"), "bad name");
     await user.tab();
-    expect(screen.getByText("Use letters, numbers, dot, dash, or underscore; start with a letter or number.")).toBeInTheDocument();
+    const problem = screen.getByText("Connection name: Use letters, numbers, dot, dash, or underscore; start with a letter or number.");
+    // 文は欄の並びの下に出し、欄はそれを説明として指し、誤りの印を持つ（index.css が枠を赤にする）。
+    expect(screen.getByLabelText("Connection name")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Connection name")).toHaveAccessibleDescription(problem.textContent ?? "");
 
     await user.clear(screen.getByLabelText("Connection name"));
     await user.type(screen.getByLabelText("Connection name"), "good-name");
@@ -273,10 +276,10 @@ describe("CreateConnectionPane", () => {
     const aliasAtLimit = "a".repeat(maxAliasLength);
     await user.type(await screen.findByLabelText("Connection name"), aliasAtLimit);
     await user.tab();
-    expect(screen.queryByText("Use letters, numbers, dot, dash, or underscore; start with a letter or number.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connection name: Use letters, numbers, dot, dash, or underscore; start with a letter or number.")).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Connection name"), "a");
-    expect(screen.getByText("Use letters, numbers, dot, dash, or underscore; start with a letter or number.")).toBeInTheDocument();
+    expect(screen.getByText("Connection name: Use letters, numbers, dot, dash, or underscore; start with a letter or number.")).toBeInTheDocument();
   });
 
   it("keeps the master password after a refused unlock so it can be corrected in place", async () => {

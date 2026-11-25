@@ -51,6 +51,9 @@ export function useSectionRoute({ present = presentAtOnce }: { present?: Locatio
   location: BrowserLocation;
   navigate: (section: Section) => boolean;
   navigateLocation: (url: string, options?: NavigateLocationOptions) => boolean;
+  // mayLeaveFor asks the section shown whether it can be left for `section`, without going there. It is false while
+  // the section holds an unsaved draft; the section then asks whether to discard it, and goes to `section` if so.
+  mayLeaveFor: (section: Section) => boolean;
   setNavigationBlocker: (blocker: NavigationBlocker | null) => void;
   // hasEntryBefore tells whether the page's history has an entry of sshc before this one; on the first entry,
   // going back would leave sshc (or, in the Android app, do nothing).
@@ -153,6 +156,10 @@ export function useSectionRoute({ present = presentAtOnce }: { present?: Locatio
     return true;
   }, [publish]);
 
+  const mayLeaveFor = useCallback((section: Section) => {
+    return blockerRef.current === null || blockerRef.current({ pathname: sectionPath(section), search: "" });
+  }, []);
+
   const navigateLocation = useCallback((url: string, options: NavigateLocationOptions = {}) => {
     const target = new URL(url, window.location.origin);
     if (target.origin !== window.location.origin) throw new Error("external navigation is not allowed");
@@ -179,5 +186,5 @@ export function useSectionRoute({ present = presentAtOnce }: { present?: Locatio
   const hasEntryBefore = useCallback(() => (navigationPointRef.current ?? 0) > 0, []);
   const currentLocation = useCallback(() => locationRef.current, []);
 
-  return { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore, currentLocation };
+  return { route, location, navigate, navigateLocation, mayLeaveFor, setNavigationBlocker, hasEntryBefore, currentLocation };
 }

@@ -176,3 +176,15 @@ test.describe("on a phone", () => {
     await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem").first()).toBeInViewport();
   });
 });
+
+test("a connection opened from Home with no session open shows its terminal, not Home again", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  const bastion = page.getByRole("list", { name: "Available connections" }).getByRole("listitem").filter({ hasText: "bastion" });
+  await bastion.dblclick();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
+  await expect(page).toHaveURL(/\/terminal$/u);
+  // It stays: the list of sessions read after the session was shown still holds it.
+  await page.waitForTimeout(1500);
+  await expect(page).toHaveURL(/\/terminal$/u);
+});

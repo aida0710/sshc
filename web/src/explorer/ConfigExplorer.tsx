@@ -1,9 +1,10 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toProblem } from "../api/guards";
 import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import type { Problem } from "../api/client";
-import { configApi, type FileContents, type Overview, type SavePreview } from "../api/config";
+import { type FileContents, type Overview, type SavePreview } from "../api/config";
 import { SavePreviewPanel } from "../connections/SavePreview";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import type { ActionMenuItem } from "../ui/ActionMenu";
@@ -25,6 +26,8 @@ import {
 } from "../ui/workspaceLayout";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
+import { saveBarSlotClass, SaveBarSlotContext, useSaveBarSlot } from "../ui/saveBarSlot";
 import type { BrowserLocation, NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
 import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
 import { sectionPath } from "../routing/sectionRoute";
@@ -59,6 +62,7 @@ function staysInConfig(next: BrowserLocation): boolean {
 
 
 export function ConfigExplorer({ target = null, onTargetHandled = () => undefined, onNavigationBlockerChange, onNavigateLocation }: ConfigExplorerProps) {
+  const { config: configApi } = useEngineApis();
   const t = useTranslate();
   const compact = useMediaQuery(mobileViewportQuery);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -97,7 +101,7 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     } catch (error) {
       setProblem(toProblem(error));
     }
-  }, []);
+  }, [configApi]);
 
   useEffect(() => {
     void reload();
@@ -300,10 +304,15 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
     });
   }
 
+  const saveBar = useSaveBarSlot();
   const modified = file !== null && draft !== file.contents;
+  function discardDraft() {
+    setDraft(file?.contents ?? "");
+  }
+
   const draftDiscard = useDraftDiscardConfirmation({
     dirty: modified,
-    discard: () => setDraft(file?.contents ?? ""),
+    discard: discardDraft,
     navigationKeepsDraft: staysInConfig,
     onNavigationBlockerChange,
     onNavigateLocation,
@@ -391,6 +400,7 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
           </section>
 
           <section aria-busy={opening} className={workspaceDetailPane(compact, showingFile)}>
+            <SaveBarSlotContext.Provider value={saveBar.slot}>
             {compact ? (
               <Button className="mb-3 w-fit" onClick={() => setShowingFile(false)}>{t("explorer.allFiles")}</Button>
             ) : null}
@@ -400,10 +410,8 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                 modified={modified}
                 actions={fileActions}
                 previewing={busyWith("preview")}
-                saving={busyWith("save")}
                 busy={busy}
                 onPreview={() => void run("preview")}
-                onSave={() => void run("save")}
               />
             )}
             {pathTask === null ? null : (
@@ -445,8 +453,19 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
                   />
                 </div>
                 <p className="mt-2.5 shrink-0 text-xs text-ink-faint">{t("explorer.formatKept")}</p>
+                {modified ? (
+                  <DraftSaveBar
+                    saving={busyWith("save")}
+                    saveDisabled={!file.editable || busy}
+                    discardDisabled={busy}
+                    onDiscard={discardDraft}
+                    onSave={() => void run("save")}
+                  />
+                ) : null}
               </>
             )}
+            <div ref={saveBar.slotRef} className={saveBarSlotClass} />
+            </SaveBarSlotContext.Provider>
           </section>
         </div>
       </PageBoard>

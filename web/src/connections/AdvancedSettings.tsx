@@ -10,13 +10,14 @@ import { Button, Notice } from "../ui/surface";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
 import { fieldsIn, forwardEnds, hasProxyJump, isForwardAddition } from "./advancedFields";
 import { draftResetKey } from "./draftResetKey";
-import { DraftSaveBar } from "./DraftSaveBar";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import { EditorSection } from "./EditorSection";
 import { HostBlockText } from "./HostBlockText";
 import { useDraftSave } from "./useDraftSave";
 import { useReportDirty } from "./useReportDirty";
 import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
 import { unsavedJumpHops } from "./jumpHops";
+import { IconButton } from "../ui/IconButton";
 
 type AdvancedSettingsProps = {
   detail: HostDetail;
@@ -328,10 +329,8 @@ export function AdvancedSettings({
 
       {fieldDirty ? (
         <DraftSaveBar
-          saveLabel={t("host.saveChanges")}
           saving={saving}
           saveDisabled={fieldsDisabled}
-          discardDisabled={saving}
           onDiscard={discard}
           onSave={submitFieldEdits}
         />
@@ -352,15 +351,8 @@ function RemoveToggle({ removed, disabled, label, onToggle }: { removed: boolean
   }
   const name = t("advanced.removeNamed", { keyword: label });
   return (
-    <button
-      type="button"
-      aria-label={name}
-      title={name}
-      disabled={disabled}
-      onClick={onToggle}
-      className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-danger"
-    >
+    <IconButton label={name} size="toolbar" tone="danger" disabled={disabled} onClick={onToggle}>
       <Icon name="close" className="size-3.5" />
-    </button>
+    </IconButton>
   );
 }

@@ -1,9 +1,9 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState } from "react";
 import type { Problem } from "../api/client";
-import { configApi, type HostDetail, type Overview } from "../api/config";
+import { type HostDetail, type Overview } from "../api/config";
 import { toProblem } from "../api/guards";
 import { useTranslate } from "../i18n/context";
-import { keysApi } from "../keys/api";
 import type { HostSelection } from "./ConnectionTree";
 import {
   loadConnectionSavedState,
@@ -11,7 +11,6 @@ import {
   type ConnectionSavedState,
 } from "./connectionSavedState";
 import type { RefreshState } from "./pageState";
-import { connectionSecretsApi } from "./secretsApi";
 
 type SelectedConnectionOptions = {
   selection: HostSelection | null;
@@ -31,6 +30,7 @@ export function useSelectedConnection({
   setProblem,
   setLocalError,
 }: SelectedConnectionOptions) {
+  const { config: configApi, keys: keysApi, secrets: connectionSecretsApi } = useEngineApis();
   const t = useTranslate();
   const [detail, setDetail] = useState<HostDetail | null>(null);
   const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
@@ -69,7 +69,7 @@ export function useSelectedConnection({
     return () => {
       active = false;
     };
-  }, [selectedPath, selectedAlias, setProblem]);
+  }, [configApi, keysApi, connectionSecretsApi, selectedPath, selectedAlias, setProblem]);
 
   // forget は、読み込んだ内容を捨てる。同じ接続の識別子が変わったときに使う。
   function forget() {

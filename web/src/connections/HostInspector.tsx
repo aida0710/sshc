@@ -6,7 +6,7 @@ import { FieldRow, FieldRowNote } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { identityKey } from "./connectionBrowser";
-import { DraftSaveBar } from "./DraftSaveBar";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import {
   canonicalHostMetadata,
   formatTags,
@@ -205,10 +205,9 @@ export function HostInspector({
 
       {saveFailed ? <Notice tone="danger">{t("inspector.hostSaveFailed")}</Notice> : null}
       {dirty ? <DraftSaveBar
-        saveLabel={t("inspector.hostSave")}
         saving={saving}
-        saveDisabled={disabled || saving}
-        discardDisabled={saving}
+        saveDisabled={disabled}
+        discardDisabled={disabled}
         onDiscard={discard}
         onSave={save}
       /> : null}

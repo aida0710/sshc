@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import { useTranslate } from "../i18n/context";
-import { iconAction } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { nextSort } from "../ui/tableSort";
 import { SFTPActionSheet } from "./SFTPActionSheet";
@@ -9,6 +8,7 @@ import type { SFTPSort, SFTPSortState } from "./sftpEntrySort";
 import { sortColumnLabelKeys } from "./sftpMessageKeys";
 import type { SFTPEntryView } from "./sftpPanes";
 import { phoneMenuItemClass } from "./SFTPMenuActionList";
+import { IconButton } from "../ui/IconButton";
 
 function sortArrow({ direction }: SFTPSortState) {
   return direction === "ascending" ? "arrowUp" : "arrowDown";
@@ -45,9 +45,9 @@ export function SFTPPhoneListHeader({ sort, columns, onSort, entryView, onEntryV
       </button>
       <div className="flex items-center gap-1">
         <SFTPEntryViewSwitch view={entryView} onChange={onEntryViewChange} touchCompact />
-        <button type="button" aria-label={t("sftp.refreshDirectory")} disabled={refreshDisabled} onClick={onRefresh} className={`${iconAction} size-11 active:bg-select-fill`}>
+        <IconButton label={t("sftp.refreshDirectory")} size="bar" disabled={refreshDisabled} onClick={onRefresh} className="active:bg-select-fill">
           <Icon name="sync" className="size-4" />
-        </button>
+        </IconButton>
       </div>
       {choosing ? (
         <SFTPActionSheet heading={t("sftp.sortMenu")} onDismiss={() => setChoosing(false)} returnFocusRef={trigger}>

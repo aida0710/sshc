@@ -61,7 +61,7 @@ export function NoticeList({ notices, collapsible = false }: { notices: Notice[]
   const list = (
     <ul className="flex flex-col gap-1">
       {notices.map((notice, index) => (
-        <li key={`${notice.code}-${notice.path ?? ""}-${notice.line ?? 0}-${index}`} className="text-xs text-notice-ink">
+        <li key={`${notice.code}-${notice.path ?? ""}-${notice.line ?? 0}-${index}`} className={`text-xs ${collapsible ? "text-ink-muted" : "text-notice-ink"}`}>
           <NoticeText notice={notice} />
         </li>
       ))}
@@ -70,7 +70,7 @@ export function NoticeList({ notices, collapsible = false }: { notices: Notice[]
   if (!collapsible) return list;
   return (
     <details className="rounded-inset border border-notice-line bg-notice px-3 py-2">
-      <DisclosureSummary className="text-xs font-medium text-notice-ink">{t("notice.summary", { count: notices.length })}</DisclosureSummary>
+      <DisclosureSummary className="text-xs font-medium text-ink">{t("notice.summary", { count: notices.length })}</DisclosureSummary>
       <div className="mt-2">{list}</div>
     </details>
   );

@@ -928,8 +928,7 @@ jobs:
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
           staticcheck ./...
+      # 本番の依存は例外なしで監査し、開発の依存は scripts/ci/npm-audit-allowed.tsv に
+      # 期限と理由と一緒に書いた勧告だけを許す。
       - name: npm vulnerability audit
-        run: |
-          npm audit --prefix web --audit-level=high
-          npm audit --prefix pages --audit-level=high
-          npm audit --prefix demo --audit-level=high
+        run: scripts/ci/npm-audit.sh

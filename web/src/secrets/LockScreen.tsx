@@ -6,7 +6,6 @@ import { useLanguage } from "../i18n/context";
 import { CheckboxField, control } from "../ui/form";
 import { EntryPreferences } from "../ui/EntryPreferences";
 import { EntryScreen } from "../ui/EntryScreen";
-import { Icon } from "../ui/icons";
 import { PasswordField } from "../ui/PasswordField";
 import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { Button, Notice } from "../ui/surface";
@@ -206,10 +205,7 @@ export function LockScreen({
   }
 
   const noRecovery = exists || noPassword ? undefined : (
-    <p className="flex gap-2.5 rounded-inset bg-notice px-3 py-2.5 text-xs leading-[19px] text-notice-ink">
-      <Icon name="warning" className="mt-0.5 size-[15px]" />
-      {t("lock.noRecovery")}
-    </p>
+    <Notice compact live={false}>{t("lock.noRecovery")}</Notice>
   );
   return (
     <EntryScreen

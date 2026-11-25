@@ -28,7 +28,7 @@ const savedProfile: VPNProfile = {
 
 function renderForm(editing?: VPNProfile) {
   const onSave = vi.fn().mockResolvedValue({ saved: true });
-  render(<VPNProfileForm busy={false} onSave={onSave} {...(editing === undefined ? {} : { editing, onCancel: () => {} })} />);
+  render(<VPNProfileForm busy={false} onSave={onSave} {...(editing === undefined ? {} : { editing, onClose: () => {} })} />);
   return onSave;
 }
 
@@ -81,10 +81,16 @@ describe("VPNProfileForm with OpenVPN", () => {
     const form = screen.getByRole("region", { name: "Edit provider" });
 
     expect(within(form).getByText("VPN servers (remote): vpn.example.jp")).toBeVisible();
-    expect(within(form).getByLabelText("VPN username")).toHaveValue("fixture");
+    const username = within(form).getByLabelText("VPN username");
+    expect(username).toHaveValue("fixture");
+    // Nothing is offered to save until something changes.
+    expect(within(form).queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    await user.type(username, "2");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith(savedProfile, {}));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(
+      { ...savedProfile, openvpn: { ...savedProfile.openvpn, username: "fixture2" } }, {},
+    ));
   });
 
   it("fills the stored file and password when editing opens, and shows the password only on request", async () => {
@@ -92,7 +98,7 @@ describe("VPNProfileForm with OpenVPN", () => {
     const onSave = vi.fn().mockResolvedValue({ saved: true });
     const revealSecrets = vi.fn().mockResolvedValue({ openvpnConfig: config, openvpnPassword: "the stored password" });
     render(
-      <VPNProfileForm busy={false} editing={savedProfile} revealSecrets={revealSecrets} onSave={onSave} onCancel={() => {}} />,
+      <VPNProfileForm busy={false} editing={savedProfile} revealSecrets={revealSecrets} onSave={onSave} onClose={() => {}} />,
     );
     const form = screen.getByRole("region", { name: "Edit provider" });
 
@@ -102,10 +108,13 @@ describe("VPNProfileForm with OpenVPN", () => {
     expect(password).toHaveAttribute("type", "password");
     await user.click(within(form).getByRole("button", { name: "Show VPN password" }));
     expect(password).toHaveAttribute("type", "text");
+    // What was taken out of the vault is not a change.
+    expect(within(form).queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    await user.type(within(form).getByLabelText("VPN username"), "2");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(
-      { ...savedProfile, openvpn: { servers: ["vpn.example.jp", "backup.example.jp"], username: "fixture" } },
+      { ...savedProfile, openvpn: { servers: ["vpn.example.jp", "backup.example.jp"], username: "fixture2" } },
       { openvpnConfig: config, openvpnPassword: "the stored password" },
     ));
   });

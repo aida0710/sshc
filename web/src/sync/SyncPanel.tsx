@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { vaultApi, type VaultApi } from "../api/vault";
 import { syncApi, type SyncApi, type PushResponse, type SyncHistoryDiff, type SyncSetupExport } from "../api/sync";
 import { useLanguage, useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button, Notice } from "../ui/surface";
+import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
 import { PanelState } from "../ui/PanelState";
+import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
+import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
 import { SyncResultCard } from "./SyncResultCard";
 import { SyncPageFrame } from "./SyncPageFrame";
 import { SyncDetailsSection } from "./SyncDetailsSection";
@@ -30,7 +33,12 @@ import { syncPathRefusals, syncRefusals } from "./syncRefusals";
 export type SyncPanelApi = SyncApi & Pick<VaultApi, "unlockVault">;
 const syncPanelApi: SyncPanelApi = { ...syncApi, ...vaultApi };
 
-type SyncPanelProps = { api?: SyncPanelApi };
+type SyncPanelProps = {
+  api?: SyncPanelApi;
+  // Used to ask before leaving while the exclusions have unsaved changes.
+  onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
+  onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
+};
 
 // The three things to do, in order, before sync is set up.
 function SyncFlowSteps() {
@@ -56,8 +64,17 @@ function SyncFlowSteps() {
   );
 }
 
-export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
+export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNavigateLocation }: SyncPanelProps) {
   const { locale, t } = useLanguage();
+  const [exclusionsDirty, setExclusionsDirty] = useState(false);
+  const discardExclusions = useRef<(() => void) | null>(null);
+  const keepDiscardExclusions = useCallback((discard: (() => void) | null) => { discardExclusions.current = discard; }, []);
+  const draftDiscard = useDraftDiscardConfirmation({
+    dirty: exclusionsDirty,
+    discard: () => discardExclusions.current?.(),
+    onNavigationBlockerChange,
+    onNavigateLocation,
+  });
   const form = useSyncSetupForm();
   const importForm = useSyncSetupImport();
   // The settings sealed for another machine, while their QR code is on the screen.
@@ -186,10 +203,9 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   if (statusState.phase === "error") {
     return (
       <SyncPageFrame>
-        <Notice tone="danger">{statusState.message}</Notice>
-        <Button onClick={() => void reload()} className="self-start">
-          {t("shell.bootstrapRetry")}
-        </Button>
+        <Notice tone="danger" actions={<Button small onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>}>
+          {statusState.message}
+        </Notice>
       </SyncPageFrame>
     );
   }
@@ -288,6 +304,8 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           onSaved={() => {
             void refreshPushDraft();
           }}
+          onDirtyChange={setExclusionsDirty}
+          onDiscardReady={keepDiscardExclusions}
         />
       ) : null}
 
@@ -481,6 +499,9 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           }
         />
       )}
+      {draftDiscard.confirming ? (
+        <DiscardDraftDialog id="sync-exclusions-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />
+      ) : null}
     </SyncPageFrame>
   );
 }

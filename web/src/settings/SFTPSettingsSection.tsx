@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { FieldRow } from "../ui/FieldRow";
 import { CheckboxField } from "../ui/form";
@@ -7,9 +6,10 @@ import { PanelState } from "../ui/PanelState";
 import { Notice } from "../ui/surface";
 import { defaultLargeFileChunkBytes, defaultLargeFileParallelism, defaultLargeFileThreshold, defaultTransferConcurrency } from "../sftp/transferDefaults";
 import { TransferSettingsForm, type PresetTransferSettings } from "../sftp/TransferSettingsForm";
-import { presetInterfaceOf, updatePresetInterface } from "./presetInterface";
+import { presetInterfaceOf } from "./presetInterface";
 import { SettingsSection } from "./SettingsSection";
-import { updatePreset, useSettings, type SettingsPreset } from "./settingsStore";
+import { usePresetInterfaceEdit, useSettingsDraft } from "./settingsDraftContext";
+import type { SettingsPreset } from "./settingsStore";
 
 const defaultTransferSettings: PresetTransferSettings = {
   maxConcurrent: defaultTransferConcurrency,
@@ -28,29 +28,24 @@ function storedTransferSettings(settings: PresetTransferSettings): SettingsPrese
 }
 
 // The SFTP settings of the preset being edited: whether lists draw thumbnails, how many transfers run at once, how
-// large files are split, the speed limit and the exclusions. Each control saves its own change at once. The machines
-// that use the preset apply a change as soon as it reaches them.
+// large files are split, the speed limit and the exclusions. The machines that use the preset apply a saved change as
+// soon as it reaches them.
 export function SFTPSettingsSection({ presetId, showHeading }: { presetId: string; showHeading: boolean }) {
   const t = useTranslate();
-  const { document, loadFailed } = useSettings();
-  const [failed, setFailed] = useState(false);
+  const { document, loadFailed, editPreset } = useSettingsDraft();
+  const editInterface = usePresetInterfaceEdit(presetId);
   const preset = document?.presets.find((candidate) => candidate.id === presetId);
   const settings: PresetTransferSettings = { ...defaultTransferSettings, ...preset?.fileTransfers };
 
-  function commit(change: Partial<PresetTransferSettings>): Promise<boolean> {
-    setFailed(false);
-    return updatePreset(presetId, ({ fileTransfers: saved, ...current }) => {
-      const stored = storedTransferSettings({ ...defaultTransferSettings, ...saved, ...change });
+  function change<Field extends keyof PresetTransferSettings>(field: Field, value: PresetTransferSettings[Field]) {
+    editPreset(presetId, `fileTransfers.${field}`, ({ fileTransfers: saved, ...current }) => {
+      const stored = storedTransferSettings({ ...defaultTransferSettings, ...saved, [field]: value });
       return stored === undefined ? current : { ...current, fileTransfers: stored };
-    }).then(() => true, () => {
-      setFailed(true);
-      return false;
     });
   }
 
   return (
     <SettingsSection id="settings-sftp" label={t("sftp.settingsHeading")} icon="files" showHeading={showHeading}>
-      {failed ? <div className="mb-5"><Notice tone="danger" compact>{t("sftp.settingsSaveFailed")}</Notice></div> : null}
       {document === null
         ? (loadFailed ? <Notice tone="danger">{t("sftp.settingsLoadFailed")}</Notice> : <PanelState tone="loading" title={t("sftp.settingsLoading")} />)
         : (
@@ -61,11 +56,11 @@ export function SFTPSettingsSection({ presetId, showHeading }: { presetId: strin
                   label={t("sftp.settingsThumbnails")}
                   hint={t("sftp.settingsThumbnailsHint")}
                   checked={presetInterfaceOf(document, presetId).hideSFTPThumbnails !== true}
-                  onChange={(checked) => void updatePresetInterface((current) => ({ ...current, hideSFTPThumbnails: !checked }), presetId)}
+                  onChange={(checked) => editInterface("hideSFTPThumbnails", (current) => ({ ...current, hideSFTPThumbnails: !checked }))}
                 />
               </FieldRow>
             </PageSection>
-            <TransferSettingsForm settings={settings} onCommit={commit} />
+            <TransferSettingsForm settings={settings} onChange={change} />
           </div>
         )}
     </SettingsSection>

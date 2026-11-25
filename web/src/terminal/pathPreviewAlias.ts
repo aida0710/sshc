@@ -2,19 +2,10 @@ import type { TerminalSession } from "../api/terminalSessions";
 import { localHostAlias } from "../sftp/localHost";
 import { savedConnectionOf } from "./terminalPresentation";
 
-// pathPreviewAlias names the machine whose files a session's shell sees, as an
-// alias this machine can read files from. A path a program prints is a path there:
-// a shell runs on this machine, or on the run target it was opened on, and an SSH
-// session runs on its alias. An SSH session opened on a run target reached its
-// host through that engine's SSH config, which this machine may not share, so it
-// has an alias here only when the alias reaches the same host from both
-// (sameDestination, from useSameDestination).
-export function pathPreviewAlias(
-  session: Pick<TerminalSession, "kind" | "alias">,
-  runTarget: string | undefined,
-  sameDestination: boolean,
-): string | undefined {
-  if (session.kind === "shell") return runTarget ?? localHostAlias;
-  if (runTarget !== undefined && !sameDestination) return undefined;
-  return savedConnectionOf(session);
+// pathPreviewAlias names the machine whose files a session's shell sees, as the engine that runs the session reads
+// them. A path a program prints is a path there: a shell runs on the engine's own machine, and an SSH session on its
+// alias. The files are read with that engine's API (EngineApis), so a session of a remote session's engine is read
+// by that engine, with its own SSH configuration.
+export function pathPreviewAlias(session: Pick<TerminalSession, "kind" | "alias">): string | undefined {
+  return session.kind === "shell" ? localHostAlias : savedConnectionOf(session);
 }

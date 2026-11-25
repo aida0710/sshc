@@ -3,6 +3,7 @@ import { Icon } from "../ui/icons";
 import type { SFTPSearchModel } from "./useSFTPSearch";
 import { isImeComposing } from "../ui/imeComposition";
 import { literalTextEntry } from "../ui/softKeyboard";
+import { IconButton } from "../ui/IconButton";
 
 export function SFTPCompactSelection({ label, menuLabel, expanded, onClear, onMenu, onSearch }: {
   label: string;
@@ -14,10 +15,10 @@ export function SFTPCompactSelection({ label, menuLabel, expanded, onClear, onMe
 }) {
   const t = useTranslate();
   return <>
-    <button type="button" aria-label={t("sftp.clearSelection")} onClick={onClear} className="flex size-12 shrink-0 items-center justify-center rounded-md text-ink-muted active:bg-select-fill"><Icon name="close" className="size-5" /></button>
+    <IconButton label={t("sftp.clearSelection")} size="barLarge" ground="none" className="active:bg-select-fill" onClick={onClear}><Icon name="close" className="size-5" /></IconButton>
     <span title={label} className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
-    <button type="button" aria-label={t("sftp.mobile.search")} aria-expanded="false" onClick={onSearch} className="flex size-12 shrink-0 items-center justify-center rounded-md text-ink-muted active:bg-select-fill"><Icon name="search" className="size-5" /></button>
-    <button type="button" aria-label={menuLabel} aria-haspopup="dialog" aria-expanded={expanded} onClick={(event) => onMenu(event.currentTarget)} className="flex size-12 shrink-0 items-center justify-center rounded-md text-ink-muted active:bg-select-fill"><Icon name="moreHorizontal" className="size-5" /></button>
+    <IconButton label={t("sftp.mobile.search")} size="barLarge" ground="none" className="active:bg-select-fill" aria-expanded="false" onClick={onSearch}><Icon name="search" className="size-5" /></IconButton>
+    <IconButton label={menuLabel} size="barLarge" ground="none" className="active:bg-select-fill" aria-haspopup="dialog" aria-expanded={expanded} onClick={(event) => onMenu(event.currentTarget)}><Icon name="moreHorizontal" className="size-5" /></IconButton>
   </>;
 }
 
@@ -36,11 +37,10 @@ export function SFTPCompactSearch({ search, recursive, disabled, onOptions }: {
       onKeyDown={(event) => { if (isImeComposing(event) || event.key !== "Enter") return; event.preventDefault(); if (recursive) void search.runSearch(); event.currentTarget.blur(); }}
       className="ml-2 h-12 min-w-0 flex-1 rounded-md border border-control-line bg-control px-2 text-base" />
     {recursive ? <>
-      <button type="button" aria-label={t("sftp.search.mode")} onClick={onOptions} className="flex size-12 shrink-0 items-center justify-center rounded-md text-ink-muted active:bg-select-fill"><Icon name="settings" className="size-5" /></button>
-      <button type="button" aria-label={search.searching ? t("sftp.search.stop") : t("sftp.searchBelow")} disabled={!search.searching && (disabled || search.filter.trim() === "")}
-        onClick={() => { search.searchInput.current?.blur(); if (search.searching) search.cancelSearch(); else void search.runSearch(); }}
-        className="flex size-12 shrink-0 items-center justify-center rounded-md text-ink-muted active:bg-select-fill"><Icon name={search.searching ? "close" : "search"} className="size-5" /></button>
+      <IconButton label={t("sftp.search.mode")} size="barLarge" ground="none" className="active:bg-select-fill" onClick={onOptions}><Icon name="settings" className="size-5" /></IconButton>
+      <IconButton label={search.searching ? t("sftp.search.stop") : t("sftp.searchBelow")} size="barLarge" ground="none" className="active:bg-select-fill" disabled={!search.searching && (disabled || search.filter.trim() === "")}
+        onClick={() => { search.searchInput.current?.blur(); if (search.searching) search.cancelSearch(); else void search.runSearch(); }}><Icon name={search.searching ? "close" : "search"} className="size-5" /></IconButton>
     </> : null}
-    <button type="button" aria-label={t("sftp.close")} onClick={() => { search.setMobileSearchOpen(false); search.setFilter(""); }} className="flex size-12 shrink-0 items-center justify-center rounded-md text-ink-muted active:bg-select-fill"><Icon name="close" className="size-5" /></button>
+    <IconButton label={t("sftp.close")} size="barLarge" ground="none" className="active:bg-select-fill" onClick={() => { search.setMobileSearchOpen(false); search.setFilter(""); }}><Icon name="close" className="size-5" /></IconButton>
   </>;
 }

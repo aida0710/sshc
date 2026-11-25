@@ -19,10 +19,10 @@ export function GroupFolderNotices({ notices, onDeclare }: { notices: readonly N
   if (notices.length === 0) return null;
   return (
     <details className="rounded-inset border border-notice-line bg-notice px-2.5 py-1.5">
-      <DisclosureSummary className="text-xs font-medium text-notice-ink">{t("groupNotices.summary", { count: notices.length })}</DisclosureSummary>
+      <DisclosureSummary className="text-xs font-medium text-ink">{t("groupNotices.summary", { count: notices.length })}</DisclosureSummary>
       <ul className="mt-2 flex flex-col gap-2.5 pb-1">
         {notices.map((notice, index) => (
-          <li key={`${notice.code}-${notice.path ?? ""}-${index}`} className="flex flex-col items-start gap-1.5 text-xs leading-[18px] text-notice-ink">
+          <li key={`${notice.code}-${notice.path ?? ""}-${index}`} className="flex flex-col items-start gap-1.5 text-xs leading-[18px] text-ink-muted">
             <span className="break-words">{t(noticeText[notice.code] ?? "groupNotices.fileUnreached", { path: notice.path ?? "", name: notice.detail ?? "" })}</span>
             {notice.code === "group_not_declared" && notice.detail !== undefined ? (
               <Button small onClick={() => onDeclare(notice.detail!)}>{t("groupNotices.declare")}</Button>

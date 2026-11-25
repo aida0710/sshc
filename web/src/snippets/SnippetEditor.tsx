@@ -1,4 +1,5 @@
 import { useTranslate } from "../i18n/context";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import { FieldRow } from "../ui/FieldRow";
 import { control } from "../ui/form";
 import { PageSection } from "../ui/page";
@@ -47,7 +48,8 @@ export function SnippetEditor({
   draft,
   variables,
   inputs,
-  savedJustNow,
+  changed,
+  saveFailure,
   deletable,
   saving,
   deleting,
@@ -55,6 +57,7 @@ export function SnippetEditor({
   onDraftChange,
   onVariableChange,
   onInputChange,
+  onDiscard,
   onSave,
   onDelete,
 }: {
@@ -63,7 +66,9 @@ export function SnippetEditor({
   // variables は、コマンドに書いた変数の定義（variablesFor で今のコマンドに合わせたもの）である。
   variables: SnippetVariable[];
   inputs: Record<string, string>;
-  savedJustNow: boolean;
+  // changed は、保存した内容から変えたか。変えたあいだ、保存の帯を出す。saveFailure は、保存できなかった理由。
+  changed: boolean;
+  saveFailure: string;
   // deletable は、保存済みのスニペットを開いているかである。新しいスニペットには削除が無い。
   deletable: boolean;
   saving: boolean;
@@ -73,6 +78,7 @@ export function SnippetEditor({
   onDraftChange: (next: SnippetDraft) => void;
   onVariableChange: (name: string, update: Partial<SnippetVariable>) => void;
   onInputChange: (name: string, value: string) => void;
+  onDiscard: () => void;
   onSave: () => void;
   onDelete: () => void;
 }) {
@@ -109,7 +115,7 @@ export function SnippetEditor({
             <FieldRow
               label={t("snippets.waitSeconds")}
               hint={t("snippets.waitSecondsHint")}
-              warning={validWaitSeconds(draft.waitSeconds) ? undefined : t("snippets.waitSecondsRange", { max: maxWaitSeconds })}
+              error={validWaitSeconds(draft.waitSeconds) ? undefined : t("snippets.waitSecondsRange", { max: maxWaitSeconds })}
             >
               <span className="flex items-center gap-2">
                 {/* An empty field is 0, which the engine takes for the default, shown as the placeholder. */}
@@ -170,23 +176,24 @@ export function SnippetEditor({
           </FieldRow>
         ))}
       </div>
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        {deletable ? (
+      {deletable ? (
+        <div className="pt-1">
           <Button kind="dangerText" busy={deleting} disabled={busy} onClick={onDelete}>
             {t("snippets.delete")}
           </Button>
-        ) : null}
-        <span className="flex-1" />
-        {savedJustNow ? <p role="status" className="text-xs text-live">{t("snippets.saved")}</p> : null}
-        <Button
-          kind="primary"
-          busy={saving}
-          disabled={busy || !canBeSaved(draft)}
-          onClick={onSave}
-        >
-          {t("snippets.save")}
-        </Button>
-      </div>
+        </div>
+      ) : null}
+      {changed ? (
+        <DraftSaveBar
+          saving={saving}
+          saveDisabled={busy}
+          inputInvalid={!canBeSaved(draft)}
+          discardDisabled={busy}
+          failure={saveFailure}
+          onDiscard={onDiscard}
+          onSave={onSave}
+        />
+      ) : null}
     </PageSection>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { sizedControl } from "../ui/form";
 import type { HostEntry, HostMetadata, Metadata } from "../api/config";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -71,14 +71,12 @@ export function OrphanPanel({ metadata, hosts, onSave }: OrphanPanelProps) {
 
   return (
     <section aria-labelledby="orphan-heading" className="flex flex-col gap-3 rounded-inset border border-notice-line bg-notice p-4">
-      <h3 id="orphan-heading" className="text-sm font-semibold text-notice-ink">
+      <h3 id="orphan-heading" className="text-sm font-semibold text-ink">
         {t("orphan.heading")}
       </h3>
       <p className="text-xs text-ink-muted">{t("orphan.explain")}</p>
       {error === "" ? null : (
-        <p role="alert" className="text-xs text-danger">
-          {error}
-        </p>
+        <Notice tone="danger" compact>{error}</Notice>
       )}
       <ul className="overflow-hidden rounded-lg bg-card">
         {orphans.map((entry) => {

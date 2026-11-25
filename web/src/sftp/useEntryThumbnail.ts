@@ -1,3 +1,4 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState } from "react";
 import type { RemoteEntry } from "./api";
 import { hasThumbnail } from "./entryThumbnails";
@@ -35,6 +36,7 @@ type MadeThumbnail = { key: string; url: string };
 // after a lost connection this is what gets the picture after all.
 export function useEntryThumbnail(alias: string | null, entry: RemoteEntry): { boxRef: (element: Element | null) => void; url: string | null } {
   const [box, setBox] = useState<Element | null>(null);
+  const readThumbnail = useEngineApis().sftp.files.thumbnail;
   const [made, setMade] = useState<MadeThumbnail | null>(null);
   const { path, revision } = entry;
   const key = alias === null || !hasThumbnail(entry) ? null : `${alias}\0${path}\0${revision}`;
@@ -58,7 +60,7 @@ export function useEntryThumbnail(alias: string | null, entry: RemoteEntry): { b
       if (made || settling !== null || cancelRequest !== null) return;
       settling = setTimeout(() => {
         settling = null;
-        cancelRequest = requestThumbnail({ alias, path, revision }, (url) => {
+        cancelRequest = requestThumbnail(readThumbnail, { alias, path, revision }, (url) => {
           cancelRequest = null;
           if (url === null) return;
           made = true;
@@ -70,7 +72,7 @@ export function useEntryThumbnail(alias: string | null, entry: RemoteEntry): { b
       stopWatching();
       stop();
     };
-  }, [alias, box, key, path, revision]);
+  }, [alias, box, key, path, readThumbnail, revision]);
 
   return { boxRef: setBox, url: made?.key === key ? made.url : null };
 }

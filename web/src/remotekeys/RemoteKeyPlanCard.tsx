@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { CopyButton } from "../ui/CopyButton";
+import { Notice } from "../ui/surface";
 import type { RemoteKeyPlan } from "./api";
 
 // 1台ぶんの登録内容。どのユーザーのどのホストへ、どの行を、どのコマンドで足すかを見せる。
@@ -50,11 +51,12 @@ export function RemoteKeyPlanCard({ plan, manual }: { plan: RemoteKeyPlan; manua
           </pre>
           <div className="mt-1"><CopyButton value={plan.routine} label="copy.remoteCommand" /></div>
           {manual ? (
-            <div className="mt-4 rounded-inset bg-well p-3">
-              <h5 className="font-medium text-notice-ink">{t("rk.manualHeading")}</h5>
-              <ol className="mt-1 list-decimal pl-5">
-                {plan.manual.map((step) => <li key={step}>{step}</li>)}
-              </ol>
+            <div className="mt-4">
+              <Notice live={false} titleLevel={5} title={t("rk.manualHeading")}>
+                <ol className="mt-1 list-decimal pl-5">
+                  {plan.manual.map((step) => <li key={step}>{step}</li>)}
+                </ol>
+              </Notice>
             </div>
           ) : null}
         </div>

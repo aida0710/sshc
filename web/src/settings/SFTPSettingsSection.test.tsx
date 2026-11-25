@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiClient, ApiError } from "../api/client";
+import { renderSettings, saveBar, saveButton, saveSettings } from "../testing/settingsDraft";
 import { fakeSettingsServer } from "../testing/settingsServer";
 import { SFTPSettingsSection } from "./SFTPSettingsSection";
 
@@ -15,7 +16,7 @@ function fileTransfersOf(server: ReturnType<typeof fakeSettingsServer>, id: stri
 describe("Settings > SFTP", () => {
   it("shows the preset's transfer settings and the exclusions, with the defaults for what it left out", () => {
     fakeSettingsServer({ presets: [{ id: "default", fileTransfers: { largeFileParallelism: 4 } }] });
-    render(<SFTPSettingsSection presetId="default" showHeading={false} />);
+    renderSettings(<SFTPSettingsSection presetId="default" showHeading={false} />);
 
     const transfers = screen.getByRole("region", { name: "Transfers" });
     const exclusions = screen.getByRole("region", { name: "Transfer exclusions" });
@@ -30,45 +31,64 @@ describe("Settings > SFTP", () => {
     expect(screen.queryByRole("checkbox", { name: "Resume automatically" })).not.toBeInTheDocument();
   });
 
-  it("saves each change in the preset being edited, leaving the defaults out", async () => {
+  it("saves the changes in the preset being edited, leaving the defaults out", async () => {
     const server = fakeSettingsServer({ presets: [{ id: "default" }, { id: "phone", name: "Phone" }] });
-    render(<SFTPSettingsSection presetId="phone" showHeading={false} />);
+    renderSettings(<SFTPSettingsSection presetId="phone" showHeading={false} />);
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
-    await waitFor(() => expect(fileTransfersOf(server, "phone")).toEqual({ maxConcurrent: 5 }));
-
     const speed = screen.getByRole("spinbutton", { name: "Speed limit" });
     fireEvent.change(speed, { target: { value: "2048" } });
-    fireEvent.blur(speed);
-    await waitFor(() => expect(fileTransfersOf(server, "phone")).toEqual({ maxConcurrent: 5, speedLimitBytesPerSecond: 2048 * 1024 }));
+    expect(fileTransfersOf(server, "phone")).toBeUndefined();
+    await saveSettings();
+    expect(fileTransfersOf(server, "phone")).toEqual({ maxConcurrent: 5, speedLimitBytesPerSecond: 2048 * 1024 });
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "2");
-    await waitFor(() => expect(fileTransfersOf(server, "phone")).toEqual({ speedLimitBytesPerSecond: 2048 * 1024 }));
+    await userEvent.click(saveButton());
+    await vi.waitFor(() => expect(fileTransfersOf(server, "phone")).toEqual({ speedLimitBytesPerSecond: 2048 * 1024 }));
     expect(fileTransfersOf(server, "default")).toBeUndefined();
   });
 
-  it("says when a change could not be saved", async () => {
+  it("offers to save from the first character typed, and not while a number is out of range", async () => {
     fakeSettingsServer();
-    render(<SFTPSettingsSection presetId="default" showHeading={false} />);
+    renderSettings(<SFTPSettingsSection presetId="default" showHeading={false} />);
+    const streams = screen.getByRole("spinbutton", { name: "Streams" });
+    expect(saveBar()).toBeNull();
+
+    fireEvent.change(streams, { target: { value: "8" } });
+    expect(saveButton()).toBeEnabled();
+
+    fireEvent.change(streams, { target: { value: "800" } });
+    expect(streams).toHaveValue(800);
+    expect(streams).toHaveAccessibleDescription("Streams: enter a whole number from 1 to 128.");
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it("says when the changes could not be saved, and keeps them", async () => {
+    fakeSettingsServer();
+    renderSettings(<SFTPSettingsSection presetId="default" showHeading={false} />);
     vi.mocked(apiClient.mutate).mockRejectedValue(new ApiError("disk_full", 500, null));
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
+    await userEvent.click(saveButton());
 
-    expect(await screen.findByText("The SFTP settings could not be saved.")).toBeVisible();
+    expect(await screen.findByText("The settings could not be saved.")).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "Concurrent transfers" })).toHaveValue("5");
   });
 
   it("turns thumbnails off in the preset being edited, and on again by leaving nothing behind", async () => {
     const server = fakeSettingsServer({ presets: [{ id: "default" }, { id: "phone", name: "Phone" }] });
-    render(<SFTPSettingsSection presetId="phone" showHeading={false} />);
+    renderSettings(<SFTPSettingsSection presetId="phone" showHeading={false} />);
     const interfaceOf = (id: string) => server.document().presets.find((preset) => preset.id === id)?.interface;
 
     const thumbnails = screen.getByRole("checkbox", { name: "Show thumbnails of images" });
     expect(thumbnails).toBeChecked();
     await userEvent.click(thumbnails);
-    await waitFor(() => expect(interfaceOf("phone")).toEqual({ hideSFTPThumbnails: true }));
+    await saveSettings();
+    expect(interfaceOf("phone")).toEqual({ hideSFTPThumbnails: true });
     expect(interfaceOf("default")).toBeUndefined();
 
     await userEvent.click(screen.getByRole("checkbox", { name: "Show thumbnails of images" }));
-    await waitFor(() => expect(interfaceOf("phone")).toBeUndefined());
+    await userEvent.click(saveButton());
+    await vi.waitFor(() => expect(interfaceOf("phone")).toBeUndefined());
   });
 });

@@ -338,8 +338,14 @@ export async function chooseTheme(page: Page, theme: Theme): Promise<void> {
   const themes = page.getByRole("radiogroup", { name: "Theme" });
   // The name is matched whole: "Dark" is also part of "Dark blue".
   const name = themeChoiceLabels[theme];
+  const choice = themes.getByRole("radio", { name, exact: true });
+  const alreadyChosen = await choice.isChecked();
   await themes.locator("label").filter({ hasText: new RegExp(`^${name}$`) }).click();
-  await expect(themes.getByRole("radio", { name, exact: true })).toBeChecked();
+  await expect(choice).toBeChecked();
+  // The choice applies once it is saved. A theme that was chosen already leaves nothing to save.
+  const bar = page.locator("[data-save-bar]");
+  if (!alreadyChosen || await bar.count() > 0) await bar.getByRole("button").last().click();
+  await expect(bar).toHaveCount(0);
 }
 
 export async function changeDisplayLanguage(

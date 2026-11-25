@@ -7,7 +7,7 @@ export type SessionShortcutRequest = SessionShortcut & { serial: number };
 
 // Application-wide keyboard shortcuts (appActions). Listened for in the capture phase so that xterm never turns
 // one of them into SSH input.
-export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessions, activeSessionId, panes, splitBesideActive, navigate, showSession, openPalette, requestSession, toggleNavigation }: AppActionContext & {
+export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessions, activeSessionId, panes, splitBesideActive, navigate, showSession, openPalette, requestSession, toggleNavigation, runTargets, selectedRunTarget, chooseRunTarget }: AppActionContext & {
   enabled: boolean;
   shortcuts: Bindings;
 }) {
@@ -28,7 +28,7 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessi
         }
         return;
       }
-      const actions = appActions({ terminalFace, orderedSessions, activeSessionId, panes, splitBesideActive, navigate, showSession, openPalette, requestSession, toggleNavigation });
+      const actions = appActions({ terminalFace, orderedSessions, activeSessionId, panes, splitBesideActive, navigate, showSession, openPalette, requestSession, toggleNavigation, runTargets, selectedRunTarget, chooseRunTarget });
       const pressed = (Object.keys(actions) as ShortcutAction[]).find((action) => matchesShortcut(event, action, shortcuts));
       if (pressed === undefined && !browserFind) return;
       event.preventDefault();
@@ -38,5 +38,5 @@ export function useAppShortcuts({ enabled, shortcuts, terminalFace, orderedSessi
     // Capture before xterm translates an application shortcut into SSH input.
     document.addEventListener("keydown", handleShortcut, true);
     return () => document.removeEventListener("keydown", handleShortcut, true);
-  }, [enabled, shortcuts, navigate, orderedSessions, activeSessionId, panes, splitBesideActive, showSession, terminalFace, openPalette, requestSession, toggleNavigation]);
+  }, [enabled, shortcuts, navigate, orderedSessions, activeSessionId, panes, splitBesideActive, showSession, terminalFace, openPalette, requestSession, toggleNavigation, runTargets, selectedRunTarget, chooseRunTarget]);
 }

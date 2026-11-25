@@ -53,11 +53,27 @@ describe("SyncExclusionsPanel", () => {
     expect(config).toBeChecked();
     await userEvent.click(config);
     expect(screen.getByText(/接続設定または鍵が除外されています/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "除外設定を保存" }));
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() =>
       expect(api.saveSyncExclusions).toHaveBeenCalledWith("*.tmp\nauthorized_keys\nknown_hosts\nknown_hosts.old\n/config\n"),
     );
+  });
+
+  it("puts the saved rules back when the changes are discarded", async () => {
+    const api = {
+      syncExclusions: vi.fn().mockResolvedValue({ document: "", usingDefaults: false, candidates: [{ path: "known_hosts", ignored: false }] }),
+      saveSyncExclusions: vi.fn(),
+    };
+    renderPanel(api);
+    await userEvent.click(screen.getByText("同期するファイル"));
+    const file = await screen.findByRole("checkbox", { name: "known_hosts" });
+    expect(screen.queryByRole("button", { name: "保存" })).not.toBeInTheDocument();
+    await userEvent.click(file);
+    await userEvent.click(screen.getByRole("button", { name: "変更を破棄" }));
+    expect(file).toBeChecked();
+    expect(screen.queryByRole("button", { name: "保存" })).not.toBeInTheDocument();
+    expect(api.saveSyncExclusions).not.toHaveBeenCalled();
   });
 
   it("warns before excluding connection material", async () => {

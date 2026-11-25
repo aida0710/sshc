@@ -14,7 +14,7 @@ import (
 	"sshc/internal/handoff"
 )
 
-// maxForwardedBody は、取り次ぐターミナルの API の要求の本文の上限である。取り次ぐのは
+// maxForwardedBody は、取り次ぐ API の要求の本文の上限である。取り次ぐのは
 // セッションの作成や名前の変更のような短い JSON だけで、接続先のエンジン自身の上限より
 // 小さい。本文は、資格を受け取り直して一度だけ送り直すために読み切って持つ。
 const maxForwardedBody = 1 << 20
@@ -26,6 +26,12 @@ const RemoteStreamPath = "/terminal/stream"
 // 取り次ぐのはセッションの一覧や作成のような、すぐ答える要求だけである（作成も SSH の接続を
 // 待たずに返る）。上限が無いと、黙って切れた SSH の接続の上で、画面が何も出さずに待ち続ける。
 const forwardedAnswerLimit = 20 * time.Second
+
+// slowForwardedAnswerLimit は、接続先のエンジンが、よそのマシンの答えを待ってから答える操作の上限である。
+// 認証の試し、ホスト鍵の読み取り、鍵の登録、VPN の経路の開始がそれで、一番長い VPN の承認待ち（2 分）が
+// 収まる長さにする。forwardedAnswerLimit のままだと、接続先がまだ働いているうちに「届かない」と断り、
+// 資格を捨ててしまう。
+const slowForwardedAnswerLimit = 3 * time.Minute
 
 // ErrRequestTooLarge は、取り次ぐ要求の本文が maxForwardedBody を超えたことを表す。
 var ErrRequestTooLarge = errors.New("the request body is too large to forward")
@@ -42,7 +48,7 @@ var forwardedUpgradeHeaders = []string{
 	"Connection", "Upgrade", "Sec-WebSocket-Accept", "Sec-WebSocket-Protocol", "Sec-WebSocket-Extensions",
 }
 
-// ForwardTerminalAPI は、ブラウザの要求を、接続先のエンジンの remotePath（/api/v1/terminal/…）
+// ForwardAPI は、ブラウザの要求を、接続先のエンジンの remotePath（/api/v1/…）
 // へ取り次ぐ。ブラウザの cookie と CSRF のトークンはこのマシンのエンジンのもので、接続先へは
 // 送らない。代わりに、このマシンのエンジンが接続先から受け取った資格を付ける。
 //
@@ -50,7 +56,24 @@ var forwardedUpgradeHeaders = []string{
 // 接続先が資格を断ったとき（資格が古くなった）は、受け取り直して一度だけ送り直す。
 // 前のポートで接続先のエンジンが身元を示せないとき（起動し直してポートを移った）も、
 // handoff を読み直して一度だけ送り直す。
-func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error {
+func (m *Manager) ForwardAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error {
+	return m.forward(w, r, forwardTo{alias: alias, remotePath: remotePath, answerLimit: m.answerLimit})
+}
+
+// ForwardSlowAPI は ForwardAPI と同じ取り次ぎで、答えを slowForwardedAnswerLimit まで待つ。
+func (m *Manager) ForwardSlowAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error {
+	return m.forward(w, r, forwardTo{alias: alias, remotePath: remotePath, answerLimit: m.slowAnswerLimit})
+}
+
+// forwardTo は、取り次ぐ先と、答えを待つ上限である。
+type forwardTo struct {
+	alias       string
+	remotePath  string
+	answerLimit time.Duration
+}
+
+func (m *Manager) forward(w http.ResponseWriter, r *http.Request, to forwardTo) error {
+	alias, remotePath := to.alias, to.remotePath
 	engine, err := m.engine(alias)
 	if err != nil {
 		return err
@@ -62,10 +85,12 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 	if len(body) > maxForwardedBody {
 		return ErrRequestTooLarge
 	}
-	call := TerminalCall{
+	// 確認のトークンは、接続先のエンジンが出したものを画面が持っていて、接続先が確かめる。
+	call := APICall{
 		Method: r.Method, Path: remotePath, RawQuery: r.URL.RawQuery, ContentType: r.Header.Get("Content-Type"), Body: body,
+		ActionToken: r.Header.Get(handoff.ActionHeader),
 	}
-	err = m.exchange(r.Context(), engine, call, func(response *http.Response) { copyResponse(w, response) })
+	err = m.exchange(r.Context(), engine, exchangeOf{call: call, answerLimit: to.answerLimit}, func(response *http.Response) { copyResponse(w, response) })
 	var refusal *RemoteRefusalError
 	if errors.As(err, &refusal) {
 		writeProblem(w, refusal.Status, refusal.Code)
@@ -74,11 +99,11 @@ func (m *Manager) ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, ali
 	return err
 }
 
-// TerminalCall は、このマシンのエンジン自身が、接続先のエンジンのターミナルの API へ送る要求1つ
+// APICall は、このマシンのエンジン自身が、接続先のエンジンの API へ送る要求1つ
 // である（ブラウザの要求の取り次ぎではない）。
-type TerminalCall struct {
+type APICall struct {
 	Method string
-	// Path は /api/v1/terminal/… である。
+	// Path は /api/v1/… である。
 	Path        string
 	RawQuery    string
 	ContentType string
@@ -87,14 +112,14 @@ type TerminalCall struct {
 	ActionToken string
 }
 
-// TerminalAnswer は、接続先のエンジンの答えである。
-type TerminalAnswer struct {
+// APIAnswer は、接続先のエンジンの答えである。
+type APIAnswer struct {
 	Status      int
 	ContentType string
 	Body        []byte
 }
 
-// maxCalledAnswer は、CallTerminalAPI が読む答えの上限である。答えは、最大 64 の宛先と
+// maxCalledAnswer は、CallAPI が読む答えの上限である。答えは、最大 64 の宛先と
 // それぞれのコマンドを並べた JSON か、セッションの一覧（転送を中継している実行先の取り次ぎ）
 // までである。
 const maxCalledAnswer = 1 << 20
@@ -102,17 +127,17 @@ const maxCalledAnswer = 1 << 20
 // ErrAnswerTooLarge は、接続先の答えが maxCalledAnswer を超えたことを表す。
 var ErrAnswerTooLarge = errors.New("the remote engine's answer is too large")
 
-// CallTerminalAPI は、call を接続先のエンジンへ送り、答えを返す。資格の扱いと送り直しは
-// ForwardTerminalAPI と同じである。接続先へ届かなかったときや、接続先が資格や Vault を
+// CallAPI は、call を接続先のエンジンへ送り、答えを返す。資格の扱いと送り直しは
+// ForwardAPI と同じである。接続先へ届かなかったときや、接続先が資格や Vault を
 // 断ったときは *RemoteRefusalError を返す。
-func (m *Manager) CallTerminalAPI(ctx context.Context, alias string, call TerminalCall) (TerminalAnswer, error) {
+func (m *Manager) CallAPI(ctx context.Context, alias string, call APICall) (APIAnswer, error) {
 	engine, err := m.engine(alias)
 	if err != nil {
-		return TerminalAnswer{}, err
+		return APIAnswer{}, err
 	}
-	var answer TerminalAnswer
+	var answer APIAnswer
 	var readErr error
-	err = m.exchange(ctx, engine, call, func(response *http.Response) {
+	err = m.exchange(ctx, engine, exchangeOf{call: call, answerLimit: m.answerLimit}, func(response *http.Response) {
 		defer func() { _ = response.Body.Close() }()
 		answer.Status = response.StatusCode
 		answer.ContentType = response.Header.Get("Content-Type")
@@ -122,7 +147,7 @@ func (m *Manager) CallTerminalAPI(ctx context.Context, alias string, call Termin
 		}
 	})
 	if err != nil {
-		return TerminalAnswer{}, err
+		return APIAnswer{}, err
 	}
 	return answer, readErr
 }
@@ -138,19 +163,26 @@ func (e *RemoteRefusalError) Error() string { return "the remote engine refused:
 
 // exchange は call を送り、答えを receive に渡す。receive は本文を閉じる。資格が古いか、
 // 前のポートに繋がらなかった1回目は、資格を受け取り直して一度だけ送り直す。
-func (m *Manager) exchange(ctx context.Context, engine *remoteEngine, call TerminalCall, receive func(*http.Response)) error {
+func (m *Manager) exchange(ctx context.Context, engine *remoteEngine, asked exchangeOf, receive func(*http.Response)) error {
 	for attempt := 0; ; attempt++ {
-		retry, err := m.exchangeOnce(ctx, engine, exchangeAttempt{call: call, first: attempt == 0}, receive)
+		retry, err := m.exchangeOnce(ctx, engine, exchangeAttempt{call: asked.call, answerLimit: asked.answerLimit, first: attempt == 0}, receive)
 		if !retry {
 			return err
 		}
 	}
 }
 
+// exchangeOf は、送る要求と、答えを待つ上限である。
+type exchangeOf struct {
+	call        APICall
+	answerLimit time.Duration
+}
+
 // exchangeAttempt は、送る要求の1回分である。first は、断られたら送り直してよい1回目かどうか。
 type exchangeAttempt struct {
-	call  TerminalCall
-	first bool
+	call        APICall
+	answerLimit time.Duration
+	first       bool
 }
 
 // exchangeOnce は、要求を1回送る。答えを待つ期限は、receive が本文を読み終えるまでこの1回の中で持つ。
@@ -159,7 +191,7 @@ func (m *Manager) exchangeOnce(ctx context.Context, engine *remoteEngine, attemp
 	if err != nil {
 		return false, err
 	}
-	answerContext, stopWaiting := context.WithTimeout(ctx, m.answerLimit)
+	answerContext, stopWaiting := context.WithTimeout(ctx, attempt.answerLimit)
 	defer stopWaiting()
 	response, err := session.client().Do(attempt.call.request(answerContext, session))
 	if err != nil && ctx.Err() == nil && errors.Is(answerContext.Err(), context.DeadlineExceeded) {
@@ -199,13 +231,16 @@ const maxRefusalBody = 64 << 10
 // 画面が自分のものと取り違えない code に置き換える。置き換えないものは空を返し、本文は
 // 読まずに残す。
 //
-// 接続先の 401・403 をそのまま返すと、このマシンの画面は自分のセッションが切れたと
-// 読んでサインインし直させる。接続先の vault_locked をそのまま返すと、このマシンの
-// Vault がロックされたと読んでロックの画面を出す。画面は状態コードに関係なく code で
-// 読むので、code も状態コードに関係なく置き換える。
+// 接続先の 401 と、入口の 403（Host、Origin、CSRF）をそのまま返すと、このマシンの画面は
+// 自分のセッションが切れたと読んでサインインし直させる。接続先の vault_locked をそのまま
+// 返すと、このマシンの Vault がロックされたと読んでロックの画面を出す。画面は状態コードに
+// 関係なく code で読むので、code も状態コードに関係なく置き換える。
+//
+// 403 のうち、操作そのものの断り（マスターパスワードの間違い wrong_passphrase、確認のトークンの
+// 断り action_token_…、編集できない場所 path_not_editable など）は、画面がその code で文を出すので、
+// 本文ごとそのまま返す。code を読めない 403 は、入口の断りとして扱う。
 func remoteRefusal(response *http.Response) string {
-	switch response.StatusCode {
-	case http.StatusUnauthorized, http.StatusForbidden:
+	if response.StatusCode == http.StatusUnauthorized {
 		_ = response.Body.Close()
 		return "remote_engine_refused"
 	}
@@ -219,10 +254,14 @@ func remoteRefusal(response *http.Response) string {
 	var refusal struct {
 		Code string `json:"code"`
 	}
-	if json.Unmarshal(body, &refusal) == nil {
-		if replaced, found := remoteRefusalCodes[refusal.Code]; found {
-			return replaced
-		}
+	if json.Unmarshal(body, &refusal) != nil {
+		refusal.Code = ""
+	}
+	if replaced, found := remoteRefusalCodes[refusal.Code]; found {
+		return replaced
+	}
+	if response.StatusCode == http.StatusForbidden && refusal.Code == "" {
+		return "remote_engine_refused"
 	}
 	response.Body = io.NopCloser(bytes.NewReader(body))
 	return ""
@@ -235,10 +274,13 @@ var remoteRefusalCodes = map[string]string{
 	"session_required": "remote_engine_refused",
 	"invalid_session":  "remote_engine_refused",
 	"invalid_csrf":     "remote_engine_refused",
+	// 接続先の入口が、このマシンのエンジンからの要求の Host や Origin を断った。
+	"invalid_host":       "remote_engine_refused",
+	"cross_site_request": "remote_engine_refused",
 }
 
 // request は、call を接続先のエンジンへの要求にし、このマシンのエンジンが受け取った資格を付ける。
-func (call TerminalCall) request(ctx context.Context, session *remoteSession) *http.Request {
+func (call APICall) request(ctx context.Context, session *remoteSession) *http.Request {
 	target := url.URL{Scheme: "http", Host: loopbackHost(session.port), Path: call.Path, RawQuery: call.RawQuery}
 	request, _ := http.NewRequestWithContext(ctx, call.Method, target.String(), bytes.NewReader(call.Body))
 	if call.ContentType != "" {

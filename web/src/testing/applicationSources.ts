@@ -16,11 +16,16 @@ function sourceFilesUnder(directory: string): string[] {
   });
 }
 
+// SourceFile は、ソースの1ファイルと、報告に書く名前（src/ui/form.tsx の形）である。
+export type SourceFile = { name: string; text: string };
+
+export function applicationSourceFiles(): SourceFile[] {
+  return sourceFilesUnder(sourceRoot).map((path) => ({ name: path.slice(path.indexOf("/src/") + 1), text: readFileSync(path, "utf8") }));
+}
+
 export function applicationSourceLines(): SourceLine[] {
-  return sourceFilesUnder(sourceRoot).flatMap((path) =>
-    readFileSync(path, "utf8")
-      .split("\n")
-      .map((text, index) => ({ where: `${path.slice(path.indexOf("/src/") + 1)}:${index + 1}`, text })),
+  return applicationSourceFiles().flatMap((file) =>
+    file.text.split("\n").map((text, index) => ({ where: `${file.name}:${index + 1}`, text })),
   );
 }
 

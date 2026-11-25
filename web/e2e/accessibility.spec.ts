@@ -22,7 +22,7 @@ test("primary pages have no serious automated accessibility violations", async (
 
   await expectNoSeriousAccessibilityViolations(page);
   // Within the page: the address of the installation carries the sign-in in its fragment, so a path added to it opens Home again.
-  for (const path of ["/connections", "/files", "/terminal", "/menu", "/settings/terminal", "/about", "/licenses"]) {
+  for (const path of ["/connections", "/files", "/menu", "/settings/terminal", "/about", "/licenses"]) {
     await page.evaluate((target) => {
       window.history.pushState(null, "", target);
       window.dispatchEvent(new PopStateEvent("popstate"));

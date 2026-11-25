@@ -15,7 +15,7 @@ import type {
   UploadTarget,
 } from "./api";
 import { browserSaveRetentionMs } from "./downloadPlane";
-import { SFTPTransferManager } from "./transferManager";
+import { SFTPTransferManager, queuesToFollow } from "./transferManager";
 
 // Exercise the same waiting transition without a production one-second backoff.
 const testReconnectDelayMs = 10;
@@ -210,6 +210,18 @@ describe("SFTPTransferManager engine ownership", () => {
     const upload = manager.getSnapshot().find((job) => job.direction === "upload")!;
     await manager.pause(upload.id);
     expect(manager.hasBrowserTransfers()).toBe(false);
+  });
+
+  it("keeps following the queue of an engine behind the one shown while this page uploads to it, and leaves an idle one alone", async () => {
+    const shown = new SFTPTransferManager(engineAPI(), 0);
+    const uploading = new SFTPTransferManager(engineAPI(), 0);
+    const idle = new SFTPTransferManager(engineAPI(), 0);
+    await uploading.addUploads([{ alias: "edge", remotePath: "/a.txt", localName: "a.txt", file: new File(["a"], "a.txt") }]);
+    await idle.addDownload("edge", "/queued.bin", "file", 4);
+
+    expect(queuesToFollow(shown, [shown, uploading, idle])).toEqual([shown, uploading]);
+    // The queue shown is followed whatever it holds.
+    expect(queuesToFollow(idle, [shown, uploading, idle])).toEqual([idle, uploading]);
   });
 
   it("names a transfer of several items in the language of whoever starts it", async () => {

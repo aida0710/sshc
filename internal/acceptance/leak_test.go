@@ -260,7 +260,9 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 	}
 	for _, route := range f.apiRoutes() {
 		key := route.Method + " " + route.Path
-		if !requiresConfirmation(route.Path) || tabled[key] {
+		// 実行先のエンジンへ取り次ぐ操作は、トークンを実行先が出して実行先が確かめる。このマシンの
+		// ハンドラは確かめないので、表には実行先で動く同じ操作（このマシンの操作）の行があればよい。
+		if !requiresConfirmation(route.Path) || tabled[key] || tabled[forwardedOperation(key)] {
 			continue
 		}
 		t.Errorf("route %s is a confirmation-guarded operation with no row in guardedRoutes", key)

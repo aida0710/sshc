@@ -6,6 +6,10 @@ import { pinchedFontSize, steppedFontSize } from "./fontSize";
 const wheelPixelsPerStep = 25;
 // wheelPixelsPerLine reads a wheel that turns by lines (Firefox) in pixels, the height of a line of the page.
 const wheelPixelsPerLine = 40;
+// scrollTurnGapMs is the longest pause between two turns of the wheel that are one scroll. A trackpad keeps sending
+// a scroll's turns every frame (about 16ms) after the fingers lift, while it coasts; a pinch or a turn made on
+// purpose with Ctrl held starts after a longer pause than a few frames.
+const scrollTurnGapMs = 80;
 
 export type FontZoomTarget = {
   fontSize: () => number;
@@ -20,14 +24,26 @@ function fingerGap(touches: TouchList): number {
 
 // attachFontZoom changes the size of the text shown in container: two fingers pinch it, and the wheel turned
 // with Ctrl held (a trackpad's pinch, too) steps it. Those gestures then neither scroll the terminal nor zoom
-// the page. It returns what detaches them.
+// the page. A scroll that was already coming when Ctrl went down is not such a turn. It returns what detaches them.
 export function attachFontZoom(container: HTMLElement, target: FontZoomTarget): () => void {
   let turned = 0;
+  // scrollLastTurnedAt is when the wheel last turned as part of a scroll: without Ctrl, or with Ctrl pressed while
+  // that scroll was still coming. null when the last turn was not a scroll.
+  let scrollLastTurnedAt: number | null = null;
   // The wheel is read before the terminal's own listener, which would scroll or report it to the program.
   const wheel = (event: WheelEvent) => {
-    if (!event.ctrlKey) return;
+    const now = performance.now();
+    const scrollUnderWay = scrollLastTurnedAt !== null && now - scrollLastTurnedAt <= scrollTurnGapMs;
+    if (!event.ctrlKey) {
+      scrollLastTurnedAt = now;
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
+    // Ctrl went down while a scroll was still coming (Ctrl+Space to switch the input source, say): those turns
+    // are the scroll's, so they change nothing.
+    scrollLastTurnedAt = scrollUnderWay ? now : null;
+    if (scrollUnderWay) return;
     turned += event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * wheelPixelsPerLine : event.deltaY;
     if (Math.abs(turned) < wheelPixelsPerStep) return;
     // Turning the wheel away from you, as scrolling up, makes the text larger.

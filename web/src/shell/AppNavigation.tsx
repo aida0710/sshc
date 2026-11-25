@@ -1,3 +1,4 @@
+import { useSftpTransferManager } from "../sftp/useSftpTransferManager";
 import type { PaneEdge } from "../terminal/splitView/layout";
 import { SplitGroupList } from "../terminal/splitView/SplitGroupList";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
@@ -22,11 +23,10 @@ import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import type { MessageKey } from "../i18n/messages";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import type { TerminalSessionsState } from "../terminal/sessions";
-import type { HostEntry } from "../api/config";
+import type { HostEntry, HostIdentity } from "../api/config";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import type { SeenProgramStatus } from "../terminal/programStatus";
 import { navigationWidth } from "./navigationLayout";
-import { sftpTransferManager } from "../sftp/transferManager";
 import type { SessionShortcutRequest } from "./useAppShortcuts";
 
 // A phone reaches the other sections and Menu from the bar at the bottom (MobileNavigation), so its
@@ -65,6 +65,8 @@ export function AppNavigation({
   onOpenShell,
   aliases = [],
   hosts = [],
+  engineChoices,
+  onOpenConnectionSettings,
   onConnect,
   directDestination,
   onOpenCommandPalette,
@@ -101,12 +103,18 @@ export function AppNavigation({
   onOpenShell: (workspaceId: string) => void;
   aliases?: string[];
   hosts?: HostEntry[];
+  // engineChoices are this machine's own connections: an engine is added to this machine's engine, which reaches it
+  // with this machine's SSH configuration, whatever engine the screens work with.
+  engineChoices: { aliases: string[]; hosts: HostEntry[] };
+  // onOpenConnectionSettings は、リモートセッションの接続先（このマシンの Connections）の設定を開く。
+  onOpenConnectionSettings: (identity: HostIdentity) => void;
   onConnect?: (alias: string, workspaceId: string) => void;
   directDestination?: DirectDestinationActions | undefined;
   onOpenCommandPalette: () => void;
   // sessionShortcut is the last new session or close session shortcut, for the session list to answer.
   sessionShortcut?: SessionShortcutRequest | null;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
   const t = useTranslate();
   const shortcuts = useBindings();
   const transfers = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
@@ -228,7 +236,7 @@ export function AppNavigation({
       </div>
 
       <div className="shrink-0">
-        <RunTargetSwitcher targets={runTargets} link={runTargetLink} aliases={aliases} hosts={hosts} onShowTerminal={onShowTerminal} />
+        <RunTargetSwitcher targets={runTargets} link={runTargetLink} aliases={engineChoices.aliases} hosts={engineChoices.hosts} onShowTerminal={onShowTerminal} onOpenConnectionSettings={onOpenConnectionSettings} />
       </div>
 
       <NavigationResizeHandle width={desktopWidth} onWidthChange={onDesktopWidthChange} />

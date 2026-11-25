@@ -1,3 +1,5 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
+import { useEngineApis } from "../shell/engineApis";
 import { useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
@@ -5,10 +7,9 @@ import type { MessageKey } from "../i18n/messages";
 import { localMutationProblemText, sftpProblemText } from "./sftpProblemText";
 import { clipboard } from "../ui/clipboard";
 import { useToast } from "../ui/useToast";
-import { sftpApi, type RemoteEntry } from "./api";
+import { type RemoteEntry } from "./api";
 import { parentRowKey, type SFTPEntryListModel } from "./useSFTPEntryList";
 import { remoteJoin as join, remoteParentOf as parentOf, type SFTPSource } from "./sftpSource";
-import { sftpTransferManager } from "./transferManager";
 import { startsAtHome } from "./remotePathInput";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 
@@ -44,6 +45,8 @@ export function useSFTPEntryActions({
   // Called before a dialog opens, so that an open menu can close.
   onInteract?: () => void;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
+  const { sftp: { files: sftpApi } } = useEngineApis();
   const t = useTranslate();
   const showToast = useToast();
   const { alias, path, source, setProblem } = browser;

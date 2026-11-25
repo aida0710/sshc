@@ -29,6 +29,9 @@ import { TerminalPortForwards } from "./TerminalPortForwards";
 import { useProgramProgress } from "./useProgramProgress";
 import { TerminalProgressBar } from "./TerminalProgressBar";
 import { TerminalHeader } from "./TerminalHeader";
+import { defaultFontSize } from "./fontSize";
+import { FontSizeTip } from "./FontSizeTip";
+import { useFontSizeTip } from "./useFontSizeTip";
 import { assembleTerminal, type AssembledTerminal, type TerminalLiveValues } from "./terminalAssembly";
 import type { CommandBlock } from "./commandBlocks";
 import { TerminalCommandCard } from "./TerminalCommandCard";
@@ -65,6 +68,7 @@ import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
 import { isTypingElsewhere } from "./terminalFocus";
+import { IconButton } from "../ui/IconButton";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -138,11 +142,6 @@ const statusLinePadding = "0.5rem";
 // リンクのポップオーバーは、押したリンクを隠さないよう、ポインターの少し右下に開く。
 const linkPopoverOffsetPx = 8;
 
-// 設定が大きさを決めていないとき、スマホ（mobileViewportQuery。ツールバーや KeyBar と同じ条件）では、小さい
-// 画面でも読めるよう、大きめにする。
-const mobileTerminalFontSize = 15;
-const desktopTerminalFontSize = 13;
-
 export function TerminalView({
   session,
   searchShortcutActive,
@@ -192,11 +191,19 @@ export function TerminalView({
   const touchTerminal = useTouchTerminal();
   const touchLinkUnderlines = useTouchLinkUnderlines();
   const everyLinkUnderlined = touchTerminal && touchLinkUnderlines;
-  const resolvedFontSize = fontSize ?? (mobile ? mobileTerminalFontSize : desktopTerminalFontSize);
+  const resolvedFontSize = fontSize ?? defaultFontSize;
   // zoomedFontSize は、つまむ操作か Ctrl とホイールが、設定の大きさ（base）の上にこのターミナルへ与えた大きさで
   // ある。この画面だけのもので、保存しない。設定の大きさが変わったら、また設定に従う。
   const [zoomedFontSize, setZoomedFontSize] = useState<{ base: number; size: number } | null>(null);
   const shownFontSize = zoomedFontSize !== null && zoomedFontSize.base === resolvedFontSize ? zoomedFontSize.size : resolvedFontSize;
+  // 大きさを変える操作（つまむ、Ctrl とホイール、ショートカット、コマンド検索）はどれも zoom を通るので、ティップは
+  // ここで出す。設定の大きさが変わっただけのときは通らず、出ない。
+  const fontSizeTip = useFontSizeTip();
+  const showFontSizeTip = fontSizeTip.show;
+  const zoom = useCallback((zoomed: { base: number; size: number } | null) => {
+    setZoomedFontSize(zoomed);
+    showFontSizeTip();
+  }, [showFontSizeTip]);
   const resolvedFontFamily = useTerminalFont(font ?? "", shownFontSize);
   const host = useRef<HTMLDivElement>(null);
   const statusLineHost = useRef<HTMLDivElement>(null);
@@ -302,7 +309,6 @@ export function TerminalView({
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
   const pathPreview = useTerminalPathPreview({
     session,
-    runTarget,
     api,
     terminal,
     currentDirectory,
@@ -393,7 +399,7 @@ export function TerminalView({
         cursorAtSecretPrompt: setCursorAtSecretPrompt,
         reviewPaste: (text) => setPendingPaste({ sessionId: session.id, raw: text }),
         dropPasteReview: () => setPendingPaste(null),
-        zoom: setZoomedFontSize,
+        zoom,
         selectLink: selectLinkAt,
         openQuickCommands,
         takeModifiers,
@@ -507,7 +513,7 @@ export function TerminalView({
   }, [shownFontSize, reducedMotion, scrollbackLines, session.state]);
 
   const displayTitle = terminalDisplayTitle(session);
-  const subtitle = terminalSubtitle(session, t);
+  const subtitle = terminalSubtitle(session, t, runTarget ?? null);
   // Ctrl と Alt は、ターミナルに打つ次のキーに効く。入力欄に打っている最中に押すと、キーボードを上げたまま、
   // 打つ先をターミナルへ移す。閉じているキーボードは閉じたままにする。そのとき、キーバーはすでにフォーカスを
   // 手放している（keepKeyboardAsIs）。
@@ -553,29 +559,25 @@ export function TerminalView({
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
       <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} runTarget={runTarget} onOpenNavigation={onOpenNavigation}>
         {mobile ? null : (
-          <button
-            type="button"
-            aria-label={t("terminal.search")}
-            title={t("terminal.search")}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover"
-            onClick={search.toggle}
-          >
+          <IconButton label={t("terminal.search")} size="toolbar" tone="faint" className="focus:bg-hover"
+            onClick={search.toggle}>
             <Icon name="search" className="size-[15px]" />
-          </button>
+          </IconButton>
         )}
         {mobile && notices.severity !== null ? (
           <TerminalNoticesButton severity={notices.severity} expanded={notices.mobileOpen} onToggle={notices.toggleMobile} buttonRef={notices.buttonRef} />
         ) : null}
-        <button
+        <IconButton
           ref={overflowTrigger}
-          type="button"
-          aria-label={t("terminal.moreActions")}
+          label={t("terminal.moreActions")}
+          size={mobile ? "bar" : "toolbar"}
+          tone="faint"
           aria-expanded={overflowOpen}
-          className={`flex shrink-0 items-center justify-center text-ink-faint hover:bg-hover hover:text-ink focus:bg-hover rounded-md ${mobile ? "size-11" : "size-7"}`}
+          className="focus:bg-hover"
           onClick={() => setOverflowOpen((current) => !current)}
         >
           <Icon name="moreHorizontal" className={mobile ? "size-5" : "size-4"} />
-        </button>
+        </IconButton>
         {headerActions}
         {overflowOpen ? (
           <TerminalOverflowMenu
@@ -591,7 +593,7 @@ export function TerminalView({
             osc52Enabled={osc52Enabled}
             onQuickCommands={openQuickCommands}
             onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
-            onOpenRemoteDirectory={runTarget === undefined && savedConnection !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
+            onOpenRemoteDirectory={savedConnection !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
               ? () => onOpenRemotePath(savedConnection, currentDirectory, "browse")
               : undefined}
             onCopyContext={() => assembled.current?.copy.copyContext()}
@@ -682,6 +684,7 @@ export function TerminalView({
             />
           </div>
         )}
+        <FontSizeTip tip={fontSizeTip} size={shownFontSize} settingsSize={resolvedFontSize} onReset={() => zoom(null)} />
         {terminalNotice === "" ? null : (
           <ToastMessage role="status" className="absolute bottom-3 right-3 z-20 max-w-[min(24rem,calc(100%-1.5rem))]">
             {terminalNotice}

@@ -28,7 +28,7 @@ export function ConnectionVaultUnlock({
   const t = useTranslate();
   return (
     <div className="flex flex-col gap-2.5 rounded-inset bg-notice p-3">
-      <p className="text-xs leading-[18px] text-notice-ink">
+      <p className="text-xs leading-[18px] text-ink">
         {t(vault.exists ? "conn.vaultLockedBeforeSave" : "conn.vaultMissingBeforeSave")}
       </p>
       <PasswordField label={t("conn.createMasterPassword")} value={masterPassword} onChange={onMasterPasswordChange} />

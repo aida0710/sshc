@@ -43,6 +43,32 @@ describe("program-wrapped URL links", () => {
     } finally { terminal.dispose(); }
   });
 
+  // 幅が 45 桁のとき、Claude Code はこの URL を redirect_uri のあとで折り、続きの行は =http で始まる。
+  it("opens the whole URL when a row it was broken over starts with a mark, as in =http or &state", async () => {
+    for (const mark of ["=", "&", "?", "#", "+", ":", "@"]) {
+      const head = "https://example.test/auth?redirect";
+      const rows = [`  ${head}`.padEnd(cols, "x"), `  ${mark}http%3A%2F%2F127.0.0.1%2Fcallback`];
+      const whole = `${rows[0]!.trim()}${rows[1]!.trim()}`;
+      const terminal = await terminalWithRows(rows, cols);
+      try {
+        for (const index of rows.keys()) {
+          expect(findBufferLinks(terminal.buffer.active, index + 1).map((link) => link.match.target), `続きが ${mark} で始まる行 ${index + 1}`).toEqual([whole]);
+        }
+      } finally { terminal.dispose(); }
+    }
+  });
+
+  it("does not take a heading or a list item under a URL that ends at the edge for the rest of it", async () => {
+    const short = "https://example.test/docs/install";
+    const first = `${"  See:".padEnd(cols - short.length, " ")}${short}`;
+    for (const next of ["  # Other systems", "  + other/systems", "  * other/systems"]) {
+      const terminal = await terminalWithRows([first, next], cols);
+      try {
+        expect(findBufferLinks(terminal.buffer.active, 1).map((link) => link.match.target), next).toEqual([short]);
+      } finally { terminal.dispose(); }
+    }
+  });
+
   it("does not glue the next word to a URL that only happens to end at the edge", async () => {
     const short = "https://example.test/docs/install";
     const first = `${"* See:".padEnd(cols - short.length, " ")}${short}`;

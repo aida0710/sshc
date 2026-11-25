@@ -1,4 +1,4 @@
-import { configApi } from "../api/config";
+import type { ConfigApi } from "../api/config";
 import { connectionAliasFromHostName, uniqueConnectionAlias } from "../connections/connectionAliasFromHost";
 import type { DirectDestination } from "../connections/directDestination";
 import { useTranslate } from "../i18n/context";
@@ -19,7 +19,10 @@ export type DirectDestinationActions = {
 
 // useDirectDestinationActions connects to a destination as it is, or writes its Host block first and then connects to
 // that: a saved destination is an ordinary connection in the config files. A password is asked for when connecting.
-export function useDirectDestinationActions({ aliases, canSave, open, onSaved }: {
+export function useDirectDestinationActions({ config: configApi, aliases, canSave, open, onSaved }: {
+  // config is the API of the engine the session opens on: the destination is saved in that machine's SSH
+  // configuration. The caller is above the provider of the engine's APIs, so it is handed over.
+  config: Pick<ConfigApi, "createConnection">;
   aliases: readonly string[];
   canSave: boolean;
   open: (alias: string, cwd?: string, workspaceId?: string) => Promise<void>;

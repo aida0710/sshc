@@ -1,6 +1,6 @@
 import { useBindings } from "./keyconfig/presets";
 import { usePresetLibrarySync } from "./settings/presetLibrary";
-import { useSettingsSync } from "./settings/settingsStore";
+import { presetInUse, useSettings, useSettingsSync } from "./settings/settingsStore";
 import { useTerminalSettings } from "./settings/terminalSettings";
 import { opensInThisPage } from "./ui/linkClick";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
@@ -21,18 +21,22 @@ import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation } from "./shell/AppNavigation";
+import { configApi } from "./api/config";
+import { EngineApisProvider, useEngineApisOf } from "./shell/engineApis";
+import { RemoteSessionFrame, remoteSessionTagRoom } from "./shell/RemoteSessionFrame";
 import { hiddenNavigationWidth, navigationShown, navigationWidth } from "./shell/navigationLayout";
 import { useColumnWidth } from "./ui/useColumnWidth";
 import { useStoredValue } from "./ui/useStoredValue";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { useTerminalWorkspaces } from "./terminal/useTerminalWorkspaces";
-import { SessionAddressesContext } from "./terminal/sessionDestination";
+import { SessionAddressesContext, SessionEngineContext } from "./terminal/sessionDestination";
 import { useRunTargetApis } from "./terminal/useRunTargetApis";
+import { useSessionProblemToast } from "./terminal/useSessionProblemToast";
 import { useRunTargetLink } from "./terminal/useRunTargetLink";
 import { useRunTargets } from "./terminal/useRunTargets";
 import { TransferNotifications } from "./sftp/TransferNotifications";
-import { sftpTransferManager } from "./sftp/transferManager";
+import { transferManagersToFollow } from "./sftp/transferManager";
 import { localHostAlias } from "./sftp/localHost";
 import { useTransferUnloadWarning } from "./sftp/useTransferUnloadWarning";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
@@ -55,6 +59,7 @@ import { useAppViewport } from "./ui/useAppViewport";
 import { useFieldLetGoOnLeaving } from "./ui/useFieldLetGoOnLeaving";
 import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckMark, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
 import { navigationId, startSections } from "./shell/sections";
+import { useHomeWithoutSessions } from "./shell/useHomeWithoutSessions";
 import { KeptSections } from "./shell/KeptSections";
 import { useKeptSections } from "./shell/useKeptSections";
 import { usePreloadedSectionPages } from "./shell/usePreloadedSectionPages";
@@ -71,17 +76,17 @@ import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useShellLayers } from "./shell/useShellLayers";
 import type { AppActionContext, SessionShortcut } from "./shell/appActions";
 import { useAppShortcuts, type SessionShortcutRequest } from "./shell/useAppShortcuts";
+import { chooseRunTarget, runTargetChoices } from "./shell/runTargetChoice";
+import { remoteSessionColorOf, remoteSessionFrameColor } from "./theme/remoteSessionColor";
+import type { HostIdentity } from "./api/config";
 import { paneSessionIds, type PaneEdge } from "./terminal/splitView/layout";
 import { SplitRequestDialog } from "./terminal/splitView/SplitRequestDialog";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
 import { useFocusBackAfterInert } from "./ui/useFocusBackAfterInert";
 import { Icon } from "./ui/icons";
+import { IconButton } from "./ui/IconButton";
 
 const transferReconcileIntervalMs = 2_000;
-
-// What SFTP or Home asked of this machine's terminals while they ran on a run
-// target: a session to open there, or one Home opened there to show.
-type PendingLocalRequest = { kind: "open"; alias: string; cwd?: string } | { kind: "show"; sessionId: string };
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -105,7 +110,7 @@ export function App({
   const navigationRail = useMediaQuery(navigationRailQuery);
   const shortcuts = useBindings();
   const { resolved: resolvedTheme, scheme } = useTheme();
-  const { route, location, navigate, navigateLocation, setNavigationBlocker, hasEntryBefore, currentLocation } =
+  const { route, location, navigate, navigateLocation, mayLeaveFor, setNavigationBlocker, hasEntryBefore, currentLocation } =
     useSectionRoute({ present: presentLocationChange });
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
@@ -127,7 +132,23 @@ export function App({
   usePreloadedSectionPages(state === "ready");
   useFirstScreenReport(state !== "starting" && (state !== "ready" || settingsLoaded));
   const handoffs = useSectionHandoffs(navigate);
-  const declared = useDeclaredConfig(state === "ready", section);
+  // Choosing another engine makes its screens anew. A screen with an unsaved draft is asked first, as when leaving it
+  // for the terminal.
+  const mayChangeEngine = useCallback(() => mayLeaveFor("Terminal"), [mayLeaveFor]);
+  const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version, mayChange: mayChangeEngine });
+  // The screens work with the engine chosen for the remote session: what the SSH configuration declares, too.
+  const engineApis = useEngineApisOf(runTargets.selected, runTargets.vaultUnlock.revision);
+  const declared = useDeclaredConfig(state === "ready", section, engineApis.config);
+  // リモートセッションを選んでいてもこのマシンのものを出す Snippets と、リモートセッションに足す sshc エンジンを選ぶ
+  // 一覧は、このマシンの接続先を並べる。このマシンを選んでいる間は、それは一度読んだ `declared` である。
+  const declaredHere = useDeclaredConfig(state === "ready" && runTargets.selected !== null, section, configApi);
+  const thisMachineDeclared = runTargets.selected === null ? declared : declaredHere;
+  // リモートセッションの枠と名札の色。その接続先（このマシンの Connections）の色、設定（Appearance）の色の順で、
+  // どちらも無ければさし色。
+  const settingsDocument = useSettings().document;
+  const remoteFrameColor = runTargets.selected === null
+    ? null
+    : remoteSessionFrameColor(thisMachineDeclared.hostColour.get(runTargets.selected), remoteSessionColorOf(presetInUse(settingsDocument)));
   const [desktopNavigationWidth, resizeDesktopNavigation] = useColumnWidth(navigationWidth);
   const [desktopNavigation, setDesktopNavigation] = useStoredValue(navigationShown);
   const {
@@ -174,13 +195,13 @@ export function App({
     setAndroidAppearance(scheme);
   }, [resolvedTheme, scheme]);
 
-  const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version });
   const runTargetApis = useRunTargetApis(runTargets.selected, runTargets.vaultUnlock.revision);
   const sessionAddresses = useMemo(
-    () => runTargets.selected === null ? addressesByAlias(declared.hosts) : new Map<string, string>(),
-    [declared.hosts, runTargets.selected],
+    () => addressesByAlias(declared.hosts),
+    [declared.hosts],
   );
   const terminalSessions = useTerminalSessions(runTargetApis.sessions, t, state === "ready");
+  useSessionProblemToast(terminalSessions.problem);
   const runTargetLink = useRunTargetLink({
     selected: runTargets.selected,
     api: runTargets.api,
@@ -215,9 +236,12 @@ export function App({
     duplicateSession,
     openSessionInSplit,
   } = terminalWorkspace;
+  const showHomeInPlace = useCallback(() => navigateLocation(sectionPath("Home"), { replace: true }), [navigateLocation]);
+  useHomeWithoutSessions({ terminalFace, activeSessionId, terminalSessions, showHome: showHomeInPlace });
   const directDestination = useDirectDestinationActions({
+    config: engineApis.config,
     aliases: declared.knownAliases,
-    canSave: runTargets.selected === null,
+    canSave: true,
     open: openSSHSession,
     onSaved: declared.readAgain,
   });
@@ -267,10 +291,6 @@ export function App({
     phoneBackSlot: mobileLayout ? phoneBackSlot : null,
   }), [inspector, inspectorOpen, inspectorTriggerRef, mobileLayout, phoneActionsSlot, phoneBackSlot, setInspectorOpen]);
 
-  // SFTP and Home open terminals on this machine. With an engine on an SSH
-  // host chosen, the run target goes back to this machine first, and what was
-  // asked for is done once this machine's terminal API is the one in use.
-  const [pendingLocalRequest, setPendingLocalRequest] = useState<PendingLocalRequest | null>(null);
   const [sessionShortcut, setSessionShortcut] = useState<SessionShortcutRequest | null>(null);
   const requestSession = useCallback((request: SessionShortcut) => {
     setSessionShortcut((previous) => ({ ...request, serial: (previous?.serial ?? 0) + 1 }));
@@ -283,35 +303,14 @@ export function App({
     if (!mobileLayout) setDesktopNavigation(desktopNavigation === "hidden" ? "shown" : "hidden");
     else if (!navigationPinned) setNavigationOpen((open) => !open);
   }, [mobileLayout, navigationPinned, desktopNavigation, setDesktopNavigation, setNavigationOpen]);
+  // SFTP works with the engine the terminals run on, so a terminal opened from a folder opens on that engine.
   const openSFTPTerminal = useCallback(async (alias: string, cwd?: string) => {
-    if (runTargets.selected !== null) {
-      setPendingLocalRequest(cwd === undefined ? { kind: "open", alias } : { kind: "open", alias, cwd });
-      runTargets.select(null);
-      return;
-    }
     if (alias === localHostAlias) {
       await openLocalShell(undefined, cwd);
       return;
     }
     await openSSHSession(alias, cwd);
-  }, [openLocalShell, openSSHSession, runTargets]);
-
-  // Home opens a session on this machine itself, so it is shown there.
-  const showLocalSession = useCallback((id: string) => {
-    if (runTargets.selected !== null) {
-      setPendingLocalRequest({ kind: "show", sessionId: id });
-      runTargets.select(null);
-      return;
-    }
-    showSession(id);
-  }, [runTargets, showSession]);
-
-  useEffect(() => {
-    if (pendingLocalRequest === null || runTargets.selected !== null) return;
-    setPendingLocalRequest(null);
-    if (pendingLocalRequest.kind === "show") showSession(pendingLocalRequest.sessionId);
-    else void openSFTPTerminal(pendingLocalRequest.alias, pendingLocalRequest.cwd);
-  }, [openSFTPTerminal, pendingLocalRequest, runTargets.selected, showSession]);
+  }, [openLocalShell, openSSHSession]);
 
   // Splitting beside the session shown: a phone shows one pane at a time, and has no splitting to ask for.
   const splittableSessionId = !splitView.compact && activeSessionId !== null && splitView.splitRefusal(activeSessionId) === null ? activeSessionId : null;
@@ -319,6 +318,25 @@ export function App({
   const splitBesideActive = useMemo(() => splittableSessionId === null
     ? null
     : (edge: PaneEdge) => requestSplit({ targetSessionId: splittableSessionId, edge }), [requestSplit, splittableSessionId]);
+
+  // ターミナルの領域を見せる。リモートセッションを切り替えたときの接続の経過は、そこに出る。
+  const showTerminalArea = useCallback(() => {
+    closeNavigation();
+    navigate("Terminal");
+  }, [closeNavigation, navigate]);
+  const runTargetList = useMemo(() => runTargetChoices(runTargets.engines), [runTargets.engines]);
+  // リモートセッションの一覧から、その接続先（このマシンの Connections）の色などの設定を開く。リモートセッションを
+  // 選んでいる間、Connections はリモートの接続先を出すので、localhost に戻してから開く。保存していない下書きを残すと
+  // 決めて戻れなかったときは、開かない（リモートの同じ名前の接続先を開いてしまわないため）。
+  const openThisMachineConnectionSettings = useCallback((identity: HostIdentity) => {
+    if (runTargets.selected !== null && !runTargets.select(null)) return;
+    closeNavigation();
+    navigateLocation(connectionLocation({ path: identity.path, alias: identity.alias, panel: "Sshc", advanced: "Settings" }));
+  }, [runTargets, closeNavigation, navigateLocation]);
+  const chooseRunTargetHere = useCallback(
+    (alias: string | null) => chooseRunTarget({ targets: runTargets, link: runTargetLink, showTerminal: showTerminalArea }, alias),
+    [runTargets, runTargetLink, showTerminalArea],
+  );
 
   const appActionContext: AppActionContext = {
     terminalFace,
@@ -331,16 +349,21 @@ export function App({
     openPalette,
     requestSession,
     toggleNavigation,
+    runTargets: runTargetList,
+    selectedRunTarget: runTargets.selected,
+    chooseRunTarget: chooseRunTargetHere,
   };
   useAppShortcuts({ enabled: state === "ready", shortcuts, ...appActionContext });
 
   // Transfers run in the engine, so the queue keeps up even while this tab is
   // hidden; a couple of seconds is fast enough for progress and cheap enough
   // for the engine.
-  usePolling(() => sftpTransferManager.reconcile(), {
+  // The queue of the engine shown is read, and so is that of any other engine this browser is moving a file for:
+  // its jobs go on behind, and the next one starts from what the engine lists.
+  usePolling(() => Promise.all(transferManagersToFollow(runTargets.selected).map((manager) => manager.reconcile())).then(() => undefined), {
     intervalMs: transferReconcileIntervalMs, enabled: state === "ready", whileHidden: true, immediately: true,
   });
-  useTransferUnloadWarning();
+  useTransferUnloadWarning(runTargets.selected);
 
   const unreadSessions = useTerminalNotifications(
     terminalSessions.sessions,
@@ -425,7 +448,9 @@ export function App({
   if (state === "session-ended") return <SessionEndedScreen />;
 
   const app = (
-    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned} data-navigation-hidden={navigationHidden}>
+    <EngineApisProvider apis={engineApis}>
+    <div className={`sshc-app flex h-screen flex-col bg-canvas text-ink ${runTargets.selected === null ? "" : remoteSessionTagRoom}`} data-mobile={mobileLayout} data-navigation-pinned={mobileLayout && navigationPinned} data-navigation-hidden={navigationHidden}>
+      {runTargets.selected === null ? null : <RemoteSessionFrame alias={runTargets.selected} color={remoteFrameColor} />}
       <div
         ref={rechecked}
         className="contents"
@@ -482,15 +507,10 @@ export function App({
           {navigationHidden ? (
             // The column the hidden navigation leaves (hiddenNavigationWidth): only the button that shows it again.
             <div className="flex justify-center pt-3">
-              <button
-                type="button"
-                aria-label={t("shell.navigationShow")}
-                title={t("shell.navigationShow")}
-                onClick={toggleNavigation}
-                className="grid size-8 place-items-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
-              >
+              <IconButton label={t("shell.navigationShow")} size="panel"
+                onClick={toggleNavigation}>
                 <Icon name="navigationShow" className="size-4" />
-              </button>
+              </IconButton>
             </div>
           ) : null}
           <AppNavigation
@@ -521,10 +541,7 @@ export function App({
               closeNavigation();
               navigate("Terminal");
             }}
-            onShowTerminal={() => {
-              closeNavigation();
-              navigate("Terminal");
-            }}
+            onShowTerminal={showTerminalArea}
             canSplitSession={(id) => id === activeSessionId ? splitBesideActive !== null : splitView.canSplit(id)}
             onSplitSession={(id, edge) => {
               if (activeSessionId === null) return;
@@ -541,6 +558,8 @@ export function App({
             onOpenShell={(workspaceId) => void openLocalShell(undefined, undefined, workspaceId)}
             aliases={declared.knownAliases}
             hosts={declared.hosts}
+            engineChoices={{ aliases: thisMachineDeclared.knownAliases, hosts: thisMachineDeclared.hosts }}
+            onOpenConnectionSettings={openThisMachineConnectionSettings}
             onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
             directDestination={directDestination}
             onOpenCommandPalette={openPaletteFromNavigation}
@@ -567,17 +586,13 @@ export function App({
                       settings={terminalSettings}
                       hostAppearance={declared.hostAppearance}
                       hostVPN={declared.hostVPN}
+                      hostSettingsRead={declared.read}
                       api={runTargetApis.sessions}
                       runTargets={runTargets}
                       runTargetLink={runTargetLink}
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                       onOpenNavigation={navigationPinned ? undefined : () => setNavigationOpen(true)}
-                      onNewSession={() => requestSession({ action: "newSession" })}
-                      onAddConnection={addConnection}
-                      onOpenSync={() => navigate("Sync")}
-                      onOpenConnection={(alias) => void openSSHSession(alias)}
-                      onShowConnections={() => navigate("Connections")}
                     />
                   </div>
                 ) : null}
@@ -615,7 +630,7 @@ export function App({
                         onInspector: setInspector,
                         onShowInspector: () => setInspectorOpen(true),
                         terminalSessions,
-                        onShowSession: showLocalSession,
+                        runTarget: runTargets.selected,
                         onOpenSSHSession: openSSHSession,
                         onOpenSSHSessions: openSSHSessions,
                         onOverviewRead: declared.adoptOverview,
@@ -624,6 +639,7 @@ export function App({
                         onOpenTerminal: openSFTPTerminal,
                       },
                       declared: { groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN },
+                      thisMachineDeclared: { groups: thisMachineDeclared.groups, knownAliases: thisMachineDeclared.knownAliases, hosts: thisMachineDeclared.hosts, hostVPN: thisMachineDeclared.hostVPN },
                       sftpTarget: handoffs.sftpTarget,
                       onSftpTargetHandled: handoffs.consumeSftpTarget,
                     }}
@@ -704,6 +720,11 @@ export function App({
       {heldForRecheck && vaultRecheck === "checking" ? <VaultRecheckMark /> : null}
       {heldForRecheck && vaultRecheck === "retrying" ? <VaultRecheckOverlay /> : null}
     </div>
+    </EngineApisProvider>
   );
-  return <SessionAddressesContext.Provider value={sessionAddresses}>{app}</SessionAddressesContext.Provider>;
+  return (
+    <SessionAddressesContext.Provider value={sessionAddresses}>
+      <SessionEngineContext.Provider value={runTargets.selected}>{app}</SessionEngineContext.Provider>
+    </SessionAddressesContext.Provider>
+  );
 }

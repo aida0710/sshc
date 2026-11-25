@@ -4621,6 +4621,7 @@ export interface components {
             /** @enum {string} */
             emptyTerminalArt?: "none" | "network" | "contours" | "globe" | "aquarium";
             reduceMotion?: boolean;
+            remoteSessionColor?: string;
         };
         TerminalAppearance: {
             palette?: string;
@@ -4660,6 +4661,17 @@ export interface components {
                 toggleNavigation: string[];
                 home: string[];
                 sftp: string[];
+                nextRunTarget: string[];
+                previousRunTarget: string[];
+                runTarget1: string[];
+                runTarget2: string[];
+                runTarget3: string[];
+                runTarget4: string[];
+                runTarget5: string[];
+                runTarget6: string[];
+                runTarget7: string[];
+                runTarget8: string[];
+                runTarget9: string[];
             };
         };
         KeyBarKey: {
@@ -4888,6 +4900,7 @@ export interface components {
         InterfaceState: {
             runTarget?: string;
             sftpPanes?: string;
+            sftpPanesByRunTarget?: string;
             sftpQueueView?: string;
             collapsedTerminalWorkspaces?: string;
             showHiddenTerminalWorkspaces?: string;

@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { defaultTint } from "../terminal/appearance";
 import { useBackgroundImage } from "../terminal/backgroundImage";
 import { fontStack } from "../ui/monospaceFonts";
-import { fontSizeRange } from "../terminal/fontSize";
+import { defaultFontSize, fontSizeRange } from "../terminal/fontSize";
 
 // A still terminal that shows what the chosen palette, font, size and
 // background will look like before they are saved.
@@ -21,7 +21,7 @@ export function TerminalPreview({
 }) {
   const backgroundURL = useBackgroundImage(background);
   const chosenSize = Number(fontSize);
-  const previewSize = Number.isFinite(chosenSize) && chosenSize >= fontSizeRange.min && chosenSize <= fontSizeRange.max ? chosenSize : 13;
+  const previewSize = Number.isFinite(chosenSize) && chosenSize >= fontSizeRange.min && chosenSize <= fontSizeRange.max ? chosenSize : defaultFontSize;
   const hasBackground = background !== "" && backgroundURL !== "";
   const style = {
     color: "var(--ui-term-fg)",

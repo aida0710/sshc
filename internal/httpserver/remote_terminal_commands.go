@@ -256,7 +256,7 @@ func (h RemoteEngineHandlers) callRemoteCommandAPI(c *echo.Context, alias string
 	if err != nil {
 		return true, unexpectedProblem(c, "terminal_command_failed", err)
 	}
-	reply, err := h.Engines.CallTerminalAPI(c.Request().Context(), alias, remoteengine.TerminalCall{
+	reply, err := h.Engines.CallAPI(c.Request().Context(), alias, remoteengine.APICall{
 		Method: http.MethodPost, Path: call.path, ContentType: echo.MIMEApplicationJSON, Body: body, ActionToken: call.actionToken,
 	})
 	if err != nil {

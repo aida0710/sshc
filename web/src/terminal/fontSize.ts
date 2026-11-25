@@ -1,5 +1,8 @@
 // The font sizes the engine accepts (EmbeddedTerminal.fontSize), in CSS pixels.
 export const fontSizeRange = { min: 8, max: 32 } as const;
+// The size a terminal draws at when the preset in use leaves it unset. It is the same on every screen; a phone that
+// wants larger text uses a preset that says so.
+export const defaultFontSize = 13;
 
 function clamped(size: number): number {
   return Math.min(fontSizeRange.max, Math.max(fontSizeRange.min, size));

@@ -56,7 +56,7 @@ export function ConfigFileField({
 
   // 欄と［ファイルを選択］を1つの入力として並べ、説明はその下に出す（試作の順）。
   return (
-    <FieldRow label={label} hint={hint} warning={readFailed ? t("vpn.configFileReadFailed") : error} interactiveChildren>
+    <FieldRow label={label} hint={hint} error={readFailed ? t("vpn.configFileReadFailed") : error} interactiveChildren>
       <ConfigFileInput
         label={label}
         value={value}

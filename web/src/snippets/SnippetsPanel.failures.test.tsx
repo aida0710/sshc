@@ -44,6 +44,7 @@ it("explains a refused save in words instead of showing the failure code", async
   await user.type(screen.getByRole("textbox", { name: "Command" }), "echo {{");
   await user.click(screen.getByRole("button", { name: "Save" }));
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("The snippet or its variables have values that cannot be used.");
+  expect(await screen.findByText("The snippet or its variables have values that cannot be used.")).toBeVisible();
+  expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Broken");
   expect(screen.queryByText("invalid_snippet")).not.toBeInTheDocument();
 });

@@ -1,15 +1,19 @@
-import { useEffect, useRef, useState } from "react";
-import { failureCode } from "../api/client";
-import { configApi, type Overview } from "../api/config";
-import { recentConnectionsApi, type RecentConnectionList } from "../api/recentConnections";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Overview } from "../api/config";
+import type { RecentConnectionList } from "../api/recentConnections";
 import { syncApi, type SyncStatus } from "../api/sync";
-import { terminalSessionsApi } from "../api/terminalSessions";
 import { useLanguage } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { PageBoard } from "../ui/PageBoard";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
+import { presetInUse, useSettings } from "../settings/settingsStore";
+import { emptyTerminalArtOf } from "./dashboard/emptyTerminalArt";
+import { HomeBackdrop } from "./dashboard/HomeBackdrop";
+import { HomeMachineSection } from "./dashboard/HomeMachineSection";
+import { useTerminalOverview } from "./dashboard/useTerminalOverview";
+import { useEngineApis } from "../shell/engineApis";
 import { ConnectionStartTiles } from "../connections/ConnectionStartTiles";
 import { attentionNoticesOf } from "../connections/noticeKinds";
 import { PanelState } from "../ui/PanelState";
@@ -18,41 +22,46 @@ import { formatOptionalDateTime } from "../ui/format";
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
 type OverviewPanelProps = {
+  // runTarget is the engine new sessions open on; null is this machine. Home lists that engine's connections, and
+  // its foot shows that machine.
+  runTarget: string | null;
   loadOverview?: () => Promise<Overview>;
   loadSync?: () => Promise<SyncStatus>;
   loadRecent?: () => Promise<RecentConnectionList>;
-  launch?: (alias: string) => Promise<{ session: { id: string } }>;
+  // onConnect opens a session to the connection on the engine new sessions open on, and shows it. It settles once
+  // the engine has answered; a failure is said where the terminal's other failures are (the sidebar and a toast).
+  onConnect: (alias: string) => Promise<void>;
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
-  onSessionOpened?: (id: string) => void;
   onAddConnection: () => void;
   onOpenLocalShell: () => void;
 };
 
-const loadDefaultOverview = () => configApi.overview();
 const loadDefaultSync = () => syncApi.syncStatus();
-const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
-const launchDefault = (alias: string) => terminalSessionsApi.openTerminalSession({ kind: "ssh", alias });
 
 export function OverviewPanel({
-  loadOverview = loadDefaultOverview,
+  runTarget,
+  loadOverview: loadOverviewOverride,
   loadSync = loadDefaultSync,
-  loadRecent = loadDefaultRecent,
-  launch = launchDefault,
+  loadRecent: loadRecentOverride,
+  onConnect,
   onNavigate,
   onNavigateLocation,
-  onSessionOpened,
   onAddConnection,
   onOpenLocalShell,
 }: OverviewPanelProps) {
   const { t, locale } = useLanguage();
+  const machineOverview = useTerminalOverview(runTarget);
+  const { config, recentConnections } = useEngineApis();
+  const loadOverview = useMemo(() => loadOverviewOverride ?? (() => config.overview()), [loadOverviewOverride, config]);
+  const loadRecent = useMemo(() => loadRecentOverride ?? (() => recentConnections.recentConnections()), [loadRecentOverride, recentConnections]);
+  const art = emptyTerminalArtOf(presetInUse(useSettings().document));
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [recent, setRecent] = useState<RecentConnectionList["connections"]>([]);
   const [launching, setLaunching] = useState("");
   const launchPending = useRef(false);
-  const [problem, setProblem] = useState("");
   // 読めなかったことを「無い」と見分けられるように、履歴の失敗は空の一覧とは
   // 別に持つ。SSH設定を読めなかったときは overview を null にする。
   const [listsFailed, setListsFailed] = useState(false);
@@ -60,6 +69,8 @@ export function OverviewPanel({
 
   useEffect(() => {
     let active = true;
+    // Another engine's lists are not this one's: until these are read, Home shows that it is reading.
+    setLoading(true);
     void Promise.allSettled([loadOverview(), loadSync(), loadRecent()]).then(([workspace, remote, history]) => {
       if (!active) return;
       setOverview(workspace.status === "fulfilled" ? workspace.value : null);
@@ -74,7 +85,6 @@ export function OverviewPanel({
   }, [loadOverview, loadSync, loadRecent, loadAttempt]);
 
   function reload() {
-    setLoading(true);
     setLoadAttempt((attempt) => attempt + 1);
   }
 
@@ -84,16 +94,8 @@ export function OverviewPanel({
     if (launchPending.current) return;
     launchPending.current = true;
     setLaunching(alias);
-    setProblem("");
     try {
-      const opened = await launch(alias);
-      onSessionOpened?.(opened.session.id);
-    } catch (error) {
-      setProblem(
-        failureCode(error) === "terminal_session_limit"
-          ? t("terminal.limitRefused")
-          : t("terminal.openFailed"),
-      );
+      await onConnect(alias);
     } finally {
       launchPending.current = false;
       setLaunching("");
@@ -114,7 +116,8 @@ export function OverviewPanel({
   const noConnections = overview !== null && connectionCount === 0;
 
   return (
-    <PageBoard wide stretch={noConnections} labelledBy="home-heading" className="flex flex-col gap-[18px]">
+    <PageBoard wide stretch={noConnections} labelledBy="home-heading" className="relative isolate flex flex-col gap-[18px]">
+      {art === "none" ? null : <HomeBackdrop art={art} history={machineOverview.history} />}
       <PageHeader
         title={t("home.heading")}
         headingId="home-heading"
@@ -125,7 +128,6 @@ export function OverviewPanel({
         )}
       />
 
-      {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
       {loading || overview === null || !listsFailed ? null : (
         <Notice actions={retryButton}>{t("home.listsLoadFailed")}</Notice>
       )}
@@ -190,6 +192,8 @@ export function OverviewPanel({
           <Button small onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
         </section>
       )}
+
+      <HomeMachineSection overview={machineOverview} runTarget={runTarget} />
     </PageBoard>
   );
 }

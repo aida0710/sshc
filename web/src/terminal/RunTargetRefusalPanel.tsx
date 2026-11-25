@@ -6,6 +6,7 @@ import { formatTimeOfDay } from "../ui/format";
 import { Icon, type IconName } from "../ui/icons";
 import { Button } from "../ui/surface";
 import { RunTargetEngineUpdate } from "./RunTargetEngineUpdate";
+import { RemoteEngineStartCommands } from "./RemoteEngineStartCommands";
 import { RunTargetRefusalDetails } from "./RunTargetRefusalDetails";
 import { RunTargetVaultUnlock } from "./RunTargetVaultUnlock";
 import { runTargetRefusalText } from "./runTargetProblem";
@@ -94,6 +95,7 @@ export function RunTargetRefusalPanel({
             {reason === "" ? null : <p className="break-words text-sm leading-6 text-ink-muted">{reason}</p>}
           </div>
         </div>
+        {refusal.code === "remote_engine_not_running" ? <RemoteEngineStartCommands /> : null}
         {refusedAt === null ? null : (
           <p className="flex flex-wrap gap-x-2 text-xs text-ink-muted">
             <span>{t("runTarget.lastTried")} <time dateTime={refusedAt.toISOString()} className="tabular-nums text-ink">{formatTimeOfDay(refusedAt, locale)}</time></span>

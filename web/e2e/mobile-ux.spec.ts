@@ -1105,8 +1105,11 @@ test("a finger moves the shell's scrollback by the pixel and settles it on a row
   await textBox.fill("seq 1 200");
   await page.getByRole("button", { name: "Send", exact: true }).tap();
   await expect(drawnRows(page).filter({ visible: true })).toContainText("200");
+  // seq のあとのプロンプトが出るまで待つ。出る前に下の行を読むと、読んだあとで行が1つ増える。
+  await expect.poll(() => page.evaluate(() => (document.querySelector(".sshc-select-overlay")?.textContent ?? "").split("\n").filter((line) => line.trim() !== "").at(-1) ?? "")).toMatch(/[$#%>]\s*$/);
 
-  // A finger pulls the text down by a third of a row: older lines, the rows drawn that far down.
+  // A finger pulls the text down by a row and a third: older lines, the rows drawn that far down.
+  // 指の向きが決まるまで（10px）は動かないので、それより長く、1行と3分の1だけ動かす。
   const host = page.locator("[data-terminal-host]").first();
   const moved = await page.evaluate(() => {
     const surface = document.querySelector<HTMLElement>(".sshc-select-overlay")!;
@@ -1115,17 +1118,18 @@ test("a finger moves the shell's scrollback by the pixel and settles it on a row
       const finger = new Touch({ identifier: 1, target: surface, clientX: 200, clientY: y });
       surface.dispatchEvent(new TouchEvent(type, { touches: type === "touchend" ? [] : [finger], changedTouches: [finger], bubbles: true, cancelable: true }));
     };
-    const bottomRow = (surface.textContent ?? "").split("\n").filter((line) => line.trim() !== "").at(-1)?.trimEnd() ?? "";
+    const rowAboveBottom = (surface.textContent ?? "").split("\n").filter((line) => line.trim() !== "").at(-2)?.trimEnd() ?? "";
     touch("touchstart", 400);
-    touch("touchmove", 400 + rows / 3);
+    touch("touchmove", 400 + (rows * 4) / 3);
     const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
     const edge = host.querySelector<HTMLElement>("[data-scrollback-edge-row]")!;
-    return { rows, bottomRow, transform: host.style.transform, edge: edge.style.display === "block" ? edge.textContent : null };
+    return { rows, rowAboveBottom, transform: host.style.transform, edge: edge.style.display === "block" ? edge.textContent : null };
   });
-  // The rows from the one before, drawn two thirds of a row up: the text sits a third of a row lower, as the finger
-  // moved it. The row that was at the bottom is now the one under the rows, drawn there.
-  expect(moved.transform).toBe(`translateY(${-(moved.rows * 2) / 3}px)`);
-  expect(moved.edge).toBe(moved.bottomRow);
+  // The rows from two before, drawn two thirds of a row up: the text sits a row and a third lower, as the finger
+  // moved it. The row that was above the bottom one is now the one under the rows, drawn there.
+  // 行の高さが割り切れない文字の大きさでは、ブラウザが style の値を小数3桁ほどに丸めるので、数として比べる。
+  expect(Number.parseFloat(/^translateY\((.+)px\)$/u.exec(moved.transform)?.[1] ?? "")).toBeCloseTo(-(moved.rows * 2) / 3, 2);
+  expect(moved.edge?.trimEnd()).toBe(moved.rowAboveBottom);
 
   // Let go slowly: the rows settle on the nearer one.
   await page.waitForTimeout(150);
@@ -1492,6 +1496,55 @@ test("a tap on a file path the terminal printed opens its preview at once", asyn
   await expect(page.getByRole("dialog", { name: "Terminal link actions" })).toHaveCount(0);
 });
 
+// スマホの幅では、プログラムが長い URL を何行にも分けて出す。どの行を押しても、URL の全体が出る。
+test("a tap on the second row of a URL that a program broke before a mark opens the whole URL", async ({ page, installation }) => {
+  // 自動の折り返しを切って書くと、1行目は右端まで埋まり、xterm の折り返しにならない。Claude Code が右端で
+  // 改行して字下げするのと同じ形になる。続きは = で始まる。
+  const overflowing = `https://example.test/authorize?${"scope=read&".repeat(12)}redirect`;
+  await openShellPrinting(page, installation, `\x1b[?7l  ${overflowing}\x1b[?7h\r\n  =http%3A%2F%2F127.0.0.1%2Fcallback\r\n$ `);
+  const rest = await printedBounds(page, "=http%3A%2F%2F127.0.0.1%2Fcallback");
+  const firstRow = ((await drawnRows(page).filter({ visible: true }).locator("> div").first().textContent()) ?? "").trim();
+  expect(firstRow).toMatch(/^https:\/\/example\.test\/authorize\?/);
+  await capture(page, "mobile-url-broken-before-a-mark");
+
+  await page.touchscreen.tap(rest.x + rest.width / 2, rest.y + rest.height / 2);
+
+  await expect(page.getByRole("dialog", { name: "Terminal link actions" }).locator("p")).toHaveAttribute("title", `${firstRow}=http%3A%2F%2F127.0.0.1%2Fcallback`);
+});
+
+test("a tap on a row of a URL broken over the rows of a table cell opens the whole URL", async ({ page, installation }) => {
+  const table = [
+    "┌──────┬──────────────────────┐",
+    "│      │ https://example.test │",
+    "│ docs │ /guides/installation │",
+    "│      │ /index.html          │",
+    "└──────┴──────────────────────┘",
+  ];
+  await openShellPrinting(page, installation, `${table.join("\r\n")}\r\n$ `);
+  const middle = await printedBounds(page, "/guides/installation");
+  await capture(page, "mobile-url-in-a-table-cell");
+
+  await page.touchscreen.tap(middle.x + middle.width * 0.7, middle.y + middle.height / 2);
+
+  await expect(page.getByRole("dialog", { name: "Terminal link actions" }).locator("p")).toHaveAttribute("title", "https://example.test/guides/installation/index.html");
+});
+
+// Claude Code は、出した URL に OSC 8 で宛先を付ける。続きの行に / や = が1つも無い URL は、画面の文字だけでは
+// 次の語と見分けられないが、宛先はプログラムが渡している。
+test("a tap on the second row of a URL a program linked with OSC 8 opens the whole URL", async ({ page, installation }) => {
+  const url = "https://example.test/d/1a9Nex-6jpYi_NXIHhtEOiYgzHyjgA0q";
+  const linked = (text: string) => `\x1b]8;id=deck;${url}\x07${text}\x1b]8;;\x07`;
+  const head = "https://example.test/d/1a9Ne";
+  const rest = "x-6jpYi_NXIHhtEOiYgzHyjgA0q";
+  await openShellPrinting(page, installation, `see (${linked(head)}\r\n  ${linked(rest)}) is ready\r\n$ `);
+  const second = await printedBounds(page, rest);
+  await capture(page, "mobile-url-linked-with-osc-8");
+
+  await page.touchscreen.tap(second.x + second.width / 2, second.y + second.height / 2);
+
+  await expect(page.getByRole("dialog", { name: "Terminal link actions" }).locator("p")).toHaveAttribute("title", url);
+});
+
 // swipe drags one finger across the screen through real touch events, in small steps as a finger moves.
 async function swipe(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
   const client = await page.context().newCDPSession(page);
@@ -1616,6 +1669,36 @@ test("a sideways swipe over the terminal opens the navigation, and one up and do
   await swipe(page, { x: 80, y: box.y + box.height / 2 }, { x: 330, y: box.y + box.height / 2 + 6 });
   await expect(navigation).toHaveAttribute("data-navigation-open", "true");
   await expect(navigation).toBeInViewport();
+});
+
+// ナビゲーションを引き出す指は真横には動かず、上下にもぶれる。その指の下で、ターミナルはスクロールバックも、
+// 自分でスクロールするプログラムも動かさない。
+test("a slanted swipe that opens the navigation leaves the terminal's scrollback where it was", async ({ page, installation }) => {
+  await mockTerminalSession(page, longOutput);
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  const rows = drawnRows(page).filter({ visible: true });
+  await expect(rows).toContainText("line 80");
+  const box = (await rows.boundingBox())!;
+  const shownBefore = await rows.innerText();
+
+  await swipe(page, { x: 80, y: box.y + box.height * 0.3 }, { x: 330, y: box.y + box.height * 0.3 + 90 });
+  await expect(page.locator("[data-app-navigation]")).toHaveAttribute("data-navigation-open", "true");
+  expect(await rows.innerText()).toBe(shownBefore);
+});
+
+test("a slanted swipe that opens the navigation sends no wheel turns to a full-screen program", async ({ page, installation }) => {
+  const program = fullScreenPrograms[0]!;
+  const messages = await mockTerminalSession(page, `${longOutput}\r\n`, `${program.modes}\x1b[2J\x1b[HFull-screen program`);
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  const screen = page.getByRole("region", { name: "Terminal for Demo shell" });
+  await expect(screen).toContainText("Full-screen program");
+  const box = (await screen.boundingBox())!;
+
+  await swipe(page, { x: 80, y: box.y + box.height * 0.3 }, { x: 330, y: box.y + box.height * 0.3 + 90 });
+  await expect(page.locator("[data-app-navigation]")).toHaveAttribute("data-navigation-open", "true");
+  expect(countSent(messages, program.forward) + countSent(messages, program.back)).toBe(0);
 });
 
 // placedByHand reads whether a swipe left the navigation's position written on it rather than in the

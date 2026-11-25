@@ -1,7 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { PathText } from "../ui/PathText";
-import { PreviewIconButton, previewIconButtonClassName } from "./PreviewIconButton";
+import { PreviewIconButton } from "./PreviewIconButton";
 import { PreviewStepper } from "./PreviewStepper";
 
 function folderOf(path: string): string {
@@ -61,7 +61,7 @@ export function FilePreviewHeader({
         <PreviewStepper position={position} count={count} onStep={onStep} />
         {onDownload === undefined ? null : <PreviewIconButton icon="download" label={t("sftp.download")} disabled={downloadDisabled} onClick={onDownload} />}
         {menu === undefined ? null : (
-          <ActionMenu label={menu.label} items={menu.items} triggerClassName={previewIconButtonClassName} />
+          <ActionMenu label={menu.label} items={menu.items} triggerSize="toolbar" />
         )}
         <PreviewIconButton icon="close" label={t("sftp.close")} onClick={onClose} />
       </div>

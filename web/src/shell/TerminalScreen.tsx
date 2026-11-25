@@ -1,14 +1,16 @@
-import { Suspense, lazy, useEffect, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useRef, type ReactNode } from "react";
 import type { TerminalAppearance, TerminalSettings } from "../api/settings";
 import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { resolveAppearance } from "../terminal/appearance";
-import { TerminalEmptyState } from "../terminal/TerminalEmptyState";
 import { TerminalSplitView } from "../terminal/splitView/TerminalSplitView";
 import { defaultRetainedTerminals } from "../terminal/splitView/retainedSessions";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
 import type { RemotePathAction } from "../sftp/SFTPPanel";
+import { hostSettingsToDrawWith, type HostSettings } from "../terminal/hostSettings";
+import { SessionEngineContext } from "../terminal/sessionDestination";
 import type { TerminalSessionsState } from "../terminal/sessions";
+import type { ExitReport } from "../terminal/stream";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import type { PaneEdge } from "../terminal/splitView/layout";
 import { maximumSplitGroups } from "../terminal/splitView/splitGroups";
@@ -23,6 +25,14 @@ const TerminalView = lazy(() =>
   import("../terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
 );
 
+// ShownTerminals is what a run target's terminals are drawn from: its sessions, how they are split and its API.
+type ShownTerminals = {
+  runTarget: string | null;
+  sessions: TerminalSession[];
+  splitView: SplitViewController;
+  api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
+} & HostSettings;
+
 // Terminals stay mounted behind other sections so output keeps flowing.
 // Each session uses its host's appearance.
 export function TerminalScreen({
@@ -33,25 +43,14 @@ export function TerminalScreen({
   settings,
   hostAppearance,
   hostVPN,
+  hostSettingsRead,
   api,
   runTargets,
   runTargetLink,
   onOpenRemotePath,
   onOSC52Change,
   onOpenNavigation,
-  onNewSession,
-  onAddConnection,
-  onOpenSync,
-  onOpenConnection,
-  onShowConnections,
 }: {
-  // onNewSession opens the picker for a new session from the empty state.
-  onNewSession: () => void;
-  onAddConnection: () => void;
-  onOpenSync: () => void;
-  // onOpenConnection opens a session to a connection the empty state lists as used recently.
-  onOpenConnection: (alias: string) => void;
-  onShowConnections: () => void;
   // onOpenNavigation opens the sidebar from a phone's terminal top bar; undefined while the sidebar stays open.
   onOpenNavigation?: (() => void) | undefined;
   visible: boolean;
@@ -62,6 +61,9 @@ export function TerminalScreen({
   hostAppearance: Map<string, TerminalAppearance>;
   // hostVPN は、alias ごとに通るVPN経路の名前である。
   hostVPN: Map<string, string>;
+  // hostSettingsRead は、hostAppearance と hostVPN が、今の実行先の SSH の設定から読んだものかどうか。
+  // 実行先を替えた直後は、読み終えるまで空である。
+  hostSettingsRead: boolean;
   // api is the terminal API of the run target the sessions belong to.
   api: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   // runTargets says which engine that is; its selected alias is null for this
@@ -93,38 +95,41 @@ export function TerminalScreen({
     return () => { document.title = "sshc"; };
   }, [session]);
   // Why the terminal's 「…」 cannot split beside a session, for its disabled items; undefined when it can.
-  function splitRefusalText(sessionId: string): string | undefined {
-    switch (splitView.splitRefusal(sessionId)) {
+  function splitRefusalText(view: SplitViewController, sessionId: string): string | undefined {
+    switch (view.splitRefusal(sessionId)) {
       case "ended": return t("splitView.refusedEnded");
       case "groups": return t("splitView.maxGroups", { count: maximumSplitGroups });
       case "sessions": return t("terminal.limitReached", { max: terminalSessions.maxSessions });
       case null: return undefined;
     }
   }
-  function renderTerminal(session: TerminalSession, headerActions: ReactNode, inPane: boolean) {
+  // terminalRenderer draws the terminals of one run target: the one shown, or one kept behind it (shownTerminals).
+  // A kept terminal is not on the screen whatever the section, and what its stream says about its session is left for
+  // the list to say when its run target is shown again: the list this screen holds is another engine's.
+  const terminalRenderer = (shown: ShownTerminals, onScreen: boolean) => function renderTerminal(session: TerminalSession, headerActions: ReactNode, inPane: boolean) {
     const appearance = resolveAppearance(
       session.alias === undefined
         ? undefined
-        : hostAppearance.get(session.alias),
+        : shown.hostAppearance.get(session.alias),
       settings.appearance,
     );
-    const vpnProfile = session.alias === undefined ? "" : hostVPN.get(session.alias) ?? "";
+    const vpnProfile = session.alias === undefined ? "" : shown.hostVPN.get(session.alias) ?? "";
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <Suspense fallback={<RouteSkeleton kind="terminal" />}>
         <TerminalView
           key={session.id}
           session={session}
-          active={visible && activeSessionId === session.id}
+          active={onScreen && visible && activeSessionId === session.id}
           inPane={inPane}
-          focusRequest={splitView.state.focusRevision}
+          focusRequest={shown.splitView.state.focusRevision}
           headerActions={headerActions}
-          {...(splitView.compact ? {} : { onSplit: (edge: PaneEdge) => splitView.requestSplit({ targetSessionId: session.id, edge }) })}
-          splitRefusal={splitRefusalText(session.id)}
-          {...(splitView.groupBySession.has(session.id) ? { onRemoveFromSplit: () => splitView.removeFromSplit(session.id) } : {})}
-          api={api}
-          {...(runTarget === null ? {} : { runTarget })}
-          searchShortcutActive={visible && activeSessionId === session.id}
+          {...(shown.splitView.compact ? {} : { onSplit: (edge: PaneEdge) => shown.splitView.requestSplit({ targetSessionId: session.id, edge }) })}
+          splitRefusal={splitRefusalText(shown.splitView, session.id)}
+          {...(shown.splitView.groupBySession.has(session.id) ? { onRemoveFromSplit: () => shown.splitView.removeFromSplit(session.id) } : {})}
+          api={shown.api}
+          {...(shown.runTarget === null ? {} : { runTarget: shown.runTarget })}
+          searchShortcutActive={onScreen && visible && activeSessionId === session.id}
           {...(settings.fontSize === undefined
             ? {}
             : { fontSize: settings.fontSize })}
@@ -141,7 +146,7 @@ export function TerminalScreen({
           stickyCommand={settings.stickyCommand ?? true}
           commandScrollbarMarks={settings.commandScrollbarMarks ?? true}
           onOsc52Change={onOSC52Change}
-          onForwardsChanged={terminalSessions.refresh}
+          {...(onScreen ? { onForwardsChanged: terminalSessions.refresh } : {})}
           {...(appearance.palette === ""
             ? {}
             : { palette: appearance.palette })}
@@ -155,8 +160,7 @@ export function TerminalScreen({
           copyOnSelect={settings.copyOnSelect ?? true}
           rightClickPaste={settings.rightClickPaste ?? true}
           webgl={settings.webgl ?? true}
-          onExit={(exit) => terminalSessions.markExited(session.id, exit)}
-          onProgramStateChanged={terminalSessions.programStateChanged}
+          {...(onScreen ? { onExit: (exit: ExitReport) => terminalSessions.markExited(session.id, exit), onProgramStateChanged: terminalSessions.programStateChanged } : {})}
           onReconnect={() => terminalSessions.reconnect(session.id)}
           onStopReconnect={() => terminalSessions.stopReconnect(session.id)}
           onCloseSession={() => void terminalSessions.close(session.id)}
@@ -168,18 +172,44 @@ export function TerminalScreen({
         </Suspense>
       </div>
     );
+  };
+
+  // The terminals of a run target stay mounted while another is shown, so that coming back finds their scrollback,
+  // the size the text was zoomed to and what was being typed. A run target's own list is read again when it is shown;
+  // until it answers, and while it is behind another, its terminals are drawn from what it listed last.
+  const kept = useRef(new Map<string | null, ShownTerminals>()).current;
+  const listed = terminalSessions.loaded && refusal === null;
+  if (listed) {
+    // A terminal draws with the appearance its connection asks for. Those settings are read after the engine is
+    // chosen, and are another engine's while it is behind: until this engine's are read, its terminals keep the ones
+    // they were drawn with. A terminal given another font changes its size, and the program in it is told.
+    const hostSettings = hostSettingsToDrawWith({ current: { hostAppearance, hostVPN }, read: hostSettingsRead, drawnWith: kept.get(runTarget) });
+    kept.set(runTarget, { runTarget, sessions: terminalSessions.sessions, splitView, api, ...hostSettings });
   }
+  for (const keptRunTarget of kept.keys()) {
+    if (keptRunTarget !== null && keptRunTarget !== runTarget && !runTargets.engines.includes(keptRunTarget)) kept.delete(keptRunTarget);
+  }
+  const retainedTerminals = settings.retainedTerminals ?? defaultRetainedTerminals;
   return <div className="relative h-full">
-    {/* What the refusing engine listed before cannot be used, so it is kept out of reach, and out of sight: the panel
-        ends above a phone's floating bottom bar so the bar stays usable, and the terminal's key bar and composer
-        would show around the bar. Hidden, not removed, the terminals keep their size and output for when the engine
-        answers again. */}
-    <div className={refusal === null ? "h-full" : "invisible h-full"} inert={refusal !== null}>
-      <TerminalSplitView splitView={splitView} sessions={terminalSessions.sessions} retainedTerminals={settings.retainedTerminals ?? defaultRetainedTerminals} renderTerminal={renderTerminal}
-        // Until the engine answers, it is not known to have no sessions.
-        emptyState={terminalSessions.loaded ? <TerminalEmptyState runTarget={runTarget} visible={visible} onNewSession={onNewSession} onAddConnection={onAddConnection} onOpenSync={onOpenSync} onOpenConnection={onOpenConnection} onShowConnections={onShowConnections} /> : null}
-      />
-    </div>
+    {/* One list, keyed by run target: a run target's terminals keep their place in the tree when it goes behind
+        another and when it comes back, so React does not mount them again. */}
+    {[...kept.values()].map((shown) => shown.runTarget === runTarget ? (
+      // What the refusing engine listed before cannot be used, so it is kept out of reach, and out of sight: the panel
+      // ends above a phone's floating bottom bar so the bar stays usable, and the terminal's key bar and composer
+      // would show around the bar. Hidden, not removed, the terminals keep their size and output for when the engine
+      // answers again.
+      <div key={runTarget ?? ""} className={refusal === null ? "h-full" : "invisible h-full"} inert={refusal !== null}>
+        <SessionEngineContext.Provider value={shown.runTarget}>
+          <TerminalSplitView splitView={shown.splitView} sessions={shown.sessions} retainedTerminals={retainedTerminals} renderTerminal={terminalRenderer(shown, listed)} />
+        </SessionEngineContext.Provider>
+      </div>
+    ) : (
+      <div key={shown.runTarget ?? ""} data-kept-run-target={shown.runTarget ?? ""} aria-hidden="true" inert className="invisible absolute inset-0">
+        <SessionEngineContext.Provider value={shown.runTarget}>
+          <TerminalSplitView splitView={shown.splitView} sessions={shown.sessions} retainedTerminals={retainedTerminals} renderTerminal={terminalRenderer(shown, false)} behind />
+        </SessionEngineContext.Provider>
+      </div>
+    ))}
     {waitingForEngine ? (
       <RunTargetConnectingPanel
         key={runTarget ?? ""}

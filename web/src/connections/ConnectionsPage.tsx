@@ -1,7 +1,7 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { toProblem } from "../api/guards";
 import {
-  configApi,
   hostMetadataEditRequest,
   type CreateConnectionResponse,
   type HostDetail,
@@ -33,6 +33,7 @@ import { Button, Notice } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { PageBoard } from "../ui/PageBoard";
 import { PageHeader } from "../ui/page";
+import { saveBarSlotClass, SaveBarSlotContext, useSaveBarSlot } from "../ui/saveBarSlot";
 import { workspaceColumnsLayout, workspaceDetailPane, workspaceHeaderLayout } from "../ui/workspaceLayout";
 import { useUnsavedDraftGuard } from "../routing/useUnsavedDraftGuard";
 import type {
@@ -49,7 +50,6 @@ import { identityKey } from "./connectionBrowser";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelState } from "../ui/PanelState";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
-import { hostDetailApi } from "./HostDetail";
 import { useConnectionSelection } from "./useConnectionSelection";
 import { useSelectedConnection } from "./useSelectedConnection";
 import { useConnectionSave } from "./useConnectionSave";
@@ -117,10 +117,12 @@ export function ConnectionsPage({
   onOpenLocalShell,
   onOverviewRead,
 }: ConnectionsPageProps) {
+  const { config: configApi } = useEngineApis();
   const t = useTranslate();
   const showToast = useToast();
   const retry = usePendingResult();
   const compact = useMediaQuery(mobileViewportQuery);
+  const saveBar = useSaveBarSlot();
   const [overview, setOverview] = useState<Overview | null>(null);
   useEffect(() => {
     if (overview !== null) onOverviewRead?.(overview);
@@ -198,7 +200,7 @@ export function ConnectionsPage({
       setProblem(toProblem(error));
       return null;
     }
-  }, [setProblem]);
+  }, [configApi, setProblem]);
 
   const save = useConnectionSave({
     selection,
@@ -209,6 +211,7 @@ export function ConnectionsPage({
   });
   const movesDisabled = editorDirty || refreshState !== "idle";
   const management = createConnectionManagement({
+    config: configApi,
     overview,
     selection,
     detail,
@@ -222,7 +225,7 @@ export function ConnectionsPage({
     clearTarget,
   });
 
-  const groups = createGroupOperations({ overview, feedback, reload });
+  const groups = createGroupOperations({ config: configApi, overview, feedback, reload });
   const listActions = useConnectionListActions({
     overview,
     compact,
@@ -554,7 +557,7 @@ export function ConnectionsPage({
           }}
         />
         <div className={`gap-4 ${listAlone ? "hidden" : workspaceDetailPane(compact, detailOpen)}`}>
-
+        <SaveBarSlotContext.Provider value={saveBar.slot}>
         {compact && detailOpen ? (
           <PhoneBackButton
             label={t("conn.backToList")}
@@ -657,7 +660,6 @@ export function ConnectionsPage({
               onBlockRaw={save.onBlockRaw}
               onBasicSave={save.onBasicSave}
               onMetadataSave={save.onMetadataSave}
-              integrations={hostDetailApi}
               panel={activePanel}
               advanced={activeAdvanced}
               onLocationChange={(panel, advanced) => {
@@ -676,6 +678,8 @@ export function ConnectionsPage({
             />
           </>
         )}
+        <div ref={saveBar.slotRef} className={saveBarSlotClass} />
+        </SaveBarSlotContext.Provider>
         </div>
       </div>
     </PageBoard>

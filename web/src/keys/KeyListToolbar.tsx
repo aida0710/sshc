@@ -4,6 +4,7 @@ import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { belowSmallWidthQuery, useMediaQuery } from "../ui/useMediaQuery";
 import type { ListFilter } from "./organizer";
+import { IconButton } from "../ui/IconButton";
 
 // KeyListToolbar は、鍵の一覧の節の見出しの右に置く、表示する種類の切り替えと検索欄である。
 // 狭い画面では、フォルダの選択と合わせて3つの欄が並ぶので、検索は虫眼鏡のボタンに畳み、押したら欄を開く。
@@ -47,14 +48,9 @@ export function KeyListToolbar({
             className={`${control} pl-8`}
           />
         </label> : (
-          <button
-            type="button"
-            aria-label={t("keys.search")}
-            onClick={() => setSearchOpened(true)}
-            className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
-          >
+          <IconButton label={t("keys.search")} size="bar" onClick={() => setSearchOpened(true)} className="ml-auto">
             <Icon name="search" className="size-4" />
-          </button>
+          </IconButton>
         )}
     </div>
   );

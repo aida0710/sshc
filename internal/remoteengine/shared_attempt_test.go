@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -284,5 +285,39 @@ func TestAStalledEngineOverAnAnsweringSSHConnectionKeepsTheConnection(t *testing
 	}
 	if connections.Load() != 1 {
 		t.Fatalf("opened %d SSH connections, want the answering one kept", connections.Load())
+	}
+}
+
+// よそのマシンを待ってから答える操作は、短い上限では切らない。接続先がまだ働いているうちに「届かない」と
+// 断ると、資格を捨て、受け取っていた確認のトークンも使えなくなる。
+func TestAnOperationThatWaitsForAnotherHostIsGivenUpOnlyAtTheLongLimit(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	var current *fakeLink
+	manager := NewManager(ManagerOptions{
+		Store: newStore(t), LocalVersion: "v9",
+		Connect: func(context.Context, string) (Link, error) {
+			current = newFakeLink(remote.server.URL+"/#x", 0)
+			return &handoffLink{fakeLink: current, handoff: remote.handoffDocument("v9")}, nil
+		},
+	})
+	t.Cleanup(manager.Close)
+	manager.answerLimit = 50 * time.Millisecond
+	manager.slowAnswerLimit = 400 * time.Millisecond
+	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
+		t.Fatal(err)
+	}
+	remote.stalled.Store(true)
+	current.silent.Store(true)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100/terminal/sessions", nil)
+	recorder := httptest.NewRecorder()
+	started := time.Now()
+	if err := manager.ForwardSlowAPI(recorder, request, "r100", "/api/v1/terminal/sessions"); err != nil {
+		t.Fatal(err)
+	}
+	if waited := time.Since(started); waited < 300*time.Millisecond {
+		t.Fatalf("gave up after %v, at the short limit", waited)
+	}
+	if !strings.Contains(recorder.Body.String(), "remote_engine_unreachable") {
+		t.Fatalf("an operation the remote never answers = %s", recorder.Body.String())
 	}
 }

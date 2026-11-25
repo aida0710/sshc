@@ -1,5 +1,5 @@
 import { newIdentifier } from "../ui/randomIdentifier";
-import { sftpApi, type SFTPConnectionAttempt } from "./api";
+import type { SFTPConnectionAttempt, SftpApi } from "./api";
 
 // connectionAttemptPollMilliseconds is how often the stage and log are read
 // again while a listing waits for its SSH connection. It matches how often the
@@ -22,7 +22,7 @@ export type ConnectionAttemptWatch = {
 // watchConnectionAttempt reads the connection the listing is opening until it
 // is stopped, and hands every reading to onChange. A failed read is dropped:
 // the listing's own answer decides what the pane shows.
-export function watchConnectionAttempt(alias: string, onChange: (attempt: SFTPConnectionAttempt) => void): ConnectionAttemptWatch {
+export function watchConnectionAttempt(sftpApi: Pick<SftpApi, "connectionAttempt" | "answerHostKey">, alias: string, onChange: (attempt: SFTPConnectionAttempt) => void): ConnectionAttemptWatch {
   const attempt = newIdentifier();
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;

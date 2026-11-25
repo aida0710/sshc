@@ -1,18 +1,21 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState } from "react";
 import { useTranslate } from "../i18n/context";
-import { sftpApi, type DirectoryComparison } from "./api";
+import { type DirectoryComparison } from "./api";
 import type { ComparisonMode } from "./contentToolTypes";
 import type { SFTPLocation } from "./sftpLocation";
 import { comparisonTransfers } from "./comparisonTransfers";
 import { localHostAlias } from "./localHost";
 import { sftpProblemText } from "./sftpProblemText";
-import { sftpTransferManager } from "./transferManager";
 
 export function useSFTPComparison({ left, right, onCopied }: {
   left: SFTPLocation;
   right: SFTPLocation;
   onCopied: () => void;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
+  const { sftp: { files: sftpApi } } = useEngineApis();
   const t = useTranslate();
   const readOnly = left.alias === localHostAlias || right.alias === localHostAlias;
   const [mode, setMode] = useState<ComparisonMode>("metadata");

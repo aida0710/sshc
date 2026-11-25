@@ -65,7 +65,7 @@ export function SnippetRunSection({
                 {target.target.alias} · {target.target.user}@{target.target.hostName}:{target.target.port}
               </p>
               {(target.target.route ?? []).map((hop, index) => (
-                <p key={`${hop.alias}-${index}`} className="mt-1 break-all text-xs text-notice-ink">
+                <p key={`${hop.alias}-${index}`} className="mt-1 break-all text-xs text-ink-muted">
                   {index + 1}. {hop.user}@{hop.hostName}:{hop.port}
                   {hop.proxyCommand === undefined || hop.proxyCommand === "" ? "" : ` · ProxyCommand: ${hop.proxyCommand}`}
                 </p>

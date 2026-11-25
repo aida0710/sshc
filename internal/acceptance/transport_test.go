@@ -328,10 +328,22 @@ func TestRouteTableMatchesTheOpenAPIContract(t *testing.T) {
 		}
 	}
 	for key := range registered {
-		if !declared[key] {
+		if !declared[key] && !declared[forwardedOperation(key)] {
 			t.Errorf("the server registers %q but api/openapi.yaml declares no such operation", key)
 		}
 	}
+}
+
+// forwardedOperation は、実行先のエンジンへ取り次ぐ操作（/api/v1/engines/:alias/…）が取り次ぐ先の、
+// このマシンの操作を返す。取り次ぐ操作は、契約にはこのマシンの操作として1度だけ書く
+// （httpserver の forwardedRoutes）。取り次ぐ操作でなければ空を返す。
+func forwardedOperation(operation string) string {
+	method, path, _ := strings.Cut(operation, " ")
+	rest, forwarded := strings.CutPrefix(path, "/api/v1/engines/:alias/")
+	if !forwarded {
+		return ""
+	}
+	return method + " /api/v1/" + rest
 }
 
 // echoPath は OpenAPI の path template を Echo の parameter 表記に変換する。

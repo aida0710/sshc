@@ -1,36 +1,44 @@
 import { useRef, useState } from "react";
-import type { HostEntry } from "../api/config";
+import type { HostEntry, HostIdentity } from "../api/config";
 import { useTranslate } from "../i18n/context";
-import { runTargetRefusalState, runTargetRefusalText } from "../terminal/runTargetProblem";
+import { runTargetRefusalCause, runTargetRefusalState } from "../terminal/runTargetProblem";
 import type { RunTargetLink } from "../terminal/useRunTargetLink";
 import type { RunTargetsState } from "../terminal/useRunTargets";
 import { Icon } from "../ui/icons";
 import { menuItemClass } from "../ui/menuStyle";
-import { Notice } from "../ui/surface";
 import { Spinner } from "../ui/Spinner";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { EngineInfoDialog } from "./EngineInfoDialog";
+import { RunTargetProblemNotice } from "../terminal/RunTargetProblemNotice";
 import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
+import { chooseRunTarget, runTargetChoices } from "./runTargetChoice";
+import { recentConnectionsApi } from "../api/recentConnections";
+import { IconButton } from "../ui/IconButton";
 
-// RunTargetSwitcher sits at the bottom of the sidebar and chooses whose
-// terminals the sidebar and the terminal show: this machine, or an engine on
-// an SSH host that this machine's engine forwards to. Settings and SFTP stay
-// this machine's whichever is chosen. It stays in view on every page, so it also says how the connection to the chosen
-// one is going.
+// リモートセッションに足す sshc エンジンは、このマシンの接続先から選ぶ。最近使ったものも、このマシンのものを出す。
+const loadThisMachineRecent = () => recentConnectionsApi.recentConnections();
+
+// RunTargetSwitcher はサイドバーの一番下にあり、画面が使う sshc エンジンを選ぶ。このマシンか、このマシンの
+// エンジンが取り次ぐ SSH の接続先のエンジンである。Snippets・設定・同期・更新は、どれを選んでもこのマシンのもの。
+// どの画面でも見えているので、選んだものへの接続の経過もここに出す。
 export function RunTargetSwitcher({
   targets,
   link,
   aliases,
   hosts,
   onShowTerminal,
+  onOpenConnectionSettings,
 }: {
   targets: RunTargetsState;
   link: RunTargetLink;
   aliases: string[];
   hosts: HostEntry[];
-  // onShowTerminal shows the terminal area, where a refusal of the chosen engine is shown with what fixes it.
+  // onShowTerminal shows the terminal area, where the connection to the chosen engine and a refusal of it are
+  // shown, with what fixes it.
   onShowTerminal: () => void;
+  // onOpenConnectionSettings は、その sshc エンジンの接続先（このマシンの Connections）の設定を開く。色はそこで変える。
+  onOpenConnectionSettings: (identity: HostIdentity) => void;
 }) {
   const t = useTranslate();
   const [open, setOpen] = useState(false);
@@ -47,15 +55,7 @@ export function RunTargetSwitcher({
   const chosenState = linkStateWords();
   const choose = (alias: string | null) => {
     setOpen(false);
-    // The chosen engine cannot be used: pressing it again goes to what fixes it. Its row already says why, and the
-    // panel that offers the actions is in the terminal area, out of sight from any other page. A locked Vault is
-    // unlocked here, in its own dialog.
-    if (alias !== null && alias === targets.selected && link.phase === "refused") {
-      if (link.refusal?.problem?.code === "remote_engine_vault_locked") targets.vaultUnlock.ask(alias);
-      else onShowTerminal();
-      return;
-    }
-    targets.select(alias);
+    chooseRunTarget({ targets, link, showTerminal: onShowTerminal }, alias);
   };
   // linkStateWords says what is happening to the chosen one; null when nothing needs saying.
   function linkStateWords(): string | null {
@@ -74,7 +74,9 @@ export function RunTargetSwitcher({
     const settledNote = alias === null ? t("runTarget.thisMachineNote") : connected ? t("runTarget.stateConnected") : t("runTarget.stateNotConnected");
     const note = (chosen ? chosenState : null) ?? settledNote;
     // The note already says it could not connect; this adds why, when that is known.
-    const refusalReason = chosen && link.refusal !== null ? runTargetRefusalText(t, link.refusal, name).reason : "";
+    const refusalReason = chosen && link.refusal !== null ? runTargetRefusalCause(t, link.refusal, name) : "";
+    // connection は、このマシンの SSH の設定にあるその接続先。消したものには、設定を開く項目を出さない。
+    const connection = alias === null ? undefined : hosts.find((host) => host.identity.alias === alias);
     return (
       <li key={alias ?? ""} className={`flex flex-wrap items-center gap-1 rounded-md ${chosen ? "bg-select-fill" : "hover:bg-hover"}`}>
         <button
@@ -89,15 +91,11 @@ export function RunTargetSwitcher({
           <span className={`shrink-0 text-2xs ${chosen && link.phase === "refused" ? "text-danger" : "text-ink-faint"}`}>{note}</span>
         </button>
         {alias === null ? null : (
-          <button
-            type="button"
-            aria-label={t("runTarget.actions", { alias })}
+          <IconButton label={t("runTarget.actions", { alias })} size="compact"
             aria-expanded={actionsFor === alias}
-            onClick={() => setActionsFor((currentAlias) => currentAlias === alias ? null : alias)}
-            className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:size-6"
-          >
+            onClick={() => setActionsFor((currentAlias) => currentAlias === alias ? null : alias)}>
             <Icon name="moreHorizontal" className="size-3.5" />
-          </button>
+          </IconButton>
         )}
         {refusalReason === "" ? null : (
           <p className="basis-full break-words px-2 pb-1 text-2xs leading-4 text-danger">{refusalReason}</p>
@@ -107,6 +105,12 @@ export function RunTargetSwitcher({
             <button type="button" onClick={() => { setActionsFor(null); setOpen(false); targets.engineInfo.ask(alias); }} className={menuItemClass()}>
               {t("engineInfo.open")}
             </button>
+            {connection === undefined ? null : (
+              <button type="button" onClick={() => { setActionsFor(null); setOpen(false); onOpenConnectionSettings(connection.identity); }} className={menuItemClass()}>
+                {/* リモートセッションを選んでいる間、Connections はリモートの接続先を出すので、localhost に戻って開く。 */}
+                {t(targets.selected === null ? "runTarget.openConnectionSettings" : "runTarget.openConnectionSettingsLeaving")}
+              </button>
+            )}
             <button type="button" onClick={() => void targets.openInNewTab(alias)} className={menuItemClass()}>
               {t("runTarget.openInNewTab")}
             </button>
@@ -125,22 +129,27 @@ export function RunTargetSwitcher({
         <div className="absolute bottom-full left-1 right-1 z-20 mb-1 rounded-lg border border-line bg-card p-1.5 shadow-float">
           <p className="px-2 pb-1 pt-0.5 text-2xs font-semibold text-ink-faint">{t("runTarget.heading")}</p>
           <ul aria-label={t("runTarget.heading")} className="flex flex-col gap-0.5">
-            {row(null)}
-            {targets.engines.map((alias) => row(alias))}
+            {runTargetChoices(targets.engines).map((alias) => row(alias))}
           </ul>
           <div className="my-1 border-t border-line" />
           <button
             type="button"
             disabled={targets.busy}
+            aria-busy={targets.busy || undefined}
             onClick={() => setPicking(true)}
             className="flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink-muted hover:bg-hover md:min-h-7"
           >
-            <Icon name="plus" className="size-3.5" aria-hidden="true" />
-            {targets.busy ? t("runTarget.adding") : t("runTarget.add")}
+            {/* 足している間は、文言を変えずに＋を回る印に替える（Button の busy と同じ決まり）。 */}
+            {targets.busy ? <Spinner /> : <Icon name="plus" className="size-3.5" aria-hidden="true" />}
+            {t("runTarget.add")}
           </button>
         </div>
       ) : null}
-      {targets.problem === "" ? null : <Notice tone="danger" compact>{targets.problem}</Notice>}
+      {targets.problem === null ? null : (
+        <div className="mb-2">
+          <RunTargetProblemNotice problem={targets.problem} onRetry={targets.retryProblem} onDismiss={targets.dismissProblem} />
+        </div>
+      )}
       <button
         ref={triggerRef}
         type="button"
@@ -162,10 +171,16 @@ export function RunTargetSwitcher({
         heading={t("runTarget.addHeading")}
         aliases={aliases}
         hosts={hosts}
+        loadRecent={loadThisMachineRecent}
         returnFocusRef={triggerRef}
         onChoose={(alias) => {
           setPicking(false);
-          void targets.add(alias).then((added) => { if (added) setOpen(false); });
+          // The added engine becomes the chosen one, so the terminal area is shown as for a chosen one.
+          void targets.add(alias).then((added) => {
+            if (!added) return;
+            setOpen(false);
+            onShowTerminal();
+          });
         }}
         onClose={() => setPicking(false)}
       />

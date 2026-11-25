@@ -1,8 +1,8 @@
 import type { DragEvent } from "react";
 import { useTranslate } from "../../i18n/context";
 import { Icon } from "../../ui/icons";
+import { IconButton } from "../../ui/IconButton";
 
-const buttonClass = "flex size-7 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-hover hover:text-ink";
 
 // Moving and focusing a pane are shown with the pointer on its header (or while in use), so the
 // header keeps the design's three actions: search, more, close.
@@ -25,32 +25,22 @@ export function PaneToolbar({ title, moving, focusMode, onSwap, onDragStart, onD
   const removeLabel = t("splitView.removePane", { title });
   return (
     <div className="flex shrink-0 items-center gap-0.5" data-pane-toolbar>
-      <button
-        type="button"
+      <IconButton label={swapLabel} size="toolbar" tone="plain" className={`cursor-grab ${moving ? "bg-select-fill text-accent" : `text-ink-faint hover:text-ink ${revealOnHeaderHover}`}`}
         draggable
         aria-pressed={moving}
-        aria-label={swapLabel}
-        title={swapLabel}
-        className={`${buttonClass} cursor-grab ${moving ? "bg-select-fill text-accent" : revealOnHeaderHover}`}
         onClick={onSwap}
         onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-      >
+        onDragEnd={onDragEnd}>
         <Icon name="movePane" className="size-[15px]" />
-      </button>
-      <button
-        type="button"
+      </IconButton>
+      <IconButton label={focusLabel} size="toolbar" tone="faint" className={focusMode ? "" : revealOnHeaderHover}
         aria-pressed={focusMode}
-        aria-label={focusLabel}
-        title={focusLabel}
-        className={`${buttonClass} ${focusMode ? "" : revealOnHeaderHover}`}
-        onClick={onFocusMode}
-      >
+        onClick={onFocusMode}>
         <Icon name="focus" className="size-[15px]" />
-      </button>
-      <button type="button" aria-label={removeLabel} title={removeLabel} className={buttonClass} onClick={onRemove}>
+      </IconButton>
+      <IconButton label={removeLabel} size="toolbar" tone="faint" onClick={onRemove}>
         <Icon name="close" className="size-[15px]" />
-      </button>
+      </IconButton>
     </div>
   );
 }

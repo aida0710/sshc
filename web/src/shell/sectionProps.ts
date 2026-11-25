@@ -42,7 +42,8 @@ export type Shell = {
   // onShowInspector opens the details pane, for a page whose user just chose what to see in it.
   onShowInspector: () => void;
   terminalSessions: TerminalSessionsState;
-  onShowSession: (id: string) => void;
+  // runTarget is the engine new sessions open on; null is this machine.
+  runTarget: string | null;
   // onOpenSSHSession は、接続を開いてからそのターミナルを表示する。cwd は開始位置である。
   onOpenSSHSession: (alias: string, cwd?: string) => Promise<void>;
   // onOpenSSHSessions opens a session for each of aliases, in that order, and shows the first.

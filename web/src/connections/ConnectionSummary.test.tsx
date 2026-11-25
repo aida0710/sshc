@@ -141,7 +141,6 @@ describe("ConnectionSummary", () => {
     );
 
     expect(screen.getByText("ops@203.0.113.10:2222")).toBeInTheDocument();
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     expect(screen.getByText(/Save or discard this draft/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(onConnect).not.toHaveBeenCalled();

@@ -11,26 +11,38 @@ import { defaultBindings, shortcutActions, shortcutKey, type Bindings, type Shor
 import { shortcutActionLabels } from "./shortcutActionLabels";
 import { maxShortcutPresetNameLength, maxShortcutPresets } from "../rules/shortcuts.generated";
 import { LibraryPresetChooser } from "../settings/LibraryPresetChooser";
+import { useDraftPart, useSettingsDraft } from "../settings/settingsDraftContext";
+import { sameContents } from "../ui/jsonContents";
 import { isImeComposing } from "../ui/imeComposition";
 
 // presetId is the settings preset being edited: the shortcut preset chosen here is the one it uses.
-export function KeyConfig({ presetId }: { presetId?: string } = {}) {
+export function KeyConfig({ presetId }: { presetId: string }) {
   const t = useTranslate();
-  const bindings = useBindings(presetId);
-  const library = usePresets(presetId);
+  const { document } = useSettingsDraft();
+  const savedBindings = useBindings(presetId, document);
+  const library = usePresets(presetId, document);
   const unavailable = library.loading || library.busy || library.error;
   const [recording, setRecording] = useState<ShortcutAction | null>(null);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  // draft is the shortcuts as edited, or null while they are as saved.
+  const [draft, setDraft] = useState<Bindings | null>(null);
+  const bindings = draft ?? savedBindings;
+  const edited = draft !== null && !sameContents(draft, savedBindings);
+  useDraftPart({
+    dirty: edited,
+    save: async () => {
+      if (draft === null) return;
+      await savePresetBindings(draft, t("shortcuts.newPresetName"), presetId);
+      // What was changed while it was being saved is still to be saved.
+      setDraft((current) => current === draft ? null : current);
+    },
+    discard: () => { setDraft(null); setError(""); },
+  });
 
-  async function save(next: Bindings) {
-    setMessage("");
+  function change(next: Bindings) {
     setError("");
-    try {
-      await savePresetBindings(next, t("shortcuts.newPresetName"), presetId);
-      setRecording(null);
-      setMessage(t("shortcuts.saved"));
-    } catch { setError(t("shortcuts.saveFailed")); }
+    setRecording(null);
+    setDraft(next);
   }
 
   return <div data-shortcut-editor className="flex flex-col gap-5">
@@ -51,8 +63,9 @@ export function KeyConfig({ presetId }: { presetId?: string } = {}) {
         }}
         limits={{ presets: maxShortcutPresets, nameLength: maxShortcutPresetNameLength }}
         copyNamed={(id, name) => ({ id, name, bindings })}
-        onReset={() => save(defaultBindings)}
-        onError={(failure) => { setMessage(""); setError(failure); }}
+        edited={edited}
+        onReset={() => change(defaultBindings)}
+        onError={setError}
       />
       <p className="mb-1 mt-3 text-xs leading-[18px] text-ink-faint">{t("shortcuts.hint")}</p>
       <fieldset disabled={unavailable}>
@@ -61,7 +74,7 @@ export function KeyConfig({ presetId }: { presetId?: string } = {}) {
           <div className="flex items-center gap-2">
             <button type="button" aria-label={t("shortcuts.assign", { action: t(shortcutActionLabels[action]) })}
               className={`${sizedControl("w-full max-w-xs")} text-left`}
-              onClick={() => { setRecording(action); setError(""); setMessage(""); }}
+              onClick={() => { setRecording(action); setError(""); }}
               onBlur={() => setRecording(null)}
               onKeyDown={(event) => {
                 if (recording !== action || isImeComposing(event)) return;
@@ -74,16 +87,16 @@ export function KeyConfig({ presetId }: { presetId?: string } = {}) {
                 if (key === null) return;
                 const conflict = shortcutActions.find((other) => other !== action && bindings[other].includes(key));
                 if (conflict !== undefined) { setError(t("shortcuts.conflict", { action: t(shortcutActionLabels[conflict]) })); return; }
-                void save({ ...bindings, [action]: [key] });
+                change({ ...bindings, [action]: [key] });
               }}>
               {recording === action ? t("shortcuts.recording") : bindings[action].map(shortcutLabel).join(" / ") || t("shortcuts.unassigned")}
             </button>
-            <Button small onClick={() => { void save({ ...bindings, [action]: [] }); }} disabled={bindings[action].length === 0}
+            <Button small onClick={() => change({ ...bindings, [action]: [] })} disabled={bindings[action].length === 0}
               aria-label={t("shortcuts.clearAction", { action: t(shortcutActionLabels[action]) })}>{t("shortcuts.clear")}</Button>
           </div>
         </FieldRow>)}
       </fieldset>
     </PageSection>
-    <div aria-live="polite">{error ? <Notice tone="danger">{error}</Notice> : message ? <p role="status" className="text-sm text-ink-muted">{message}</p> : null}</div>
+    <div aria-live="polite">{error ? <Notice tone="danger">{error}</Notice> : null}</div>
   </div>;
 }

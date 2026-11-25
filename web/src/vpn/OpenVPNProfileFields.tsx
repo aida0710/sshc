@@ -67,13 +67,13 @@ export function OpenVPNProfileFields({
           </>
         }
       />
-      <FieldRow label={t("vpn.username")} hint={t("vpn.openVPNUsernameHint")} warning={errorFor("openvpn.username")}>
+      <FieldRow label={t("vpn.username")} hint={t("vpn.openVPNUsernameHint")} error={errorFor("openvpn.username")}>
         <input {...asciiTextEntry} className={control} value={username} onChange={(event) => onUsername(event.target.value)} />
       </FieldRow>
       <FieldRow
         label={t("vpn.password")}
         hint={t(keepsPassword && password === "" ? "vpn.secretKeepHint" : "vpn.openVPNPasswordHint")}
-        warning={errorFor("secrets.openvpnPassword")}
+        error={errorFor("secrets.openvpnPassword")}
         interactiveChildren
       >
         <PasswordInput label={t("vpn.password")} value={password} onChange={onPassword} />

@@ -3,8 +3,9 @@ import type { RemoteEnginesApi } from "../api/remoteEngines";
 import { useTranslate } from "../i18n/context";
 import { CommandOutput } from "../ui/CommandOutput";
 import { Spinner } from "../ui/Spinner";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { useElapsedSeconds } from "../ui/useElapsedSeconds";
+import { RunTargetProblemNotice } from "./RunTargetProblemNotice";
 import { useEngineInfo } from "./useEngineInfo";
 
 // RunTargetEngineUpdate shows the two sshc versions that do not work together
@@ -54,14 +55,14 @@ export function RunTargetEngineUpdate({
           {t("runTarget.updateProgress", { alias, seconds: String(elapsed) })}
         </p>
       ) : null}
-      {info.actionProblem === "" ? null : <p role="alert" className="break-words text-sm text-danger">{info.actionProblem}</p>}
-      {info.lastResult === null ? null : succeeded
-        ? <p role="status" className="text-sm text-ink">{t("engineInfo.updated")}</p>
-        : <p role="alert" className="text-sm text-danger">{t("engineInfo.actionFailed")}</p>}
+      {info.actionProblem === null ? null : <RunTargetProblemNotice problem={{ ...info.actionProblem, alias }} showAlias={false} />}
+      {info.lastResult === null ? null : (
+        <Notice tone={succeeded ? "success" : "danger"}>{t(succeeded ? "engineInfo.updated" : "engineInfo.actionFailed")}</Notice>
+      )}
       <CommandOutput output={info.output} label={t("engineInfo.output")} />
       <div className="flex flex-wrap gap-2">
         <Button kind="primary" busy={updating} disabled={info.running !== null} onClick={() => void info.run("update")}>
-          {updating ? t("runTarget.updating", { alias }) : t("runTarget.update", { alias })}
+          {t("runTarget.update", { alias })}
         </Button>
         {children}
       </div>

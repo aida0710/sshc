@@ -1,11 +1,11 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useRef, useState } from "react";
 import { AndroidSaveCancelled } from "../android/native";
 import { useTranslate } from "../i18n/context";
 import type { BrowserSave } from "../ui/saveFile";
-import { sftpApi } from "./api";
 import { localHostAlias } from "./localHost";
 import { sftpProblemText } from "./sftpProblemText";
-import { sftpTransferManager } from "./transferManager";
 
 // A size the transfer job learns from the engine once the download starts.
 // The preview never listed the file, so it has no size to give.
@@ -19,6 +19,8 @@ const unknownTotalBytes = -1;
 // The browser may read a local save's blob after the save returns, so the
 // blobs are released when the preview closes, not before.
 export function usePreviewDownload(alias: string): { download: (path: string) => void; problem: string } {
+  const sftpTransferManager = useSftpTransferManager();
+  const { sftp: { files: sftpApi } } = useEngineApis();
   const t = useTranslate();
   const [problem, setProblem] = useState("");
   const saves = useRef<BrowserSave[]>([]);

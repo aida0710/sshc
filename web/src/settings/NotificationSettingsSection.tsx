@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { useRestingSave } from "./useRestingSave";
-import { useSettings } from "./settingsStore";
+import { useEffect, useState } from "react";
+import { usePresetInterfaceEdit, useSettingsDraft } from "./settingsDraftContext";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import {
   notificationSoundOf,
   notificationSoundPresets,
   playNotificationSound,
-  saveNotificationSoundPreferences,
+  withNotificationSound,
   type NotificationSoundPreferences,
   type NotificationSoundPreset,
 } from "../terminal/notificationSound";
@@ -50,12 +49,9 @@ export function NotificationSettingsSection({ presetId, showHeading }: { presetI
   const t = useTranslate();
   const [permission, setPermission] = useState<BrowserNotificationPermission>(() => browserNotificationPermission());
   const request = useAsyncOperation();
-  const settingsDocument = useSettings().document;
-  const preset = settingsDocument?.presets.find((candidate) => candidate.id === presetId);
-  const storedSounds = useMemo(() => notificationSoundOf(preset ?? { id: presetId }), [preset, presetId]);
-  // sounds is what the controls show while a change has not been saved yet.
-  const [sounds, setSounds] = useState<NotificationSoundPreferences>(storedSounds);
-  useEffect(() => setSounds(storedSounds), [storedSounds]);
+  const preset = useSettingsDraft().document?.presets.find((candidate) => candidate.id === presetId);
+  const sounds = notificationSoundOf(preset ?? { id: presetId });
+  const editInterface = usePresetInterfaceEdit(presetId);
 
   useEffect(() => {
     const refreshPermission = () => setPermission(browserNotificationPermission());
@@ -63,13 +59,8 @@ export function NotificationSettingsSection({ presetId, showHeading }: { presetI
     return () => window.removeEventListener("focus", refreshPermission);
   }, []);
 
-  const saveSounds = useRestingSave((next: NotificationSoundPreferences) => {
-    void saveNotificationSoundPreferences(next, presetId).catch(() => undefined);
-  });
-
   function changeSounds(next: NotificationSoundPreferences) {
-    setSounds(next);
-    saveSounds(next);
+    editInterface("notificationSound", (current) => withNotificationSound(current, next));
   }
 
   async function enableOrTest() {

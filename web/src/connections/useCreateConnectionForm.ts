@@ -1,7 +1,8 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState, type FormEvent } from "react";
 import { failureCode } from "../api/client";
 import {
-  configApi,
+  type ConfigApi,
   type Overview,
   type CreateConnectionAuthentication,
   type CreateConnectionRequest,
@@ -10,18 +11,18 @@ import {
 import type { Credential } from "../api/credentials";
 import type { PasswordVaultStatus } from "../api/vault";
 import { useTranslate } from "../i18n/context";
-import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
+import { selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
 import { isValidHostName } from "../rules/rules";
 import { connectionAliasFromHostName, uniqueConnectionAlias } from "./connectionAliasFromHost";
 import { authenticationNeedsVault, noProxyJump, type CreateConnectionAuthenticationKind, type CreateConnectionDraft } from "./createConnectionDraft";
 import { groupDefaultValue } from "./groupDefaults";
 import { createConnectionFieldErrors } from "./createConnectionValidation";
-import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
+import { type ConnectionSecretsApi } from "./secretsApi";
 import { openVaultCredentials, readVaultCredentials } from "./vaultCredentials";
 
 export type CreateConnectionFormOptions = {
-  config?: Pick<typeof configApi, "createConnection">;
+  config?: Pick<ConfigApi, "createConnection">;
   keys?: Pick<KeysApi, "inventory">;
   secrets?: Pick<ConnectionSecretsApi, "passwordVault" | "credentials" | "initialiseVault" | "unlockVault">;
   initialDraft?: CreateConnectionDraft | undefined;
@@ -42,15 +43,19 @@ function optional(value: string): string | undefined {
 // useCreateConnectionForm は、新しい接続の欄の値と、認証の選択肢の読み込み、Vault を開くこと、作成の要求を持つ。
 // 欄の見た目は CreateConnectionPane が持つ。
 export function useCreateConnectionForm({
-  config = configApi,
-  keys = keysApi,
-  secrets = connectionSecretsApi,
+  config: configOverride,
+  keys: keysOverride,
+  secrets: secretsOverride,
   initialDraft,
   groups,
   aliases = noAliases,
   onCreated,
 }: CreateConnectionFormOptions) {
   const t = useTranslate();
+  const engineApis = useEngineApis();
+  const config = configOverride ?? engineApis.config;
+  const keys = keysOverride ?? engineApis.keys;
+  const secrets = secretsOverride ?? engineApis.secrets;
   const [alias, setAlias] = useState(initialDraft?.alias ?? "");
   const [group, setGroup] = useState(initialDraft?.group ?? "");
   const [hostName, setHostName] = useState(initialDraft?.hostName ?? "");

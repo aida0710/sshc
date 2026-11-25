@@ -1,3 +1,4 @@
+import { useEngineApis } from "../shell/engineApis";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../ui/icons";
 import type { HostEntry } from "../api/config";
@@ -25,6 +26,7 @@ import {
   activeTab, addTab, allTabs, blankTab, canSplit, changeTabView, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab, swapPanes,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
+import { IconButton } from "../ui/IconButton";
 
 // Why closing a tab waits for a confirmation, and what the dialog names.
 type CloseTabIntent =
@@ -88,7 +90,9 @@ export function SFTPWorkspace({
   onOpenTerminal?: (alias: string, path: string) => void | Promise<void>;
 }) {
   const t = useTranslate();
-  const [panes, setPanes] = useState<SFTPPane[]>(restorePanes);
+  // The section is mounted anew for another engine (its key in sections.tsx), so the engine does not change under it.
+  const { runTarget } = useEngineApis();
+  const [panes, setPanes] = useState<SFTPPane[]>(() => restorePanes(runTarget));
   const [splitRatio, changeSplitRatio] = useStoredValue(sftpSplitRatio);
   const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0]?.id ?? "");
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
@@ -109,7 +113,7 @@ export function SFTPWorkspace({
   // directory, later navigation inside it must not be pulled back. A tab that held a connection when the person
   // last left the section reopens connected (tabsConnectedOnLeaving.ts).
   const restoring = useRef(new Map<string, RestoredSFTPLocation>(panes.flatMap((pane, paneIndex) => pane.tabs.map((tab, tabIndex) =>
-    [tab.id, { alias: tab.alias, path: tab.path, ...(wasConnectedOnLeaving(paneIndex, tabIndex, tab.alias) ? { connect: true } : {}) }] as const))));
+    [tab.id, { alias: tab.alias, path: tab.path, ...(wasConnectedOnLeaving(runTarget, { paneIndex, tabIndex, alias: tab.alias }) ? { connect: true } : {}) }] as const))));
   const blockers = useRef(new Map<string, NavigationBlocker>());
   const visibleSplit = panes.length > 1 && !compactViewport;
   const leftPane = panes[0] ?? null;
@@ -121,13 +125,13 @@ export function SFTPWorkspace({
   const comparable = (tab: SFTPTab | null) => tab !== null && (tab.alias === localHostAlias || connectedTabs.has(tab.id));
   const comparisonTabs = allTabs(panes).filter(comparable);
 
-  useEffect(() => { rememberPanes(panes); }, [panes]);
+  useEffect(() => { rememberPanes(runTarget, panes); }, [runTarget, panes]);
 
   // Which tabs held a connection is read as the section is taken down. A layout effect's cleanup runs before the
   // panels' own cleanups, which report each of them as no longer connected.
   const shownOnLeaving = useRef({ panes, connectedTabs });
   shownOnLeaving.current = { panes, connectedTabs };
-  useLayoutEffect(() => () => rememberTabsConnectedOnLeaving(shownOnLeaving.current.panes, shownOnLeaving.current.connectedTabs), []);
+  useLayoutEffect(() => () => rememberTabsConnectedOnLeaving(runTarget, shownOnLeaving.current.panes, shownOnLeaving.current.connectedTabs), [runTarget]);
 
   useEffect(() => {
     if (draggedTabId !== null && findTab(panes, draggedTabId) === null) setDraggedTabId(null);
@@ -371,11 +375,10 @@ export function SFTPWorkspace({
   const boardFrame = "rounded-lg border border-line bg-sidebar shadow-pane";
   const boardLook = `overflow-hidden ${boardFrame}`;
   const compactComparisonButton = canCompare ? (
-    <button type="button" aria-label={t("sftp.compare.heading")} title={t("sftp.compare.heading")}
-      onClick={requestComparison}
-      className="flex min-h-12 w-12 shrink-0 items-center justify-center rounded-md text-sm text-ink-muted hover:bg-card/50 hover:text-ink">
+    <IconButton label={t("sftp.compare.heading")} size="barLarge" ground="card"
+      onClick={requestComparison}>
       <Icon name="arrowLeftRight" className="size-5" />
-    </button>
+    </IconButton>
   ) : null;
 
   function renderPane(pane: SFTPPane, index: number) {

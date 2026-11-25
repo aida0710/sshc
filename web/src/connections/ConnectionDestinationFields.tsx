@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import { FieldProblems, type FieldProblem } from "../ui/FieldProblems";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { asciiTextEntry } from "../ui/softKeyboard";
@@ -41,20 +42,35 @@ function sourceTitle(state: BasicFieldState, t: Translate): string {
   return t("conn.basicInheritedFrom", { path, line: state.source?.line ?? 0 });
 }
 
-function DestinationInput({ name, entry, numeric = false }: { name: DestinationName; entry: DestinationEntry; numeric?: boolean }) {
+// destinationProblem は、欄の問題の文。書き方が込み入っていて編集できない欄は、誤りではないので注意（琥珀）にする。
+function destinationProblem(t: Translate, name: DestinationName, entry: DestinationEntry, id: string): FieldProblem {
+  const complex = entry.draft.state.origin === "complex";
+  return {
+    id,
+    field: t(labels[name].label),
+    text: complex ? t("conn.basicComplex", { keyword: entry.draft.state.keyword }) : entry.error,
+    tone: complex ? "notice" : "danger",
+  };
+}
+
+function DestinationInput({ name, entry, problem, numeric = false }: {
+  name: DestinationName;
+  entry: DestinationEntry;
+  // problem は、この欄の問題の文。文そのものは ConnectionDestinationFields が欄の並びの下に出す。
+  problem: FieldProblem;
+  numeric?: boolean;
+}) {
   const t = useTranslate();
   const id = useId();
-  const errorId = useId();
   const sourceId = useId();
-  const { draft: field, error, onChange } = entry;
+  const { draft: field, onChange } = entry;
   const complex = field.state.origin === "complex";
   const inherits = !complex && inheritsValue(field);
   // 書いてある値を外したときは、保存したあとに何を継承するかが、この画面には分からない。
   const placeholder = !inherits ? "" : field.inherit ? t("conn.basicInheritPlaceholder") : field.state.value;
   const tail = !inherits || field.inherit ? "" : t(field.state.origin === "default" ? "conn.basicDefaultTail" : "conn.basicInheritedTail");
   const canReset = !inherits && !complex && field.state.editable;
-  const warning = complex ? t("conn.basicComplex", { keyword: field.state.keyword }) : error;
-  const descriptions = [warning === "" ? "" : errorId, tail === "" ? "" : sourceId].filter((id) => id !== "").join(" ");
+  const descriptions = [problem.text === "" ? "" : problem.id, tail === "" ? "" : sourceId].filter((id) => id !== "").join(" ");
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <label htmlFor={id} className="text-xs text-ink-muted">{t(labels[name].label)}</label>
@@ -66,7 +82,8 @@ function DestinationInput({ name, entry, numeric = false }: { name: DestinationN
           value={inherits ? "" : field.value}
           placeholder={placeholder}
           disabled={!field.state.editable || complex}
-          aria-invalid={warning === "" ? undefined : true}
+          aria-invalid={problem.text === "" ? undefined : true}
+          data-field-tone={problem.tone === "notice" ? "notice" : undefined}
           aria-describedby={descriptions === "" ? undefined : descriptions}
           onChange={(event) => onChange(typedValue(field, event.target.value))}
           className={`${tail === "" ? control : inputWithTail} ${canReset ? resetButtonRoom : ""} font-mono`}
@@ -78,6 +95,7 @@ function DestinationInput({ name, entry, numeric = false }: { name: DestinationN
           </span>
         )}
         {canReset ? (
+          // icon-button-exempt: 入力欄の中、高さいっぱいに重ねる戻すボタン（右の角だけ丸め、載せたときだけ出す）。
           <button
             type="button"
             data-touch-compact
@@ -90,24 +108,37 @@ function DestinationInput({ name, entry, numeric = false }: { name: DestinationN
           </button>
         ) : null}
       </span>
-      {warning === "" ? null : <span id={errorId} aria-live="polite" className="text-xs leading-[18px] text-notice-ink">{warning}</span>}
     </div>
   );
 }
 
 // ConnectionDestinationFields は、基本タブの「接続先」の3つの欄（ホスト名・ユーザー・ポート）である。
 // 1行に並べ、狭い欄ではホスト名を1行に、ユーザーとポートを下の1行にする。継承した値と既定値は入力欄の
-// 見本の文字で見せ、自分で書いた値には右端に戻すボタンを出す。
+// 見本の文字で見せ、自分で書いた値には右端に戻すボタンを出す。欄の問題の文は、狭い欄の下で折り返さないよう、
+// 3つの欄の並びの下に幅いっぱいで出す。
 // The port column holds five digits beside the reset button. A phone draws the fields' text larger (16px, so that the
 // browser does not zoom into a field) and always shows the button, so there the column is wider.
 export function ConnectionDestinationFields({ hostName, user, port }: Record<DestinationName, DestinationEntry>) {
+  const t = useTranslate();
+  const problemIds = { hostName: useId(), user: useId(), port: useId() };
+  const problems = {
+    hostName: destinationProblem(t, "hostName", hostName, problemIds.hostName),
+    user: destinationProblem(t, "user", user, problemIds.user),
+    port: destinationProblem(t, "port", port, problemIds.port),
+  };
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_var(--port-column)] gap-x-2.5 gap-y-2 [--port-column:84px] mobile-layout:[--port-column:6.5rem] @sm/editor:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_var(--port-column)]">
-      <div className="col-span-2 @sm/editor:col-span-1">
-        <DestinationInput name="hostName" entry={hostName} />
+    <div>
+      <div className="grid grid-cols-[minmax(0,1fr)_var(--port-column)] gap-x-2.5 gap-y-2 [--port-column:84px] mobile-layout:[--port-column:6.5rem] @sm/editor:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_var(--port-column)]">
+        <div className="col-span-2 @sm/editor:col-span-1">
+          <DestinationInput name="hostName" entry={hostName} problem={problems.hostName} />
+        </div>
+        <DestinationInput name="user" entry={user} problem={problems.user} />
+        <DestinationInput name="port" entry={port} problem={problems.port} numeric />
       </div>
-      <DestinationInput name="user" entry={user} />
-      <DestinationInput name="port" entry={port} numeric />
+      {/* 編集できない理由は最初から出ているので、変わったときだけ控えめに読み上げる。 */}
+      <div aria-live="polite">
+        <FieldProblems className="mt-1.5" problems={[problems.hostName, problems.user, problems.port]} />
+      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Installation, openApplication, openSection, openSettingsPage, shellSays, test, openLocalShell } from "./support/environment";
+import { saveBar, saveSettings } from "./support/saveBar";
 import { metadataSchemaVersion, standardPresetMetadata } from "./support/settings";
-import type { Locator, Page, Response } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import {
   drawnRowCount,
   drawnRowFont,
@@ -67,26 +68,10 @@ async function openTerminalSettingsTab(region: Locator, name: "Display" | "Conne
   await region.getByRole("tab", { name, exact: true }).click();
 }
 
-// saveTerminalSettings waits for the change just made to be saved. The page has no Save button: a choice is
-// saved once it rests, and a typed field when it is left, which Tab does.
-async function saveTerminalSettings(page: Page, region: Locator): Promise<Response> {
-  const responsePromise = page.waitForResponse((response) => {
-    const request = response.request();
-    return new URL(response.url()).pathname === "/api/v1/settings/presets/default" && request.method() === "PUT";
-  });
-  await region.page().keyboard.press("Tab");
-  const response = await responsePromise;
-  expect(response.ok()).toBe(true);
-  return response;
-}
-
 test("opens a local shell, runs a command and shows its output", async ({ page, installation }) => {
   const violations = watchForPolicyViolations(page);
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  const emptyState = page.getByRole("heading", { name: "No session is open" }).locator("..");
-  await expect(emptyState.locator("[data-sshc-brand-mark]")).toBeVisible();
-  await expect(emptyState).not.toContainText(">_");
   await openSessionList(page);
   await openLocalShell(page);
 
@@ -103,16 +88,27 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
   expect(violations).toEqual([]);
 });
 
-test("opens the new session picker from the empty state and starts a local shell from it", async ({ page, installation }) => {
+test("with no session open the terminal's address shows Home, and closing the last session goes there too", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSection(page, "Terminal");
-  const main = page.getByRole("main");
-  await main.getByRole("button", { name: /^Open a session/ }).click();
+  await page.goto(`${new URL(page.url()).origin}/terminal`);
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/u);
+  // The foot of Home says which machine new sessions open on.
+  await expect(page.getByRole("main").getByLabel("The machine new shells open on")).toBeVisible();
 
-  const dialog = page.getByRole("dialog", { name: "New session" });
-  await dialog.getByRole("button", { name: /^Local shell, localhost/ }).click();
-  await expect(dialog).toBeHidden();
-  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
+  await openSessionList(page);
+  await openLocalShell(page);
+  const screen = page.getByRole("region", { name: /^Terminal for / });
+  await expect(screen).toBeVisible();
+  await expect(page).toHaveURL(/\/terminal$/u);
+
+  await page.getByRole("list", { name: "Open sessions" }).getByRole("button", { name: /^Close / }).click();
+  await page.getByRole("dialog", { name: /^Close / }).getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/u);
+  // Home took the terminal's place in the history: Back does not come to an empty terminal.
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/terminal$/u);
 });
 
 test("keeps image-backed terminal editing free of stale glyphs", async ({ page, installation }) => {
@@ -418,7 +414,7 @@ test("shows an open session again after a reload instead of claiming there are n
   await expect(page.getByRole("heading", { name: "sshc" })).toBeVisible();
 
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
-  await expect(page.getByText("No session is open")).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeHidden();
 });
 
 test("applies the session limit set from the settings screen", async ({ page, installation }) => {
@@ -427,7 +423,7 @@ test("applies the session limit set from the settings screen", async ({ page, in
 
   const region = await openLoadedTerminalSettings(page);
   await region.getByLabel("Sessions open at once").fill("1");
-  const saved = await saveTerminalSettings(page, region);
+  const saved = await saveSettings(page);
   expect(saved.request().postDataJSON()).toEqual(expect.objectContaining({
     preset: expect.objectContaining({ terminal: expect.objectContaining({ maxSessions: 1 }) }),
   }));
@@ -463,7 +459,7 @@ test("starts local shells where the setting says", async ({ page, installation }
   const region = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(region, "Behaviour");
   await region.getByLabel("Starting directory").fill("~/workspace");
-  await saveTerminalSettings(page, region);
+  await saveSettings(page);
 
   await openSessionList(page);
   await openLocalShell(page);
@@ -892,7 +888,7 @@ test("can turn automatic selection copy off for an already open session", async 
   const settings = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(settings, "Behaviour");
   await settings.getByRole("checkbox", { name: "Copy selected text automatically" }).uncheck();
-  await saveTerminalSettings(page, settings);
+  await saveSettings(page);
 
   await reopenFirstSession(panel);
   await page.evaluate(() => navigator.clipboard.writeText("clipboard-sentinel"));
@@ -1143,7 +1139,7 @@ test("paints the terminal in the colour scheme that was chosen", async ({ page, 
   const settings = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(settings, "Display");
   await settings.getByLabel("Colour scheme").selectOption("dracula");
-  await saveTerminalSettings(page, settings);
+  await saveSettings(page);
 
   await reopenFirstSession(panel);
   await expect.poll(surface).toBe("#282a36");
@@ -1166,7 +1162,7 @@ test("loads the font it ships and hands it to the terminal", async ({ page, inst
   const settings = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(settings, "Display");
   await settings.getByLabel("Font family").selectOption("jetbrains-mono");
-  await saveTerminalSettings(page, settings);
+  await saveSettings(page);
 
   await reopenFirstSession(panel);
   await expect.poll(family).toContain("JetBrains Mono");
@@ -1206,7 +1202,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   await expect(thumbnail).toBeVisible();
   await expect.poll(async () => thumbnail.evaluate((node) => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   await library.getByRole("button", { name: "Use this image", exact: true }).click();
-  await saveTerminalSettings(page, settings);
+  await saveSettings(page);
 
   await reopenFirstSession(panel);
   const wiring = {
@@ -1220,10 +1216,9 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   const cleared = await openLoadedTerminalSettings(page);
   await openTerminalSettingsTab(cleared, "Display");
   await cleared.getByRole("button", { name: "Clear", exact: true }).click();
-  const saved = await saveTerminalSettings(page, cleared);
+  const saved = await saveSettings(page);
   expect(saved.request().postDataJSON()).not.toHaveProperty("appearance");
-  // The settings page says a change was saved under the row it was made in.
-  await expect(cleared.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved your changes.", { exact: true })).toBeVisible();
 
   await reopenFirstSession(panel);
   await expect.poll(() => surfaceBackgroundImage(page)).toBe("none");
@@ -1285,9 +1280,10 @@ test("draws the terminals with the preset this machine uses", async ({ page, ins
   await region.getByLabel("Font size").fill("22");
   const presetSave = page.waitForResponse((response) =>
     new URL(response.url()).pathname.startsWith("/api/v1/settings/presets/") && response.request().method() === "PUT");
-  // Enter confirms a typed field as leaving it does.
+  // Enter in a one-line field saves as the button does.
   await region.getByLabel("Font size").press("Enter");
   expect((await presetSave).ok()).toBe(true);
+  await expect(saveBar(page)).toHaveCount(0);
   await page.getByRole("button", { name: "Use on this machine" }).click();
   await expect(page.getByText("In use here")).toBeVisible();
 

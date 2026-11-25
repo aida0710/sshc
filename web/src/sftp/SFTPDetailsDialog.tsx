@@ -1,10 +1,11 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useCallback, useId, type ReactNode, type RefObject } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { useLanguage } from "../i18n/context";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { Button } from "../ui/surface";
 import { localHostAlias } from "./localHost";
-import { sftpApi, type RemoteDirectoryStats, type RemoteEntry } from "./api";
+import { type RemoteDirectoryStats, type RemoteEntry } from "./api";
 import { formatBytes, formatDateTime } from "../ui/format";
 import { entryKind } from "./entryKind";
 import { entryTypeLabelKeys } from "./sftpMessageKeys";
@@ -59,6 +60,7 @@ export function SFTPDetailsDialog({
   onChangeOwnership?: ((entry: RemoteEntry) => void) | undefined;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
+  const { sftp: { files: sftpApi } } = useEngineApis();
   const { locale, t } = useLanguage();
   const headingId = useId();
   const mobileViewport = useMediaQuery(mobileViewportQuery);
@@ -83,7 +85,7 @@ export function SFTPDetailsDialog({
   // Only a remote directory has its size counted; anything else reads nothing.
   const readDirectoryStats = useCallback(
     async (): Promise<RemoteDirectoryStats | null> => directoryPath === null ? null : sftpApi.directoryStats(alias, directoryPath),
-    [alias, directoryPath],
+    [alias, directoryPath, sftpApi],
   );
   const directoryStatsLoad = useLoad(readDirectoryStats);
   const directoryStats = directoryStatsLoad.state === "loaded" ? directoryStatsLoad.value : null;

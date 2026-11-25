@@ -12,25 +12,26 @@ import { defaultRetainedTerminals, maxRetainedTerminals, minRetainedTerminals } 
 import { fonts } from "../ui/monospaceFonts";
 import { palettes } from "../terminal/palettes";
 import type { DescribableControlProps } from "../ui/describeControl";
+import { useFieldError } from "../ui/fieldError";
 import { FieldRow } from "../ui/FieldRow";
 import { CheckboxField, control, sizedControl } from "../ui/form";
-import { fontSizeRange } from "../terminal/fontSize";
-import { defaultMaxSessions, defaultReplayBufferKiB, maxSessionsRange, replayBufferKiBRange, type TerminalDraft } from "./terminalSettingsDraft";
+import { defaultFontSize, fontSizeRange } from "../terminal/fontSize";
+import { defaultMaxSessions, defaultReplayBufferKiB, maxSessionsRange, replayBufferKiBRange, type TerminalDraft, type TypedNumber } from "./terminalSettingsDraft";
 
 // The rows of Settings > Terminal, in the groups the page shows together: on a computer each group (or two)
-// is a tab, on a phone each is a card. All of them edit the one draft the page saves as it changes.
+// is a tab, on a phone each is a card. All of them edit the one draft.
 
-type GroupProps = {
+export type TerminalGroupProps = {
   draft: TerminalDraft;
-  // edit is a choice, saved at once; type is a key in a typed field, saved when the field is left.
   edit: (patch: Partial<TerminalDraft>) => void;
-  type: (patch: Partial<TerminalDraft>) => void;
+  // problems is what is wrong with a typed number, by its field.
+  problems: Partial<Record<TypedNumber["field"], string>>;
 };
 
 const unitText = "text-xs text-ink-muted";
 
 // The colour scheme, font, size and background image.
-export function TerminalLookFields({ draft, edit, type }: GroupProps) {
+export function TerminalLookFields({ draft, edit, problems }: TerminalGroupProps) {
   const t = useTranslate();
   return (
     <>
@@ -50,8 +51,8 @@ export function TerminalLookFields({ draft, edit, type }: GroupProps) {
           unchosen={t("terminal.fontFollowsSystem")}
         />
       </FieldRow>
-      <FieldRow label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint")}>
-        <FontSizeInput value={draft.fontSize} onChange={(next) => type({ fontSize: next })} />
+      <FieldRow label={t("terminal.fontSizeLabel")} hint={t("terminal.fontSizeHint", { size: defaultFontSize })} error={problems.fontSize}>
+        <FontSizeInput value={draft.fontSize} onChange={(next) => edit({ fontSize: next })} />
       </FieldRow>
       <FieldRow label={t("terminal.backgroundLabel")} hint={t("terminal.backgroundHint")} interactiveChildren>
         <BackgroundPicker
@@ -80,7 +81,7 @@ function FontSizeInput({ value, onChange, ...description }: { value: string; onC
         {...description}
         className={`${sizedControl("w-[110px]")} font-mono`}
         value={value}
-        placeholder="15 / 13"
+        placeholder={String(defaultFontSize)}
         onChange={(event) => onChange(event.target.value)}
       />
       <span aria-hidden="true" className={unitText}>px</span>
@@ -89,7 +90,7 @@ function FontSizeInput({ value, onChange, ...description }: { value: string; onC
 }
 
 // The limits on one row. Reconnecting and the connection log are global settings (GeneralSettingsSection).
-export function TerminalConnectionFields({ draft, edit, type }: GroupProps) {
+export function TerminalConnectionFields({ draft, edit, problems }: TerminalGroupProps) {
   const t = useTranslate();
   return (
     <>
@@ -98,7 +99,7 @@ export function TerminalConnectionFields({ draft, edit, type }: GroupProps) {
         hint={t("terminal.limitsHint")}
         interactiveChildren
       >
-        <TerminalLimitInputs draft={draft} edit={edit} type={type} />
+        <TerminalLimitInputs draft={draft} edit={edit} problems={problems} />
       </FieldRow>
     </>
   );
@@ -110,8 +111,12 @@ const limitLabel = "col-span-3 grid grid-cols-subgrid items-center sm:inline-fle
 
 // TerminalLimitInputs are the four numbers in one sentence-like line. Each input keeps its full name (the
 // short words beside them only make sense together), and all four take the row's description.
-function TerminalLimitInputs({ draft, type, ...description }: GroupProps & DescribableControlProps) {
+function TerminalLimitInputs({ draft, edit, problems, ...description }: TerminalGroupProps & DescribableControlProps) {
   const t = useTranslate();
+  const maxSessions = useFieldError(problems.maxSessions ?? "", description);
+  const scrollback = useFieldError(problems.scrollback ?? "", description);
+  const browserScrollback = useFieldError(problems.browserScrollbackLines ?? "", description);
+  const retainedTerminals = useFieldError(problems.retainedTerminals ?? "", description);
   return (
     <span className={`grid grid-cols-[max-content_max-content_minmax(0,1fr)] items-center gap-x-2 gap-y-2 sm:flex sm:flex-wrap sm:gap-x-[18px] ${unitText}`}>
       <label className={limitLabel}>
@@ -121,11 +126,11 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
           min={maxSessionsRange.min}
           max={maxSessionsRange.max}
           aria-label={t("terminal.maxSessionsLabel")}
-          {...description}
+          {...maxSessions}
           className={`${sizedControl("w-[72px]")} font-mono`}
           value={draft.maxSessions}
           placeholder={String(defaultMaxSessions)}
-          onChange={(event) => type({ maxSessions: event.target.value })}
+          onChange={(event) => edit({ maxSessions: event.target.value })}
         />
       </label>
       <label className={limitLabel}>
@@ -135,11 +140,11 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
           min={replayBufferKiBRange.min}
           max={replayBufferKiBRange.max}
           aria-label={t("terminal.scrollbackLabel")}
-          {...description}
+          {...scrollback}
           className={`${sizedControl("w-[84px]")} font-mono`}
           value={draft.scrollback}
           placeholder={String(defaultReplayBufferKiB)}
-          onChange={(event) => type({ scrollback: event.target.value })}
+          onChange={(event) => edit({ scrollback: event.target.value })}
         />
         KiB
       </label>
@@ -150,11 +155,11 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
           min={minBrowserScrollbackLines}
           max={maxBrowserScrollbackLines}
           aria-label={t("terminal.browserScrollbackLabel")}
-          {...description}
+          {...browserScrollback}
           className={`${sizedControl("w-[84px]")} font-mono`}
           value={draft.browserScrollbackLines}
           placeholder={String(defaultBrowserScrollbackLines)}
-          onChange={(event) => type({ browserScrollbackLines: event.target.value })}
+          onChange={(event) => edit({ browserScrollbackLines: event.target.value })}
         />
         {t("terminal.linesUnit")}
       </label>
@@ -165,11 +170,11 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
           min={minRetainedTerminals}
           max={maxRetainedTerminals}
           aria-label={t("terminal.retainedTerminalsLabel")}
-          {...description}
+          {...retainedTerminals}
           className={`${sizedControl("w-[64px]")} font-mono`}
           value={draft.retainedTerminals}
           placeholder={String(defaultRetainedTerminals)}
-          onChange={(event) => type({ retainedTerminals: event.target.value })}
+          onChange={(event) => edit({ retainedTerminals: event.target.value })}
         />
       </label>
     </span>
@@ -177,7 +182,7 @@ function TerminalLimitInputs({ draft, type, ...description }: GroupProps & Descr
 }
 
 // Where a local shell starts and which shell it is.
-export function TerminalStartFields({ draft, edit, type, profiles }: GroupProps & { profiles: LocalShellProfile[] }) {
+export function TerminalStartFields({ draft, edit, profiles }: TerminalGroupProps & { profiles: LocalShellProfile[] }) {
   const t = useTranslate();
   return (
     <>
@@ -188,7 +193,7 @@ export function TerminalStartFields({ draft, edit, type, profiles }: GroupProps 
           value={draft.startDirectory}
           spellCheck={false}
           placeholder="~/"
-          onChange={(event) => type({ startDirectory: event.target.value })}
+          onChange={(event) => edit({ startDirectory: event.target.value })}
         />
       </FieldRow>
       <FieldRow label={t("terminal.localShellProfileLabel")} hint={t("terminal.localShellProfileHint")}>
@@ -227,7 +232,7 @@ const switches: { key: Switch; label: MessageKey; hint: MessageKey }[] = [
 
 // The clipboard, keyboard and drawing switches, in two columns with a line between rows. The first row of
 // each column has no line above it, as the first row of a form.
-export function TerminalSwitches({ draft, edit }: GroupProps) {
+export function TerminalSwitches({ draft, edit }: TerminalGroupProps) {
   const t = useTranslate();
   return (
     <div className="grid lg:grid-cols-2 lg:gap-x-6">

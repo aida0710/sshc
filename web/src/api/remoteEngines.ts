@@ -25,11 +25,15 @@ export type RemoteEnginesApi = {
 
 const enginePath = (alias: string) => `/api/v1/engines/${encodeURIComponent(alias)}`;
 
+// 一覧は起動時と未読の印の定期取得が裏で読む。このマシンのエンジンに届かないだけなら次の取得で読み直せ、
+// エンジンが止まったときは画面がそれを示すので、共通の通知は出さない。
+const quietListFailures = ["network_request_failed"] as const;
+
 // The engines on SSH hosts added as run targets. This machine's engine
 // forwards their terminal API (see engineTerminalBase).
 export const remoteEnginesApi: RemoteEnginesApi = {
   async list() {
-    return validateOpenAPISchema<RemoteEngineList>("RemoteEngineList", await apiClient.read("/api/v1/engines"));
+    return validateOpenAPISchema<RemoteEngineList>("RemoteEngineList", await apiClient.read("/api/v1/engines", { locallyHandledCodes: quietListFailures }));
   },
   async add(alias) {
     validateOpenAPISchema("RemoteEngine", await postJSON<unknown>("/api/v1/engines", { alias }));
@@ -53,6 +57,14 @@ export const remoteEnginesApi: RemoteEnginesApi = {
     await postJSON<void>(`${enginePath(alias)}/vault/unlock`, { passphrase });
   },
 };
+
+// localApiBase is the API of this machine's engine. engineApiBase is the API of the engine a screen works with:
+// this machine's (runTarget null), or a run target's as this machine's engine forwards it. Only the routes this
+// machine's engine names are forwarded (registerRemoteEngineRoutes); what stays this machine's is never read with it.
+export const localApiBase = "/api/v1";
+export function engineApiBase(runTarget: string | null): string {
+  return runTarget === null ? localApiBase : enginePath(runTarget);
+}
 
 // engineTerminalBase is the terminal API of a run-target engine, as this
 // machine's engine forwards it; engineStreamPath is its terminal stream.
