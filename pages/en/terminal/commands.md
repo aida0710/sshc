@@ -9,7 +9,7 @@ Open Quick Commands from the terminal overflow menu to insert, run, or copy a sa
 
 ![Terminal Quick Commands menu](/images/terminal-actions.png)
 
-Create named commands and variables under Menu → Snippets. Secret variables are handled separately and the library is encrypted with the vault master key.
+Create named commands and variables under Menu → Snippets. Secret variables are handled separately and the library is encrypted with the vault master key. Changes to a snippet are saved from the bar at the bottom of the screen (the same bar as [saving settings](/en/reference/settings#saving-settings)).
 
 Execution has a preview step showing targets, expanded commands, and required inputs. If the terminal process changes after preview, sshc refuses to send to the replacement process.
 

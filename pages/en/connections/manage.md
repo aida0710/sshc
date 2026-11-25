@@ -45,7 +45,7 @@ Groups are folders: a group's connections live in `~/.ssh/connections/<group>/` 
 
 Move up and Move down change the order of groups at the same level. Hide in Connections works on a group with no connections directly in it. **Show hidden groups (〈count〉)** below the list brings hidden groups into view, and **Close hidden groups** hides them again. While shown they carry a **Hidden** mark, and **Stop hiding** in their **…** menu restores them.
 
-Selecting a group while no connection is open shows the group's editor on the right. Folders lists the files in the group's folder with their connections, its keys, and the `Include` line in `~/.ssh/config` that reads the folder. User name, Port, Key, and Jump host become defaults for the connections in that group; a value set on a connection itself wins.
+Selecting a group while no connection is open shows the group's editor on the right. Folders lists the files in the group's folder with their connections, its keys, and the `Include` line in `~/.ssh/config` that reads the folder. User name, Port, Key, and Jump host become defaults for the connections in that group; a value set on a connection itself wins. Changes in the group's editor are written only once they are saved from the bar at the bottom of the screen (the same bar as [saving settings](/en/reference/settings#saving-settings)).
 
 When a folder under `~/.ssh/connections/` has no `Include` line, or a group's folder is missing, Folder checks appears above the group column. Make it a group turns a folder without an `Include` line into a group.
 
