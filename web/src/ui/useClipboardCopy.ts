@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clipboard } from "./clipboard";
 
 // コピーの結果。押した直後にその場で見せる。
@@ -15,24 +15,22 @@ export const copiedVisibleMs = 2000;
 // idle へ戻す。断られたことは、次に押すか値が変わるまで残す。
 export function useClipboardCopy(value: string): { state: CopyState; copy: () => void } {
   const [state, setState] = useState<CopyState>("idle");
-  // copies は書けた回数。続けて押したときも、✓ を出す長さを数え直すために使う。
-  const [copies, setCopies] = useState(0);
+  // 戻す時計は、書けたときに始める。描画のあとの effect で始めると、描画が遅れた分だけ ✓ が長く残る。
+  const resetTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
+    window.clearTimeout(resetTimer.current);
     setState("idle");
   }, [value]);
 
-  useEffect(() => {
-    if (state !== "copied") return;
-    const timer = window.setTimeout(() => setState("idle"), copiedVisibleMs);
-    return () => window.clearTimeout(timer);
-  }, [state, copies]);
+  useEffect(() => () => window.clearTimeout(resetTimer.current), []);
 
   async function write() {
+    window.clearTimeout(resetTimer.current);
     try {
       await clipboard.writeText(value);
       setState("copied");
-      setCopies((count) => count + 1);
+      resetTimer.current = window.setTimeout(() => setState("idle"), copiedVisibleMs);
     } catch {
       setState("failed");
     }
