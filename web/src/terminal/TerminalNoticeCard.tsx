@@ -107,7 +107,7 @@ function EndedCard({ session, recovery, onCloseSession, frame }: {
     >
       {onCloseSession === undefined ? null : <Button onClick={onCloseSession} className={noticeCardButton}>{t("terminal.noticeCloseSession")}</Button>}
       {reconnects ? (
-        <Button kind="primary" busy={recovery.reconnectBusy} onClick={recovery.reconnect} className={noticeCardButton}>{t("terminal.manualReconnect")}</Button>
+        <Button kind="primary" busy={recovery.reconnectBusy} busyLabel={t("busy.connecting")} onClick={recovery.reconnect} className={noticeCardButton}>{t("terminal.manualReconnect")}</Button>
       ) : null}
     </NoticeFrame>
   );

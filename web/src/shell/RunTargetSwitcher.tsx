@@ -132,6 +132,7 @@ export function RunTargetSwitcher({
             {runTargetChoices(targets.engines).map((alias) => row(alias))}
           </ul>
           <div className="my-1 border-t border-line" />
+          {/* busy-label-exempt: メニューの行の形のボタン。Button の busyLabel と同じく、足している間は「接続中…」に替える。 */}
           <button
             type="button"
             disabled={targets.busy}
@@ -139,9 +140,8 @@ export function RunTargetSwitcher({
             onClick={() => setPicking(true)}
             className="flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink-muted hover:bg-hover md:min-h-7"
           >
-            {/* 足している間は、文言を変えずに＋を回る印に替える（Button の busy と同じ決まり）。 */}
             {targets.busy ? <Spinner /> : <Icon name="plus" className="size-3.5" aria-hidden="true" />}
-            {t("runTarget.add")}
+            {t(targets.busy ? "busy.connecting" : "runTarget.add")}
           </button>
         </div>
       ) : null}

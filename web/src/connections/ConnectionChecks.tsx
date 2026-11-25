@@ -90,10 +90,10 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   return (
     <section aria-label={t("conn.checksLabel")} className="flex flex-col gap-1.5 pt-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <Button small busy={busy === "reachability"} disabled={blocked} onClick={() => void checkReachability()} className="max-w-full whitespace-normal text-left">
+        <Button small busy={busy === "reachability"} busyLabel={t("busy.checking")} disabled={blocked} onClick={() => void checkReachability()} className="max-w-full whitespace-normal text-left">
           {t("conn.checkReachability")}
         </Button>
-        <Button small busy={busy === "authentication"} disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left">
+        <Button small busy={busy === "authentication"} busyLabel={t("busy.checking")} disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left">
           {t("conn.checkAuthentication")}
         </Button>
       </div>

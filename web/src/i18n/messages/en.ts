@@ -1,5 +1,11 @@
 export const en = {
   "ui.moreDetails": "More details",
+  // 待っている間のボタンの文言（Button の busyLabel）。押したボタンだけが、回る印とこの文言に替わる。
+  "busy.checking": "Checking…",
+  "busy.connecting": "Connecting…",
+  "busy.creating": "Creating…",
+  "busy.starting": "Starting…",
+  "busy.stopping": "Stopping…",
   "shortcuts.heading": "Keyboard shortcuts",
   "shortcuts.description": "Key bindings are shared by every machine. Each settings preset chooses the ones it uses.",
   "shortcuts.confirmDelete": "Delete these key bindings on all synced devices?",
@@ -1602,7 +1608,6 @@ export const en = {
   "about.checkedAt": "Last checked",
   "about.notChecked": "Not checked yet",
   "about.check": "Check for updates",
-  "about.checking": "Checking…",
   "about.activity": "Check and update progress",
   "about.activityChecking": "Checking GitHub for the latest release…",
   "about.activityLatest": "The latest release on GitHub is {version}.",

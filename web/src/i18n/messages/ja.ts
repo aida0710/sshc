@@ -2,6 +2,11 @@ import type { MessageKey } from "./en";
 
 export const ja = {
   "ui.moreDetails": "詳しく",
+  "busy.checking": "確認中…",
+  "busy.connecting": "接続中…",
+  "busy.creating": "作成中…",
+  "busy.starting": "開始中…",
+  "busy.stopping": "停止中…",
   "shortcuts.heading": "Keyboard shortcuts",
   "shortcuts.description": "キーの割り当てはすべてのマシンで共通です。どれを使うかは、設定のプリセットごとに選びます。",
   "shortcuts.confirmDelete": "同期しているすべてのマシンからこの割り当てを削除しますか？",
@@ -1601,7 +1606,6 @@ export const ja = {
   "about.checkedAt": "最後に確認した日時",
   "about.notChecked": "未確認",
   "about.check": "更新を確認",
-  "about.checking": "確認中…",
   "about.activity": "確認と更新の経過",
   "about.activityChecking": "GitHubで最新リリースを確認しています…",
   "about.activityLatest": "GitHubの最新リリースは{version}です。",

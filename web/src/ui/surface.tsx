@@ -232,9 +232,10 @@ type ButtonProps = (
   | { kind?: "secondary"; small?: boolean }
   | { kind: "primary" | "danger" | "dangerText"; small?: never }
 ) & {
-  // busy は、このボタンで始めた処理を待っている間。文言は変えずに回転の印を添え、
-  // aria-busy を付けて押せなくする（薄くはしない。index.css の決まり）。
+  // busy は、このボタンで始めた処理を待っている間。回転の印を添え、aria-busy を付けて押せなくする
+  // （薄くはしない。index.css の決まり）。busyLabel は待っている間の文言（「保存中…」）で、あれば文言を替える。
   busy?: boolean;
+  busyLabel?: string;
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -242,6 +243,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     kind = "secondary",
     small = false,
     busy = false,
+    busyLabel,
     disabled,
     className = "",
     type = "button",
@@ -273,7 +275,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...rest}
     >
       {busy ? <Spinner /> : null}
-      {children}
+      {busy && busyLabel !== undefined ? busyLabel : children}
     </button>
   );
 });

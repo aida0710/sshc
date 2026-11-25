@@ -111,8 +111,9 @@ describe("AboutPage", () => {
     let failCheck: (reason: Error) => void = () => {};
     vi.mocked(update.checkUpdate).mockImplementation(() => new Promise((_, reject) => { failCheck = reject; }));
     await userEvent.click(screen.getByRole("button", { name: "Check for updates" }));
-    expect(screen.getByRole("button", { name: "Check for updates" })).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("button", { name: "Check for updates" })).toBeDisabled();
+    // 確かめている間、ボタンは回る印と「確認中…」に替わる。
+    expect(screen.getByRole("button", { name: "Checking…" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
     expect(screen.queryByText(/is the latest/)).not.toBeInTheDocument();
     await act(async () => failCheck(new Error("offline")));
     expect(screen.getByText("Could not check for the latest release. The sshc engine did not return a result.")).toBeVisible();
@@ -171,7 +172,7 @@ describe("AboutPage", () => {
     let finish: (status: UpdateStatus) => void = () => {};
     vi.mocked(update.checkUpdate).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     render(<AboutPage api={api} updates={update} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Check for updates" })).toHaveAttribute("aria-busy", "true"));
+    expect(await screen.findByRole("button", { name: "Checking…" })).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByText("failed hours ago")).not.toBeInTheDocument();
     expect(screen.queryByText(/Could not check for the latest release/)).not.toBeInTheDocument();
 
