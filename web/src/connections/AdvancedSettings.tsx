@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { FieldEdit, FormField, HostDetail } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { forwardDirective, forwardHintKeys, forwardLabelKeys, forwardKindForKeyword, validForwardDestination, validForwardPort, type PortForwardKind } from "../forwarding/portForwarding";
@@ -41,9 +41,6 @@ const proxyJumpKeyword = "ProxyJump";
 
 // 1行の追加欄と表の行の、小さな文字の入力欄。
 const compactControl = `${control} h-[30px] py-0`;
-
-// Where a forward goes is the one part of its row that gets long, and a finger cannot hover over a title, so it wraps.
-const forwardTargetCell = "py-1.5 pr-2 font-mono [overflow-wrap:anywhere]";
 
 // AdvancedSettings は、接続エディタの「踏み台・転送・その他」のタブである。踏み台・ポート転送・その他の設定の
 // 3つの節に、Host ブロックのディレクティブを並べる。area が Raw のときは、ブロックの文を直接編集する。
@@ -239,37 +236,24 @@ export function AdvancedSettings({
         {forwardFields.length === 0 && pendingForwards.length === 0 ? <p className="pb-1 text-xs text-ink-faint">{t("conn.forwardNoneSaved")}</p> : (
           <table className="w-full table-fixed text-xs">
             <thead>
-              <tr className="text-left text-xs text-ink-faint">
-                <th scope="col" className="w-[6.5rem] pb-1.5 pr-2 font-normal">{t("conn.forwardType")}</th>
-                <th scope="col" className="w-[5rem] pb-1.5 pr-2 font-normal">{t("advanced.forwardListen")}</th>
+              <tr className="text-left align-top text-xs text-ink-faint">
+                <th scope="col" className="w-[6.5rem] pb-1.5 pr-2 font-normal">
+                  {t("conn.forwardType")}
+                  <span className="block @sm/editor:hidden">{t("advanced.forwardListen")}</span>
+                </th>
+                <th scope="col" className="hidden w-[5rem] pb-1.5 pr-2 font-normal @sm/editor:table-cell">{t("advanced.forwardListen")}</th>
                 <th scope="col" className="pb-1.5 pr-2 font-normal">{t("conn.forwardDestination")}</th>
                 <th scope="col" className="w-14 pb-1.5"><span className="sr-only">{t("advanced.rowActions")}</span></th>
               </tr>
             </thead>
             <tbody>
-              {forwardFields.map((field) => {
-                const ends = forwardEnds(field.values);
-                const gone = removed.includes(field.line);
-                return (
-                  <tr key={fieldKey(field)} className={`border-t border-line ${gone ? "text-ink-faint line-through" : "text-ink"}`}>
-                    <td className="truncate py-1.5 pr-2">{t(forwardLabelKeys[forwardKindForKeyword(field.keyword) ?? "local"])}</td>
-                    <td title={ends.listen} className="truncate py-1.5 pr-2 font-mono">{ends.listen}</td>
-                    <td className={forwardTargetCell}>{ends.target}</td>
-                    <td className="py-1.5 text-right">{removeButton(field)}</td>
-                  </tr>
-                );
-              })}
-              {pendingForwards.map((addition, index) => {
-                const ends = forwardEnds(addition.values ?? []);
-                return (
-                  <tr key={`new-forward-${index}`} className="border-t border-line text-ink">
-                    <td className="truncate py-1.5 pr-2">{t(forwardLabelKeys[forwardKindForKeyword(addition.keyword ?? "") ?? "local"])}</td>
-                    <td title={ends.listen} className="truncate py-1.5 pr-2 font-mono">{ends.listen}</td>
-                    <td className={forwardTargetCell}>{ends.target}<span className="ml-2 font-sans text-2xs text-notice-ink">{t("advanced.pending")}</span></td>
-                    <td className="py-1.5 text-right"><RemoveToggle removed={false} disabled={fieldsDisabled} label={addition.keyword ?? ""} onToggle={() => setAdditions(additions.filter((candidate) => candidate !== addition))} /></td>
-                  </tr>
-                );
-              })}
+              {forwardFields.map((field) => (
+                <ForwardRow key={fieldKey(field)} keyword={field.keyword} values={field.values} removed={removed.includes(field.line)} action={removeButton(field)} />
+              ))}
+              {pendingForwards.map((addition, index) => (
+                <ForwardRow key={`new-forward-${index}`} keyword={addition.keyword ?? ""} values={addition.values ?? []} pending
+                  action={<RemoveToggle removed={false} disabled={fieldsDisabled} label={addition.keyword ?? ""} onToggle={() => setAdditions(additions.filter((candidate) => candidate !== addition))} />} />
+              ))}
             </tbody>
           </table>
         )}
@@ -336,6 +320,27 @@ export function AdvancedSettings({
         />
       ) : null}
     </section>
+  );
+}
+
+// ForwardRow は、ポート転送の表の1行である。狭い入れ物（スマホ、細い右の欄）では、待ち受けを種類の下に重ね、転送先に
+// 幅を残す。長くなるのは転送先だけで、指では title を読めないので、転送先は折り返す。
+function ForwardRow({ keyword, values, removed = false, pending = false, action }: { keyword: string; values: string[]; removed?: boolean; pending?: boolean; action: ReactNode }) {
+  const t = useTranslate();
+  const ends = forwardEnds(values);
+  return (
+    <tr className={`border-t border-line ${removed ? "text-ink-faint line-through" : "text-ink"}`}>
+      <td className="py-1.5 pr-2">
+        <span className="block truncate">{t(forwardLabelKeys[forwardKindForKeyword(keyword) ?? "local"])}</span>
+        <span title={ends.listen} className="block truncate font-mono @sm/editor:hidden">{ends.listen}</span>
+      </td>
+      <td title={ends.listen} className="hidden truncate py-1.5 pr-2 font-mono @sm/editor:table-cell">{ends.listen}</td>
+      <td className="py-1.5 pr-2 font-mono [overflow-wrap:anywhere]">
+        {ends.target}
+        {pending ? <span className="ml-2 font-sans text-2xs text-notice-ink">{t("advanced.pending")}</span> : null}
+      </td>
+      <td className="py-1.5 text-right">{action}</td>
+    </tr>
   );
 }
 

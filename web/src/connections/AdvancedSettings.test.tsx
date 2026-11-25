@@ -206,7 +206,7 @@ describe("AdvancedSettings", () => {
       { line: 4, keyword: "RemoteForward", values: ["9080", "127.0.0.1:3000"], category: "advanced", editable: true },
     ] } };
     const harness = renderAdvanced("Settings", saved);
-    expect(screen.getByRole("row", { name: /Remote tunnel 9080 127\.0\.0\.1:3000/ })).toBeVisible();
+    expect(screen.getByRole("row", { name: /Remote tunnel.*9080 127\.0\.0\.1:3000/ })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Remove RemoteForward" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(harness.props.onFieldEdits).toHaveBeenCalledWith([{ action: "remove", line: 4 }]);
