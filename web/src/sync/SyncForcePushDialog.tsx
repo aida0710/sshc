@@ -62,6 +62,7 @@ export function SyncForcePushDialog({
           <Button
             kind="danger"
             busy={busy}
+            busyLabel={t("busy.replacing")}
             disabled={!confirmed || !keyConfigured || message.trim() === ""}
             onClick={onSubmit}
             className="self-start"

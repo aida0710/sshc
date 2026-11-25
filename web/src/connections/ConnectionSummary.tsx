@@ -38,7 +38,7 @@ export function ConnectionSummary({
   const { phoneActionsSlot } = useContext(PageChromeContext);
   const headerActions = (
     <>
-      <Button kind="primary" className="shrink-0" busy={connecting} disabled={blocked || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect}>
+      <Button kind="primary" className="shrink-0" busy={connecting} busyLabel={t("busy.connecting")} disabled={blocked || !connectAvailable} aria-describedby={blocked ? reasonId : undefined} onClick={onConnect}>
         {t("conn.connect")}
       </Button>
       <ActionMenu

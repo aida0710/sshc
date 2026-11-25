@@ -55,7 +55,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
 
       <EditorSection title={t("conn.analysisAuthoritative")}>
         <div className="flex flex-col gap-3">
-          <Button className="self-start" busy={inspection.busy} disabled={disabled} onClick={() => void inspect()}>
+          <Button className="self-start" busy={inspection.busy} busyLabel={t("busy.checking")} disabled={disabled} onClick={() => void inspect()}>
             {t("conn.analysisRun")}
           </Button>
           {inspection.error === "" ? null : <Notice tone="danger">{inspection.error}</Notice>}

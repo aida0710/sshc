@@ -308,6 +308,7 @@ export function WorkspaceCommandCenter({
             <Button
               className="self-start"
               busy={running === "preview"}
+              busyLabel={t("busy.checking")}
               disabled={busy || request() === null}
               onClick={() => void makePreview()}
             >
@@ -336,6 +337,7 @@ export function WorkspaceCommandCenter({
               kind="primary"
               className="mt-3"
               busy={running === "send"}
+              busyLabel={t("busy.sending")}
               disabled={busy}
               onClick={() => void run()}
             >

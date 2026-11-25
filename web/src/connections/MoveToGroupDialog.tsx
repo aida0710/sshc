@@ -50,6 +50,7 @@ export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCan
           const moving = move.pending && picked === row.name;
           return (
             <li key={row.name || "ungrouped"}>
+              {/* busy-label-exempt: 行の名前はグループ名なので残し、右の端に回る印と「移動中…」を添える。 */}
               <button
                 type="button"
                 disabled={row.name === currentGroup || move.pending}
@@ -63,7 +64,7 @@ export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCan
               >
                 <Icon name="groups" className="size-4 text-ink-faint" />
                 <span title={row.label} className="min-w-0 flex-1 truncate">{row.label}</span>
-                {moving ? <Spinner /> : null}
+                {moving ? <span className="flex shrink-0 items-center gap-2 text-ink-muted"><Spinner />{t("busy.moving")}</span> : null}
               </button>
             </li>
           );

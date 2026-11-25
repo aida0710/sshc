@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient, ApiError } from "../api/client";
 import { fakeSettingsServer, settingsDocument, testMachineId } from "../testing/settingsServer";
 import { captureNavigationBlocker } from "../testing/navigationBlocker";
-import { discardSettings, saveBar, saveButton, saveSettings } from "../testing/settingsDraft";
+import { discardSettings, saveBar, saveButton, saveSettings, savingButton } from "../testing/settingsDraft";
 import { vaultStatus } from "../testing/vaultStatus";
 import { ToastProvider } from "../ui/ToastProvider";
 import { refreshSettings, resetSettingsForTests, type SettingsPreset } from "./settingsStore";
@@ -622,7 +622,7 @@ describe("SettingsPanel", () => {
     await user.click(saveButton());
 
     expect(sessions).toBeEnabled();
-    expect(saveButton()).toHaveAttribute("aria-busy", "true");
+    expect(savingButton()).toHaveAttribute("aria-busy", "true");
     release();
     expect(await screen.findByText("Saved your changes.")).toBeVisible();
     expect(saveBar()).toBeNull();

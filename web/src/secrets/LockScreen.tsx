@@ -231,7 +231,7 @@ export function LockScreen({
         {versionMismatch === null ? null : (
           <div className="flex flex-col gap-3 rounded-inset bg-well p-4">
             <p className="text-sm leading-6 text-ink-muted">{t("lock.schemaRecoveryHint")}</p>
-            <Button type="button" busy={running === "recover"} disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
+            <Button type="button" busy={running === "recover"} busyLabel={t("busy.restoring")} disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
               {t("lock.restoreCompatibleBackup")}
             </Button>
             <CheckboxField label={t("lock.resetUnsupportedAcknowledge")} checked={resetAcknowledged} onChange={setResetAcknowledged} tone="danger" />
@@ -239,6 +239,7 @@ export function LockScreen({
               kind="danger"
               type="button"
               busy={running === "reset"}
+              busyLabel={t("busy.creating")}
               disabled={busy || tooShort || !resetAcknowledged}
               onClick={() => void resetUnsupportedVault()}
             >
@@ -254,7 +255,7 @@ export function LockScreen({
           )}
         </>}
         {!exists && !noPassword && isAcceptedButShort(password, minPassphraseLength) ? <p className="text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
-        <Button kind="primary" className="h-[38px] w-full text-sm" type="submit" busy={running === "submit"} disabled={busy || tooShort || mismatched}>
+        <Button kind="primary" className="h-[38px] w-full text-sm" type="submit" busy={running === "submit"} busyLabel={t(exists ? "busy.unlocking" : "busy.creating")} disabled={busy || tooShort || mismatched}>
           {exists ? t("lock.open") : t("lock.create")}
         </Button>
       </form>

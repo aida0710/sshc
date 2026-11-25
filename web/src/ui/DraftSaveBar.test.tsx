@@ -57,7 +57,7 @@ describe("DraftSaveBar", () => {
 
   it("holds both buttons while it saves", () => {
     render(<DraftSaveBar onSave={vi.fn()} onDiscard={vi.fn()} saving />);
-    expect(screen.getByRole("button", { name: "Save" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Saving…" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("button", { name: "Discard changes" })).toBeDisabled();
   });
 

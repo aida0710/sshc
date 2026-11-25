@@ -139,6 +139,7 @@ export function VPNProfileRow({
         <Button
           small
           busy={starting}
+          busyLabel={t("busy.connecting")}
           disabled={busy || preparing || checking || !available}
           title={starting ? undefined : waitingForOperation}
           onClick={actions.onStart}
@@ -148,6 +149,7 @@ export function VPNProfileRow({
         <Button
           small
           busy={busyWith("disconnect")}
+          busyLabel={t("busy.disconnecting")}
           disabled={busy || checking || !(status.running || preparing)}
           title={busyWith("disconnect") ? undefined : waitingForOperation}
           onClick={actions.onStop}

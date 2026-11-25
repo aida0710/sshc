@@ -80,7 +80,7 @@ function ReconnectingCard({ session, title, recovery, frame }: {
       {...frame}
     >
       {recovery.stopReconnecting === undefined ? null : (
-        <Button busy={recovery.stopBusy} onClick={recovery.stopReconnecting} className={noticeCardButton}>{t("terminal.stopReconnect")}</Button>
+        <Button busy={recovery.stopBusy} busyLabel={t("busy.stopping")} onClick={recovery.stopReconnecting} className={noticeCardButton}>{t("terminal.stopReconnect")}</Button>
       )}
     </NoticeFrame>
   );

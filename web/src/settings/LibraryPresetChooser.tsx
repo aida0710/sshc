@@ -102,6 +102,7 @@ export function LibraryPresetChooser<Preset extends LibraryPreset>({ library, bu
           label={t("presetLibrary.name")}
           initialValue={naming === "rename" ? chosenName : ""}
           submitLabel={naming === "copy" ? t("presetLibrary.duplicate") : t("presetLibrary.rename")}
+          busyLabel={null}
           cancelLabel={t("presetLibrary.cancel")}
           validate={(value) => value === "" ? t("presetLibrary.nameRequired")
             : [...value].length > limits.nameLength ? t("presetLibrary.nameTooLong", { max: String(limits.nameLength) }) : ""}
@@ -115,6 +116,7 @@ export function LibraryPresetChooser<Preset extends LibraryPreset>({ library, bu
           heading={labels.deleteHeading}
           body={<p className="text-sm text-ink-muted">{t("presetLibrary.deleteBody", { name: chosen.name })}</p>}
           confirmLabel={t("presetLibrary.deleteEverywhere")}
+          busyLabel={null}
           cancelLabel={t("presetLibrary.cancel")}
           onCancel={() => setDeleting(false)}
           onConfirm={() => {

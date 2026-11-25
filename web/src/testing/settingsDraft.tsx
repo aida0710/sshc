@@ -25,6 +25,8 @@ function saveBarButton(name: string): HTMLElement {
 }
 
 export const saveButton = () => saveBarButton("Save");
+// savingButton は、保存を待っている間の［保存］。「Saving…」に替わる。
+export const savingButton = () => saveBarButton("Saving…");
 
 export async function saveSettings(user: Pick<typeof userEvent, "click"> = userEvent) {
   await user.click(saveButton());

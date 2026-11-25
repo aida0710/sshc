@@ -39,6 +39,7 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
         heading={dialog.parent === "" ? t("groupDialog.createHeading") : t("groupDialog.createInside", { name: dialog.parent })}
         label={t("groupDialog.nameLabel")}
         submitLabel={t("groupDialog.create")}
+        busyLabel={t("busy.creating")}
         cancelLabel={t("groupDialog.cancel")}
         validate={validateSegment(dialog.parent, null)}
         onSubmit={(value) => onCreate(joinGroup(dialog.parent, value))}
@@ -57,6 +58,7 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
         label={t("groupDialog.nameLabel")}
         initialValue={groupBaseName(dialog.name)}
         submitLabel={t("tree.rename")}
+        busyLabel={t("busy.renaming")}
         cancelLabel={t("groupDialog.cancel")}
         validate={validateSegment(parent, dialog.name)}
         onSubmit={(value) => {
@@ -93,6 +95,7 @@ export function GroupDialogs({ dialog, groupNames, onCreate, onRename, onDelete,
         </div>
       )}
       confirmLabel={t("groupDialog.delete")}
+      busyLabel={t("busy.deleting")}
       cancelLabel={t("groupDialog.cancel")}
       onConfirm={() => onDelete(dialog.name, destination)}
       onCancel={onClose}

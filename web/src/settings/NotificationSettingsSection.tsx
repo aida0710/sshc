@@ -110,6 +110,7 @@ export function NotificationSettingsSection({ presetId, showHeading }: { presetI
               <Button
                 kind={permission === "default" ? "primary" : "secondary"}
                 busy={request.busy}
+                busyLabel={t(permission === "granted" ? "busy.sending" : "busy.setting")}
                 onClick={() => void enableOrTest()}
               >
                 {t(permission === "granted"

@@ -16,7 +16,7 @@ export function ExecutableDirectiveConfirmation({ directives, busy, onAcknowledg
       titleLevel={4}
       title={t("conn.checksExecutableHeading")}
       actions={(
-        <Button disabled={busy} busy={busy} onClick={onAcknowledge}>
+        <Button busy={busy} busyLabel={t("busy.authenticating")} onClick={onAcknowledge}>
           {t("conn.checksAcknowledge")}
         </Button>
       )}

@@ -105,6 +105,7 @@ export function ConnectionListDialogs({ actions, hosts, createGroup, renameGroup
             />
           )}
           confirmLabel={deleting.length === 1 ? t("conn.confirmDelete") : t("bulkDelete.confirm", { count: deleting.length })}
+          busyLabel={t("busy.deleting")}
           cancelLabel={t("conn.deleteCancel")}
           onConfirm={() => attempt(actions.deleteChosen, {
             close: actions.closeDelete,
@@ -123,6 +124,7 @@ export function ConnectionListDialogs({ actions, hosts, createGroup, renameGroup
           label={t("host.renameAlias")}
           initialValue={renamingConnection.identity.alias}
           submitLabel={t("tree.rename")}
+          busyLabel={t("busy.renaming")}
           cancelLabel={t("groupDialog.cancel")}
           textEntry={asciiTextEntry}
           validate={(value) => (isValidAlias(value) ? "" : t("conn.createAliasInvalid"))}

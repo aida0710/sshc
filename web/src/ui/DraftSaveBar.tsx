@@ -85,6 +85,7 @@ export function DraftSaveBar({
             {...(form === undefined ? {} : { form })}
             kind="primary"
             busy={saving}
+            busyLabel={t("busy.saving")}
             disabled={saveDisabled || inputInvalid}
             onClick={onSave}
           >

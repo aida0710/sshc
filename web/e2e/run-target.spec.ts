@@ -241,8 +241,10 @@ test("updates an incompatible engine from the terminal area and recovers", async
   // The first lines show while sshc on bastion still runs.
   const output = panel.getByRole("log", { name: "Output of sshc on that host", exact: true });
   await expect(output).toContainText(`sshc: updating ${remoteVersion} to ${localVersion}`);
-  await expect(update).toHaveAttribute("aria-busy", "true");
-  await expect(update).toBeDisabled();
+  // 待っている間、押したボタンは回る印と「Updating…」に替わる。
+  const updating = panel.getByRole("button", { name: "Updating…", exact: true });
+  await expect(updating).toHaveAttribute("aria-busy", "true");
+  await expect(updating).toBeDisabled();
   await expect(output).not.toContainText("sshc: updated to");
   remote.finishUpdate();
   await expect(panel).toBeHidden();

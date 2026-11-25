@@ -289,6 +289,7 @@ export function ConnectionBasicForm({
           heading={t("conn.basicRouteConfirmHeading")}
           body={<p className="text-sm text-ink-muted">{t("conn.basicRouteConfirmBody")}</p>}
           confirmLabel={t("conn.basicRouteConfirmSave")}
+          busyLabel={null}
           cancelLabel={t("conn.basicRouteConfirmCancel")}
           confirmKind="primary"
           onConfirm={() => {

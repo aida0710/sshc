@@ -114,6 +114,7 @@ export function PresetPicker({ editing, onEdit, layout }: {
           label={t("settings.presetNameLabel")}
           initialValue={naming.kind === "rename" ? naming.name : ""}
           submitLabel={naming.kind === "create" ? t("settings.presetCreate") : t("settings.presetRename")}
+          busyLabel={t(naming.kind === "create" ? "busy.creating" : "busy.renaming")}
           cancelLabel={t("settings.presetCancel")}
           validate={(value) => value === "" ? t("settings.presetNameRequired")
             : [...value].length > maxPresetNameLength ? t("settings.presetNameTooLong", { max: maxPresetNameLength }) : ""}
@@ -128,6 +129,7 @@ export function PresetPicker({ editing, onEdit, layout }: {
           heading={t("settings.presetDeleteHeading")}
           body={<p className="text-sm text-ink-muted">{t("settings.presetDeleteBody", { name: editedName })}</p>}
           confirmLabel={t("settings.presetDeleteEverywhere")}
+          busyLabel={null}
           cancelLabel={t("settings.presetCancel")}
           onCancel={() => setDeleting(false)}
           onConfirm={() => void remove()}

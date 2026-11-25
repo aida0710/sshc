@@ -203,7 +203,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
                 if (file !== undefined) void add(file);
               }}
             />
-            <Button kind="primary" onClick={() => chooser.current?.click()} busy={library.running === "add"} disabled={busy}>{t("terminal.backgroundAdd")}</Button>
+            <Button kind="primary" onClick={() => chooser.current?.click()} busy={library.running === "add"} busyLabel={t("busy.adding")} disabled={busy}>{t("terminal.backgroundAdd")}</Button>
           </div>
           {libraryState === "failed" ? (
             <PanelState tone="failed" title={t("terminal.backgroundLoadFailed")} action={<Button onClick={() => void loadLibrary()}>{t("shell.bootstrapRetry")}</Button>} />
@@ -254,6 +254,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
           label={t("terminal.backgroundRenameLabel")}
           initialValue={renameTarget.name}
           submitLabel={t("terminal.backgroundRenameSubmit")}
+          busyLabel={t("busy.renaming")}
           cancelLabel={t("terminal.backgroundRenameCancel")}
           validate={(next) => next === "" ? t("terminal.backgroundRenameRequired") : ""}
           onSubmit={rename}
@@ -267,6 +268,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
           heading={t("terminal.backgroundDeleteHeading")}
           body={<p className="text-sm text-ink-muted">{t("terminal.backgroundDeleteHint", { name: deleteTarget.name })}</p>}
           confirmLabel={t("terminal.backgroundDeleteAction")}
+          busyLabel={t("busy.deleting")}
           cancelLabel={t("terminal.backgroundRenameCancel")}
           onConfirm={() => drop(deleteTarget.name)}
           onCancel={() => setDeleteTarget(null)}

@@ -316,7 +316,7 @@ export function TerminalQuickCommands({
             {initialCommand}
           </pre>
           <div className="flex gap-2">
-            <Button kind="primary" busy={running === "save"} disabled={busy || saveName.trim() === ""} onClick={() => void saveSelection()}>
+            <Button kind="primary" busy={running === "save"} busyLabel={t("busy.saving")} disabled={busy || saveName.trim() === ""} onClick={() => void saveSelection()}>
               {t("terminal.quickCommandSave")}
             </Button>
             <Button onClick={() => setSaveOpen(false)}>
@@ -367,11 +367,11 @@ export function TerminalQuickCommands({
               {hasNoVariables ? <pre className={`max-h-32 whitespace-pre-wrap ${codeBlock}`}>{selected.command}</pre> : null}
               <div className="flex flex-wrap gap-2">
                 {hasNoVariables ? (
-                  <Button kind="primary" busy={running === "insertSnippet"} disabled={busy} onClick={() => void insertSnippet()}>
+                  <Button kind="primary" busy={running === "insertSnippet"} busyLabel={t("busy.inserting")} disabled={busy} onClick={() => void insertSnippet()}>
                     {t("terminal.quickCommandInsert")}
                   </Button>
                 ) : null}
-                <Button busy={running === "prepare"} disabled={busy || selected === null} onClick={() => void prepare()}>
+                <Button busy={running === "prepare"} busyLabel={t("busy.checking")} disabled={busy || selected === null} onClick={() => void prepare()}>
                   {t("snippets.preview")}
                 </Button>
               </div>
@@ -385,13 +385,13 @@ export function TerminalQuickCommands({
                 {t("terminal.quickCommandContextWarning")}
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button busy={running === "insert"} disabled={busy} onClick={() => void insertPrepared()}>
+                <Button busy={running === "insert"} busyLabel={t("busy.inserting")} disabled={busy} onClick={() => void insertPrepared()}>
                   {t("terminal.quickCommandInsert")}
                 </Button>
-                <Button kind="primary" busy={running === "run"} disabled={busy} onClick={() => void runPrepared()}>
+                <Button kind="primary" busy={running === "run"} busyLabel={t("busy.running")} disabled={busy} onClick={() => void runPrepared()}>
                   {t("terminal.quickCommandRun")}
                 </Button>
-                <Button busy={running === "copy"} disabled={busy} onClick={() => void copyPrepared()}>
+                <Button busy={running === "copy"} busyLabel={t("busy.copying")} disabled={busy} onClick={() => void copyPrepared()}>
                   {t("terminal.quickCommandCopy")}
                 </Button>
               </div>

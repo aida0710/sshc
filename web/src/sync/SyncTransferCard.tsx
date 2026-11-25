@@ -58,6 +58,7 @@ export function SyncTransferCard({ status, busy, pushDraft, pushMessage, onMessa
         <Button
           kind="primary"
           busy={pending.running === "push"}
+          busyLabel={t("busy.sending")}
           disabled={
             busy ||
             !status.keyConfigured ||
@@ -71,6 +72,7 @@ export function SyncTransferCard({ status, busy, pushDraft, pushMessage, onMessa
         </Button>
         <Button
           busy={pending.running === "preview"}
+          busyLabel={t("busy.checking")}
           disabled={busy || !status.keyConfigured}
           onClick={() => void pending.start("preview", onPreview)}
         >

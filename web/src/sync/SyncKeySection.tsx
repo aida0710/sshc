@@ -57,6 +57,7 @@ export function SyncKeySection({ status, busy, form, onSave }: {
           <Button
             kind="primary"
             busy={pending.running === "save"}
+            busyLabel={t(status.keyConfigured ? "busy.replacing" : "busy.creating")}
             disabled={
               busy ||
               (chooseOwn && ownKey === "") ||

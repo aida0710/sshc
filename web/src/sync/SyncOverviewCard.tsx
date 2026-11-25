@@ -8,7 +8,7 @@ import { Button, Notice } from "../ui/surface";
 import { usePendingAction } from "../ui/usePendingAction";
 import { describeLastSync } from "./describeLastSync";
 import { SyncErrorNotice } from "./SyncErrorNotice";
-import { syncAutoHintKeys, syncDirectionLabelKeys, syncNowLabelKeys } from "./syncMessageKeys";
+import { syncAutoHintKeys, syncDirectionLabelKeys, syncNowBusyLabelKeys, syncNowLabelKeys } from "./syncMessageKeys";
 import { syncRefusals } from "./syncRefusals";
 
 // OverviewAction は、このカードのボタンのうち、押すと engine の応答を待つものである。
@@ -103,6 +103,7 @@ export function SyncOverviewCard({
           <Button
             kind="primary"
             busy={pending.running === "syncNow"}
+            busyLabel={t(remoteHeadBlocked ? "busy.checking" : syncNowBusyLabelKeys[status.direction])}
             disabled={busy || !status.keyConfigured}
             onClick={() => void pending.start("syncNow", remoteHeadBlocked ? onPreviewRemoteHead : onSyncNow)}
           >
@@ -115,6 +116,7 @@ export function SyncOverviewCard({
           {status.direction === "push" || remoteHeadBlocked ? null : (
             <Button
               busy={pending.running === "checkRemoteChanges"}
+              busyLabel={t("busy.checking")}
               disabled={busy || !status.keyConfigured}
               onClick={() => void pending.start("checkRemoteChanges", onPreview)}
             >
@@ -124,6 +126,7 @@ export function SyncOverviewCard({
           {status.direction === "push" ? null : (
             <Button
               busy={pending.running === "forcePull"}
+              busyLabel={t("busy.checking")}
               disabled={busy || !status.keyConfigured}
               onClick={() => void pending.start("forcePull", onPreviewRemoteHead)}
             >

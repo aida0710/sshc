@@ -467,7 +467,7 @@ export function ConnectionsPage({
                 tone="failed"
                 title={problem.message}
                 {...(problem.detail === undefined ? {} : { detail: problem.detail })}
-                action={<Button busy={retry.pending} onClick={() => retry.watch(reload())}>{t("shell.bootstrapRetry")}</Button>}
+                action={<Button busy={retry.pending} busyLabel={t("busy.loading")} onClick={() => retry.watch(reload())}>{t("shell.bootstrapRetry")}</Button>}
               />
             )}
           </div>
@@ -698,6 +698,7 @@ export function ConnectionsPage({
         heading={t("conn.deleteHeading", { alias: detail.form.entry.identity.alias })}
         body={<DeleteConnectionsBody body={t("conn.deleteBody")} deleting={[detail.form.entry.identity.alias]} hosts={overview.hosts} />}
         confirmLabel={t("conn.confirmDelete")}
+        busyLabel={null}
         cancelLabel={t("conn.deleteCancel")}
         onCancel={() => setConfirmingDelete(false)}
         onConfirm={() => {
@@ -713,6 +714,7 @@ export function ConnectionsPage({
         heading={t("conn.discardChanges")}
         body={<p className="text-sm text-ink-muted">{t(groupDraftDirty ? "groupEditor.discardPrompt" : creationDirty ? "conn.discardCreationPrompt" : "conn.discardPrompt")}</p>}
         confirmLabel={t("conn.discardChanges")}
+        busyLabel={null}
         cancelLabel={t("conn.keepEditing")}
         onConfirm={confirmDiscard}
         onCancel={() => setDiscardIntent(null)}

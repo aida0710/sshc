@@ -236,7 +236,7 @@ export function KnownHostsPanel({ runTarget = null, api: apiOverride }: KnownHos
     />
   );
   const scanButton = (layout: string) => (
-    <Button kind="primary" className={layout} busy={action.running === "scan"} disabled={action.running !== null} onClick={() => void scan()}>
+    <Button kind="primary" className={layout} busy={action.running === "scan"} busyLabel={t("busy.scanning")} disabled={action.running !== null} onClick={() => void scan()}>
       {t("kh.scan")}
     </Button>
   );
@@ -358,6 +358,7 @@ export function KnownHostsPanel({ runTarget = null, api: apiOverride }: KnownHos
               <Button
                 kind="primary"
                 busy={action.running === "addToKnownHosts"}
+                busyLabel={t("busy.adding")}
                 disabled={!provenOrAcknowledged || action.running !== null}
                 onClick={() => void confirmAdd()}
               >
@@ -470,6 +471,7 @@ export function KnownHostsPanel({ runTarget = null, api: apiOverride }: KnownHos
           heading={t("kh.delete")}
           body={<p className="text-sm text-ink-muted">{t("kh.confirmRemove", { line: pending.line, fingerprint: pending.fingerprint })}</p>}
           confirmLabel={t("kh.confirmDelete")}
+          busyLabel={t("busy.deleting")}
           cancelLabel={t("kh.cancel")}
           onConfirm={confirmDelete}
           onCancel={() => setPending(null)}

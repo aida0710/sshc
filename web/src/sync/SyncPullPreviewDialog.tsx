@@ -80,10 +80,10 @@ export function SyncPullPreviewDialog({
               live={false}
               actions={(
                 <>
-                  <Button busy={pending.running === "keepMine"} disabled={busy} onClick={() => void pending.start("keepMine", () => onResolve("local"))}>
+                  <Button busy={pending.running === "keepMine"} busyLabel={t("busy.checking")} disabled={busy} onClick={() => void pending.start("keepMine", () => onResolve("local"))}>
                     {t("sync.keepMine")}
                   </Button>
-                  <Button busy={pending.running === "takeTheirs"} disabled={busy} onClick={() => void pending.start("takeTheirs", () => onResolve("remote"))}>
+                  <Button busy={pending.running === "takeTheirs"} busyLabel={t("busy.checking")} disabled={busy} onClick={() => void pending.start("takeTheirs", () => onResolve("remote"))}>
                     {t("sync.takeTheirs")}
                   </Button>
                 </>
@@ -146,6 +146,7 @@ export function SyncPullPreviewDialog({
           <Button
             kind="primary"
             busy={pending.running === "apply"}
+            busyLabel={t(acceptRemoteHead ? "busy.receiving" : "busy.applying")}
             disabled={
               busy ||
               conflicted ||

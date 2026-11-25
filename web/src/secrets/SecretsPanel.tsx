@@ -256,6 +256,7 @@ export function SecretsPanel({
           heading={t("secrets.deleteHeading", { name: pendingDeletion.name })}
           body={<p className="text-sm text-ink-muted">{t("secrets.deleteBody")}</p>}
           confirmLabel={t("secrets.confirmDelete")}
+          busyLabel={null}
           cancelLabel={t("secrets.deleteCancel")}
           onCancel={() => setPendingDeletion(null)}
           onConfirm={() => {

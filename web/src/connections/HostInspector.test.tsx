@@ -163,8 +163,9 @@ describe("HostInspector", () => {
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
     await user.click(saveButton()!);
 
-    expect(saveButton()).toBeDisabled();
-    expect(saveButton()).toHaveAttribute("aria-busy", "true");
+    const saving = screen.getByRole("button", { name: "Saving…" });
+    expect(saving).toBeDisabled();
+    expect(saving).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("button", { name: "Discard changes" })).toBeDisabled();
     expect(screen.getByLabelText("Remote text encoding")).toBeDisabled();
     await act(async () => finish());

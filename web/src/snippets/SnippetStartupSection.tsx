@@ -50,7 +50,7 @@ export function SnippetStartupSection({
                 <option key={candidate}>{candidate}</option>
               ))}
             </select>
-            <Button busy={assigning} disabled={busy || alias === ""} onClick={onAssign}>
+            <Button busy={assigning} busyLabel={t("busy.setting")} disabled={busy || alias === ""} onClick={onAssign}>
               {t("snippets.setStartup")}
             </Button>
             <button

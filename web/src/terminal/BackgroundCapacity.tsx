@@ -40,7 +40,7 @@ export function BackgroundCapacity({ usedBytes, capacityBytes, capacityInput, on
               <span>MiB</span>
             </span>
           </span>
-          <Button busy={saving} disabled={!canSave} onClick={onSave}>{t("terminal.backgroundCapacitySave")}</Button>
+          <Button busy={saving} busyLabel={t("busy.saving")} disabled={!canSave} onClick={onSave}>{t("terminal.backgroundCapacitySave")}</Button>
         </label>
       </div>
       <p className="mt-2 text-xs text-ink-faint">{t("terminal.backgroundCapacityHint")}</p>

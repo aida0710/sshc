@@ -93,8 +93,8 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
         <footer className="flex flex-wrap justify-end gap-2 border-t border-line/60 px-5 py-4">
           <Button onClick={onDismiss}>{t("sftp.cancel")}</Button>
           {readOnly ? null : <>
-            <Button busy={copying === "right"} disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("right")}>{t("sftp.compare.rightToLeft")}</Button>
-            <Button kind="primary" busy={copying === "left"} disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("left")}>{t("sftp.compare.leftToRight")}</Button>
+            <Button busy={copying === "right"} busyLabel={t("busy.copying")} disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("right")}>{t("sftp.compare.rightToLeft")}</Button>
+            <Button kind="primary" busy={copying === "left"} busyLabel={t("busy.copying")} disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("left")}>{t("sftp.compare.leftToRight")}</Button>
           </>}
         </footer>
       </ModalShell>

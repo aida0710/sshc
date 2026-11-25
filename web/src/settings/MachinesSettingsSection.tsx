@@ -98,6 +98,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
           label={t("settings.machineNameLabel")}
           initialValue={renaming.settings.name ?? ""}
           submitLabel={t("settings.machineRename")}
+          busyLabel={null}
           cancelLabel={t("settings.presetCancel")}
           validate={(value) => value === "" ? t("settings.presetNameRequired")
             : [...value].length > maxMachineNameLength ? t("settings.presetNameTooLong", { max: maxMachineNameLength }) : ""}
@@ -117,6 +118,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
           label={t("settings.machineSessionLogFolder")}
           initialValue={choosingLogFolder.settings.sessionLogDirectory ?? ""}
           submitLabel={t("settings.machineSessionLogSave")}
+          busyLabel={null}
           cancelLabel={t("settings.presetCancel")}
           validate={(value) => value === "" || folderPathFor(choosingLogFolder.facts.os, value) ? "" : t("settings.machineSessionLogInvalid")}
           onSubmit={(value) => {
@@ -133,6 +135,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
           heading={t("settings.machineRemoveHeading")}
           body={<p className="text-sm text-ink-muted">{t("settings.machineRemoveBody", { name: removing.settings.name ?? "" })}</p>}
           confirmLabel={t("settings.machineRemove")}
+          busyLabel={null}
           cancelLabel={t("settings.presetCancel")}
           onCancel={() => setRemoving(null)}
           onConfirm={() => {

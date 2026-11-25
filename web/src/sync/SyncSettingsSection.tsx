@@ -184,6 +184,7 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
                     <Button
                       kind="primary"
                       busy={pending.running === "complete"}
+                      busyLabel={t("busy.saving")}
                       disabled={
                         busy ||
                         (setupCheck.state === "existing" && ownKey === "") ||
@@ -198,6 +199,7 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     busy={pending.running === "check"}
+                    busyLabel={t("busy.checking")}
                     disabled={
                       busy ||
                       endpoint === "" ||

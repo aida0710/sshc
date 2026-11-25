@@ -25,6 +25,7 @@ export function useSignOutConfirmation() {
       heading={t("menu.signOutConfirmHeading")}
       body={<p className="text-sm text-ink-muted">{t("menu.signOutConfirmBody")}</p>}
       confirmLabel={t("menu.signOut")}
+      busyLabel={null}
       cancelLabel={t("menu.signOutCancel")}
       onCancel={() => setConfirming(false)}
       onConfirm={() => void leave()}

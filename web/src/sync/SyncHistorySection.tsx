@@ -192,6 +192,7 @@ export function SyncHistorySection({
                   <Button
                     kind="primary"
                     busy={pending.running === "restore"}
+                    busyLabel={t("busy.checking")}
                     disabled={busy || direction === "push"}
                     onClick={() => void pending.start("restore", () => onPreview(selected.key))}
                     className="self-start"

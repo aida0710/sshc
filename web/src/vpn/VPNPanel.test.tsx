@@ -745,7 +745,7 @@ describe("VPNPanel", () => {
 
     await user.click(within(route).getByRole("button", { name: "Connect" }));
 
-    expect(within(route).getByRole("button", { name: "Connect" })).toHaveAttribute("aria-busy", "true");
+    expect(within(route).getByRole("button", { name: "Connecting…" })).toHaveAttribute("aria-busy", "true");
     expect(within(route).getByText("connecting")).toBeVisible();
     const edit = await rowActionItem(user, route, "Edit");
     expect(edit).toBeDisabled();
