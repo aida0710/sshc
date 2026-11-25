@@ -12,6 +12,7 @@ const KEYBOARD = `.xterm-helper-textarea${SHOWN}`;
 const SELECTION = `.xterm-selection${SHOWN} div`;
 const VIEWPORT = `.xterm-viewport${SHOWN}`;
 const SCROLLBAR_SLIDER = `.xterm-scrollable-element${SHOWN} > .xterm-scrollbar.xterm-vertical > .xterm-slider`;
+const SCROLLBARS = `.xterm-scrollable-element${SHOWN} > .xterm-scrollbar`;
 // The canvas beside the scrollbar that xterm draws the marks of commands and search matches on.
 const OVERVIEW_RULER = ".xterm-decoration-overview-ruler";
 // These fit tests use 13px fonts: allow the 16px padding and one rounded row.
@@ -26,6 +27,19 @@ export async function waitForTerminalLayout(page: Page): Promise<void> {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
   });
+}
+// xterm のスクロールバーは、中身が動いたときとポインターが上にあるときに出て、800ms かけて消える（xterm.css の
+// xterm-fade）。ドキュメントに載せる画像に写らないよう、撮る前にポインターを画面の端へ外し、画面に出ているものが
+// すべて消えきるのを待つ。分割表示から外して隠したターミナルのスクロールバーは、出ていたときの不透明さのまま残るので
+// 見ない。
+export async function hideTerminalScrollbars(page: Page): Promise<void> {
+  await page.mouse.move(0, 0);
+  await page.waitForFunction(
+    (selector) => Array.from(document.querySelectorAll(selector))
+      .filter((scrollbar) => scrollbar.checkVisibility())
+      .every((scrollbar) => getComputedStyle(scrollbar).opacity === "0"),
+    SCROLLBARS,
+  );
 }
 export function terminalRoot(page: Page): Locator {
   return page.locator(ROOT);

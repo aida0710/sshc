@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 import { saveEverything } from "./support/saveBar";
-import { drawnRowsIn, terminalHostBottomOverflow, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
+import { drawnRowsIn, hideTerminalScrollbars, terminalHostBottomOverflow, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
 
 function pane(page: Page, sessionId: string): Locator {
   return page.locator(`[data-split-view-pane="${sessionId}"]`);
@@ -534,7 +534,10 @@ test("limits split view to four panes and shows the Japanese desktop layout", as
     expect(hostBounds.y - boardBounds.y).toBeLessThanOrEqual(maximumHeaderHeight);
   }
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
-  if (visualDirectory !== undefined) await page.screenshot({ path: `${visualDirectory}/split-view-four-panes-ja.png` });
+  if (visualDirectory !== undefined) {
+    await hideTerminalScrollbars(page);
+    await page.screenshot({ path: `${visualDirectory}/split-view-four-panes-ja.png` });
+  }
   for (const index of [2, 3]) {
     await pane(page, ids[index]!).getByRole("button", { name: `${titles[index]}を分割表示から外す`, exact: true }).click();
   }
@@ -544,5 +547,8 @@ test("limits split view to four panes and shows the Japanese desktop layout", as
   expect(rightBounds.x).toBeGreaterThan(leftBounds.x);
   expect(rightBounds.y).toBe(leftBounds.y);
   await waitForTerminalLayout(page);
-  if (visualDirectory !== undefined) await page.screenshot({ path: `${visualDirectory}/split-view-two-panes-ja.png` });
+  if (visualDirectory !== undefined) {
+    await hideTerminalScrollbars(page);
+    await page.screenshot({ path: `${visualDirectory}/split-view-two-panes-ja.png` });
+  }
 });
