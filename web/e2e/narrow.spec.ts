@@ -303,6 +303,8 @@ test("shows the version beside the brand in the mobile drawer", async ({ page, i
   });
   await openApplication(page, installation);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    // 読み込み中の枠ではなく、読み終えた Home を撮る。
+    await expect(page.locator("[data-loading-placeholder]")).toHaveCount(0);
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-mobile-home-dark.png`, fullPage: true });
   }
   await page.getByRole("button", { name: "Navigation", exact: true }).click();

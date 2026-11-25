@@ -64,6 +64,8 @@ test("gives one named secret to two hosts and writes neither name into the file"
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.setViewportSize({ width: 1280, height: 720 });
+    // 保存したときの短い知らせが消えてから撮る。
+    await expect(page.getByText("Saved your changes.")).toBeHidden({ timeout: 10_000 });
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/vault-account-passwords.png`, fullPage: true });
   }
 
@@ -318,6 +320,8 @@ test("lists saved one-time passwords with their current codes in both languages"
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.evaluate(() => window.scrollTo(0, 0));
+    // 保存したときの短い知らせが消えてから撮る。
+    await expect(page.getByText("Saved your changes.")).toBeHidden({ timeout: 10_000 });
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/otp-desktop-en.png` });
     await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
     await page.reload();

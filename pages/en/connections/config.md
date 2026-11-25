@@ -16,7 +16,7 @@ The file box, and the box of **Edit as text** for a connection, are the same edi
 - Lines with a problem found when the configuration was read, such as a directive OpenSSH does not know, are marked; hovering the mark shows what the problem is.
 - `Tab` indents. To move the focus out of the editor with `Tab`, switch what it does with `Ctrl+M` (`Ctrl+Shift+M` on macOS).
 
-The editor shows loaded files and their Include relationships. UTF-8 text is written to a temporary file before replacement. Outside sshc-managed group markers, comments, blank lines, directive order, and unrelated blocks are preserved whenever possible. Do not edit the region between the line starting with `# >>> sshc groups` and `# <<< sshc groups` directly: its contents are replaced on the next save.
+The editor shows loaded files and their Include relationships. A changed file is saved from the same bar at the bottom of the screen. UTF-8 text is written to a temporary file before replacement. Outside sshc-managed group markers, comments, blank lines, directive order, and unrelated blocks are preserved whenever possible. Do not edit the region between the line starting with `# >>> sshc groups` and `# <<< sshc groups` directly: its contents are replaced on the next save.
 
 ### Files and directories
 
@@ -36,7 +36,7 @@ Renaming and deleting wait until unsaved edits are saved. Paths outside `~/.ssh`
 - **Display & terminal**: colour, OS icon, tags, display order, the terminal's palette and encoding, the VPN, and the other sshc-only behavior
 - **Resolved values**: effective values, sources, warnings
 
-Clearing a value removes its connection-specific directive and restores OpenSSH inheritance. Renaming, moving to a group, duplicating, the comment, the storage file, deleting, and **Edit as text** for the raw Host block are in the **…** at the top of the connection.
+Changing a value on a tab brings up a bar at the bottom of the screen with **Discard changes** and **Save**; nothing is written to the config file until it is saved (the same bar as [saving settings](/en/reference/settings#saving-settings)). Clearing a value removes its connection-specific directive and restores OpenSSH inheritance. Renaming, moving to a group, duplicating, the comment, the storage file, deleting, and **Edit as text** for the raw Host block are in the **…** at the top of the connection.
 
 ```sh
 sshc info <alias>

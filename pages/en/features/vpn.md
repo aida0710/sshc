@@ -90,7 +90,7 @@ Secrets are encrypted and kept in the vault.
 
 ### Creating and editing
 
-Creating and editing are separate operations. Creating a profile whose name is already taken is refused and changes nothing.
+Creating and editing are separate operations. Creating a profile whose name is already taken is refused and changes nothing. Changes made with Edit on the VPN screen are saved from the bar at the bottom of the screen (the same bar as [saving settings](/en/reference/settings#saving-settings)).
 
 | To change | Use |
 |---|---|
