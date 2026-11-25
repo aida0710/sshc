@@ -27,7 +27,7 @@ test("fixes a touch-first PC to the mouse, so drag selection and link clicks wor
   await expect(overlay).toHaveCount(1);
 
   await terminal.getByRole("button", { name: "More terminal actions" }).click();
-  const presetSettings = terminal.getByRole("group", { name: /^Preset: / });
+  const presetSettings = page.getByRole("menu", { name: "More terminal actions" }).getByRole("group", { name: /^Preset: / });
   await presetSettings.getByRole("menuitemcheckbox", { name: "Detect touch automatically" }).click();
   await presetSettings.getByRole("menuitemradio", { name: "Use by mouse" }).click();
   // The same terminal, without reconnecting: the output stays and only the layer goes.
@@ -114,7 +114,7 @@ test("underlines every link a tap opens until Settings turns it off, and the mou
 
   // The setting is the touch terminal's: with the mouse, the link under the pointer is underlined, and only it.
   await terminal.getByRole("button", { name: "More terminal actions" }).click();
-  const presetSettings = terminal.getByRole("group", { name: /^Preset: / });
+  const presetSettings = page.getByRole("menu", { name: "More terminal actions" }).getByRole("group", { name: /^Preset: / });
   await presetSettings.getByRole("menuitemcheckbox", { name: "Detect touch automatically" }).click();
   await presetSettings.getByRole("menuitemradio", { name: "Use by mouse" }).click();
   await expect(page.locator(".sshc-select-overlay")).toHaveCount(0);

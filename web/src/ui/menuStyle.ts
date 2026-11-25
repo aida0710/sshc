@@ -1,6 +1,6 @@
-// The look of every menu: the floating panel and its items. ActionMenu uses it, and so do the menus
-// that place themselves (SFTP's folder, create and selection menus, the transfer manager's actions, the
-// terminal's menu and its rows' menus), so a menu looks the same whichever one opens.
+// The look of every menu: the floating panel and its items. MenuPanel and MenuItems use it, and so do the
+// menus that still place themselves (SFTP's folder, create and selection menus, the transfer manager's
+// actions), so a menu looks the same whichever one opens.
 
 // menuSurface is the panel. The caller adds where it sits and how wide it is.
 export const menuSurface = "rounded-lg border border-line bg-card p-1 shadow-float [overflow-wrap:break-word]";

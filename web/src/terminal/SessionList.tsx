@@ -17,8 +17,6 @@ import { SessionRowMenu, type WorkspaceMoveTarget } from "./SessionRowMenu";
 import { terminalDisplayTitle } from "./terminalPresentation";
 import { notificationText, type UnreadSessions } from "./terminalNotifications";
 import { revealOnHoverAtPcSize } from "../ui/ActionMenu";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
-import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { useShiftKeyHeld } from "../ui/useShiftKeyHeld";
 import { SessionCloseConfirmation } from "./SessionCloseConfirmation";
 import { isImeComposing } from "../ui/imeComposition";
@@ -97,7 +95,6 @@ export function SessionList({
   const [draft, setDraft] = useState("");
   const [dropBefore, setDropBefore] = useState<string | null>(null);
   const shiftPressed = useShiftKeyHeld();
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
 
@@ -110,18 +107,6 @@ export function SessionList({
   useEffect(() => {
     if (heldSessionId === null) setDropBefore(null);
   }, [heldSessionId]);
-
-  useDismissibleLayer({
-    open: menuFor !== null,
-    containerRefs: [menuRef, menuTriggerRef],
-    onDismiss: () => setMenuFor(null),
-    returnFocusRef: menuTriggerRef,
-  });
-  useMenuKeyboard({
-    open: menuFor !== null,
-    menuRef,
-    onClose: () => setMenuFor(null),
-  });
 
   // 動かした先のすぐ後ろのセッションの前へ置く。最後まで下げたら、後ろが無いので最後へ置く。
   function move(id: string, delta: number) {
@@ -338,8 +323,7 @@ export function SessionList({
                 {menuFor === session.id ? (
                   <SessionRowMenu
                     session={session}
-                    menuRef={menuRef}
-                    triggerRef={menuTriggerRef}
+                    anchorRef={menuTriggerRef}
                     canDuplicate={!busy && !atSessionLimit}
                     canSplit={canSplitSession?.(session.id) ?? false}
                     {...(onSplitSession === undefined ? {} : { onSplit: (edge: PaneEdge) => onSplitSession(session.id, edge) })}

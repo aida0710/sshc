@@ -10,7 +10,7 @@ test("does not repeat an old clipboard request when reopening a terminal session
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/);
   await screen.getByRole("button", { name: "More terminal actions" }).click();
-  await screen.getByRole("menuitemcheckbox", { name: "OSC 52" }).click();
+  await page.getByRole("menu", { name: "More terminal actions" }).getByRole("menuitemcheckbox", { name: "OSC 52" }).click();
 
   const copiedText = "copied-before-switch";
   const copyCommand = `printf '\\033]52;c;${Buffer.from(copiedText).toString("base64")}\\a'`;
@@ -89,7 +89,7 @@ test("turns OSC 52 on for every terminal from one terminal's menu", async ({ pag
   const first = page.getByRole("region", { name: /^Terminal for / });
   await expect(first).toContainText(/[$#%>]/);
   await first.getByRole("button", { name: "More terminal actions" }).click();
-  await first.getByRole("group", { name: "All machines" }).getByRole("menuitemcheckbox", { name: "OSC 52" }).click();
+  await page.getByRole("menu", { name: "More terminal actions" }).getByRole("group", { name: "All machines" }).getByRole("menuitemcheckbox", { name: "OSC 52" }).click();
   await expect(first).toContainText("OSC 52 clipboard writes are now allowed in every terminal.");
 
   await openLocalShell(page);
@@ -97,7 +97,7 @@ test("turns OSC 52 on for every terminal from one terminal's menu", async ({ pag
   const second = page.getByRole("region", { name: /^Terminal for / });
   await expect(second).toContainText(/[$#%>]/);
   await second.getByRole("button", { name: "More terminal actions" }).click();
-  await expect(second.getByRole("menuitemcheckbox", { name: "OSC 52" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("menu", { name: "More terminal actions" }).getByRole("menuitemcheckbox", { name: "OSC 52" })).toHaveAttribute("aria-checked", "true");
 });
 
 test("shows where an OSC 8 link after Japanese text goes before opening it, unless its text is that address", async ({ page, context, installation }) => {

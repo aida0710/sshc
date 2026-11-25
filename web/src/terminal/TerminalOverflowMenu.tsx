@@ -1,12 +1,8 @@
-import { useRef, type RefObject } from "react";
-import { Icon } from "../ui/icons";
+import type { RefObject } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { useAnchoredMenu } from "../ui/useAnchoredMenu";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
-import { useMenuKeyboard } from "../ui/useMenuKeyboard";
-import { SwitchMark } from "../ui/SwitchMark";
-import { menuChoiceItemClass, menuGroupClass, menuGroupHeadingClass, menuItemClass, menuSurface } from "../ui/menuStyle";
+import { MenuChoiceItem, MenuGroup, MenuItem } from "../ui/MenuItems";
+import { MenuPanel } from "../ui/MenuPanel";
 import { isScreenWakeLockSupported, saveKeepScreenAwake, useKeepScreenAwake } from "./keepScreenAwake";
 import { saveTouchMode, useDetectedTouchMode, useTouchMode, type FixedTouchMode } from "./touchMode";
 import type { PaneEdge } from "./splitView/layout";
@@ -53,19 +49,9 @@ export function TerminalOverflowMenu({
 }) {
   const t = useTranslate();
   const scopeLabel = useSettingScopeLabel();
-  const panel = useRef<HTMLDivElement>(null);
   const keepScreenAwake = useKeepScreenAwake();
   const touchMode = useTouchMode();
   const detectedTouchMode = useDetectedTouchMode();
-
-  useDismissibleLayer({
-    open: true,
-    containerRefs: [panel, triggerRef],
-    onDismiss: onClose,
-    returnFocusRef: triggerRef,
-  });
-  useAnchoredMenu({ open: true, anchorRef: triggerRef, menuRef: panel });
-  useMenuKeyboard({ open: true, menuRef: panel, onClose });
 
   const action = (callback: () => void | Promise<void>) => () => {
     void callback();
@@ -73,82 +59,75 @@ export function TerminalOverflowMenu({
   };
 
   return (
-    <div
-      ref={panel}
-      role="menu"
-      aria-label={t("terminal.moreActions")}
-      className={`fixed z-40 w-72 overflow-y-auto ${menuSurface}`}
-    >
+    <MenuPanel label={t("terminal.moreActions")} anchorRef={triggerRef} width="wide" onClose={onClose}>
       {onSearch === undefined ? null : (
-        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onSearch)}>
+        <MenuItem onSelect={action(onSearch)}>
           {t("terminal.search")}
-        </button>
+        </MenuItem>
       )}
       {onPreviousPrompt === undefined ? null : (
-        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onPreviousPrompt)}>
+        <MenuItem onSelect={action(onPreviousPrompt)}>
           {t("shortcuts.previousPrompt")}
-        </button>
+        </MenuItem>
       )}
       {onNextPrompt === undefined ? null : (
-        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onNextPrompt)}>
+        <MenuItem onSelect={action(onNextPrompt)}>
           {t("shortcuts.nextPrompt")}
-        </button>
+        </MenuItem>
       )}
       {onSplit === undefined ? null : (["right", "bottom"] as const).map((edge) => (
-        <button key={edge} type="button" role="menuitem" disabled={splitRefusal !== undefined} title={splitRefusal} className={menuItemClass()}
-          onClick={action(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</button>
+        <MenuItem key={edge} disabled={splitRefusal !== undefined} title={splitRefusal}
+          onSelect={action(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</MenuItem>
       ))}
       {onRemoveFromSplit === undefined ? null : (
-        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onRemoveFromSplit)}>
+        <MenuItem onSelect={action(onRemoveFromSplit)}>
           {t("splitView.remove")}
-        </button>
+        </MenuItem>
       )}
       {onQuickCommands === undefined ? null : (
-        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onQuickCommands)}>
+        <MenuItem onSelect={action(onQuickCommands)}>
           {t("terminal.quickCommands")}
-        </button>
+        </MenuItem>
       )}
       {onPortForwarding === undefined ? null : (
-        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onPortForwarding)}>
+        <MenuItem onSelect={action(onPortForwarding)}>
           {t("terminal.portForwarding")}
-        </button>
+        </MenuItem>
       )}
       {onOpenRemoteDirectory === undefined ? null : (
-        <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onOpenRemoteDirectory)}>
+        <MenuItem onSelect={action(onOpenRemoteDirectory)}>
           {t("terminal.openDirectoryInSFTP")}
-        </button>
+        </MenuItem>
       )}
-      <button type="button" role="menuitem" className={menuItemClass()} title={t("terminal.copyContextHint")} onClick={action(onCopyContext)}>
+      <MenuItem title={t("terminal.copyContextHint")} onSelect={action(onCopyContext)}>
         {t("terminal.copyContext")}
-      </button>
-      <button type="button" role="menuitem" className={menuItemClass()} title={t("terminal.copyWithColorsHint")} onClick={action(onCopyWithColors)}>
+      </MenuItem>
+      <MenuItem title={t("terminal.copyWithColorsHint")} onSelect={action(onCopyWithColors)}>
         {t("terminal.copyWithColors")}
-      </button>
-      <button type="button" role="menuitem" className={menuItemClass()} onClick={action(onSaveScrollback)}>
+      </MenuItem>
+      <MenuItem onSelect={action(onSaveScrollback)}>
         {t("terminal.saveScrollback")}
-      </button>
+      </MenuItem>
       {/* These apply to every terminal, not only this one, so they sit apart, each group under how far it
           reaches: OSC 52 is one value for every machine, the rest belong to the preset this machine uses. */}
-      <div role="group" aria-label={scopeLabel("allMachines")} className={menuGroupClass}>
-        <p aria-hidden="true" className={menuGroupHeadingClass}>{scopeLabel("allMachines")}</p>
-        <ChoiceMenuItem role="menuitemcheckbox" label="OSC 52" hint={t("terminal.osc52Hint")} checked={osc52Enabled} onSelect={action(onToggleOsc52)} />
-      </div>
-      <div role="group" aria-label={scopeLabel("preset")} className={menuGroupClass}>
-        <p aria-hidden="true" className={menuGroupHeadingClass}>{scopeLabel("preset")}</p>
+      <MenuGroup heading={scopeLabel("allMachines")}>
+        <MenuChoiceItem role="menuitemcheckbox" label="OSC 52" hint={t("terminal.osc52Hint")} checked={osc52Enabled} onSelect={action(onToggleOsc52)} />
+      </MenuGroup>
+      <MenuGroup heading={scopeLabel("preset")}>
         {isScreenWakeLockSupported() ? (
-          <ChoiceMenuItem role="menuitemcheckbox" label={t("terminal.keepScreenAwake")} hint={t("terminal.keepScreenAwakeHint")} checked={keepScreenAwake}
+          <MenuChoiceItem role="menuitemcheckbox" label={t("terminal.keepScreenAwake")} hint={t("terminal.keepScreenAwakeHint")} checked={keepScreenAwake}
             onSelect={action(() => saveKeepScreenAwake(!keepScreenAwake))} />
         ) : null}
         {/* Turning detection off keeps the menu open: the two fixed choices appear under it to pick from.
             It starts on the one detection picked, so nothing changes until one is picked. */}
-        <ChoiceMenuItem role="menuitemcheckbox" label={t("terminal.touchModeAuto")} hint={t("terminal.touchModeAutoHint")} checked={touchMode === "auto"}
+        <MenuChoiceItem role="menuitemcheckbox" label={t("terminal.touchModeAuto")} hint={t("terminal.touchModeAutoHint")} checked={touchMode === "auto"}
           onSelect={() => saveTouchMode(touchMode === "auto" ? detectedTouchMode : "auto")} />
         {touchMode === "auto" ? null : fixedTouchModes.map(({ mode, label, hint }) => (
-          <ChoiceMenuItem key={mode} role="menuitemradio" indent label={t(label)} hint={t(hint)} checked={touchMode === mode}
+          <MenuChoiceItem key={mode} role="menuitemradio" indent label={t(label)} hint={t(hint)} checked={touchMode === mode}
             onSelect={action(() => saveTouchMode(mode))} />
         ))}
-      </div>
-    </div>
+      </MenuGroup>
+    </MenuPanel>
   );
 }
 
@@ -156,27 +135,3 @@ const fixedTouchModes: { mode: FixedTouchMode; label: MessageKey; hint: MessageK
   { mode: "touch", label: "terminal.touchModeTouch", hint: "terminal.touchModeTouchHint" },
   { mode: "mouse", label: "terminal.touchModeMouse", hint: "terminal.touchModeMouseHint" },
 ];
-
-function ChoiceMenuItem({ role, label, hint, checked, onSelect, indent = false }: {
-  role: "menuitemcheckbox" | "menuitemradio";
-  label: string;
-  hint: string;
-  checked: boolean;
-  onSelect: () => void;
-  indent?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role={role}
-      aria-checked={checked}
-      className={menuChoiceItemClass({ indent })}
-      title={hint}
-      onClick={onSelect}
-    >
-      <span>{label}</span>
-      {role === "menuitemcheckbox" ? <SwitchMark on={checked} />
-        : checked ? <Icon name="check" className="size-4 text-live" /> : <span aria-hidden="true" className="size-4" />}
-    </button>
-  );
-}

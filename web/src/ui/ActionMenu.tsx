@@ -1,10 +1,7 @@
 import { useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Icon } from "./icons";
-import { menuItemClass, menuSurface } from "./menuStyle";
-import { useAnchoredMenu } from "./useAnchoredMenu";
-import { useDismissibleLayer } from "./useDismissibleLayer";
-import { useMenuKeyboard } from "./useMenuKeyboard";
+import { MenuItem } from "./MenuItems";
+import { MenuPanel } from "./MenuPanel";
 import { IconButton, type IconButtonGround, type IconButtonSize, type IconButtonTone } from "./IconButton";
 
 // revealOnHover は、行やカードの「…」を、載せられる PC の画面（hover-reveal）では乗せたとき（とキーボードで
@@ -53,10 +50,7 @@ type ActionMenuProps = {
   onOpenChange?: (open: boolean) => void;
 };
 
-// A "…" button that opens the actions for one item as a menu. The menu follows
-// the temporary layer contract of useDismissibleLayer and the keys of
-// useMenuKeyboard, and is portaled so that a card's rounded corners or a
-// scrolling list do not clip it.
+// A "…" button that opens the actions for one item as a menu (MenuPanel).
 export function ActionMenu({ label, items, triggerSize, triggerTone = "muted", triggerGround = "hover", triggerClassName = "", triggerTouchDense = false, iconClassName = "size-4", open: controlledOpen, onOpenChange }: ActionMenuProps) {
   const [ownOpen, setOwnOpen] = useState(false);
   const open = controlledOpen ?? ownOpen;
@@ -65,18 +59,7 @@ export function ActionMenu({ label, items, triggerSize, triggerTone = "muted", t
     if (onOpenChange !== undefined) onOpenChange(value);
     else setOwnOpen(value);
   };
-  const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useDismissibleLayer({
-    open,
-    containerRefs: [rootRef, menuRef],
-    onDismiss: () => setOpen(false),
-    returnFocusRef: triggerRef,
-  });
-  useMenuKeyboard({ open, menuRef, onClose: () => setOpen(false) });
-  useAnchoredMenu({ open, anchorRef: triggerRef, menuRef });
 
   // Focus goes back to the button before the action runs. A dialog the action
   // opens then returns focus to the button when it closes, and inside a modal
@@ -88,7 +71,7 @@ export function ActionMenu({ label, items, triggerSize, triggerTone = "muted", t
   }
 
   return (
-    <div ref={rootRef} className="relative shrink-0">
+    <div className="relative shrink-0">
       <IconButton
         ref={triggerRef}
         label={label}
@@ -103,23 +86,14 @@ export function ActionMenu({ label, items, triggerSize, triggerTone = "muted", t
       >
         <Icon name="moreHorizontal" className={iconClassName} />
       </IconButton>
-      {open ? createPortal(
-        <div ref={menuRef} role="menu" className={`fixed z-50 w-56 overflow-y-auto ${menuSurface}`}>
+      {open ? (
+        <MenuPanel label={label} anchorRef={triggerRef} onClose={() => setOpen(false)}>
           {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled}
-              title={item.title}
-              onClick={() => select(item)}
-              className={menuItemClass(item.tone)}
-            >
+            <MenuItem key={item.label} tone={item.tone} disabled={item.disabled === true} title={item.title} onSelect={() => select(item)}>
               {item.label}
-            </button>
+            </MenuItem>
           ))}
-        </div>,
-        document.body,
+        </MenuPanel>
       ) : null}
     </div>
   );

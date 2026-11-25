@@ -176,7 +176,7 @@ test("keeps terminal actions compact and exposes terminal settings", async ({ pa
   await expect(terminal).toBeVisible();
   await expect(terminal.getByRole("button", { name: "Find" })).toBeVisible();
   await terminal.getByRole("button", { name: "More terminal actions" }).click();
-  const menu = terminal.getByRole("menu", { name: "More terminal actions" });
+  const menu = page.getByRole("menu", { name: "More terminal actions" });
   await expect(menu.getByRole("menuitem", { name: "Quick Commands" })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "Copy recent terminal context" })).toBeVisible();
   await expect(menu.getByRole("group", { name: "All machines" }).getByRole("menuitemcheckbox", { name: "OSC 52" })).toBeVisible();
@@ -248,7 +248,7 @@ test("opens forwarding management only for an SSH terminal", async ({ page, inst
   const terminal = page.getByRole("region", { name: "Terminal for bastion" });
   await expect(terminal).toBeVisible();
   await terminal.getByRole("button", { name: "More terminal actions" }).click();
-  await terminal.getByRole("menuitem", { name: "Port forwarding" }).click();
+  await page.getByRole("menu", { name: "More terminal actions" }).getByRole("menuitem", { name: "Port forwarding" }).click();
   const dialog = page.getByRole("dialog", { name: "Port forwarding" });
   await expect(dialog.getByText("socks5://127.0.0.1:1080")).toBeVisible();
   await expect(dialog.getByText(/Listeners use 127\.0\.0\.1 on this device or the SSH server/)).toBeVisible();
