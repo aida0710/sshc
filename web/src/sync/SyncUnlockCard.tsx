@@ -22,7 +22,8 @@ export function SyncUnlockCard({ master, busy, onMasterChange, onUnlock }: {
         />
         <Button
           kind="primary"
-          disabled={busy || master === ""}
+          busy={busy}
+          disabled={master === ""}
           onClick={onUnlock}
           className="self-start"
         >

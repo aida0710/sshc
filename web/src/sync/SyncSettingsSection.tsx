@@ -7,6 +7,7 @@ import { CheckboxField, control } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { PageSection } from "../ui/page";
 import { PasswordInput } from "../ui/PasswordField";
+import { usePendingAction } from "../ui/usePendingAction";
 import { Button, Notice } from "../ui/surface";
 import { SyncDirectionField } from "./SyncDirectionField";
 import { SyncKeySection } from "./SyncKeySection";
@@ -25,10 +26,12 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
   // Exporting these settings for another machine; shown with the settings it exports, once sync is set up.
   exportSection: ReactNode;
   // Asks the engine what the bucket path holds before anything is saved.
-  onCheckSetup: () => void;
-  onCompleteSetup: () => void;
-  onSaveKey: () => void;
+  onCheckSetup: () => Promise<void>;
+  onCompleteSetup: () => Promise<void>;
+  onSaveKey: () => Promise<void>;
 }) {
+  // 押したボタンだけを busy にする（SyncOverviewCard と同じ形）。失敗は SyncPanel が文にして出す。
+  const pending = usePendingAction<"check" | "complete">();
   const t = useTranslate();
   const {
     endpoint,
@@ -180,12 +183,13 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
                     ) : null}
                     <Button
                       kind="primary"
+                      busy={pending.running === "complete"}
                       disabled={
                         busy ||
                         (setupCheck.state === "existing" && ownKey === "") ||
                         (chooseOwn && ownKey === "")
                       }
-                      onClick={onCompleteSetup}
+                      onClick={() => void pending.start("complete", onCompleteSetup)}
                     >
                       {t("sync.setup.save")}
                     </Button>
@@ -193,6 +197,7 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
                 )}
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button
+                    busy={pending.running === "check"}
                     disabled={
                       busy ||
                       endpoint === "" ||
@@ -200,7 +205,7 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
                       accessKeyId === "" ||
                       secretAccessKey === ""
                     }
-                    onClick={onCheckSetup}
+                    onClick={() => void pending.start("check", onCheckSetup)}
                   >
                     {t("sync.setup.check")}
                   </Button>

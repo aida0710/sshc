@@ -61,9 +61,8 @@ export function SyncForcePushDialog({
           <CheckboxField label={t("sync.forceConfirm")} checked={confirmed} onChange={setConfirmed} tone="danger" />
           <Button
             kind="danger"
-            disabled={
-              busy || !confirmed || !keyConfigured || message.trim() === ""
-            }
+            busy={busy}
+            disabled={!confirmed || !keyConfigured || message.trim() === ""}
             onClick={onSubmit}
             className="self-start"
           >

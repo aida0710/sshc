@@ -3,6 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { control, hintText } from "../ui/form";
 import { PageSection } from "../ui/page";
 import { Button } from "../ui/surface";
+import { usePendingAction } from "../ui/usePendingAction";
 
 // The push side: a commit message for the local changes the engine counted,
 // and the buttons that send or preview them.
@@ -12,9 +13,11 @@ export function SyncTransferCard({ status, busy, pushDraft, pushMessage, onMessa
   pushDraft: SyncPushDraft | null;
   pushMessage: string;
   onMessageChange: (value: string) => void;
-  onPush: () => void;
-  onPreview: () => void;
+  onPush: () => Promise<void>;
+  onPreview: () => Promise<void>;
 }) {
+  // 押したボタンだけを busy にする（SyncOverviewCard と同じ形）。失敗は SyncPanel が文にして出す。
+  const pending = usePendingAction<"push" | "preview">();
   const t = useTranslate();
   const pushChangeCount =
     pushDraft === null
@@ -54,6 +57,7 @@ export function SyncTransferCard({ status, busy, pushDraft, pushMessage, onMessa
       <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
         <Button
           kind="primary"
+          busy={pending.running === "push"}
           disabled={
             busy ||
             !status.keyConfigured ||
@@ -61,13 +65,14 @@ export function SyncTransferCard({ status, busy, pushDraft, pushMessage, onMessa
             pushChangeCount === null ||
             pushChangeCount === 0
           }
-          onClick={onPush}
+          onClick={() => void pending.start("push", onPush)}
         >
           {t("sync.push")}
         </Button>
         <Button
+          busy={pending.running === "preview"}
           disabled={busy || !status.keyConfigured}
-          onClick={onPreview}
+          onClick={() => void pending.start("preview", onPreview)}
         >
           {t("sync.preview")}
         </Button>

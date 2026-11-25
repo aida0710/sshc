@@ -61,7 +61,7 @@ export function UpdateControls({ status, api, sessions, onStart }: UpdateControl
   return (
     <>
       {status.canUpdate !== true || isUpdateActive(job) ? null : (
-        <Button ref={buttonRef} kind="primary" disabled={loading} onClick={() => { void review(); }}>
+        <Button ref={buttonRef} kind="primary" busy={loading} onClick={() => { void review(); }}>
           {t("update.install")}
         </Button>
       )}

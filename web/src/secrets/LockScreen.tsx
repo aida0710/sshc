@@ -51,7 +51,9 @@ export function LockScreen({
     required: number;
   } | null>(null);
   const [resetAcknowledged, setResetAcknowledged] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // running は、待っている操作（開く・作る、互換のバックアップから戻す、作り直す）。押したボタンだけを busy にする。
+  const [running, setRunning] = useState<"submit" | "recover" | "reset" | null>(null);
+  const busy = running !== null;
   const [withoutPassword, setWithoutPassword] = useState(false);
   const noPassword = exists ? passwordless : withoutPassword;
   const tooShort = !noPassword && (exists ? password === "" : !meetsMasterPasswordMinimum(password, minPassphraseLength));
@@ -59,7 +61,7 @@ export function LockScreen({
 
   async function submit() {
     if (busy || tooShort || mismatched) return;
-    setBusy(true);
+    setRunning("submit");
     setError("");
     setDiagnostic(null);
     setVersionMismatch(null);
@@ -157,12 +159,12 @@ export function LockScreen({
           setError(failureMessage);
       }
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
   async function recoverCompatibleBackup() {
-    setBusy(true);
+    setRunning("recover");
     setError("");
     try {
       const status = await api.recoverCompatibleVault(password);
@@ -182,13 +184,13 @@ export function LockScreen({
           setError(t("lock.recoveryFailed"));
       }
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
   async function resetUnsupportedVault() {
     if (!resetAcknowledged) return;
-    setBusy(true);
+    setRunning("reset");
     setError("");
     try {
       const status = await api.resetUnsupportedVault(password);
@@ -200,7 +202,7 @@ export function LockScreen({
       const code = caught instanceof ApiError ? caught.code : "network_request_failed";
       setError(t(code === "vault_backups_too_many" ? "lock.tooManyBackups" : "lock.resetFailed"));
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
@@ -229,13 +231,14 @@ export function LockScreen({
         {versionMismatch === null ? null : (
           <div className="flex flex-col gap-3 rounded-inset bg-well p-4">
             <p className="text-sm leading-6 text-ink-muted">{t("lock.schemaRecoveryHint")}</p>
-            <Button type="button" disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
+            <Button type="button" busy={running === "recover"} disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
               {t("lock.restoreCompatibleBackup")}
             </Button>
             <CheckboxField label={t("lock.resetUnsupportedAcknowledge")} checked={resetAcknowledged} onChange={setResetAcknowledged} tone="danger" />
             <Button
               kind="danger"
               type="button"
+              busy={running === "reset"}
               disabled={busy || tooShort || !resetAcknowledged}
               onClick={() => void resetUnsupportedVault()}
             >
@@ -251,7 +254,7 @@ export function LockScreen({
           )}
         </>}
         {!exists && !noPassword && isAcceptedButShort(password, minPassphraseLength) ? <p className="text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
-        <Button kind="primary" className="h-[38px] w-full text-sm" type="submit" disabled={busy || tooShort || mismatched}>
+        <Button kind="primary" className="h-[38px] w-full text-sm" type="submit" busy={running === "submit"} disabled={busy || tooShort || mismatched}>
           {exists ? t("lock.open") : t("lock.create")}
         </Button>
       </form>

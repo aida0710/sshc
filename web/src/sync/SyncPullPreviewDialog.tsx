@@ -3,6 +3,7 @@ import type { Translate } from "../i18n/context";
 import { CheckboxField, hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
+import { usePendingAction } from "../ui/usePendingAction";
 import { ModalShell } from "../ui/ModalShell";
 import { SyncErrorNotice } from "./SyncErrorNotice";
 
@@ -17,9 +18,9 @@ type SyncPullPreviewDialogProps = {
   direction: SyncDirection;
   t: Translate;
   onAcceptRemovals: (accepted: boolean) => void;
-  onApply: () => void;
+  onApply: () => Promise<void>;
   onClose: () => void;
-  onResolve: (choice: "local" | "remote") => void;
+  onResolve: (choice: "local" | "remote") => Promise<void>;
 };
 
 export function SyncPullPreviewDialog({
@@ -37,6 +38,8 @@ export function SyncPullPreviewDialog({
   onResolve,
 }: SyncPullPreviewDialogProps) {
   const conflicted = preview.conflicts.length > 0;
+  // 押したボタンだけを busy にする（SyncOverviewCard と同じ形）。失敗は SyncPanel が文にして出す。
+  const pending = usePendingAction<"keepMine" | "takeTheirs" | "apply">();
   return (
     <ModalShell
       labelledBy="sync-pull-preview-heading"
@@ -77,10 +80,10 @@ export function SyncPullPreviewDialog({
               live={false}
               actions={(
                 <>
-                  <Button disabled={busy} onClick={() => onResolve("local")}>
+                  <Button busy={pending.running === "keepMine"} disabled={busy} onClick={() => void pending.start("keepMine", () => onResolve("local"))}>
                     {t("sync.keepMine")}
                   </Button>
-                  <Button disabled={busy} onClick={() => onResolve("remote")}>
+                  <Button busy={pending.running === "takeTheirs"} disabled={busy} onClick={() => void pending.start("takeTheirs", () => onResolve("remote"))}>
                     {t("sync.takeTheirs")}
                   </Button>
                 </>
@@ -142,13 +145,14 @@ export function SyncPullPreviewDialog({
           )}
           <Button
             kind="primary"
+            busy={pending.running === "apply"}
             disabled={
               busy ||
               conflicted ||
               direction === "push" ||
               (preview.removed.length > 0 && !acceptedRemovals)
             }
-            onClick={onApply}
+            onClick={() => void pending.start("apply", onApply)}
             className="self-start"
           >
             {t(acceptRemoteHead ? "sync.remoteHeadApply" : "sync.apply")}
