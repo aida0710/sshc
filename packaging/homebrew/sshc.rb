@@ -17,15 +17,15 @@ class Sshc < Formula
   SOURCE_COMMIT_TIME = "".freeze
 
   depends_on "go" => :build
-  # 画面は CI・リリースと同じ Node 26 で組み立てる。Node が違うと組み立ての結果が変わる。
-  # node@26 は今は node（26 系）の別名で、node が次の版へ進むと 26 に留まる formula になる。
-  # node と書くと次の版へ勝手に上がるので、node@26 と書いて 26 に固定する。
-  depends_on "node@26" => :build
+  # 利用者の PATH の node を替えないよう、keg-only の node@24 で画面を組み立てる。node@26 は今は node の別名で、
+  # 入れると PATH の node が 26 になり、自分で link してある node@22 なども外れる。CI・リリースの Node 26 と同じ
+  # 画面になることは、CI（jobs.web-checks）が両方で組み立てて確かめる。
+  depends_on "node@24" => :build
 
   def install
     # 埋め込む画面を組み立てる。npm は web/ の中で走らせる（--prefix は下位命令ごとに意味が違う）。
-    # node@26 が別名でも keg-only の formula でも、その bin を PATH の先頭に置けば 26 が使われる。
-    ENV.prepend_path "PATH", Formula["node@26"].opt_bin
+    # node@24 は keg-only なので、その bin を PATH の先頭に置く。
+    ENV.prepend_path "PATH", Formula["node@24"].opt_bin
     cd "web" do
       system "npm", "ci", *std_npm_args(prefix: false)
       system "npm", "run", "build"

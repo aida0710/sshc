@@ -637,6 +637,18 @@ jobs:
           SSHC_E2E_BROWSER_CHANNEL: chrome
         run: npm run e2e -- --project=chromium --output="$RUNNER_TEMP/playwright-results" e2e/accessibility.spec.ts
 
+      # Homebrew の formula だけは Node 24 で画面を組み立てる（理由は packaging/homebrew/sshc.rb）。上の Build の
+      # 画面と1バイトも違わないことを確かめる。違えば、Homebrew で入れた sshc だけ画面が変わる。
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+      - name: Build the same web UI with the Node of the Homebrew formula
+        run: |
+          mv ../internal/ui/dist/app "$RUNNER_TEMP/web-ui-app"
+          npm ci
+          npm run build
+          diff -r "$RUNNER_TEMP/web-ui-app" ../internal/ui/dist/app
+
   web-unit:
     name: Web unit tests (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
