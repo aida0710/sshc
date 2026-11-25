@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { usePendingResult } from "./usePendingResult";
-import { control, dialogHeading, hintText } from "./form";
+import { control, dialogHeading, Field, hintText } from "./form";
 import { Button, Notice } from "./surface";
 import { ModalShell } from "./ModalShell";
 import { hasOnScreenKeyboard, type asciiTextEntry } from "./softKeyboard";
@@ -53,8 +53,6 @@ export function InputDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const normalized = value.trim();
   const validation = useMemo(() => validate?.(normalized) ?? "", [normalized, validate]);
-  const errorId = `${id}-error`;
-  const inputId = `${id}-input`;
   const descriptionId = description === undefined ? undefined : `${id}-description`;
   const failureId = `${id}-failure`;
   const describedBy = [descriptionId, error === "" ? undefined : failureId].filter((part) => part !== undefined).join(" ");
@@ -88,21 +86,17 @@ export function InputDialog({
           submit();
         }}
       >
-        <div className="flex flex-col gap-1">
-          <label htmlFor={inputId} className="text-xs font-medium tracking-wide text-ink-muted">{label}</label>
+        {/* 誤りは確定を押したあとだけ出す。打っている途中から赤くしない。 */}
+        <Field label={label} error={touched ? validation : ""}>
           <input
             {...textEntry}
-            id={inputId}
             ref={inputRef}
             value={value}
             readOnly={submitting}
-            aria-invalid={touched && validation !== ""}
-            aria-describedby={touched && validation !== "" ? errorId : undefined}
             onChange={(event) => setValue(event.target.value)}
             className={control}
           />
-          {touched && validation !== "" ? <span id={errorId} role="alert" className="text-xs text-danger">{validation}</span> : null}
-        </div>
+        </Field>
         {error === "" ? null : <Notice tone="danger" id={failureId}>{error}</Notice>}
         <div className="flex justify-end gap-2">
           <Button disabled={submitting} onClick={onCancel}>{cancelLabel}</Button>

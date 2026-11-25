@@ -136,10 +136,10 @@ export function VPNProfileRow({
         <ProfileConnections connections={status.connections} />
       </div>
       <div className="col-start-2 row-start-1 flex items-center justify-end gap-1 @2xl:col-start-auto @2xl:row-start-auto @2xl:pr-1">
+        {/* 経路を用意している間は、左の札が回る印と「接続中」を出すので、［接続］は押せなくするだけにする
+            （同じことを2か所で言わない。Home の接続先のカードと同じ形）。 */}
         <Button
           small
-          busy={starting}
-          busyLabel={t("busy.connecting")}
           disabled={busy || preparing || checking || !available}
           title={starting ? undefined : waitingForOperation}
           onClick={actions.onStart}

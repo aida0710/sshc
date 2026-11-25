@@ -1,6 +1,7 @@
-import { useCallback, useId, useState, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { describeControl } from "./describeControl";
-import { FieldErrorContext } from "./fieldError";
+import { FieldErrorContext, useReportedFieldErrors } from "./fieldError";
+import { fieldErrorText, fieldNoticeText } from "./form";
 
 // The two columns of a form: the names, then the controls. FieldRowNote lines up with the second. The names'
 // column fits twelve characters, so names such as 現在のマスターパスワード do not break mid-word. Other
@@ -13,8 +14,6 @@ export const formColumns = "lg:grid-cols-[184px_minmax(0,1fr)] lg:gap-x-6";
 export const editorContainer = "@container/editor";
 
 type Density = "page" | "editor";
-
-const noErrors: ReadonlyMap<string, string> = new Map();
 
 // A page row's one column below lg is minmax(0, 1fr), not the implicit auto: a control that is itself an
 // auto-fill grid (Appearance's themes) needs a definite width to count its columns, or it lays all of them in
@@ -71,14 +70,7 @@ export function FieldRow({
   const errorId = useId();
   const warningId = useId();
   // reported は、行の中の部品が伝えた誤り（useFieldError）。
-  const [reported, setReported] = useState<ReadonlyMap<string, string>>(noErrors);
-  const reportError = useCallback((id: string, text: string) => setReported((current) => {
-    if ((current.get(id) ?? "") === text) return current;
-    const next = new Map(current);
-    if (text === "") next.delete(id);
-    else next.set(id, text);
-    return next;
-  }), []);
+  const { reported, reportError } = useReportedFieldErrors();
   const name = <span className={look.name}>{label}</span>;
   const control = (
     <span className="flex min-w-0 flex-col">
@@ -96,11 +88,11 @@ export function FieldRow({
         {interactiveChildren ? <div className={look.pair}>{name}{control}</div> : <label className={look.pair}>{name}{control}</label>}
       </FieldErrorContext.Provider>
       {hint === undefined ? null : <span id={hintId} className={`text-xs leading-[18px] text-ink-faint ${look.second}`}>{hint}</span>}
-      {error === undefined ? null : <span id={errorId} aria-live="polite" className={`text-xs leading-[18px] text-danger ${look.second}`}>{error}</span>}
+      {error === undefined ? null : <span id={errorId} aria-live="polite" className={`${fieldErrorText} ${look.second}`}>{error}</span>}
       {[...reported].map(([id, text]) => (
-        <span key={id} id={id} aria-live="polite" className={`text-xs leading-[18px] text-danger ${look.second}`}>{text}</span>
+        <span key={id} id={id} aria-live="polite" className={`${fieldErrorText} ${look.second}`}>{text}</span>
       ))}
-      {warning === undefined ? null : <span id={warningId} aria-live="polite" className={`text-xs leading-[18px] text-notice-ink ${look.second}`}>{warning}</span>}
+      {warning === undefined ? null : <span id={warningId} aria-live="polite" className={`${fieldNoticeText} ${look.second}`}>{warning}</span>}
       {actions === undefined ? null : <div className={`flex flex-wrap gap-2 ${look.second}`}>{actions}</div>}
     </div>
   );

@@ -1,6 +1,6 @@
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { control } from "../ui/form";
+import { control, fieldErrorText } from "../ui/form";
 import { Button } from "../ui/surface";
 import { literalTextEntry } from "../ui/softKeyboard";
 
@@ -68,7 +68,7 @@ export function ConfigPathForm({
         </Button>
         <Button className="min-h-10 md:min-h-0" onClick={onCancel}>{t("explorer.cancelPathTask")}</Button>
       </div>
-      {problem === "" ? null : <p id="config-path-problem" role="alert" className="text-xs text-danger">{problem}</p>}
+      {problem === "" ? null : <p id="config-path-problem" role="alert" className={fieldErrorText}>{problem}</p>}
       <p id="config-path-note" className="text-xs leading-[18px] text-ink-faint">{t(texts.note)}</p>
     </form>
   );
