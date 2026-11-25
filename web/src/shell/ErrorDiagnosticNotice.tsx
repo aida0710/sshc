@@ -1,6 +1,8 @@
 import { useTranslate } from "../i18n/context";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
+import { Banner, bannerButton } from "../ui/Banner";
 import { CopyButton } from "../ui/CopyButton";
+import { Button } from "../ui/surface";
 import type { RequestFailureDiagnostic } from "../api/client";
 import { workspaceRefusalMessages } from "../api/workspaceRefusals";
 
@@ -28,30 +30,17 @@ export function ErrorDiagnosticNotice({
   const report = diagnosticReport(version, diagnostic);
 
   return (
-    <section
-      aria-labelledby="request-failure-heading"
-      className="shrink-0 border-b border-danger/40 bg-danger/5 px-4 py-3"
-    >
-      <div className="mx-auto flex max-w-5xl flex-col gap-2">
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 grow">
-            <h2 id="request-failure-heading" className="text-sm font-semibold text-danger">
-              {t("diagnostic.requestFailed")}
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-ink-muted">
-              {t(workspaceRefusalMessages[diagnostic.code] ?? "diagnostic.requestFailedHint", { code: diagnostic.code })}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("diagnostic.dismiss")}
-            className="shrink-0 rounded-md border border-control-line px-2 py-1 text-xs text-ink-muted"
-          >
-            {t("diagnostic.dismiss")}
-          </button>
-        </div>
-        <details className="text-xs">
+    <Banner
+      tone="danger"
+      labelledBy="request-failure-heading"
+      multiline
+      actions={(
+        <Button small onClick={onClose} className={bannerButton}>
+          {t("diagnostic.dismiss")}
+        </Button>
+      )}
+      details={(
+        <details>
           <DisclosureSummary className="text-ink-muted">{t("diagnostic.showDetails")}</DisclosureSummary>
           <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md border border-line bg-card p-2 text-ink">
             {report}
@@ -60,7 +49,14 @@ export function ErrorDiagnosticNotice({
             <CopyButton value={report} label="copy.diagnosticReport" />
           </div>
         </details>
-      </div>
-    </section>
+      )}
+    >
+      <h2 id="request-failure-heading" className="text-sm font-semibold text-danger">
+        {t("diagnostic.requestFailed")}
+      </h2>
+      <p className="mt-1 leading-5 text-ink-muted">
+        {t(workspaceRefusalMessages[diagnostic.code] ?? "diagnostic.requestFailedHint", { code: diagnostic.code })}
+      </p>
+    </Banner>
   );
 }

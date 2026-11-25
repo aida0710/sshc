@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { ActionMenuItem } from "../ui/ActionMenu";
+import { Banner } from "../ui/Banner";
 import { FilePreviewBody } from "./FilePreviewBody";
 import { FilePreviewArea, FilePreviewFrame, useFilePreviewOverlay } from "./FilePreviewFrame";
 import { FilePreviewHeader } from "./FilePreviewHeader";
@@ -59,7 +60,7 @@ export function FilePreviewDialog({
         overlay={overlay}
         onClose={onClose}
       />
-      {problem === "" ? null : <p role="alert" className={`px-3 py-2 text-xs text-danger ${overlay ? "" : "border-b border-line"}`}>{problem}</p>}
+      {problem === "" ? null : <Banner tone={overlay ? "overlay" : "plain"} role="alert"><p className="text-danger">{problem}</p></Banner>}
     </>
   );
 
