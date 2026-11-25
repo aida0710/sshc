@@ -94,7 +94,7 @@ sshc help                    # すべてのコマンド
 
 ## 開発
 
-Go 1.26とNode.js 22が必要です。
+Go 1.26とNode.js 26が必要です。
 
 ```sh
 make build
