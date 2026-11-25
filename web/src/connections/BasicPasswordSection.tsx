@@ -1,8 +1,7 @@
 import { useTranslate } from "../i18n/context";
 import { ConnectionVaultUnlock } from "./ConnectionVaultUnlock";
-import { CheckboxField, control } from "../ui/form";
+import { CheckboxField, control, fieldErrorText, fieldNoticeText } from "../ui/form";
 import { FieldRow, FieldRowNote } from "../ui/FieldRow";
-import { Icon } from "../ui/icons";
 import { PasswordInput } from "../ui/PasswordField";
 import { Notice } from "../ui/surface";
 import { eligibilityText } from "./eligibilityText";
@@ -133,12 +132,8 @@ export function BasicPasswordSection({
   );
 }
 
-// NoteLine is one warning under a row: a marked, coloured line rather than a box.
+// NoteLine は、行の下の1行の注意。ほかの設定の行の誤りと注意（FieldRow の error・warning）と同じく、印を付けず
+// 色の字だけで出す（2026-11-25、印の付いた形と分かれていたのをそろえた）。
 function NoteLine({ tone = "notice", children }: { tone?: "notice" | "danger"; children: string }) {
-  return (
-    <p role={tone === "danger" ? "alert" : "status"} className={`flex gap-1.5 text-xs leading-[18px] ${tone === "danger" ? "text-danger" : "text-notice-ink"}`}>
-      <Icon name="warning" className="mt-0.5 size-3.5 shrink-0" />
-      <span>{children}</span>
-    </p>
-  );
+  return <p role={tone === "danger" ? "alert" : "status"} className={tone === "danger" ? fieldErrorText : fieldNoticeText}>{children}</p>;
 }

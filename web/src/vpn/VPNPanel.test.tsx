@@ -737,7 +737,7 @@ describe("VPNPanel", () => {
     expect(await screen.findByText("None yet.")).toBeVisible();
   });
 
-  it("shows Connect as working while the route is being opened, and why the profile cannot be changed meanwhile", async () => {
+  it("shows the route as connecting while it is being opened, holds Connect, and says why the profile cannot be changed meanwhile", async () => {
     const user = userEvent.setup();
     const startVPNRoute = vi.fn().mockReturnValue(new Promise<VPNOverview>(() => undefined));
     render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(stoppedOverview()), startVPNRoute })} />);
@@ -745,8 +745,10 @@ describe("VPNPanel", () => {
 
     await user.click(within(route).getByRole("button", { name: "Connect" }));
 
-    expect(within(route).getByRole("button", { name: "Connecting…" })).toHaveAttribute("aria-busy", "true");
+    // 用意している間は札が「connecting」と言うので、［Connect］は押せなくなるだけで、同じことを言わない。
     expect(within(route).getByText("connecting")).toBeVisible();
+    expect(within(route).getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(within(route).getByRole("button", { name: "Connect" })).not.toHaveAttribute("aria-busy");
     const edit = await rowActionItem(user, route, "Edit");
     expect(edit).toBeDisabled();
     expect(edit).toHaveAttribute(
