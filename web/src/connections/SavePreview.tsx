@@ -44,10 +44,13 @@ export function SavePreviewPanel({
   preview,
   conflict,
   problem,
+  onDismissProblem,
 }: {
   preview: SavePreview | null;
   conflict: ConflictReport | null;
   problem: Problem | null;
+  // onDismissProblem は、断られた理由を消す。理由に付くディスク上の変更との比べと診断も、いっしょに消える。
+  onDismissProblem?: (() => void) | undefined;
 }) {
   const t = useTranslate();
   // 書き込んだものも、断られた理由も無いうちは何も出さない。いつも出ていると、済んだことのない操作の
@@ -65,7 +68,7 @@ export function SavePreviewPanel({
       </div>
 
       {problem === null ? null : (
-        <Band tone="danger">{saveProblemMessage(problem, t)}</Band>
+        <Band tone="danger" onDismiss={onDismissProblem}>{saveProblemMessage(problem, t)}</Band>
       )}
 
       {problem?.diagnostics === undefined ? null : <ConfigDiagnosticList diagnostics={problem.diagnostics} />}

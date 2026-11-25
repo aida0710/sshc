@@ -837,6 +837,14 @@ describe("SFTPPanel uploads", () => {
     expect(api.list).not.toHaveBeenCalled();
   });
 
+  it("hides the notice of a failure on request", async () => {
+    render(<SFTPPanel aliases={["edge"]} target={{ alias: "missing", path: "/etc/hosts", action: "browse", request: 4 }} />);
+
+    await userEvent.click(within(await screen.findByRole("alert")).getByRole("button", { name: "Hide this notice" }));
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("shows the stage and connection log while connecting, and keeps the log with the reason when it fails", async () => {
     let failConnection: (reason: unknown) => void = () => undefined;
     api.list.mockImplementationOnce(() => new Promise((_, reject) => { failConnection = reject; }));

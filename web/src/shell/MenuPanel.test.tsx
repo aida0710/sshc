@@ -135,6 +135,9 @@ describe("MenuPanel", () => {
     await user.click(screen.getByRole("dialog").querySelector("button:last-of-type") as HTMLElement);
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not sign out.");
     expect(reload).not.toHaveBeenCalled();
+
+    await user.click(within(screen.getByRole("alert")).getByRole("button", { name: "Hide this notice" }));
+    expect(screen.queryByRole("alert")).toBeNull();
     vi.unstubAllGlobals();
   });
 });

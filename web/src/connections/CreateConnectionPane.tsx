@@ -104,7 +104,7 @@ export function CreateConnectionPane({
           </div>
         </header>
 
-        {form.error === "" ? null : <div className="mb-3.5"><Notice tone="danger">{form.error}</Notice></div>}
+        {form.error === "" ? null : <div className="mb-3.5"><Notice tone="danger" onDismiss={form.clearError}>{form.error}</Notice></div>}
 
         <EditorSection title={t("conn.createNameSection")}>
           <div className="grid gap-2.5 @sm/editor:grid-cols-2">

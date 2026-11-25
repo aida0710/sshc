@@ -46,5 +46,5 @@ export function useDraftSave({ draft, saved }: { draft: unknown; saved: unknown 
     }
   }
 
-  return { saving, written: result === "written", saveFailed: result === "failed", save };
+  return { saving, written: result === "written", saveFailed: result === "failed", save, dismissFailure: () => setOutcome(null) };
 }

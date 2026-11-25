@@ -32,5 +32,11 @@ export function useSignOutConfirmation() {
     />
   ) : null;
 
-  return { requestSignOut: () => setConfirming(true), busy: signingOut.busy, error: signingOut.error, confirmation };
+  return {
+    requestSignOut: () => setConfirming(true),
+    busy: signingOut.busy,
+    error: signingOut.error,
+    dismissError: signingOut.clearError,
+    confirmation,
+  };
 }

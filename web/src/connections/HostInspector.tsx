@@ -52,7 +52,7 @@ export function HostInspector({
   // tagsText は、タグの入力欄の文字列である。入力途中のカンマや空白を消さないよう、
   // 下書きのタグとは別に持つ。
   const [tagsText, setTagsText] = useState(() => formatTags(saved.tags));
-  const { saving, written, saveFailed, save: saveDraft } = useDraftSave({ draft, saved });
+  const { saving, written, saveFailed, save: saveDraft, dismissFailure } = useDraftSave({ draft, saved });
   const dirty = !written && !sameHostMetadata(draft, saved);
 
   const discard = useCallback(() => {
@@ -203,7 +203,7 @@ export function HostInspector({
         </EditorSection>
       </fieldset>
 
-      {saveFailed ? <Notice tone="danger">{t("inspector.hostSaveFailed")}</Notice> : null}
+      {saveFailed ? <Notice tone="danger" onDismiss={dismissFailure}>{t("inspector.hostSaveFailed")}</Notice> : null}
       {dirty ? <DraftSaveBar
         saving={saving}
         saveDisabled={disabled}

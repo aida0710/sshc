@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -267,6 +267,10 @@ describe("CreateConnectionPane", () => {
     await user.click(screen.getByRole("button", { name: "Create connection" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The connection could not be created");
+    expect(screen.getByLabelText("Connection password")).toHaveValue("kept-for-retry");
+
+    await user.click(within(screen.getByRole("alert")).getByRole("button", { name: "Hide this notice" }));
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByLabelText("Connection password")).toHaveValue("kept-for-retry");
   });
 
