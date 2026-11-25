@@ -732,7 +732,7 @@ describe("SFTP tabs", () => {
     await userEvent.click(within(local).getByRole("button", { name: "Open Terminal here" }));
     expect(onOpenTerminal).toHaveBeenCalledWith(localHostAlias, "/home/edge");
     fireEvent.contextMenu(within(local).getByRole("button", { name: "notes.txt" }));
-    const contextMenu = await within(local).findByRole("menu", { name: "Actions for notes.txt" });
+    const contextMenu = await screen.findByRole("menu", { name: "Actions for notes.txt" });
     const items = within(contextMenu).getAllByRole("menuitem").map((item) => item.textContent);
     expect(items).toContain("Upload selection");
     expect(items).toContain("Copy full path");
