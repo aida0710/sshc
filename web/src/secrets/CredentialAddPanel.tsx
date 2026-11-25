@@ -9,6 +9,7 @@ import { PasswordField } from "../ui/PasswordField";
 import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { Button } from "../ui/surface";
+import { ActionArea } from "../ui/ActionArea";
 
 const headingKeys: Record<CredentialKind, MessageKey> = {
   password: "secrets.addPassword",
@@ -56,12 +57,12 @@ export function CredentialAddPanel({ kind, onStore, onCancel }: {
             <input ref={nameInput} value={name} onChange={(event) => setName(event.target.value)} disabled={saving} className={control} />
           </Field>
           <PasswordField label={t(valueLabelKeys[kind])} value={secret} onChange={setSecret} disabled={saving} />
-          <div className="flex justify-end gap-2">
+          <ActionArea placement="inline">
             <Button onClick={onCancel}>{t("secrets.cancel")}</Button>
             <Button kind="primary" busy={saving} busyLabel={t("busy.saving")} disabled={name === "" || secret === ""} onClick={() => void store()}>
               {t("secrets.save")}
             </Button>
-          </div>
+          </ActionArea>
         </div>
       </section>
     </InlinePanel>

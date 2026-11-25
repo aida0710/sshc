@@ -12,6 +12,7 @@ import { Button, Card, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
 import { useToast } from "../ui/useToast";
 import { asciiTextEntry, hasOnScreenKeyboard } from "../ui/softKeyboard";
+import { ActionArea } from "../ui/ActionArea";
 
 type ForwardApi = Pick<TerminalSessionsApi, "startTerminalForward" | "stopTerminalForward">;
 type SaveApi = Pick<typeof configApi, "overview" | "host" | "save">;
@@ -191,11 +192,11 @@ export function TerminalPortForwards({
               />
             )}
             {!connected ? <Notice>{t("terminal.forwardNeedsConnection")}</Notice> : null}
-            <div className="flex justify-end">
+            <ActionArea placement="inline">
               <Button kind="primary" busy={busy} busyLabel={t("busy.starting")} disabled={!canStart} onClick={() => void start()}>
                 {t("terminal.forwardStart")}
               </Button>
-            </div>
+            </ActionArea>
           </section>
         </div>
     </ModalShell>

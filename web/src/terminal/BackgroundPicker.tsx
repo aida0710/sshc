@@ -14,6 +14,7 @@ import { usePendingAction } from "../ui/usePendingAction";
 import { BackgroundCapacity } from "./BackgroundCapacity";
 import { BackgroundCard } from "./BackgroundCard";
 import { BackgroundThumbnail } from "./BackgroundThumbnail";
+import { ActionArea } from "../ui/ActionArea";
 
 type BackgroundApi = Pick<SettingsApi, "terminalBackgrounds" | "addTerminalBackground" | "setTerminalBackgroundCapacity" | "renameTerminalBackground" | "deleteTerminalBackground">;
 
@@ -239,10 +240,10 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
           />
           {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
         </div>
-        <footer className="flex items-center justify-between gap-3 border-t border-line bg-toolbar px-4 py-3">
-          <button type="button" className="text-sm text-ink-muted transition-colors duration-150 hover:text-ink" onClick={() => setDraft("")}>{t("terminal.backgroundUseNone")}</button>
+        <ActionArea placement="band" className="bg-toolbar px-4 py-3"
+          start={<button type="button" className="text-sm text-ink-muted transition-colors duration-150 hover:text-ink" onClick={() => setDraft("")}>{t("terminal.backgroundUseNone")}</button>}>
           <Button kind="primary" disabled={busy} onClick={() => { onChange(draft); setLibraryOpen(false); }}>{t("terminal.backgroundUse")}</Button>
-        </footer>
+        </ActionArea>
       </ModalShell> : null}
 
       {renameTarget === null ? null : (

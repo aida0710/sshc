@@ -6,6 +6,7 @@ import { Button, Notice } from "../ui/surface";
 import { usePendingAction } from "../ui/usePendingAction";
 import { ModalShell } from "../ui/ModalShell";
 import { SyncErrorNotice } from "./SyncErrorNotice";
+import { ActionArea } from "../ui/ActionArea";
 
 // 適用の失敗は、このダイアログの中に出す。背面の画面に出すとダイアログに隠れる。
 type SyncPullPreviewDialogProps = {
@@ -143,21 +144,22 @@ export function SyncPullPreviewDialog({
               />
             </>
           )}
-          <Button
-            kind="primary"
-            busy={pending.running === "apply"}
-            busyLabel={t(acceptRemoteHead ? "busy.receiving" : "busy.applying")}
-            disabled={
-              busy ||
-              conflicted ||
-              direction === "push" ||
-              (preview.removed.length > 0 && !acceptedRemovals)
-            }
-            onClick={() => void pending.start("apply", onApply)}
-            className="self-start"
-          >
-            {t(acceptRemoteHead ? "sync.remoteHeadApply" : "sync.apply")}
-          </Button>
+          <ActionArea placement="inline">
+            <Button
+              kind="primary"
+              busy={pending.running === "apply"}
+              busyLabel={t(acceptRemoteHead ? "busy.receiving" : "busy.applying")}
+              disabled={
+                busy ||
+                conflicted ||
+                direction === "push" ||
+                (preview.removed.length > 0 && !acceptedRemovals)
+              }
+              onClick={() => void pending.start("apply", onApply)}
+            >
+              {t(acceptRemoteHead ? "sync.remoteHeadApply" : "sync.apply")}
+            </Button>
+          </ActionArea>
         </div>
     </ModalShell>
   );

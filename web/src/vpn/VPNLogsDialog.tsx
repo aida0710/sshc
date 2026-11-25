@@ -5,6 +5,7 @@ import { dialogHeading, hintText } from "../ui/form";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
 import { useLoad } from "../ui/useLoad";
+import { ActionArea } from "../ui/ActionArea";
 
 // engine が経路を用意した記録と、コンテナの直近の出力を見せる。繋がらないときに
 // 最初に見る場所で、利用者に docker を直接叩かせないためにある。秘密は engine の
@@ -51,11 +52,11 @@ export function VPNLogsDialog({
           {lines}
         </pre>
       )}
-      <div className="flex justify-end">
+      <ActionArea placement="inline">
         <Button ref={closeRef} onClick={onClose}>
           {t("vpn.close")}
         </Button>
-      </div>
+      </ActionArea>
     </ModalShell>
   );
 }

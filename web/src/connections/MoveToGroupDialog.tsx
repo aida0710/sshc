@@ -6,6 +6,7 @@ import { Spinner } from "../ui/Spinner";
 import { Button, Notice } from "../ui/surface";
 import { usePendingResult } from "../ui/usePendingResult";
 import type { GroupListing } from "./groupListing";
+import { ActionArea } from "../ui/ActionArea";
 
 type MoveToGroupDialogProps = {
   // 動かす接続先の名前。1件なら見出しに名前を出す。
@@ -72,9 +73,9 @@ export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCan
         })}
       </ul>
       {error === "" ? null : <div className="px-4 py-2"><Notice tone="danger" id={errorId}>{error}</Notice></div>}
-      <div className="flex justify-end border-t border-line px-4 py-3">
+      <ActionArea placement="band" className="px-4 py-3">
         <Button disabled={move.pending} onClick={onCancel}>{t("groupDialog.cancel")}</Button>
-      </div>
+      </ActionArea>
     </ModalShell>
   );
 }

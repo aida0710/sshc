@@ -15,6 +15,7 @@ import { SyncWarning } from "./SyncWarning";
 import { syncSetupStateKeys } from "./syncMessageKeys";
 import type { SyncSetupForm } from "./useSyncSetupForm";
 import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
+import { ActionArea } from "../ui/ActionArea";
 
 // Bucket settings and the shared key. Until sync is configured this is the
 // whole screen; afterwards it folds away behind "manage settings". Only then is it a <details>: one
@@ -196,7 +197,8 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
                     </Button>
                   </div>
                 )}
-                <div className="flex flex-wrap justify-end gap-2">
+                {/* 線は、確かめた結果とこの行を包む枠の上の線が受け持つので、行には引かない。 */}
+                <ActionArea placement="inline">
                   <Button
                     busy={pending.running === "check"}
                     busyLabel={t("busy.checking")}
@@ -219,7 +221,7 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
                       {t("sync.cancelSettings")}
                     </Button>
                   ) : null}
-                </div>
+                </ActionArea>
               </div>
             </>
           ) : null}

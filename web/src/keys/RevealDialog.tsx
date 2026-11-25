@@ -5,6 +5,7 @@ import { useTranslate } from "../i18n/context";
 import type { KeysApi } from "./api";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
+import { ActionArea } from "../ui/ActionArea";
 
 type RevealDialogProps = {
   keyId: string;
@@ -53,13 +54,6 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
         <>
           <div className="mt-3"><Notice live={false}>{t("reveal.warning")}</Notice></div>
           <MoreDetails className="mt-2">{t("reveal.warningMore")}</MoreDetails>
-          <Button
-            ref={showButton}
-            className="mt-4"
-            onClick={() => void confirm()}
-          >
-            {t("reveal.show")}
-          </Button>
         </>
       )}
       {state === "loading" && (
@@ -83,9 +77,17 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
           <Notice tone="danger">{t("reveal.failed")}</Notice>
         </div>
       )}
-      <Button className="mt-4" onClick={close}>
-        {t("reveal.close")}
-      </Button>
+      {/* 確かめる間は、確認のダイアログと同じく［閉じる］［秘密鍵を表示］を1つの行に並べる。 */}
+      <ActionArea placement="inline" className="mt-4">
+        <Button onClick={close}>
+          {t("reveal.close")}
+        </Button>
+        {state === "confirm" ? (
+          <Button ref={showButton} onClick={() => void confirm()}>
+            {t("reveal.show")}
+          </Button>
+        ) : null}
+      </ActionArea>
     </ModalShell>
   );
 }

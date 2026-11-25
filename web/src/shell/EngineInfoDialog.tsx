@@ -12,6 +12,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
 import { RunTargetProblemNotice } from "../terminal/RunTargetProblemNotice";
+import { ActionArea } from "../ui/ActionArea";
 
 // engineActions are listed in the order the dialog offers them.
 const engineActions: RemoteEngineAction[] = ["update", "restart", "stop"];
@@ -86,9 +87,9 @@ export function EngineInfoDialog({
           </Notice>
         )}
         <CommandOutput output={info.output} label={t("engineInfo.output")} />
-        <div className="flex justify-end">
+        <ActionArea placement="inline">
           <Button ref={closeRef} disabled={busy} onClick={onClose}>{t("engineInfo.close")}</Button>
-        </div>
+        </ActionArea>
       </ModalShell>
       {confirming === null ? null : (
         <ConfirmDialog

@@ -57,6 +57,7 @@ import { menuItemClass, menuSurface } from "../ui/menuStyle";
 import { SFTPQuickHosts } from "./SFTPQuickHosts";
 import { literalTextEntry } from "../ui/softKeyboard";
 import { IconButton } from "../ui/IconButton";
+import { ActionArea } from "../ui/ActionArea";
 
 const noHosts: HostEntry[] = [];
 
@@ -796,11 +797,11 @@ export function SFTPPanel({
           <p className="mt-2 text-sm leading-6 text-ink-muted">
             {t("sftp.remoteDropDescription", { count: transfers.remoteDrop.entries.length, alias })}
           </p>
-          <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <ActionArea placement="inline" className="mt-5">
             <Button onClick={transfers.dismissRemoteDrop}>{t("sftp.cancel")}</Button>
             <Button onClick={() => void transfers.acceptRemoteDrop("move")}>{t("sftp.moveHere")}</Button>
             <Button kind="primary" onClick={() => void transfers.acceptRemoteDrop("copy")}>{t("sftp.copyHere")}</Button>
-          </div>
+          </ActionArea>
         </ModalShell>
       )}
 

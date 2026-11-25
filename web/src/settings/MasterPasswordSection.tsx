@@ -110,7 +110,7 @@ export function MasterPasswordSection({ api, onVaultChanged }: {
           </>}
         </div>
         {!draft.withoutPassword && isAcceptedButShort(draft.next, minPassphraseLength) ? <p className="mt-3 text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
-        <ActionArea status={masterPasswordStatus()}
+        <ActionArea start={masterPasswordStatus()}
         >
           <Button kind="primary" busy={save.busy} busyLabel={t("busy.changing")} disabled={!canChange} onClick={() => void submit()}>
             {t("secrets.change")}

@@ -3,6 +3,7 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { ModalShell } from "./ModalShell";
 import { Button, Notice } from "./surface";
 import { usePendingResult } from "./usePendingResult";
+import { ActionArea } from "./ActionArea";
 
 // ConfirmDialog は、取り消せない操作の前に確かめる。
 //
@@ -84,7 +85,7 @@ export function ConfirmDialog({
       {error === "" ? null : (
         <Notice tone="danger" id={errorId}>{error}</Notice>
       )}
-      <div className="flex justify-end gap-2">
+      <ActionArea placement="inline">
         <Button ref={cancelRef} disabled={locked} onClick={onCancel} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
           {cancelLabel}
         </Button>
@@ -99,7 +100,7 @@ export function ConfirmDialog({
         >
           {confirmLabel}
         </Button>
-      </div>
+      </ActionArea>
     </ModalShell>
   );
 }

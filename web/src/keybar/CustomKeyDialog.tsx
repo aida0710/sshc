@@ -6,6 +6,7 @@ import { Button } from "../ui/surface";
 import { literalTextEntry } from "../ui/softKeyboard";
 import { keyBarLabelForbiddenPattern, keyBarTextForbiddenPattern, maxKeyBarLabelLength, maxKeyBarTextLength } from "../rules/keyBar.generated";
 import type { KeyBarKey } from "./keySequences";
+import { ActionArea } from "../ui/ActionArea";
 
 // CustomKey is a key the person makes: what it shows and what it sends.
 export type CustomKey = { label: string; text: string; enter?: boolean };
@@ -61,10 +62,10 @@ export function CustomKeyDialog({ initial, onSubmit, onCancel }: {
           <input type="checkbox" className="size-[15px] shrink-0 accent-accent" checked={enter} onChange={(event) => setEnter(event.target.checked)} />
           {t("keyBar.customEnter")}
         </label>
-        <div className="flex justify-end gap-2">
+        <ActionArea placement="inline">
           <Button onClick={onCancel}>{t("keyBar.cancel")}</Button>
           <Button kind="primary" type="submit">{initial === undefined ? t("keyBar.customAdd") : t("keyBar.customSave")}</Button>
-        </div>
+        </ActionArea>
       </form>
     </ModalShell>
   );

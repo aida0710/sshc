@@ -15,6 +15,7 @@ import { localHostAlias } from "./localHost";
 
 import type { SFTPLocation } from "./sftpLocation";
 import { useSFTPComparison } from "./useSFTPComparison";
+import { ActionArea } from "../ui/ActionArea";
 
 type DirectoryDifference = DirectoryComparison["entries"][number];
 
@@ -42,7 +43,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
   return (
     <>
       <ModalShell labelledBy="sftp-compare-heading" onDismiss={onDismiss} panelClassName="flex h-[min(44rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden">
-        <header className="border-b border-line/60 px-5 py-4">
+        <header className="border-b border-line px-4 py-3">
           <h2 id="sftp-compare-heading" className={dialogHeading}>{t("sftp.compare.heading")}</h2>
           <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 font-mono text-xs text-ink-muted">
             <PathText path={`${leftLabel}:${left.path}`} className="max-w-full" />
@@ -90,13 +91,13 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
             ))}</tbody>
           </table>}
         </div>
-        <footer className="flex flex-wrap justify-end gap-2 border-t border-line/60 px-5 py-4">
+        <ActionArea placement="band" className="px-4 py-3">
           <Button onClick={onDismiss}>{t("sftp.cancel")}</Button>
           {readOnly ? null : <>
             <Button busy={copying === "right"} busyLabel={t("busy.copying")} disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("right")}>{t("sftp.compare.rightToLeft")}</Button>
             <Button kind="primary" busy={copying === "left"} busyLabel={t("busy.copying")} disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("left")}>{t("sftp.compare.leftToRight")}</Button>
           </>}
-        </footer>
+        </ActionArea>
       </ModalShell>
       {textDifference === null ? null : <SFTPTextCompareDialog path={textDifference.relativePath} left={{ alias: left.alias, entry: textDifference.left }} right={{ alias: right.alias, entry: textDifference.right }} onDismiss={() => setTextDifference(null)} />}
     </>
