@@ -1,21 +1,18 @@
 import type { PaneEdge } from "./splitView/layout";
-import type { ReactNode, RefObject } from "react";
-import { createPortal } from "react-dom";
+import type { RefObject } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
-import { menuGroupClass, menuGroupHeadingClass, menuItemClass, menuSurface } from "../ui/menuStyle";
-import { useAnchoredMenu } from "../ui/useAnchoredMenu";
+import { MenuGroup, MenuItem } from "../ui/MenuItems";
+import { MenuPanel } from "../ui/MenuPanel";
 
 // A workspace the session can be moved to, already named for this screen.
 export type WorkspaceMoveTarget = { id: string; label: string };
 
-// The menu of one row in the terminal list. Every item closes the menu after
-// it acts. It is portaled and placed beside its 「…」 button (triggerRef), so the
-// list's scrolling and the phone's sliding drawer neither clip nor move it.
+// The menu of one row in the terminal list, beside its 「…」 button (anchorRef). Every item closes the menu after
+// it acts.
 export function SessionRowMenu({
   session,
-  menuRef,
-  triggerRef,
+  anchorRef,
   canDuplicate,
   canSplit = false,
   onSplit,
@@ -32,8 +29,7 @@ export function SessionRowMenu({
   onClose,
 }: {
   session: TerminalSession;
-  menuRef: RefObject<HTMLDivElement | null>;
-  triggerRef: RefObject<HTMLButtonElement | null>;
+  anchorRef: RefObject<HTMLButtonElement | null>;
   canDuplicate: boolean;
   canSplit?: boolean;
   onSplit?: (edge: PaneEdge) => void;
@@ -51,69 +47,39 @@ export function SessionRowMenu({
   onClose: () => void;
 }) {
   const t = useTranslate();
-  useAnchoredMenu({ open: true, anchorRef: triggerRef, menuRef });
   const choose = (action: () => void) => () => {
     action();
     onClose();
   };
-  return createPortal(
-    <div
-      ref={menuRef}
-      role="menu"
-      aria-label={t("terminal.rowMenu", { title: session.title })}
-      className={`fixed z-50 w-60 overflow-y-auto ${menuSurface}`}
-    >
-      <SessionRowMenuItem onClick={choose(onRename)}>{t("terminal.rename")}</SessionRowMenuItem>
+  return (
+    <MenuPanel label={t("terminal.rowMenu", { title: session.title })} anchorRef={anchorRef} onClose={onClose}>
+      <MenuItem onSelect={choose(onRename)}>{t("terminal.rename")}</MenuItem>
       {session.presentation?.titlePinned !== true ? null : (
-        <SessionRowMenuItem onClick={choose(onUnpinTitle)}>{t("terminal.unpinTitle")}</SessionRowMenuItem>
+        <MenuItem onSelect={choose(onUnpinTitle)}>{t("terminal.unpinTitle")}</MenuItem>
       )}
-      <SessionRowMenuItem disabled={!canDuplicate} onClick={choose(onDuplicate)}>
+      <MenuItem disabled={!canDuplicate} onSelect={choose(onDuplicate)}>
         {t("terminal.duplicate")}
-      </SessionRowMenuItem>
+      </MenuItem>
       {onSplit === undefined ? null : (
         <>
-          <SessionRowMenuItem disabled={!canSplit} onClick={choose(() => onSplit("right"))}>{t("splitView.right")}</SessionRowMenuItem>
-          <SessionRowMenuItem disabled={!canSplit} onClick={choose(() => onSplit("bottom"))}>{t("splitView.below")}</SessionRowMenuItem>
+          <MenuItem disabled={!canSplit} onSelect={choose(() => onSplit("right"))}>{t("splitView.right")}</MenuItem>
+          <MenuItem disabled={!canSplit} onSelect={choose(() => onSplit("bottom"))}>{t("splitView.below")}</MenuItem>
         </>
       )}
       {onRemoveFromSplit === undefined ? null : (
-        <SessionRowMenuItem onClick={choose(onRemoveFromSplit)}>{t("splitView.remove")}</SessionRowMenuItem>
+        <MenuItem onSelect={choose(onRemoveFromSplit)}>{t("splitView.remove")}</MenuItem>
       )}
-      <SessionRowMenuItem disabled={!canMoveUp} onClick={choose(onMoveUp)}>{t("terminal.moveUp")}</SessionRowMenuItem>
-      <SessionRowMenuItem disabled={!canMoveDown} onClick={choose(onMoveDown)}>{t("terminal.moveDown")}</SessionRowMenuItem>
+      <MenuItem disabled={!canMoveUp} onSelect={choose(onMoveUp)}>{t("terminal.moveUp")}</MenuItem>
+      <MenuItem disabled={!canMoveDown} onSelect={choose(onMoveDown)}>{t("terminal.moveDown")}</MenuItem>
       {moveTargets.length === 0 ? null : (
-        <div role="group" aria-label={t("workspace.moveTo")} className={menuGroupClass}>
-          <p aria-hidden="true" className={menuGroupHeadingClass}>{t("workspace.moveTo")}</p>
+        <MenuGroup heading={t("workspace.moveTo")}>
           {moveTargets.map((target) => (
-            <SessionRowMenuItem key={target.id} onClick={choose(() => onMoveToWorkspace(target.id))}>
+            <MenuItem key={target.id} onSelect={choose(() => onMoveToWorkspace(target.id))}>
               {target.label}
-            </SessionRowMenuItem>
+            </MenuItem>
           ))}
-        </div>
+        </MenuGroup>
       )}
-    </div>,
-    document.body,
-  );
-}
-
-function SessionRowMenuItem({
-  disabled = false,
-  onClick,
-  children,
-}: {
-  disabled?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      disabled={disabled}
-      onClick={onClick}
-      className={menuItemClass()}
-    >
-      {children}
-    </button>
+    </MenuPanel>
   );
 }
