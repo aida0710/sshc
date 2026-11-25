@@ -58,7 +58,17 @@ type Registration = {
 
 const registrations = new Set<Registration>();
 let generation = 0;
-let refreshing = false;
+// syncing is whether the metadata may be read: the vault is open, and usePresetLibrarySync keeps the libraries in step.
+let syncing = false;
+// refreshing is the read under way, or null.
+let refreshing: Promise<void> | null = null;
+
+// A library whose screen is loaded later (the key bar's) registers after the first read, and cannot take the answer of
+// one already under way. It is read at once, not at the next poll, so that the person's own preset shows with its screen.
+function register(registration: Registration) {
+  registrations.add(registration);
+  if (syncing) void (refreshing ?? Promise.resolve()).then(() => syncing ? refreshPresetLibraries() : undefined);
+}
 
 export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, read, choice, builtIn = [] }: {
   endpoint: string;
@@ -81,7 +91,7 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
   const savedIn = (presets: Preset[], id: string) => presets.find((preset) => preset.id === id);
   const chosenIn = (presets: Preset[], id: string) => savedIn(presets, id) ?? builtIn.find((preset) => preset.id === id);
 
-  registrations.add({
+  register({
     begin(atGeneration) {
       if (state.busy) return null;
       const atRevision = revision;
@@ -138,14 +148,17 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
 
 // refreshPresetLibraries reads the metadata once and gives every library its list.
 export async function refreshPresetLibraries() {
-  if (refreshing) return;
-  refreshing = true;
+  if (refreshing !== null) return;
+  refreshing = readPresetLibraries().finally(() => { refreshing = null; });
+  await refreshing;
+}
+
+async function readPresetLibraries() {
   const finishers = [...registrations].map((registration) => registration.begin(generation)).filter((finish) => finish !== null);
   try {
     const metadata = validateOpenAPISchema<Metadata>("Metadata", await apiClient.read("/api/v1/metadata"));
     finishers.forEach((finish) => finish(metadata));
   } catch { finishers.forEach((finish) => finish(null)); }
-  finally { refreshing = false; }
 }
 
 // usePresetLibrarySync keeps every library in step with the metadata while the vault is open (ready).
@@ -153,11 +166,12 @@ export function usePresetLibrarySync(ready: boolean) {
   useEffect(() => {
     if (!ready) return;
     ++generation;
+    syncing = true;
     registrations.forEach((registration) => registration.setLoading());
     void refreshPresetLibraries();
     const refresh = () => { void refreshPresetLibraries(); };
     window.addEventListener("focus", refresh);
-    return () => { ++generation; window.removeEventListener("focus", refresh); };
+    return () => { ++generation; syncing = false; window.removeEventListener("focus", refresh); };
   }, [ready]);
   usePolling(refreshPresetLibraries, { intervalMs: presetPollIntervalMs, enabled: ready, whileHidden: true });
 }
