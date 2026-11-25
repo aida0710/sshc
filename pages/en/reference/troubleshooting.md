@@ -7,7 +7,7 @@ description: Checks for engine, vault, keys, sync and SSH connection failures.
 
 ## Notices on the screen
 
-A failed operation shows a notice with a red border on the screen or in the sidebar. It stays until the next operation, and the **×** at its top right closes it once read. The result of a finished operation (such as starting a port forward) appears briefly at the bottom of the screen and then goes away. A copy button turns into **✓ Copied** for about two seconds after it is pressed.
+A failed operation shows a notice with a red border on the screen or in the sidebar. It stays until the next operation, and the **×** at its top right closes it once read. The result of a finished operation (such as starting a port forward) appears briefly at the bottom of the screen and then goes away. A copy button shows a check mark and **Copied** for about two seconds after it is pressed.
 
 ## The engine does not start
 
