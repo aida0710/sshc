@@ -5,7 +5,19 @@
 export function isTypingElsewhere(terminalRegion: HTMLElement | null): boolean {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || terminalRegion?.contains(active) === true) return false;
-  return active.isContentEditable || active.matches("input, textarea, select");
+  return isTextField(active);
+}
+
+// isTypingOutsideTerminals は、ターミナルではない欄（サイドバーの名前など）にフォーカスがあるかである。開いた
+// セッションの画面が出るときに、それまで打っていたほかのターミナルからはフォーカスを移してよいので、
+// isTypingElsewhere と違って、ほかのターミナルの入力は数えない。
+export function isTypingOutsideTerminals(): boolean {
+  const active = document.activeElement;
+  return active instanceof HTMLElement && active.closest("[data-terminal-host]") === null && isTextField(active);
+}
+
+function isTextField(element: HTMLElement): boolean {
+  return element.isContentEditable || element.matches("input, textarea, select");
 }
 
 // isInNoticeCard is whether the focus sits in a notice card (NoticeFrame: one over the terminal, or the host key
