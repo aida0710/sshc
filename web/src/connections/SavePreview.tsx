@@ -6,6 +6,7 @@ import { useTranslate } from "../i18n/context";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { Notice as Band } from "../ui/surface";
 import { NoticeList } from "./NoticeList";
+import { hintText, sectionHeading } from "../ui/form";
 
 function DiffView({ lines }: { lines: DiffLine[] }) {
   return (
@@ -59,7 +60,7 @@ export function SavePreviewPanel({
   return (
     <section aria-labelledby="preview-heading" className="flex flex-col gap-3 border-t border-line pt-5">
       <div className="flex items-center justify-between gap-3">
-        <h3 id="preview-heading" className="text-sm font-semibold text-ink">{t("preview.heading")}</h3>
+        <h3 id="preview-heading" className={sectionHeading}>{t("preview.heading")}</h3>
         {preview === null ? null : (
           <span className={tagClass("neutral")}>
             {preview.diffs.length}
@@ -79,7 +80,7 @@ export function SavePreviewPanel({
           <DiffView lines={conflict.externalChange} />
           <h4 className="text-xs font-semibold text-ink-muted">{t("preview.pendingChange")}</h4>
           <DiffView lines={conflict.localChange} />
-          <p className="text-xs text-ink-muted">{t("preview.mergeByHand")}</p>
+          <p className={hintText}>{t("preview.mergeByHand")}</p>
         </div>
       )}
 

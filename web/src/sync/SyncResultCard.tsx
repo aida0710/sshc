@@ -3,6 +3,7 @@ import { useLanguage } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
 import { PageSection } from "../ui/page";
 import { formatBytes as formatSize, formatDateTime } from "../ui/format";
+import { hintText } from "../ui/form";
 
 export type SyncResultView =
   | { kind: "push"; result: PushResult }
@@ -91,7 +92,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
                 count: new Intl.NumberFormat(locale).format(objectCount),
               })}
             </p>
-            <p className="text-xs text-ink-muted">
+            <p className={hintText}>
               {t("sync.result.created", { at: formatDateTime(summary.createdAt, locale) })}
             </p>
           </>
@@ -123,7 +124,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
             </p>
           </>
         )}
-        <p className="text-xs text-ink-muted">
+        <p className={hintText}>
           {t("sync.result.completed", { at: formatDateTime(completedAt, locale) })}
         </p>
       </div>

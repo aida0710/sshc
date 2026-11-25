@@ -6,7 +6,7 @@ import { commandSnippets } from "../../snippets/snippetKind";
 import { describeTerminalCommandFailure, terminalCommandProblemText } from "./terminalCommandProblem";
 import { Button, Notice, Segmented } from "../../ui/surface";
 import { ModalShell } from "../../ui/ModalShell";
-import { codeBlock, control } from "../../ui/form";
+import { codeBlock, control, hintText } from "../../ui/form";
 import { SnippetVariableInputs } from "../../snippets/SnippetVariableInputs";
 import {
   terminalCommandApi,
@@ -192,7 +192,7 @@ export function WorkspaceCommandCenter({
             >
               {t("workspace.broadcastHeading")}
             </h2>
-            <p className="mt-1 text-xs text-ink-muted">
+            <p className={`mt-1 ${hintText}`}>
               {t("workspace.broadcastDescription")}
             </p>
           </div>
@@ -352,7 +352,7 @@ export function WorkspaceCommandCenter({
             <h3 className="text-sm font-semibold">
               {t("workspace.deliveryResults")}
             </h3>
-            <p className="mt-1 text-xs text-ink-muted">
+            <p className={`mt-1 ${hintText}`}>
               {t("workspace.deliveryNotice")}
             </p>
             <div className="mt-2 grid max-h-56 gap-2 overflow-auto md:grid-cols-2">

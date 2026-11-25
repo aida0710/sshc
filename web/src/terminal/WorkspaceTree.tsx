@@ -33,6 +33,7 @@ import {
 } from "./workspaceGrouping";
 import { useWorkspaceReorderDrag } from "./useWorkspaceReorderDrag";
 import { IconButton } from "../ui/IconButton";
+import { hintText } from "../ui/form";
 
 type WorkspaceTreeProps = {
   workspaces: TerminalWorkspacesState;
@@ -254,6 +255,7 @@ export function WorkspaceTree({
             data-touch-dense
             title={t("terminal.openNextUnread")}
             onClick={openNextUnread}
+            // tag-exempt: 札の形をした、押すと次の未読へ移るボタン。スマホでは指で押せる高さを持つので Tag にしない。
             className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-notice px-1.5 text-2xs text-notice-ink hover:brightness-110 md:min-h-5"
           >
             <span aria-hidden="true" className="size-1.5 rounded-full bg-notice-ink" />
@@ -352,7 +354,7 @@ export function WorkspaceTree({
         <Icon name="plus" className="size-3.5" aria-hidden="true" />
         {t("terminal.newSession")}
       </button>
-      {atSessionLimit ? <p className="px-2 text-xs text-ink-muted">{t("terminal.limitReached", { max: terminalSessions.maxSessions })}</p> : null}
+      {atSessionLimit ? <p className={`px-2 ${hintText}`}>{t("terminal.limitReached", { max: terminalSessions.maxSessions })}</p> : null}
       <HostPickerDialog
         open={pickerWorkspace !== null}
         heading={t("terminal.newSession")}

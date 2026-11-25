@@ -1,4 +1,4 @@
-import { dialogHeading } from "../ui/form";
+import { dialogHeading, hintText } from "../ui/form";
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
@@ -58,7 +58,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
               <option value="content">{t("sftp.compare.content")}</option>
             </select>
           </label>
-          {comparison?.bytesRead === undefined ? null : <p className="mt-2 text-xs text-ink-muted">{t("sftp.search.bytesRead", { bytes: formatBytes(comparison.bytesRead) })}</p>}
+          {comparison?.bytesRead === undefined ? null : <p className={`mt-2 ${hintText}`}>{t("sftp.search.bytesRead", { bytes: formatBytes(comparison.bytesRead) })}</p>}
           {comparison?.truncated ? <div className="mt-2"><Notice>{t("sftp.compare.partial")}</Notice></div> : null}
         </header>
         {problem === "" ? null : <div className="px-5 pt-3"><Notice tone="danger">{problem}</Notice></div>}

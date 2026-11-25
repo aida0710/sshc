@@ -1,10 +1,11 @@
 import type { SyncHistoryDiff, SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { SyncBucketStateSection } from "./SyncBucketStateSection";
 import { SyncHistorySection } from "./SyncHistorySection";
 import type { BucketStatusState, HistoryState } from "./useSyncRemoteState";
+import { sectionHeading } from "../ui/form";
 
 // SyncDetailsSection は、たたんで置く詳細である。バケットの状態と、暗号化した
 // 履歴を並べる。
@@ -40,10 +41,9 @@ export function SyncDetailsSection({
   const t = useTranslate();
   return (
     <details className="border-t border-line pt-4">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-ink marker:hidden">
-        <DisclosureChevron className="size-3.5 text-ink-muted" />
+      <DisclosureSummary className={sectionHeading}>
         {t("sync.detailsHeading")}
-      </summary>
+      </DisclosureSummary>
       <div className="grid gap-4 pt-4 lg:grid-cols-2">
         <SyncBucketStateSection
           bucketState={bucketState}

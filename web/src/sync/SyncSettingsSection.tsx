@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { tagClass } from "../ui/Tag";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import type { SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
-import { CheckboxField, control } from "../ui/form";
+import { CheckboxField, control, sectionHeading } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { PageSection } from "../ui/page";
 import { PasswordInput } from "../ui/PasswordField";
@@ -240,10 +240,9 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
       onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
       className="border-t border-line pt-4"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-ink marker:hidden">
-        <DisclosureChevron className="size-3.5 text-ink-muted" />
+      <DisclosureSummary className={sectionHeading}>
         {t("sync.manageSettings")}
-      </summary>
+      </DisclosureSummary>
       {body}
     </details>
   );

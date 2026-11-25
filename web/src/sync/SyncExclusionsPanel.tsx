@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { failureCode } from "../api/client";
 import type { SyncApi, SyncExclusions } from "../api/sync";
 import { CodeField } from "../editor/CodeField";
 import { useLanguage } from "../i18n/context";
 import { DraftSaveBar } from "../ui/DraftSaveBar";
-import { control, hintText } from "../ui/form";
+import { control, hintText, sectionHeading } from "../ui/form";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useToast } from "../ui/useToast";
@@ -120,11 +119,8 @@ export function SyncExclusionsPanel({ api, initial, onSaved, onDirtyChange, onDi
         if (event.currentTarget.open) void load();
       }}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden">
-        <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-ink">
-          <DisclosureChevron className="size-3.5 text-ink-muted" />
-          {t("sync.exclusions.heading")}
-        </span>
+      <DisclosureSummary>
+        <span className={`${sectionHeading} min-w-0 grow`}>{t("sync.exclusions.heading")}</span>
         <span className={hintText}>
           {loaded
             ? t("sync.exclusions.summary", {
@@ -133,7 +129,7 @@ export function SyncExclusionsPanel({ api, initial, onSaved, onDirtyChange, onDi
               })
             : t("sync.exclusions.open")}
         </span>
-      </summary>
+      </DisclosureSummary>
       <div className="flex flex-col gap-4 border-t border-line p-4">
         {operation.busy && !loaded ? (
           <PanelState layout="line" tone="loading" title={t("sync.exclusions.loading")} />

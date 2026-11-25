@@ -2,12 +2,7 @@ import { useTranslate } from "../i18n/context";
 import { PageSection } from "../ui/page";
 import type { Credential } from "../api/credentials";
 import type { KeyItem, RelocateKeyResponse } from "./api";
-import {
-  CheckboxField,
-  Field,
-  control,
-  hintText,
-} from "../ui/form";
+import { CheckboxField, control, Field, hintText, sectionHeading } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
 import { PasswordInput } from "../ui/PasswordField";
@@ -71,7 +66,7 @@ export function RelocateForm({
         if (!submission.pending) submission.watch(onSubmit(item));
       }}
     >
-      <h3 id="relocate-heading" className="text-sm font-semibold text-ink">
+      <h3 id="relocate-heading" className={sectionHeading}>
         {t("keys.relocateHeading", { path: item.relativePath })}
       </h3>
       <p className="text-sm text-ink-muted">{t("keys.relocateNote")}</p>
@@ -128,7 +123,7 @@ export function PassphraseForm({
         if (!submission.pending) submission.watch(onSubmit(item));
       }}
     >
-      <h3 id="passphrase-heading" className="text-sm font-semibold text-ink">
+      <h3 id="passphrase-heading" className={sectionHeading}>
         {t("keys.passphraseHeading", { path: item.relativePath })}
       </h3>
       <p className="text-sm text-ink-muted">{t("keys.passphraseNote")}</p>
@@ -194,7 +189,7 @@ export function AgentForm({
         if (!submission.pending) submission.watch(onSubmit(item));
       }}
     >
-      <h3 id="agent-register-heading" className="text-sm font-semibold text-ink">
+      <h3 id="agent-register-heading" className={sectionHeading}>
         {t("keys.registerHeading", { path: item.relativePath })}
       </h3>
       <p className="text-sm text-ink-muted">{t("keys.registerNote")}</p>
@@ -383,7 +378,7 @@ export function RelocateResult({
       aria-labelledby="relocate-result-heading"
       className="flex flex-col gap-2 text-sm"
     >
-      <h3 id="relocate-result-heading" className="text-sm font-semibold text-ink">
+      <h3 id="relocate-result-heading" className={sectionHeading}>
         {result.blockers.length > 0
           ? t("keys.relocateRefused")
           : t("keys.relocateDone", { path: result.relativePath })}

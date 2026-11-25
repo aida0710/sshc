@@ -10,6 +10,7 @@ import {
 import { useLanguage } from "../i18n/context";
 import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
+import { tagClass } from "../ui/Tag";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { localStorageKeys } from "../ui/browserStorageKeys";
@@ -169,7 +170,7 @@ export function QuickConnectBrowser({
               <span className="truncate text-sm font-semibold text-ink" title={alias}>{alias}</span>
               {lastConnectedAt === null || opening ? null : (
                 <span title={lastConnectedLabel} aria-label={lastConnectedLabel}
-                  className="shrink-0 whitespace-nowrap rounded-full bg-select-fill px-2 text-2xs leading-[18px] text-accent">{lastConnectedAt}</span>
+                  className={tagClass("accent")}>{lastConnectedAt}</span>
               )}
               {server.duplicateAlias ? <span role="img" aria-label={t("browser.duplicateAlias")} className="text-notice-ink"><Icon name="warning" className="size-3.5" /></span> : null}
             </span>

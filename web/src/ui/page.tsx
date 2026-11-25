@@ -2,6 +2,7 @@ import { useContext, useId, type ComponentPropsWithoutRef, type ReactNode } from
 import { PageChromeContext } from "./pageChrome";
 import { PageChromePortal } from "./PageChromePortal";
 import { mobileViewportQuery, useMediaQuery } from "./useMediaQuery";
+import { sectionHeading } from "./form";
 
 // PageHeader is the top of a page: its name, a line on what it is for, and its main actions on the right.
 // On a phone the app's top bar already shows the section's name, so the heading is only for screen
@@ -121,7 +122,7 @@ export function PageSection({
   return (
     <section aria-labelledby={id} className={frameClass}>
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h3 id={id} className="text-sm font-semibold text-ink">{heading}</h3>
+        <h3 id={id} className={sectionHeading}>{heading}</h3>
         {meta === undefined ? null : <span title={typeof meta === "string" ? meta : undefined} className="min-w-0 truncate font-mono text-xs text-ink-faint">{meta}</span>}
         {/* It takes the room left on its line and keeps its controls at the end of it, so a field marked w-full fills a phone. */}
         {actions === undefined ? null : <div className="flex min-w-0 grow flex-wrap items-center justify-end gap-2">{actions}</div>}

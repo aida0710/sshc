@@ -12,7 +12,7 @@ import { describeSnippetFailure } from "../snippets/snippetFailure";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { SnippetVariableInputs } from "../snippets/SnippetVariableInputs";
 import { Button, Notice } from "../ui/surface";
-import { codeBlock, control } from "../ui/form";
+import { codeBlock, control, hintText } from "../ui/form";
 import { IconButton } from "../ui/IconButton";
 import { PanelState } from "../ui/PanelState";
 
@@ -333,7 +333,7 @@ export function TerminalQuickCommands({
       {busy && snippets.length === 0 ? (
         <PanelState layout="line" tone="loading" title={t("palette.loading")} />
       ) : snippets.length === 0 ? (
-        <p className="text-xs text-ink-muted">{t("snippets.empty")}</p>
+        <p className={hintText}>{t("snippets.empty")}</p>
       ) : (
         <>
           <label className="text-xs text-ink-muted">
@@ -354,7 +354,7 @@ export function TerminalQuickCommands({
             </select>
           </label>
           {selected?.description ? (
-            <p className="text-xs text-ink-muted">{selected.description}</p>
+            <p className={hintText}>{selected.description}</p>
           ) : null}
           {selected === null ? null : (
             <SnippetVariableInputs

@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from "react";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { useTranslate } from "../i18n/context";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
@@ -56,10 +56,9 @@ export function TerminalPasteDialog({
         />
       </label>
       <details className="overflow-hidden rounded-md border border-control-line bg-control">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm text-ink-muted hover:text-ink sshc-focus-inset [&::-webkit-details-marker]:hidden">
-          <DisclosureChevron className="size-3.5" />
+        <DisclosureSummary className="px-3 py-2 text-sm text-ink-muted hover:text-ink sshc-focus-inset">
           <span>{t("terminal.pastePreview")}</span>
-        </summary>
+        </DisclosureSummary>
         <pre
           aria-label={t("terminal.pastePreview")}
           className="max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-control-line p-3 font-mono text-xs text-ink"

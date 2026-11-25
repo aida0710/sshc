@@ -7,6 +7,7 @@ import { Button, Notice } from "../ui/surface";
 import { useElapsedSeconds } from "../ui/useElapsedSeconds";
 import { RunTargetProblemNotice } from "./RunTargetProblemNotice";
 import { useEngineInfo } from "./useEngineInfo";
+import { hintText } from "../ui/form";
 
 // RunTargetEngineUpdate shows the two sshc versions that do not work together
 // and updates the run target's sshc in the terminal area itself. Unlike the
@@ -66,7 +67,7 @@ export function RunTargetEngineUpdate({
         </Button>
         {children}
       </div>
-      <p className="text-xs text-ink-muted">{t("runTarget.updateConsequence", { alias })}</p>
+      <p className={hintText}>{t("runTarget.updateConsequence", { alias })}</p>
     </div>
   );
 }

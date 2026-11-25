@@ -11,6 +11,7 @@ import { RunTargetRefusalDetails } from "./RunTargetRefusalDetails";
 import { RunTargetVaultUnlock } from "./RunTargetVaultUnlock";
 import { runTargetRefusalText } from "./runTargetProblem";
 import { sessionListPollIntervalMs } from "./sessions";
+import { sectionHeading } from "../ui/form";
 
 // RunTargetRefusalPanel covers the terminal area while the run target's engine
 // refuses to list its sessions. It is not a dialog: the sidebar, the run-target
@@ -91,7 +92,7 @@ export function RunTargetRefusalPanel({
             <Icon name={refusalIcon(refusal.code)} className="size-[18px]" />
           </span>
           <div className="flex min-w-0 flex-col gap-1">
-            <h2 id={headingId} className="break-words text-sm font-semibold text-ink">{heading}</h2>
+            <h2 id={headingId} className={`${sectionHeading} break-words`}>{heading}</h2>
             {reason === "" ? null : <p className="break-words text-sm leading-6 text-ink-muted">{reason}</p>}
           </div>
         </div>

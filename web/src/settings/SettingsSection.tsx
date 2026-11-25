@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "../ui/icons";
+import { sectionHeading } from "../ui/form";
 
 // One block of the settings page: a heading in the margin on the full page,
 // none when the block is shown on its own.
@@ -25,7 +26,7 @@ export function SettingsSection({
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">
               <Icon name={icon} />
             </span>
-            <h3 className="text-sm font-semibold text-ink">{label}</h3>
+            <h3 className={sectionHeading}>{label}</h3>
           </header>
         ) : null}
         <div className="min-w-0">{children}</div>
