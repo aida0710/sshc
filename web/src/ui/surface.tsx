@@ -231,17 +231,23 @@ type ButtonProps = (
   // small は知らせの中や状態の行の端に置く低いボタン。今は secondary だけにある。
   | { kind?: "secondary"; small?: boolean }
   | { kind: "primary" | "danger" | "dangerText"; small?: never }
-) & {
-  // busy は、このボタンで始めた処理を待っている間。文言は変えずに回転の印を添え、
-  // aria-busy を付けて押せなくする（薄くはしない。index.css の決まり）。
-  busy?: boolean;
-} & ButtonHTMLAttributes<HTMLButtonElement>;
+) & ButtonBusyProps & ButtonHTMLAttributes<HTMLButtonElement>;
+
+// busy は、このボタンで始めた処理を待っている間。回転の印を添え、aria-busy を付けて押せなくする
+// （薄くはしない。index.css の決まり）。待っている間は文言を busyLabel（「保存中…」）に替えるので、busy を
+// 持つボタンは busyLabel も必ず持つ（2026-11-25、待つボタンを回る印と「〇〇中…」にそろえた）。
+// busyLabel が null のボタンは文言を替えず、回る印だけを添える。「〇〇中」の形にならない［やめる］［保存しない］
+// ［中止］だけが使い、前の行に busy-label-exempt と書く（ui/busyButtons.test.ts が確かめる）。
+type ButtonBusyProps =
+  | { busy?: never; busyLabel?: never }
+  | { busy: boolean; busyLabel: string | null };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
     kind = "secondary",
     small = false,
     busy = false,
+    busyLabel,
     disabled,
     className = "",
     type = "button",
@@ -273,7 +279,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...rest}
     >
       {busy ? <Spinner /> : null}
-      {children}
+      {busy && typeof busyLabel === "string" ? busyLabel : children}
     </button>
   );
 });

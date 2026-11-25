@@ -54,7 +54,7 @@ export function RemoteVaultUnlockDialog({
           <PasswordField label={t("runTarget.unlockPassword", { alias })} value={form.password} onChange={form.setPassword} error={form.error} disabled={busy} autoFocus={!hasOnScreenKeyboard()} />
           <div className="flex justify-end gap-2">
             <Button disabled={busy} onClick={onClose}>{t("runTarget.unlockCancel")}</Button>
-            <Button type="submit" kind="primary" busy={busy} disabled={form.password === ""}>
+            <Button type="submit" kind="primary" busy={busy} busyLabel={t("busy.unlocking")} disabled={form.password === ""}>
               {t("runTarget.unlock")}
             </Button>
           </div>

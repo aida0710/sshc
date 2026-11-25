@@ -40,7 +40,7 @@ export function ConfigFileHead({
           items={actions}
           triggerSize="panel"
         />
-        <Button className="min-h-10 md:min-h-0" busy={previewing} disabled={busy} onClick={onPreview}>
+        <Button className="min-h-10 md:min-h-0" busy={previewing} busyLabel={t("busy.loading")} disabled={busy} onClick={onPreview}>
           {t("explorer.preview")}
         </Button>
       </div>

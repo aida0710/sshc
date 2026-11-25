@@ -73,7 +73,7 @@ export function SyncSetupImportSection({ busy, form, onImport }: {
             <Button disabled={busy} onClick={form.reset}>
               {t("sync.import.chooseAnother")}
             </Button>
-            <Button kind="primary" type="submit" busy={busy} disabled={form.key.trim() === ""}>
+            <Button kind="primary" type="submit" busy={busy} busyLabel={t("busy.importing")} disabled={form.key.trim() === ""}>
               {t("sync.import.submit")}
             </Button>
           </div>

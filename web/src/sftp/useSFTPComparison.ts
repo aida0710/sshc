@@ -23,6 +23,8 @@ export function useSFTPComparison({ left, right, onCopied }: {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(true);
+  // copying は、写している向き。押したほうのボタンだけに回る印を出す。
+  const [copying, setCopying] = useState<"left" | "right" | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,6 +63,7 @@ export function useSFTPComparison({ left, right, onCopied }: {
     const transfers = comparisonTransfers({ comparison, selected, direction, left, right });
     if (transfers.length === 0) return;
     setBusy(true);
+    setCopying(direction);
     setProblem("");
     try {
       await sftpTransferManager.addRemoteTransfers(transfers, "copy");
@@ -68,8 +71,9 @@ export function useSFTPComparison({ left, right, onCopied }: {
     } catch (error) {
       setProblem(sftpProblemText(t, error));
       setBusy(false);
+      setCopying(null);
     }
   }
 
-  return { comparison, changes, selected, problem, busy, readOnly, mode, setMode, toggle, copySelectedDifferences };
+  return { comparison, changes, selected, problem, busy, copying, readOnly, mode, setMode, toggle, copySelectedDifferences };
 }

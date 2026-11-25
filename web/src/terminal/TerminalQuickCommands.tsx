@@ -44,7 +44,10 @@ export function TerminalQuickCommands({
   const [selectedId, setSelectedId] = useState("");
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [prepared, setPrepared] = useState<Prepared | null>(null);
-  const [busy, setBusy] = useState(true);
+  const [loading, setLoading] = useState(true);
+  // running は、待っている操作。押したボタンだけを busy にし、ほかは押せなくする。
+  const [running, setRunning] = useState<"save" | "insertSnippet" | "prepare" | "copy" | "insert" | "run" | null>(null);
+  const busy = loading || running !== null;
   const [problem, setProblem] = useState("");
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -66,7 +69,7 @@ export function TerminalQuickCommands({
         setSelectedId((current) => current || (commands[0]?.id ?? ""));
       })
       .catch(() => active && setProblem(t("snippets.loadFailed")))
-      .finally(() => active && setBusy(false));
+      .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
@@ -99,7 +102,7 @@ export function TerminalQuickCommands({
     const name = saveName.trim();
     const command = initialCommand;
     if (name === "" || command.trim() === "" || busy) return;
-    setBusy(true);
+    setRunning("save");
     setProblem("");
     try {
       const saved = await snippetsApi.create({
@@ -116,7 +119,7 @@ export function TerminalQuickCommands({
     } catch (error) {
       setProblem(describeSnippetFailure(t, error));
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
@@ -142,7 +145,7 @@ export function TerminalQuickCommands({
   // line break is refused here as it is after a review.
   async function insertSnippet() {
     if (selected === null || busy) return;
-    setBusy(true);
+    setRunning("insertSnippet");
     setProblem("");
     try {
       const request = requestFor(selected);
@@ -158,13 +161,13 @@ export function TerminalQuickCommands({
     } catch (error) {
       setProblem(describeTerminalCommandFailure(t, error));
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
   async function prepare() {
     if (selected === null || busy) return;
-    setBusy(true);
+    setRunning("prepare");
     setProblem("");
     try {
       const request = requestFor(selected);
@@ -177,14 +180,14 @@ export function TerminalQuickCommands({
       setProblem(describeTerminalCommandFailure(t, error));
       setPrepared(null);
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
   async function copyPrepared() {
     if (prepared === null) return;
     const current = prepared;
-    setBusy(true);
+    setRunning("copy");
     try {
       await clipboard.writeText(await revealPrepared());
       onClose();
@@ -196,7 +199,7 @@ export function TerminalQuickCommands({
         setProblem(t("terminal.clipboardRefused"));
       }
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
@@ -214,7 +217,7 @@ export function TerminalQuickCommands({
   async function insertPrepared() {
     if (prepared === null) return;
     const current = prepared;
-    setBusy(true);
+    setRunning("insert");
     setProblem("");
     try {
       const confirmed = await api.preview({
@@ -228,14 +231,14 @@ export function TerminalQuickCommands({
     } catch (error) {
       await handleActionFailure(error, current);
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
   async function runPrepared() {
     if (prepared === null) return;
     const current = prepared;
-    setBusy(true);
+    setRunning("run");
     setProblem("");
     try {
       const confirmed = await api.preview({
@@ -249,7 +252,7 @@ export function TerminalQuickCommands({
     } catch (error) {
       await handleActionFailure(error, current);
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
@@ -313,7 +316,7 @@ export function TerminalQuickCommands({
             {initialCommand}
           </pre>
           <div className="flex gap-2">
-            <Button kind="primary" disabled={busy || saveName.trim() === ""} onClick={() => void saveSelection()}>
+            <Button kind="primary" busy={running === "save"} busyLabel={t("busy.saving")} disabled={busy || saveName.trim() === ""} onClick={() => void saveSelection()}>
               {t("terminal.quickCommandSave")}
             </Button>
             <Button onClick={() => setSaveOpen(false)}>
@@ -364,11 +367,11 @@ export function TerminalQuickCommands({
               {hasNoVariables ? <pre className={`max-h-32 whitespace-pre-wrap ${codeBlock}`}>{selected.command}</pre> : null}
               <div className="flex flex-wrap gap-2">
                 {hasNoVariables ? (
-                  <Button kind="primary" disabled={busy} onClick={() => void insertSnippet()}>
+                  <Button kind="primary" busy={running === "insertSnippet"} busyLabel={t("busy.inserting")} disabled={busy} onClick={() => void insertSnippet()}>
                     {t("terminal.quickCommandInsert")}
                   </Button>
                 ) : null}
-                <Button disabled={busy || selected === null} onClick={() => void prepare()}>
+                <Button busy={running === "prepare"} busyLabel={t("busy.checking")} disabled={busy || selected === null} onClick={() => void prepare()}>
                   {t("snippets.preview")}
                 </Button>
               </div>
@@ -382,13 +385,13 @@ export function TerminalQuickCommands({
                 {t("terminal.quickCommandContextWarning")}
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button disabled={busy} onClick={() => void insertPrepared()}>
+                <Button busy={running === "insert"} busyLabel={t("busy.inserting")} disabled={busy} onClick={() => void insertPrepared()}>
                   {t("terminal.quickCommandInsert")}
                 </Button>
-                <Button kind="primary" disabled={busy} onClick={() => void runPrepared()}>
+                <Button kind="primary" busy={running === "run"} busyLabel={t("busy.running")} disabled={busy} onClick={() => void runPrepared()}>
                   {t("terminal.quickCommandRun")}
                 </Button>
-                <Button disabled={busy} onClick={() => void copyPrepared()}>
+                <Button busy={running === "copy"} busyLabel={t("busy.copying")} disabled={busy} onClick={() => void copyPrepared()}>
                   {t("terminal.quickCommandCopy")}
                 </Button>
               </div>

@@ -499,6 +499,7 @@ export function SFTPWorkspace({
             heading={t("sftp.leaveHeading")}
             body={<p className="text-sm text-ink-muted">{t("sftp.leaveBody", { path: closeTabIntent.path })}</p>}
             confirmLabel={t("sftp.leaveDiscard")}
+            busyLabel={null}
             cancelLabel={t("sftp.leaveStay")}
             onConfirm={() => {
               setCloseTabIntent(null);
@@ -516,6 +517,7 @@ export function SFTPWorkspace({
               <p className="mt-2 text-xs text-ink-faint">{t("sftp.closeConnectedShiftHint")}</p>
             </>}
             confirmLabel={t("sftp.closeConnectedConfirm")}
+            busyLabel={null}
             cancelLabel={t("sftp.closeConnectedCancel")}
             onConfirm={() => {
               setCloseTabIntent(null);

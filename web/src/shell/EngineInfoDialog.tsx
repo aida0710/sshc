@@ -18,10 +18,10 @@ const engineActions: RemoteEngineAction[] = ["update", "restart", "stop"];
 
 // actionLabels name each action: its button, the button while it runs, the
 // confirmation heading and the line once the host's sshc succeeded.
-const actionLabels: Record<RemoteEngineAction, { button: MessageKey; confirm: MessageKey; done: MessageKey }> = {
-  update: { button: "engineInfo.update", confirm: "engineInfo.confirmUpdate", done: "engineInfo.updated" },
-  restart: { button: "engineInfo.restart", confirm: "engineInfo.confirmRestart", done: "engineInfo.restarted" },
-  stop: { button: "engineInfo.stop", confirm: "engineInfo.confirmStop", done: "engineInfo.stopped" },
+const actionLabels: Record<RemoteEngineAction, { button: MessageKey; busy: MessageKey; confirm: MessageKey; done: MessageKey }> = {
+  update: { button: "engineInfo.update", busy: "busy.updating", confirm: "engineInfo.confirmUpdate", done: "engineInfo.updated" },
+  restart: { button: "engineInfo.restart", busy: "busy.restarting", confirm: "engineInfo.confirmRestart", done: "engineInfo.restarted" },
+  stop: { button: "engineInfo.stop", busy: "busy.stopping", confirm: "engineInfo.confirmStop", done: "engineInfo.stopped" },
 };
 
 // EngineInfoDialog shows a run-target engine's version, Vault and sessions,
@@ -74,7 +74,7 @@ export function EngineInfoDialog({
         {info.problem === null ? null : <RunTargetProblemNotice problem={{ ...info.problem, alias }} showAlias={false} />}
         <div className="flex flex-wrap gap-2">
           {engineActions.map((action) => (
-            <Button key={action} kind={action === "update" ? "primary" : action === "stop" ? "danger" : "secondary"} busy={info.running === action} disabled={busy} onClick={() => setConfirming(action)}>
+            <Button key={action} kind={action === "update" ? "primary" : action === "stop" ? "danger" : "secondary"} busy={info.running === action} busyLabel={t(actionLabels[action].busy)} disabled={busy} onClick={() => setConfirming(action)}>
               {t(actionLabels[action].button)}
             </Button>
           ))}
@@ -101,6 +101,7 @@ export function EngineInfoDialog({
             </>
           )}
           confirmLabel={t(actionLabels[confirming].button)}
+          busyLabel={null}
           cancelLabel={t("engineInfo.cancel")}
           confirmKind={confirming === "stop" ? "danger" : "primary"}
           onConfirm={() => {

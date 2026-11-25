@@ -343,15 +343,15 @@ export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNav
           />
         )}
         onCheckSetup={() =>
-          void run(() => api.checkSyncSetup(form.setupInput), {
+          run(() => api.checkSyncSetup(form.setupInput), {
             apply: form.acceptSetupCheck,
             failure: t("sync.configureFailed"),
           })
         }
-        onCompleteSetup={() => {
+        onCompleteSetup={async () => {
           const request = form.setupRequest();
           if (request === null) return;
-          void run(() => api.completeSyncSetup(request), {
+          await run(() => api.completeSyncSetup(request), {
             apply: (next) => {
               adoptAndRefresh(next.status);
               setRevealed(next.generatedKey ?? "");
@@ -365,7 +365,7 @@ export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNav
         }}
         onSaveKey={() => {
           const { chooseOwn, ownKey } = form;
-          void run(
+          return run(
             () =>
               status.keyConfigured
                 ? api.setSyncKey(
@@ -398,12 +398,12 @@ export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNav
           pushMessage={pushMessage}
           onMessageChange={editPushMessage}
           onPush={() =>
-            void run(() => api.pushSnapshot(pushMessage.trim()), {
+            run(() => api.pushSnapshot(pushMessage.trim()), {
               apply: (next) => adoptPush(next, "sync.pushed"),
               failure: t("sync.pushFailed"),
             })
           }
-          onPreview={() => void previewWith(undefined)}
+          onPreview={() => previewWith(undefined)}
         />
       ) : null}
 
@@ -421,7 +421,7 @@ export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNav
           selectedHistoryKey={selectedHistoryKey}
           onRefreshHistory={() => void refreshHistory()}
           onSelectHistory={(key) => void selectHistory(key)}
-          onPreviewHistory={(key) => void previewWith(undefined, key)}
+          onPreviewHistory={(key) => previewWith(undefined, key)}
         />
       ) : null}
 
@@ -467,9 +467,9 @@ export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNav
           t={t}
           onAcceptRemovals={pull.acceptRemovals}
           onClose={pull.close}
-          onResolve={(choice) => void previewWith(choice, previewHistoryKey)}
+          onResolve={(choice) => previewWith(choice, previewHistoryKey)}
           onApply={() =>
-            void run(
+            run(
               () =>
                 previewAcceptRemoteHead
                   ? api.pullSnapshot(

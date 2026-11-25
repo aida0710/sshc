@@ -15,8 +15,9 @@ import { usePendingResult } from "./usePendingResult";
 //   出す。ダイアログが残らないので、失敗が隠れない。接続の管理パネル・シークレット・VPN
 //   プロファイル・スニペットの削除などがこちら。
 // onConfirm が Promise を返す間と busy の間は、両方のボタンとダイアログを閉じる操作を
-// 止め、二度押しで要求が 2 回飛ばないようにする。その間、確認ボタンは文言を変えずに
-// 回転の印を添え、押したことが受け付けられて進んでいると分かるようにする。
+// 止め、二度押しで要求が 2 回飛ばないようにする。その間、確認ボタンは回転の印と busyLabel
+// （「削除中…」）に替わり、押したことが受け付けられて進んでいると分かるようにする。先に閉じる
+// ダイアログはこの間が無いので、busyLabel に null を渡す。
 // onDismiss は、Esc や背景で閉じたときの処理である。省くとキャンセルと同じに扱う。
 // キャンセルのボタンが取り消せない決定（記録を消すなど）のときは、閉じるだけの処理を渡す。
 // confirmDisabled は、確かめる内容がまだ揃っていない間（確認の前提をサーバーから
@@ -27,6 +28,7 @@ export function ConfirmDialog({
   heading,
   body,
   confirmLabel,
+  busyLabel,
   cancelLabel,
   onConfirm,
   onCancel,
@@ -41,6 +43,7 @@ export function ConfirmDialog({
   heading: string;
   body: ReactNode;
   confirmLabel: string;
+  busyLabel: string | null;
   cancelLabel: string;
   onConfirm: () => void | Promise<unknown>;
   onCancel: () => void;
@@ -89,6 +92,7 @@ export function ConfirmDialog({
           ref={confirmRef}
           kind={confirmKind}
           busy={locked}
+          busyLabel={busyLabel}
           disabled={confirmDisabled}
           onClick={confirm}
           className="focus:outline-2 focus:outline-offset-2 focus:outline-accent"

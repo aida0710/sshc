@@ -408,6 +408,7 @@ export function SnippetsPanel({
           heading={t("snippets.deleteHeading", { name: current.name })}
           body={<p className="text-sm text-ink-muted">{t("snippets.deleteBody")}</p>}
           confirmLabel={t("snippets.confirmDelete")}
+          busyLabel={null}
           cancelLabel={t("snippets.deleteCancel")}
           onCancel={() => setConfirmingDelete(false)}
           onConfirm={() => {

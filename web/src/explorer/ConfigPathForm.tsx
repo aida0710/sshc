@@ -7,11 +7,11 @@ import { literalTextEntry } from "../ui/softKeyboard";
 // ConfigPathTask は、~/.ssh の中のパスを1つ入れて行う操作である。［ファイルを作成］と「…」のメニューから始める。
 export type ConfigPathTask = "createFile" | "createDirectory" | "deleteDirectory" | "rename";
 
-const taskTexts: Record<ConfigPathTask, { label: MessageKey; submit: MessageKey; note: MessageKey }> = {
-  createFile: { label: "explorer.newFilePath", submit: "explorer.submitCreate", note: "explorer.newFileNote" },
-  createDirectory: { label: "explorer.directoryPath", submit: "explorer.submitCreate", note: "explorer.createDirectoryNote" },
-  deleteDirectory: { label: "explorer.directoryPath", submit: "explorer.submitDelete", note: "explorer.deleteDirectoryNote" },
-  rename: { label: "explorer.renameTo", submit: "explorer.submitRename", note: "explorer.renameNote" },
+const taskTexts: Record<ConfigPathTask, { label: MessageKey; submit: MessageKey; busy: MessageKey; note: MessageKey }> = {
+  createFile: { label: "explorer.newFilePath", submit: "explorer.submitCreate", busy: "busy.creating", note: "explorer.newFileNote" },
+  createDirectory: { label: "explorer.directoryPath", submit: "explorer.submitCreate", busy: "busy.creating", note: "explorer.createDirectoryNote" },
+  deleteDirectory: { label: "explorer.directoryPath", submit: "explorer.submitDelete", busy: "busy.deleting", note: "explorer.deleteDirectoryNote" },
+  rename: { label: "explorer.renameTo", submit: "explorer.submitRename", busy: "busy.renaming", note: "explorer.renameNote" },
 };
 
 // ConfigPathForm は、開いているファイルの見出しの下に開く、パスを入れる欄である。入力のために画面を
@@ -63,7 +63,7 @@ export function ConfigPathForm({
           aria-describedby={problem === "" ? "config-path-note" : "config-path-problem config-path-note"}
           className={`${control} min-h-10 basis-full font-mono sm:min-w-48 sm:flex-1 sm:basis-0 md:min-h-0`}
         />
-        <Button type="submit" kind={task === "deleteDirectory" ? "danger" : "primary"} className="min-h-10 md:min-h-0" busy={submitting} disabled={unchanged || busy}>
+        <Button type="submit" kind={task === "deleteDirectory" ? "danger" : "primary"} className="min-h-10 md:min-h-0" busy={submitting} busyLabel={t(texts.busy)} disabled={unchanged || busy}>
           {t(texts.submit)}
         </Button>
         <Button className="min-h-10 md:min-h-0" onClick={onCancel}>{t("explorer.cancelPathTask")}</Button>

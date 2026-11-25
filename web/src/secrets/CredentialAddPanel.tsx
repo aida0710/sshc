@@ -58,7 +58,7 @@ export function CredentialAddPanel({ kind, onStore, onCancel }: {
           <PasswordField label={t(valueLabelKeys[kind])} value={secret} onChange={setSecret} disabled={saving} />
           <div className="flex justify-end gap-2">
             <Button onClick={onCancel}>{t("secrets.cancel")}</Button>
-            <Button kind="primary" busy={saving} disabled={name === "" || secret === ""} onClick={() => void store()}>
+            <Button kind="primary" busy={saving} busyLabel={t("busy.saving")} disabled={name === "" || secret === ""} onClick={() => void store()}>
               {t("secrets.save")}
             </Button>
           </div>

@@ -362,6 +362,7 @@ export function VPNPanel({ api: apiOverride, onNavigationBlockerChange, onNaviga
             </p>
           }
           confirmLabel={t("vpn.disconnect")}
+          busyLabel={null}
           cancelLabel={t("vpn.cancel")}
           onCancel={() => setPendingDisconnect(null)}
           onConfirm={() => {
@@ -378,6 +379,7 @@ export function VPNPanel({ api: apiOverride, onNavigationBlockerChange, onNaviga
           heading={t("vpn.removeTitle", { name: pendingRemoval })}
           body={t("vpn.removeBody")}
           confirmLabel={t("vpn.remove")}
+          busyLabel={null}
           cancelLabel={t("vpn.cancel")}
           onCancel={() => setPendingRemoval("")}
           onConfirm={() => {
@@ -396,6 +398,7 @@ export function VPNPanel({ api: apiOverride, onNavigationBlockerChange, onNaviga
           label={t("vpn.renameLabel")}
           initialValue={pendingRename}
           submitLabel={t("vpn.renameAction")}
+          busyLabel={null}
           cancelLabel={t("vpn.cancel")}
           validate={(value) => {
             // engine と同じ規則で、名前の誤りをこの欄に出す。

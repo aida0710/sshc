@@ -6,6 +6,7 @@ import type { Locale } from "../i18n/locale";
 import { hintText } from "../ui/form";
 import { formatDateTime } from "../ui/format";
 import { Button, Notice } from "../ui/surface";
+import { usePendingAction } from "../ui/usePendingAction";
 import { formatStorageBytes } from "./SyncResultCard";
 import { syncHistoryRelationLabelKeys } from "./syncMessageKeys";
 import type { HistoryState } from "./useSyncRemoteState";
@@ -19,7 +20,7 @@ type SyncHistorySectionProps = {
   locale: Locale;
   selectedKey: string | null;
   t: Translate;
-  onPreview: (key: string) => void;
+  onPreview: (key: string) => Promise<void>;
   onRefresh: () => void;
   onSelect: (key: string) => void;
 };
@@ -37,6 +38,8 @@ export function SyncHistorySection({
   onRefresh,
   onSelect,
 }: SyncHistorySectionProps) {
+  // 戻す前の確認を作っている間は、押した［確認］だけを busy にする。
+  const pending = usePendingAction<"restore">();
   const selected =
     historyState.phase === "ready" && selectedKey !== null
       ? historyState.value.revisions.find(
@@ -188,8 +191,10 @@ export function SyncHistorySection({
                   <p className={hintText}>{t("sync.historyRestoreHint")}</p>
                   <Button
                     kind="primary"
+                    busy={pending.running === "restore"}
+                    busyLabel={t("busy.checking")}
                     disabled={busy || direction === "push"}
-                    onClick={() => onPreview(selected.key)}
+                    onClick={() => void pending.start("restore", () => onPreview(selected.key))}
                     className="self-start"
                   >
                     {t("sync.historyRestorePreview")}

@@ -53,7 +53,7 @@ export function SnippetRunSection({
           </label>
         ))}
       </div>
-      <Button className="mt-3" busy={previewing} disabled={busy || targets.length === 0} onClick={onPreview}>
+      <Button className="mt-3" busy={previewing} busyLabel={t("busy.checking")} disabled={busy || targets.length === 0} onClick={onPreview}>
         {t("snippets.preview")}
       </Button>
       {preview === null ? null : (
@@ -73,7 +73,7 @@ export function SnippetRunSection({
               <pre className={`mt-1 ${codeBlock}`}>{target.command}</pre>
             </div>
           ))}
-          <Button kind="primary" className="mt-3" busy={running} disabled={busy} onClick={onRun}>
+          <Button kind="primary" className="mt-3" busy={running} busyLabel={t("busy.running")} disabled={busy} onClick={onRun}>
             {t("snippets.run")}
           </Button>
         </section>
@@ -84,8 +84,8 @@ export function SnippetRunSection({
             <h4 className="grow text-sm font-semibold">
               {t("snippets.results")} · {t(snippetStatusLabelKey(job.status))}
             </h4>
-            {job.status === "running" ? (
-              <Button busy={cancelling} disabled={busy} onClick={() => onCancel(job.id)}>
+            {job.status === "running" ? ( // busy-label-exempt: ［中止］は「〇〇中」の形にならないので、文言を替えず回る印だけを添える（2026-11-25 利用者が決めた）。
+              <Button busy={cancelling} busyLabel={null} disabled={busy} onClick={() => onCancel(job.id)}>
                 {t("snippets.cancel")}
               </Button>
             ) : null}

@@ -31,6 +31,7 @@ export function SFTPEntryActionDialogs({ actions, currentPath, returnFocusRef }:
             </ul>
           </div>}
           confirmLabel={t("sftp.delete")}
+          busyLabel={t("busy.deleting")}
           cancelLabel={t("sftp.cancel")}
           returnFocusRef={returnFocusRef}
           onConfirm={actions.remove}
@@ -46,6 +47,7 @@ export function SFTPEntryActionDialogs({ actions, currentPath, returnFocusRef }:
           label={t(inputText.label)}
           initialValue={inputText.initialValue}
           submitLabel={t(inputText.submit)}
+          busyLabel={t(inputText.busy)}
           cancelLabel={t("sftp.cancel")}
           returnFocusRef={returnFocusRef}
           validate={(value) => {

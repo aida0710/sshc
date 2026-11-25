@@ -77,7 +77,7 @@ export function RunTargetRefusalPanel({
     default:
       actions = (
         <div className="flex flex-wrap gap-2">
-          <Button kind="primary" busy={reconnecting} onClick={() => void reconnect()}>{t("runTarget.reconnect")}</Button>
+          <Button kind="primary" busy={reconnecting} busyLabel={t("busy.connecting")} onClick={() => void reconnect()}>{t("runTarget.reconnect")}</Button>
           {useThisMachine}
         </div>
       );

@@ -9,9 +9,11 @@ import { hasOnScreenKeyboard, type asciiTextEntry } from "./softKeyboard";
 //
 // 入れた値で始めた処理の結果をどこに出すかは、ConfirmDialog と同じく呼び手が決める。
 // - 閉じずに待つ: onSubmit から Promise を返し、失敗の文を error で渡す。待つ間は確定の
-//   ボタンに回転の印を出し、両方のボタンとダイアログを閉じる操作を止める。失敗したら
-//   入力欄へフォーカスを戻し、直してそのままやり直せるようにする。成功したら呼び手が閉じる。
+//   ボタンが回転の印と busyLabel（「変更中…」）に替わり、両方のボタンとダイアログを閉じる操作を
+//   止める。失敗したら入力欄へフォーカスを戻し、直してそのままやり直せるようにする。成功したら
+//   呼び手が閉じる。
 // - 先に閉じる: onSubmit の中でダイアログを閉じてから処理を始め、結果は背面の画面に出す。
+//   待つ間が無いので、busyLabel に null を渡す。
 export function InputDialog({
   id,
   heading,
@@ -19,6 +21,7 @@ export function InputDialog({
   label,
   initialValue = "",
   submitLabel,
+  busyLabel,
   cancelLabel,
   validate,
   onSubmit,
@@ -33,6 +36,7 @@ export function InputDialog({
   label: string;
   initialValue?: string;
   submitLabel: string;
+  busyLabel: string | null;
   cancelLabel: string;
   validate?: (value: string) => string;
   onSubmit: (value: string) => void | Promise<unknown>;
@@ -102,7 +106,7 @@ export function InputDialog({
         {error === "" ? null : <Notice tone="danger" id={failureId}>{error}</Notice>}
         <div className="flex justify-end gap-2">
           <Button disabled={submitting} onClick={onCancel}>{cancelLabel}</Button>
-          <Button kind="primary" type="submit" busy={submitting}>{submitLabel}</Button>
+          <Button kind="primary" type="submit" busy={submitting} busyLabel={busyLabel}>{submitLabel}</Button>
         </div>
       </form>
     </ModalShell>

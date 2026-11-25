@@ -361,6 +361,7 @@ export function VPNProfileForm({
           <Button
             kind="primary"
             busy={saving.pending}
+            busyLabel={t("busy.saving")}
             disabled={waiting || missingValues}
             title={busy && !saving.pending ? t("vpn.waitingForOperation") : undefined}
             onClick={() => void save()}

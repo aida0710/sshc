@@ -40,6 +40,7 @@ export function SFTPPermissionsDialog({ permissions, returnFocusRef }: {
     </div>}
     confirmKind="primary"
     confirmLabel={t("sftp.apply")}
+    busyLabel={t("busy.applying")}
     cancelLabel={t(permissions.attempted ? "sftp.close" : "sftp.cancel")}
     onConfirm={permissions.apply}
     onCancel={permissions.cancel}
@@ -98,7 +99,7 @@ function PermissionsForm({ intent, permissions, returnFocusRef }: {
       {validation || permissions.problem ? <Notice tone="danger">{validation || permissions.problem}</Notice> : null}
       <div className="flex justify-end gap-2">
         <Button onClick={permissions.cancel}>{t("sftp.cancel")}</Button>
-        <Button kind="primary" type="submit" busy={permissions.planning}>{t("sftp.chmodReview")}</Button>
+        <Button kind="primary" type="submit" busy={permissions.planning} busyLabel={t("busy.checking")}>{t("sftp.chmodReview")}</Button>
       </div>
     </form>
   </ModalShell>;

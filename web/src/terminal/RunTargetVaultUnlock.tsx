@@ -41,7 +41,7 @@ export function RunTargetVaultUnlock({
     <form onSubmit={(event) => void form.unlock(event)} className="flex flex-col gap-3">
       <PasswordField label={t("runTarget.unlockPassword", { alias })} value={form.password} onChange={form.setPassword} error={form.error} disabled={form.busy} />
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" kind="primary" busy={form.busy} disabled={form.password === ""}>{t("runTarget.unlock")}</Button>
+        <Button type="submit" kind="primary" busy={form.busy} busyLabel={t("busy.unlocking")} disabled={form.password === ""}>{t("runTarget.unlock")}</Button>
         {children}
       </div>
     </form>

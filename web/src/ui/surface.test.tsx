@@ -173,18 +173,23 @@ describe("Card", () => {
 });
 
 describe("Button while it waits", () => {
-  it("keeps its label while it waits, and cannot be pressed again", async () => {
+  it("says what it waits for, and cannot be pressed again", async () => {
     const onClick = vi.fn();
-    render(<Button busy onClick={onClick}>Save</Button>);
-    const button = screen.getByRole("button", { name: "Save" });
+    render(<Button busy busyLabel="Saving…" onClick={onClick}>Save</Button>);
+    const button = screen.getByRole("button", { name: "Saving…" });
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button).toBeDisabled();
     await userEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("keeps its label while it waits when it has no waiting wording", () => {
+    render(<Button busy busyLabel={null}>Stop</Button>);
+    expect(screen.getByRole("button", { name: "Stop" })).toHaveAttribute("aria-busy", "true");
+  });
+
   it("says nothing about waiting when it is idle", () => {
-    render(<Button>Save</Button>);
+    render(<Button busy={false} busyLabel="Saving…">Save</Button>);
     expect(screen.getByRole("button", { name: "Save" })).not.toHaveAttribute("aria-busy");
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });

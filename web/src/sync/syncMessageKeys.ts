@@ -29,6 +29,13 @@ export const syncNowLabelKeys: Record<SyncDirection, MessageKey> = {
   pull: "sync.autoNow.pull",
 };
 
+// syncNowBusyLabelKeys は、［今すぐ同期］［今すぐ送信］［今すぐ受信］を押して待っている間の文言。
+export const syncNowBusyLabelKeys: Record<SyncDirection, MessageKey> = {
+  both: "busy.syncing",
+  push: "busy.sending",
+  pull: "busy.receiving",
+};
+
 export const syncSetupStateKeys: Record<SyncSetupCheckResponse["state"], MessageKey> = {
   empty: "sync.setup.empty",
   existing: "sync.setup.existing",

@@ -22,7 +22,9 @@ export function SyncUnlockCard({ master, busy, onMasterChange, onUnlock }: {
         />
         <Button
           kind="primary"
-          disabled={busy || master === ""}
+          busy={busy}
+          busyLabel={t("busy.unlocking")}
+          disabled={master === ""}
           onClick={onUnlock}
           className="self-start"
         >

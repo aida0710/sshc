@@ -90,10 +90,11 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
       {!rows.has("host-key") || question === undefined || hostKeyAnswer === undefined ? null : (
         <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
           <p className="min-w-0 grow">{t("terminal.noticeCheckHostKey", { target: question.alias || question.hostName })}</p>
-          <Button small disabled={hostKeyAnswer.busy} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, false)} className={bannerButton}>
+          {/* busy-label-exempt: ［やめる］は「〇〇中」の形にならないので、文言を替えず回る印だけを添える（2026-11-25 利用者が決めた）。 */}
+          <Button small busy={hostKeyAnswer.answering === false} busyLabel={null} disabled={hostKeyAnswer.answering !== null} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, false)} className={bannerButton}>
             {t("terminal.hostKeyReject")}
           </Button>
-          <Button small disabled={hostKeyAnswer.busy} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, true)} className={bannerButton}>
+          <Button small busy={hostKeyAnswer.answering === true} busyLabel={t("busy.connecting")} disabled={hostKeyAnswer.answering !== null} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, true)} className={bannerButton}>
             {t("terminal.hostKeyAccept")}
           </Button>
         </div>
@@ -105,7 +106,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
             <ReconnectMessage reconnect={session.reconnect} awaitingInput={reconnectAwaitsInput(session)} />
           </p>
           {recovery?.stopReconnecting === undefined ? null : (
-            <Button small disabled={recovery.stopBusy} onClick={recovery.stopReconnecting} className={bannerButton}>
+            <Button small busy={recovery.stopBusy} busyLabel={t("busy.stopping")} onClick={recovery.stopReconnecting} className={bannerButton}>
               {t("terminal.stopReconnect")}
             </Button>
           )}
@@ -151,7 +152,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
             {session.problem === "" ? exitText(t, session.exited, session) : t(terminalProblemKey(session.problem))}
           </p>
           {session.kind !== "ssh" || session.alias === undefined || recovery?.reconnect === undefined ? null : (
-            <Button small busy={recovery.reconnectBusy} onClick={recovery.reconnect} className={bannerButton}>
+            <Button small busy={recovery.reconnectBusy} busyLabel={t("busy.connecting")} onClick={recovery.reconnect} className={bannerButton}>
               {t("terminal.manualReconnect")}
             </Button>
           )}

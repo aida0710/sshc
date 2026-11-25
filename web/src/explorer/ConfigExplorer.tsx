@@ -478,6 +478,7 @@ export function ConfigExplorer({ target = null, onTargetHandled = () => undefine
           heading={t("explorer.deleteFile")}
           body={<div className="flex flex-col gap-2 text-sm text-ink-muted"><p className="break-all font-mono">{file.file.path}</p><p>{t("explorer.deleteIsRecoverable")}</p></div>}
           confirmLabel={t("explorer.confirmDelete")}
+          busyLabel={t("busy.deleting")}
           cancelLabel={t("explorer.cancelDelete")}
           onConfirm={deleteFile}
           onCancel={() => setConfirmingDelete(false)}

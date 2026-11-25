@@ -18,6 +18,7 @@ describe("InputDialog", () => {
         heading="Rename"
         label="New name"
         submitLabel="Save"
+        busyLabel={null}
         cancelLabel="Cancel"
         validate={(value) => value === "" ? "Enter a name." : value.includes("/") ? "Do not use a slash." : ""}
         onSubmit={submit}
@@ -38,15 +39,15 @@ describe("InputDialog", () => {
     const cancel = vi.fn();
     const user = userEvent.setup();
     render(
-      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" cancelLabel="Cancel" onSubmit={submit} onCancel={cancel} />,
+      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" busyLabel="Saving…" cancelLabel="Cancel" onSubmit={submit} onCancel={cancel} />,
     );
 
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(screen.getByRole("button", { name: "Save" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Saving…" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(cancel).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Saving…" }));
     expect(submit).toHaveBeenCalledTimes(1);
 
     settle();
@@ -58,12 +59,12 @@ describe("InputDialog", () => {
     const submit = vi.fn(() => new Promise<void>((_, reject) => { fail = () => reject(new Error("taken")); }));
     const user = userEvent.setup();
     const view = render(
-      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" cancelLabel="Cancel" onSubmit={submit} onCancel={vi.fn()} />,
+      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" busyLabel="Saving…" cancelLabel="Cancel" onSubmit={submit} onCancel={vi.fn()} />,
     );
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     view.rerender(
-      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" cancelLabel="Cancel" onSubmit={submit} onCancel={vi.fn()} error="That name is taken." />,
+      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" busyLabel="Saving…" cancelLabel="Cancel" onSubmit={submit} onCancel={vi.fn()} error="That name is taken." />,
     );
     fail();
 
@@ -78,13 +79,13 @@ describe("InputDialog", () => {
     const submit = vi.fn(() => new Promise<void>((_, reject) => { fail = () => reject(new Error("taken")); }));
     const user = userEvent.setup();
     const view = render(
-      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" cancelLabel="Cancel" onSubmit={submit} onCancel={vi.fn()} />,
+      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" busyLabel="Saving…" cancelLabel="Cancel" onSubmit={submit} onCancel={vi.fn()} />,
     );
     expect(screen.getByRole("dialog")).toHaveFocus();
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     view.rerender(
-      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" cancelLabel="Cancel" onSubmit={submit} onCancel={vi.fn()} error="That name is taken." />,
+      <InputDialog id="name-heading" heading="Rename" label="New name" initialValue="old" submitLabel="Save" busyLabel="Saving…" cancelLabel="Cancel" onSubmit={submit} onCancel={vi.fn()} error="That name is taken." />,
     );
     fail();
 
@@ -98,7 +99,7 @@ describe("InputDialog", () => {
 
   it("opens the value's field with the keyboard the caller asks for", () => {
     render(
-      <InputDialog id="name-heading" heading="Rename" label="New name" submitLabel="Save" cancelLabel="Cancel" textEntry={asciiTextEntry} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <InputDialog id="name-heading" heading="Rename" label="New name" submitLabel="Save" busyLabel="Saving…" cancelLabel="Cancel" textEntry={asciiTextEntry} onSubmit={vi.fn()} onCancel={vi.fn()} />,
     );
     expect(screen.getByRole("textbox", { name: "New name" })).toHaveAttribute("inputmode", "email");
   });

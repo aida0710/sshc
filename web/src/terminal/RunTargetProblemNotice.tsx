@@ -21,6 +21,7 @@ export function RunTargetProblemNotice({ problem, showAlias = true, onRetry, onD
     <Button
       small
       busy={retrying}
+      busyLabel={t("busy.retrying")}
       onClick={() => {
         setRetrying(true);
         void onRetry().finally(() => setRetrying(false));

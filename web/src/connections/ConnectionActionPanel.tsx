@@ -61,6 +61,7 @@ export function ConnectionActionPanel({
       title: t("host.renameAlias"),
       ready: renameTo.trim() !== "" && renameTo !== identity.alias,
       submitLabel: t("host.rename"),
+      busyLabel: t("busy.renaming"),
       run: () => onRename(renameTo.trim()),
       body: <input {...asciiTextEntry} id={fieldId} value={renameTo} onChange={(event) => setRenameTo(event.target.value)} className={`${control} font-mono`} />,
       hint: "",
@@ -69,6 +70,7 @@ export function ConnectionActionPanel({
       title: t("host.primaryGroup"),
       ready: group !== currentGroup,
       submitLabel: t("host.moveToGroup"),
+      busyLabel: t("busy.moving"),
       run: () => onMoveToGroup(group),
       body: (
         <select id={fieldId} value={group} onChange={(event) => setGroup(event.target.value)} className={control}>
@@ -82,6 +84,7 @@ export function ConnectionActionPanel({
       title: t("host.comment"),
       ready: comment !== initialComment,
       submitLabel: t("host.saveComment"),
+      busyLabel: t("busy.saving"),
       run: () => onComment(comment),
       body: <textarea id={fieldId} value={comment} onChange={(event) => setComment(event.target.value)} rows={3} className={control} />,
       hint: t("host.commentNote"),
@@ -90,6 +93,7 @@ export function ConnectionActionPanel({
       title: t("conn.moveToFile"),
       ready: file !== "",
       submitLabel: t("conn.move"),
+      busyLabel: t("busy.moving"),
       run: () => onMoveToFile(file),
       body: (
         <select id={fieldId} value={file} onChange={(event) => setFile(event.target.value)} className={control}>
@@ -112,7 +116,7 @@ export function ConnectionActionPanel({
         {disabled ? <p className="text-xs text-notice-ink">{t("conn.manageDraftBlocked")}</p> : null}
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>{t("conn.actionCancel")}</Button>
-          <Button kind="primary" disabled={!form.ready} busy={pending.running === action} onClick={() => submit(form.run)}>{form.submitLabel}</Button>
+          <Button kind="primary" disabled={!form.ready} busy={pending.running === action} busyLabel={form.busyLabel} onClick={() => submit(form.run)}>{form.submitLabel}</Button>
         </div>
       </fieldset>
     </section>

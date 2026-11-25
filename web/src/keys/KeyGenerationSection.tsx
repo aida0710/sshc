@@ -164,7 +164,7 @@ export function KeyGenerationSection({
           />
         )}
         <ActionArea>
-          <Button kind="primary" type="submit" busy={submission.pending}>
+          <Button kind="primary" type="submit" busy={submission.pending} busyLabel={t(inProcess ? "busy.creating" : "busy.loading")}>
             {inProcess ? t("keys.createSubmit") : t("keys.showTerminalCommand")}
           </Button>
           <Button disabled={submission.pending} onClick={onClose}>{t("keys.close")}</Button>

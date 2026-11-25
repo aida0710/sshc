@@ -13,6 +13,7 @@ function open(overrides: Partial<Parameters<typeof ConfirmDialog>[0]> = {}) {
         heading="Close zsh?"
         body={<p>Everything running stops.</p>}
         confirmLabel="Close"
+        busyLabel="Closing…"
         cancelLabel="Keep it open"
         onConfirm={onConfirm}
         onCancel={onCancel}
@@ -59,7 +60,7 @@ describe("ConfirmDialog", () => {
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Closing…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Keep it open" })).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(onCancel).not.toHaveBeenCalled();
@@ -109,7 +110,7 @@ describe("ConfirmDialog", () => {
     outside.remove();
   });
 
-  it("marks the pressed confirm button as working, with the same label, until the action settles", async () => {
+  it("turns the pressed confirm button into a spinner and what it waits for, until the action settles", async () => {
     let settle: () => void = () => undefined;
     const onConfirm = vi.fn(() => new Promise<void>((resolve) => { settle = resolve; }));
     open({ onConfirm });
@@ -117,7 +118,7 @@ describe("ConfirmDialog", () => {
 
     expect(screen.getByRole("button", { name: "Close" })).not.toHaveAttribute("aria-busy");
     await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.getByRole("button", { name: "Close" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Closing…" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("button", { name: "Keep it open" })).not.toHaveAttribute("aria-busy");
 
     settle();
@@ -126,7 +127,7 @@ describe("ConfirmDialog", () => {
 
   it("disables both buttons while the caller reports busy", () => {
     open({ busy: true });
-    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Closing…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Keep it open" })).toBeDisabled();
   });
 

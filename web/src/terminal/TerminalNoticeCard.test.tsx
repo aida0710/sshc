@@ -34,7 +34,7 @@ type CardOptions = {
 function renderCard(
   shown: TerminalSession,
   actions: SessionRecovery,
-  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), busy: false }, focus = { take: () => false, giveBack: vi.fn() }, asksNotificationPermission = false, onAnswerPasswordSave, onResumeProgram = vi.fn() }: CardOptions = {},
+  { onCloseSession = vi.fn(), onDismiss = vi.fn(), answers = { answer: vi.fn(), answering: null }, focus = { take: () => false, giveBack: vi.fn() }, asksNotificationPermission = false, onAnswerPasswordSave, onResumeProgram = vi.fn() }: CardOptions = {},
 ) {
   const notice = terminalNoticeFor(shown, { phase: "live" }, asksNotificationPermission);
   if (notice === null) throw new Error("no card for this session");

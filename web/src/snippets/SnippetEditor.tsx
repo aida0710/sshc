@@ -178,7 +178,7 @@ export function SnippetEditor({
       </div>
       {deletable ? (
         <div className="pt-1">
-          <Button kind="dangerText" busy={deleting} disabled={busy} onClick={onDelete}>
+          <Button kind="dangerText" busy={deleting} busyLabel={t("busy.deleting")} disabled={busy} onClick={onDelete}>
             {t("snippets.delete")}
           </Button>
         </div>

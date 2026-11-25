@@ -337,9 +337,9 @@ export function RemoteKeyPanel({
           )}
         >
           <div className="flex flex-wrap justify-end gap-2">
-            <Button busy={planning} disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
+            <Button busy={planning} busyLabel={t("busy.checking")} disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
             {plannedTargets.length > 0 && registerable.length === 0 ? null : (
-              <Button kind="primary" busy={registering} disabled={blocked} onClick={() => void register()}>
+              <Button kind="primary" busy={registering} busyLabel={t("busy.registering")} disabled={blocked} onClick={() => void register()}>
                 {registerable.length > 1 ? t("rk.registerMany", { count: registerable.length }) : t("rk.register")}
               </Button>
             )}

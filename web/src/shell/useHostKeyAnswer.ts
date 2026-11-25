@@ -6,24 +6,26 @@ import { useState } from "react";
 export type HostKeyAnswer = {
   // answer is undefined when this view cannot answer from a button.
   answer: ((fingerprint: string, accept: boolean) => void) | undefined;
-  busy: boolean;
+  // answering は、送っている答え（true は［接続する］、false は［やめる］）。押したほうのボタンだけに回る印を出し、
+  // もう一方は押せなくする。答えを送っていないときは null。
+  answering: boolean | null;
 };
 
 export function useHostKeyAnswer(onAnswerHostKey: ((fingerprint: string, accept: boolean) => Promise<boolean>) | undefined): HostKeyAnswer {
-  const [busy, setBusy] = useState(false);
+  const [answering, setAnswering] = useState<boolean | null>(null);
 
   async function answer(handler: (fingerprint: string, accept: boolean) => Promise<boolean>, fingerprint: string, accept: boolean) {
-    if (busy) return;
-    setBusy(true);
+    if (answering !== null) return;
+    setAnswering(accept);
     try {
       await handler(fingerprint, accept);
     } finally {
-      setBusy(false);
+      setAnswering(null);
     }
   }
 
   return {
     answer: onAnswerHostKey === undefined ? undefined : (fingerprint, accept) => void answer(onAnswerHostKey, fingerprint, accept),
-    busy,
+    answering,
   };
 }

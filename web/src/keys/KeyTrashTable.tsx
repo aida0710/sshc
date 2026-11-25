@@ -103,6 +103,7 @@ export function KeyTrashTable({ trash, onRestore, onPurge }: {
           heading={t("keys.purge")}
           body={<Notice tone="danger" live={false}>{t("keys.purgeWarning")}</Notice>}
           confirmLabel={t("keys.confirmPurge")}
+          busyLabel={t("busy.deleting")}
           cancelLabel={t("keys.cancel")}
           onConfirm={async () => {
             setPurgeError("");

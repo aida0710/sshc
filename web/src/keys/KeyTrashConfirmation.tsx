@@ -52,6 +52,7 @@ export function KeyTrashConfirmation({
         </div>
       }
       confirmLabel={t("keys.trashConfirm")}
+      busyLabel={t("busy.moving")}
       cancelLabel={t("keys.trashCancel")}
       onConfirm={() => onConfirm(item.id)}
       onCancel={onCancel}

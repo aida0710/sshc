@@ -1531,7 +1531,7 @@ describe("SFTPPanel uploads", () => {
     await userEvent.type(within(dialog).getByRole("textbox", { name: "Folder name" }), "logs");
     await userEvent.click(within(dialog).getByRole("button", { name: "New folder" }));
 
-    expect(within(dialog).getByRole("button", { name: "New folder" })).toHaveAttribute("aria-busy", "true");
+    expect(within(dialog).getByRole("button", { name: "Creating…" })).toHaveAttribute("aria-busy", "true");
     refuse(new ApiError("sftp_exists", 409, null));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("An entry with the same name already exists.");
     expect(within(dialog).getByRole("textbox", { name: "Folder name" })).toHaveValue("logs");
@@ -1561,7 +1561,7 @@ describe("SFTPPanel uploads", () => {
     await userEvent.type(name, "notes.md");
     await userEvent.click(within(dialog).getByRole("button", { name: "Rename" }));
 
-    expect(within(dialog).getByRole("button", { name: "Rename" })).toHaveAttribute("aria-busy", "true");
+    expect(within(dialog).getByRole("button", { name: "Renaming…" })).toHaveAttribute("aria-busy", "true");
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled();
     finish();
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Rename" })).not.toBeInTheDocument());
