@@ -565,14 +565,13 @@ jobs:
           SSHC_ANDROID_NDK_HOME: ${{ steps.android-ndk.outputs.path }}
         run: make android-bind ANDROID_NDK_HOME="$SSHC_ANDROID_NDK_HOME"
 
-      # Android SDK を必要としないホスト側ロジックを JVM テストで検証する。
-      - name: Unit tests
+      # JVM テスト（Android SDK を必要としないホスト側のロジック）と APK の組み立てを、1回の Gradle で流す。
+      # setup-java のキャッシュは、鍵が同じあいだ保存し直されない。保存から30日を過ぎると、Gradle は実行の終わりに、
+      # 復元したファイルを使われていないものとして掃除する。2回に分けると、2回目が200以上のファイルを Maven の
+      # リポジトリから取り直し、429 で落ちることがある。
+      - name: Unit tests and assembleDebug
         working-directory: android
-        run: ./gradlew --no-daemon test
-
-      - name: assembleDebug
-        working-directory: android
-        run: ./gradlew --no-daemon assembleDebug
+        run: ./gradlew --no-daemon test assembleDebug
 
       # 実機に入れられるものを置いていく。debug 署名なので配布物ではないが、
       # 「main の今の APK」を取りに行ける場所がここ以外に無い。
