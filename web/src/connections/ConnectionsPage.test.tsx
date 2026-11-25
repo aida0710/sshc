@@ -174,9 +174,7 @@ describe("ConnectionsPage", () => {
       await user.click(within(dialog).getByRole("button", { name: "work" }));
 
       // 押した行は、グループ名を残したまま、右の端に回る印と「Moving…」を添える。
-      const work = within(dialog).getByRole("button", { name: /^work/ });
-      await waitFor(() => expect(work).toHaveAttribute("aria-busy", "true"));
-      expect(within(work).getByText("Moving…")).toBeVisible();
+      await waitFor(() => expect(within(dialog).getByRole("button", { name: "work Moving…" })).toHaveAttribute("aria-busy", "true"));
       expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled();
       finish();
       await waitFor(() => expect(screen.queryByRole("dialog", { name: "Move 2 connections" })).not.toBeInTheDocument());

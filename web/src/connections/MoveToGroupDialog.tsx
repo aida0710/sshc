@@ -64,7 +64,8 @@ export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCan
               >
                 <Icon name="groups" className="size-4 text-ink-faint" />
                 <span title={row.label} className="min-w-0 flex-1 truncate">{row.label}</span>
-                {moving ? <span className="flex shrink-0 items-center gap-2 text-ink-muted"><Spinner />{t("busy.moving")}</span> : null}
+                {/* 前の空白は、読み上げの名前を「work 移動中…」と区切るため。 */}
+                {moving ? <>{" "}<span className="flex shrink-0 items-center gap-2 text-ink-muted"><Spinner />{t("busy.moving")}</span></> : null}
               </button>
             </li>
           );
