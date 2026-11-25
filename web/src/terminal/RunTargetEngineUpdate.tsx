@@ -62,7 +62,7 @@ export function RunTargetEngineUpdate({
       <CommandOutput output={info.output} label={t("engineInfo.output")} />
       <div className="flex flex-wrap gap-2">
         <Button kind="primary" busy={updating} disabled={info.running !== null} onClick={() => void info.run("update")}>
-          {updating ? t("runTarget.updating", { alias }) : t("runTarget.update", { alias })}
+          {t("runTarget.update", { alias })}
         </Button>
         {children}
       </div>

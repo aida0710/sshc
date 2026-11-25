@@ -137,6 +137,7 @@ export function QuickConnectBrowser({
           selected || opening ? "border-accent bg-select-fill" : "border-transparent bg-well hover:border-accent/45"
         }`}
       >
+        {/* busy-label-exempt: カードの名前（接続名）は変えず、その下に状態の行として回る印と「接続中…」を足している。 */}
         <button
           type="button"
           data-touch-compact
