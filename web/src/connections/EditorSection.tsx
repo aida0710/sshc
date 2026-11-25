@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from "react";
+import { sectionHeading } from "../ui/form";
 
 // EditorSection is one part of a tab of the connection editor, set off from the part above by a line: a heading,
 // details beside it on the right (meta, such as the file the Host block is in), then its rows (FieldRow with
@@ -8,7 +9,7 @@ export function EditorSection({ title, meta, children }: { title: string; meta?:
   return (
     <section aria-labelledby={headingId} className="border-t border-line py-3.5 first:border-t-0 first:pt-0">
       <div className="mb-2.5 flex min-w-0 items-baseline gap-2">
-        <h3 id={headingId} className="shrink-0 text-sm font-semibold text-ink">{title}</h3>
+        <h3 id={headingId} className={`${sectionHeading} shrink-0`}>{title}</h3>
         {meta === undefined ? null : <span title={typeof meta === "string" ? meta : undefined} className="ml-auto min-w-0 truncate text-right font-mono text-xs text-ink-faint">{meta}</span>}
       </div>
       {children}

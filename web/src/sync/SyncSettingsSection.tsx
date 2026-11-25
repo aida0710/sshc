@@ -3,7 +3,7 @@ import { tagClass } from "../ui/Tag";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import type { SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
-import { CheckboxField, control } from "../ui/form";
+import { CheckboxField, control, sectionHeading } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { PageSection } from "../ui/page";
 import { PasswordInput } from "../ui/PasswordField";
@@ -240,7 +240,7 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
       onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
       className="border-t border-line pt-4"
     >
-      <DisclosureSummary className="text-sm font-semibold text-ink">
+      <DisclosureSummary className={sectionHeading}>
         {t("sync.manageSettings")}
       </DisclosureSummary>
       {body}

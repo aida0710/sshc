@@ -3,7 +3,7 @@ import { failureCode } from "../api/client";
 import type { CredentialKind, CredentialList, CredentialsApi } from "../api/credentials";
 import { useTranslate } from "../i18n/context";
 import { DraftSaveBar } from "../ui/DraftSaveBar";
-import { Field, control, hintText } from "../ui/form";
+import { control, Field, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { Button, Notice } from "../ui/surface";
@@ -40,7 +40,7 @@ export function CredentialEditPanel({ kind, name, api, onSaved, onClose, onDirty
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-inset bg-well p-3">
       <div>
-        <h4 id={headingId} className="text-sm font-semibold text-ink">{heading}</h4>
+        <h4 id={headingId} className={sectionHeading}>{heading}</h4>
         <p className={`mt-1 ${hintText}`}>{t("secrets.editNote")}</p>
       </div>
       {revealed.state === "loading" ? (

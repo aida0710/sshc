@@ -4,7 +4,7 @@ import { settingsApi, type SettingsApi, type TerminalBackground } from "../api/s
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { control, sizedControl } from "../ui/form";
+import { control, sectionHeading, sizedControl } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { InputDialog } from "../ui/InputDialog";
 import { ModalShell } from "../ui/ModalShell";
@@ -183,7 +183,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
         panelClassName="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden"
       >
         <header className="flex items-center gap-3 border-b border-line bg-toolbar px-4 py-3">
-          <h3 id="terminal-background-library-heading" className="min-w-0 flex-1 text-sm font-semibold text-ink">{t("terminal.backgroundLibrary")}</h3>
+          <h3 id="terminal-background-library-heading" className={`${sectionHeading} min-w-0 flex-1`}>{t("terminal.backgroundLibrary")}</h3>
           <Button onClick={() => setLibraryOpen(false)}>{t("terminal.backgroundClose")}</Button>
         </header>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">

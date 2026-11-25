@@ -3,6 +3,7 @@ import type { FileContents } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Button } from "../ui/surface";
+import { sectionHeading } from "../ui/form";
 
 // ConfigFileHead は、開いているファイルの見出しの行である。状態の点・名前・編集できるかの札と、
 // ファイルとディレクトリの操作の「…」、プレビューのボタンを並べる。
@@ -29,7 +30,7 @@ export function ConfigFileHead({
       {/* The name keeps at least 12rem, so on a phone the buttons go to a line of their own instead of hiding it. */}
       <div className="flex min-w-48 flex-1 items-center gap-2.5">
         <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${modified ? "bg-notice-ink" : file.editable ? "bg-live" : "bg-ink-faint"}`} />
-        <h3 title={name} className="min-w-0 truncate font-mono text-sm font-semibold text-ink">{name}</h3>
+        <h3 title={name} className={`${sectionHeading} min-w-0 truncate font-mono`}>{name}</h3>
         <span className={tagClass("neutral")}>
           {file.editable ? t("explorer.editable") : t("explorer.readOnly")}
         </span>

@@ -15,6 +15,7 @@ import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { historyOperationLabelKey, historyStatusLabelKey, restorableFileName, shownHistoryPaths } from "./historyLabels";
 import { PendingChangeDialog } from "./PendingChangeDialog";
 import { useToast } from "../ui/useToast";
+import { sectionHeading } from "../ui/form";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -112,7 +113,7 @@ export function HistoryPanel() {
             <span className="flex size-[30px] items-center justify-center rounded-md bg-card text-notice-ink">
               <Icon name="history" className="size-4" />
             </span>
-            <h3 id="pending-heading" className="text-sm font-semibold text-ink">{t("history.interrupted")}</h3>
+            <h3 id="pending-heading" className={sectionHeading}>{t("history.interrupted")}</h3>
           </header>
           <div className="divide-y divide-notice-line">
             {pending.map((item) => (

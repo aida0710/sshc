@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Notice } from "../ui/surface";
-import { sizedControl } from "../ui/form";
+import { sectionHeading, sizedControl } from "../ui/form";
 import type { HostEntry, HostMetadata, Metadata } from "../api/config";
 import { useTranslate, type Translate } from "../i18n/context";
 import { identityKey } from "./connectionBrowser";
@@ -71,7 +71,7 @@ export function OrphanPanel({ metadata, hosts, onSave }: OrphanPanelProps) {
 
   return (
     <section aria-labelledby="orphan-heading" className="flex flex-col gap-3 rounded-inset border border-notice-line bg-notice p-4">
-      <h3 id="orphan-heading" className="text-sm font-semibold text-ink">
+      <h3 id="orphan-heading" className={sectionHeading}>
         {t("orphan.heading")}
       </h3>
       <p className="text-xs text-ink-muted">{t("orphan.explain")}</p>

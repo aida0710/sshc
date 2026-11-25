@@ -5,7 +5,7 @@ import type { SyncApi, SyncExclusions } from "../api/sync";
 import { CodeField } from "../editor/CodeField";
 import { useLanguage } from "../i18n/context";
 import { DraftSaveBar } from "../ui/DraftSaveBar";
-import { control, hintText } from "../ui/form";
+import { control, hintText, sectionHeading } from "../ui/form";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useToast } from "../ui/useToast";
@@ -120,7 +120,7 @@ export function SyncExclusionsPanel({ api, initial, onSaved, onDirtyChange, onDi
       }}
     >
       <DisclosureSummary>
-        <span className="min-w-0 grow text-sm font-semibold text-ink">{t("sync.exclusions.heading")}</span>
+        <span className={`${sectionHeading} min-w-0 grow`}>{t("sync.exclusions.heading")}</span>
         <span className={hintText}>
           {loaded
             ? t("sync.exclusions.summary", {

@@ -7,7 +7,7 @@ import { forwardDirective, forwardHintKeys, validForwardDestination, validForwar
 import { describeForwardProblem, forwardProblemIsSpecific } from "./forwardProblem";
 import { savedConnectionOf, terminalSubtitle } from "./terminalPresentation";
 import { CopyButton } from "../ui/CopyButton";
-import { CheckboxField, Field, control, hintText } from "../ui/form";
+import { CheckboxField, control, Field, hintText, sectionHeading } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
 import { useToast } from "../ui/useToast";
@@ -129,7 +129,7 @@ export function TerminalPortForwards({
           {session.state === "reconnecting" ? <Notice>{t("terminal.forwardPausedReconnect")}</Notice> : null}
 
           <section aria-labelledby="terminal-forward-active" className="flex flex-col gap-2">
-            <h3 id="terminal-forward-active" className="text-sm font-semibold text-ink">{t("terminal.forwardActive")}</h3>
+            <h3 id="terminal-forward-active" className={sectionHeading}>{t("terminal.forwardActive")}</h3>
             {forwards.length === 0 ? <p className={hintText}>{t("terminal.forwardNone")}</p> : (
               <Card tone="subtle">
                 {forwards.map((forward) => (
@@ -160,7 +160,7 @@ export function TerminalPortForwards({
           </section>
 
           <section aria-labelledby="terminal-forward-new" className="flex flex-col gap-3 border-t border-line pt-4">
-            <h3 id="terminal-forward-new" className="text-sm font-semibold text-ink">{t("terminal.forwardNew")}</h3>
+            <h3 id="terminal-forward-new" className={sectionHeading}>{t("terminal.forwardNew")}</h3>
             <Notice>{t("conn.forwardLoopbackOnly")}</Notice>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t("conn.forwardType")}>
