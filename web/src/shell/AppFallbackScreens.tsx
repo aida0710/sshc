@@ -73,6 +73,7 @@ export function VaultRecheckMark() {
   const t = useTranslate();
   return (
     <div className="pointer-events-none fixed inset-x-0 top-14 z-fallback flex justify-center px-4">
+      {/* loading-line-exempt: 区画の中ではなく、画面の上に浮かべて出す知らせなので、札の形にする。 */}
       <p role="status" className="sshc-slow-status flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1.5 text-xs text-ink-muted shadow-card">
         <Spinner />
         {t("shell.vaultChecking")}

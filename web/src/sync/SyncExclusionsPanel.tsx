@@ -10,6 +10,7 @@ import { control, hintText } from "../ui/form";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { useToast } from "../ui/useToast";
+import { PanelState } from "../ui/PanelState";
 
 type Props = {
   api: Pick<SyncApi, "syncExclusions" | "saveSyncExclusions">;
@@ -135,9 +136,7 @@ export function SyncExclusionsPanel({ api, initial, onSaved, onDirtyChange, onDi
       </summary>
       <div className="flex flex-col gap-4 border-t border-line p-4">
         {operation.busy && !loaded ? (
-          <p role="status" className={hintText}>
-            {t("sync.exclusions.loading")}
-          </p>
+          <PanelState layout="line" tone="loading" title={t("sync.exclusions.loading")} />
         ) : view === null ? (
           operation.error === "" ? null : <Notice tone="danger">{operation.error}</Notice>
         ) : (

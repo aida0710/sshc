@@ -6,6 +6,7 @@ import type { KeysApi } from "./api";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea } from "../ui/ActionArea";
+import { PanelState } from "../ui/PanelState";
 
 type RevealDialogProps = {
   keyId: string;
@@ -57,9 +58,7 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
         </>
       )}
       {state === "loading" && (
-        <p aria-live="polite" className="mt-2 text-sm text-ink-muted">
-          {t("reveal.requesting")}
-        </p>
+        <PanelState layout="line" tone="loading" title={t("reveal.requesting")} className="mt-2" />
       )}
       {state === "shown" && (
         <>

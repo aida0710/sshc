@@ -10,6 +10,7 @@ import { usePendingAction } from "../ui/usePendingAction";
 import { formatStorageBytes } from "./SyncResultCard";
 import { syncHistoryRelationLabelKeys } from "./syncMessageKeys";
 import type { HistoryState } from "./useSyncRemoteState";
+import { PanelState } from "../ui/PanelState";
 
 type SyncHistorySectionProps = {
   busy: boolean;
@@ -62,9 +63,7 @@ export function SyncHistorySection({
       {historyState.phase === "idle" ? (
         <p className={hintText}>{t("sync.historyNeedsKey")}</p>
       ) : historyState.phase === "loading" ? (
-        <p role="status" className={hintText}>
-          {t("sync.historyLoading")}
-        </p>
+        <PanelState layout="line" tone="loading" title={t("sync.historyLoading")} />
       ) : historyState.phase === "error" ? (
         <Notice tone="danger">{historyState.message}</Notice>
       ) : (
@@ -154,11 +153,7 @@ export function SyncHistorySection({
                     </p>
                   </div>
                   {historyDiff === null ? (
-                    <p role="status" className={hintText}>
-                      {busy
-                        ? t("sync.historyDiffLoading")
-                        : t("sync.historyDiffEmpty")}
-                    </p>
+                    <PanelState layout="line" tone={busy ? "loading" : "empty"} title={t(busy ? "sync.historyDiffLoading" : "sync.historyDiffEmpty")} />
                   ) : (
                     <div className="grid gap-2 text-xs sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
                       {(

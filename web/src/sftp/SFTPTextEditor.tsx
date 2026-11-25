@@ -6,6 +6,7 @@ import { PathText } from "../ui/PathText";
 import { Button, Notice } from "../ui/surface";
 import { loadMonacoEditor } from "../editor/loadMonacoEditor";
 import type { SFTPTextEditorModel } from "./useSFTPTextEditor";
+import { PanelState } from "../ui/PanelState";
 
 const MonacoEditor = lazy(() => loadMonacoEditor().then(({ MonacoEditor }) => ({ default: MonacoEditor })));
 
@@ -51,7 +52,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
             </div>
           )}
           <div className="min-h-0 flex-1">
-            <Suspense fallback={<div className="p-4 text-sm text-ink-muted">{t("sftp.editorLoading")}</div>}>
+            <Suspense fallback={<PanelState tone="loading" title={t("sftp.editorLoading")} className="h-full" />}>
               <MonacoEditor path={opened.entry.path} value={contents} onChange={setContents} onSave={() => { if (!writeDisabled) void editor.save(); }} readOnly={editor.busy} initialLine={editor.initialLine} />
             </Suspense>
           </div>
@@ -77,7 +78,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
             <>
               <p className="text-sm text-ink-muted">{t(editor.local ? "sftp.editorLocalOverwriteBody" : "sftp.editorOverwriteBody", { path })}</p>
               {/* Says why Overwrite cannot be pressed yet: over a slow route the read can take seconds. */}
-              {editor.readingOverwriteRevision ? <p role="status" className="text-sm text-ink-muted">{t(editor.local ? "sftp.editorLocalOverwriteReading" : "sftp.editorOverwriteReading")}</p> : null}
+              {editor.readingOverwriteRevision ? <PanelState layout="line" tone="loading" title={t(editor.local ? "sftp.editorLocalOverwriteReading" : "sftp.editorOverwriteReading")} /> : null}
             </>
           )}
           confirmLabel={t("sftp.editorOverwrite")}

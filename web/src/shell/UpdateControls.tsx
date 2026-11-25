@@ -8,6 +8,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Button } from "../ui/surface";
 import { updateMessage } from "./updateMessage";
 import { isUpdateActive } from "./useUpdateStatus";
+import { PanelState } from "../ui/PanelState";
 
 type UpdateControlsProps = {
   status: UpdateStatus;
@@ -71,11 +72,13 @@ export function UpdateControls({ status, api, sessions, onStart }: UpdateControl
           heading={t("update.confirmTitle")}
           body={
             <>
-              <p>{preview === null ? t("update.preparing") : t(preview.manager === "homebrew" ? "update.confirmHomebrewVersion" : "update.confirmVersion", {
-                current: preview.current,
-                target: preview.target,
-                manager: preview.manager === "homebrew" ? "Homebrew" : preview.manager,
-              })}</p>
+              {preview === null ? <PanelState layout="line" tone="loading" title={t("update.preparing")} /> : (
+                <p>{t(preview.manager === "homebrew" ? "update.confirmHomebrewVersion" : "update.confirmVersion", {
+                  current: preview.current,
+                  target: preview.target,
+                  manager: preview.manager === "homebrew" ? "Homebrew" : preview.manager,
+                })}</p>
+              )}
               <p>{t("update.disconnectWarning")}</p>
               <EngineEndingSessionsList api={sessions} />
               <p>{t("update.vaultWarning")}</p>

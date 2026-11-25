@@ -19,6 +19,7 @@ import { TerminalPreview } from "./TerminalPreview";
 import { TouchModeField } from "./TouchModeField";
 import { useDescribeFailure, useDraftProblem, useSettingsDraft } from "./settingsDraftContext";
 import { draftOf, settingsOf, unusableNumbers, type TerminalDraft, type TypedNumber } from "./terminalSettingsDraft";
+import { PanelState } from "../ui/PanelState";
 
 export type TerminalSettingsApi = Pick<SettingsApi, "localShellProfiles">;
 
@@ -182,7 +183,7 @@ export function TerminalSettingsSection({ api, presetId, showHeading }: {
           </div>
         )}
       </fieldset>
-      {!ready && !loadFailed ? <p role="status" className="text-sm text-ink-muted">{t("terminal.settingsLoading")}</p> : null}
+      {!ready && !loadFailed ? <PanelState layout="line" tone="loading" title={t("terminal.settingsLoading")} /> : null}
     </SettingsSection>
   );
 }
