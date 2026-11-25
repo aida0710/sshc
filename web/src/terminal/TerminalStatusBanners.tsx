@@ -8,13 +8,11 @@ import { hostKeyQuestionOf, statusBannerRows, type StatusBannerRow } from "./sta
 import { useReconnectCountdown } from "./useReconnectCountdown";
 import type { HostKeyAnswer } from "../shell/useHostKeyAnswer";
 import type { SessionRecovery } from "./useSessionRecovery";
+import { Banner, bannerButton } from "../ui/Banner";
 import { Button } from "../ui/surface";
 
 // 帯は、ターミナルの上に1行ずつ重なる。共通の Notice のように操作を文の下に置くと、帯ごとに1行増えて
-// ターミナルの行が減るので、操作は文の右に並べ、ボタンは知らせの中に置く低いボタン（Button small）にする。
-const notice = "shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink";
-// スマホの組み方では、指で押せるように帯のボタンを少し高くする。
-const bannerButton = "shrink-0 mobile-layout:min-h-8";
+// ターミナルの行が減るので、区画の上の帯（Banner）にして、操作は文の右に並べる。
 
 function StreamLinkMessage({ link }: { link: Exclude<StreamLink, { phase: "live" }> }) {
   const t = useTranslate();
@@ -77,86 +75,97 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
   return (
     <>
       {!rows.has("view-problem") ? null : (
-        <p role="status" className={notice}>
-          {problem}
-        </p>
+        <Banner tone="notice" role="status">{problem}</Banner>
       )}
       {rows.has("reconnect-failed") ? (
-        <p role="status" className={notice}>
-          {t("terminal.manualReconnectFailed")}
-        </p>
+        <Banner tone="notice" role="status">{t("terminal.manualReconnectFailed")}</Banner>
       ) : null}
 
       {!rows.has("host-key") || question === undefined || hostKeyAnswer === undefined ? null : (
-        <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
-          <p className="min-w-0 grow">{t("terminal.noticeCheckHostKey", { target: question.alias || question.hostName })}</p>
-          {/* busy-label-exempt: ［やめる］は「〇〇中」の形にならないので、文言を替えず回る印だけを添える（2026-11-25 利用者が決めた）。 */}
-          <Button small busy={hostKeyAnswer.answering === false} busyLabel={null} disabled={hostKeyAnswer.answering !== null} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, false)} className={bannerButton}>
-            {t("terminal.hostKeyReject")}
-          </Button>
-          <Button small busy={hostKeyAnswer.answering === true} busyLabel={t("busy.connecting")} disabled={hostKeyAnswer.answering !== null} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, true)} className={bannerButton}>
-            {t("terminal.hostKeyAccept")}
-          </Button>
-        </div>
+        <Banner
+          tone="notice"
+          role="status"
+          actions={(
+            <>
+              {/* busy-label-exempt: ［やめる］は「〇〇中」の形にならないので、文言を替えず回る印だけを添える（2026-11-25 利用者が決めた）。 */}
+              <Button small busy={hostKeyAnswer.answering === false} busyLabel={null} disabled={hostKeyAnswer.answering !== null} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, false)} className={bannerButton}>
+                {t("terminal.hostKeyReject")}
+              </Button>
+              <Button small busy={hostKeyAnswer.answering === true} busyLabel={t("busy.connecting")} disabled={hostKeyAnswer.answering !== null} onClick={() => hostKeyAnswer.answer?.(question.fingerprint, true)} className={bannerButton}>
+                {t("terminal.hostKeyAccept")}
+              </Button>
+            </>
+          )}
+        >
+          {t("terminal.noticeCheckHostKey", { target: question.alias || question.hostName })}
+        </Banner>
       )}
 
       {!rows.has("reconnecting") ? null : (
-        <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
-          <p className="min-w-0 grow">
-            <ReconnectMessage reconnect={session.reconnect} awaitingInput={reconnectAwaitsInput(session)} />
-          </p>
-          {recovery?.stopReconnecting === undefined ? null : (
+        <Banner
+          tone="notice"
+          role="status"
+          actions={recovery?.stopReconnecting === undefined ? undefined : (
             <Button small busy={recovery.stopBusy} busyLabel={t("busy.stopping")} onClick={recovery.stopReconnecting} className={bannerButton}>
               {t("terminal.stopReconnect")}
             </Button>
           )}
-        </div>
+        >
+          <ReconnectMessage reconnect={session.reconnect} awaitingInput={reconnectAwaitsInput(session)} />
+        </Banner>
       )}
 
       {!rows.has("connection-problem") ? null : (
-        <p role="alert" className={notice}>
-          {t(terminalProblemKey(session.problem))}
-        </p>
+        <Banner tone="notice" role="alert">{t(terminalProblemKey(session.problem))}</Banner>
       )}
 
       {!rows.has("link") || link.phase === "live" ? null : (
-        <div role="status" className={`flex items-center gap-2 ${notice}`}>
-          <p className="min-w-0 grow">
-            <StreamLinkMessage link={link} />
-          </p>
-          {link.phase === "stopped" && link.gone ? null : (
-            <Button small disabled={link.phase === "connecting"} onClick={onLinkNow} className={bannerButton}>
-              {t("terminal.linkNow")}
-            </Button>
+        <Banner
+          tone="notice"
+          role="status"
+          actions={link.phase === "stopped" && link.gone ? undefined : (
+            <>
+              <Button small disabled={link.phase === "connecting"} onClick={onLinkNow} className={bannerButton}>
+                {t("terminal.linkNow")}
+              </Button>
+              {link.phase === "stopped" ? null : (
+                <Button small onClick={onLinkStop} className={bannerButton}>
+                  {t("terminal.linkStop")}
+                </Button>
+              )}
+            </>
           )}
-          {link.phase === "stopped" ? null : (
-            <Button small onClick={onLinkStop} className={bannerButton}>
-              {t("terminal.linkStop")}
-            </Button>
-          )}
-        </div>
+        >
+          <StreamLinkMessage link={link} />
+        </Banner>
       )}
       {!rows.has("resume-program") || session.resume === undefined ? null : (
-        <div role="status" className={`flex flex-wrap items-center gap-2 ${notice}`}>
-          <p className="min-w-0 grow">{t("terminal.resumeTitle", { program: session.resume.program })}</p>
-          {onResumeProgram === undefined ? null : (
+        <Banner
+          tone="notice"
+          role="status"
+          actions={onResumeProgram === undefined ? undefined : (
             <Button small onClick={() => onResumeProgram(session.resume?.command ?? "")} className={bannerButton}>
               {t("terminal.resumeRun")}
             </Button>
           )}
-        </div>
+        >
+          {t("terminal.resumeTitle", { program: session.resume.program })}
+        </Banner>
       )}
       {!rows.has("ended") || session.exited === undefined ? null : (
-        <div role={session.problem === "" ? "status" : "alert"} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-card px-3 py-1.5 text-xs">
-          <p className={`min-w-0 grow ${session.problem !== "" || exitedAbnormally(session) ? "text-danger" : "text-ink-muted"}`}>
-            {session.problem === "" ? exitText(t, session.exited, session) : t(terminalProblemKey(session.problem))}
-          </p>
-          {session.kind !== "ssh" || session.alias === undefined || recovery?.reconnect === undefined ? null : (
+        <Banner
+          tone="quiet"
+          role={session.problem === "" ? "status" : "alert"}
+          actions={session.kind !== "ssh" || session.alias === undefined || recovery?.reconnect === undefined ? undefined : (
             <Button small busy={recovery.reconnectBusy} busyLabel={t("busy.connecting")} onClick={recovery.reconnect} className={bannerButton}>
               {t("terminal.manualReconnect")}
             </Button>
           )}
-        </div>
+        >
+          <span className={session.problem !== "" || exitedAbnormally(session) ? "text-danger" : "text-ink-muted"}>
+            {session.problem === "" ? exitText(t, session.exited, session) : t(terminalProblemKey(session.problem))}
+          </span>
+        </Banner>
       )}
     </>
   );

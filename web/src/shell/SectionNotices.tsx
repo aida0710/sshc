@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { CreateConnectionDraft } from "../connections/createConnectionDraft";
 import { useTranslate } from "../i18n/context";
 import type { Section } from "../routing/sectionRoute";
+import { Banner, bannerButton } from "../ui/Banner";
 import { Button } from "../ui/surface";
 
 // The sections a connection being created sends the person to for what it
@@ -34,14 +35,12 @@ export function SectionNotices({
           actionLabel={t("lock.migrationDismiss")}
           onAction={onDismissVaultMigration}
         >
-          <p className="min-w-0 grow">
-            {t("lock.migrationCompleted", { current: vaultMigration.from, required: vaultMigration.to })}
-          </p>
+          {t("lock.migrationCompleted", { current: vaultMigration.from, required: vaultMigration.to })}
         </SectionNotice>
       )}
       {draftWaiting ? (
         <SectionNotice actionLabel={t("conn.createReturnToDraft")} onAction={onReturnToConnectionDraft}>
-          <p className="min-w-0 grow truncate">
+          <p className="truncate">
             {t("conn.createDraftWaiting", { alias: connectionDraft.alias || t("conn.createUntitledDraft") })}
           </p>
         </SectionNotice>
@@ -62,14 +61,12 @@ function SectionNotice({
   children: ReactNode;
 }) {
   return (
-    <div
+    <Banner
+      tone="notice"
       role={status ? "status" : undefined}
-      className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink"
+      actions={<Button small className={bannerButton} onClick={onAction}>{actionLabel}</Button>}
     >
       {children}
-      <Button className="shrink-0" onClick={onAction}>
-        {actionLabel}
-      </Button>
-    </div>
+    </Banner>
   );
 }
