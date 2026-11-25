@@ -174,7 +174,7 @@ function MachineRow({ machine, document, onEdit, onRename, onChooseLogFolder, on
   const started = machine.facts.startedAt === undefined
     ? t("settings.machineNeverStarted")
     : formatDateTime(machine.facts.startedAt, locale);
-  // ポートの欄は狭いので、値の誤りは欄のすぐ下でなく、行の下に幅いっぱいで出す（FieldProblems の決まり）。
+  // ポートの欄は狭いので、値の誤りは欄の幅でなく、行の幅いっぱいで出す（FieldProblems の決まり）。
   const { reported, reportError } = useReportedFieldErrors();
 
   return (
@@ -201,6 +201,8 @@ function MachineRow({ machine, document, onEdit, onRename, onChooseLogFolder, on
             <PortInput machine={machine} onEdit={onEdit} />
           </StackedNamedCell>
         ) : <span aria-hidden="true" className="hidden @2xl/machines:block" />}
+        {/* 積んだ狭い行では欄のすぐ下に、横に並べた広い行では行の最後に、幅いっぱいで出す。 */}
+        <FieldProblems className="col-span-full @2xl/machines:order-last" problems={[...reported].map(([id, text]) => ({ id, field: t("settings.machineColumnPort"), text }))} />
         <StackedNamedCell name={t("settings.machineColumnStarted")}>
           <span className="whitespace-nowrap text-xs text-ink-muted">{started}</span>
         </StackedNamedCell>
@@ -216,7 +218,6 @@ function MachineRow({ machine, document, onEdit, onRename, onChooseLogFolder, on
             { label: t("settings.machineRemove"), onSelect: onRemove, tone: "danger", disabled: self },
           ]} />
         </div>
-        <FieldProblems className="col-span-full" problems={[...reported].map(([id, text]) => ({ id, field: t("settings.machineColumnPort"), text }))} />
       </div>
     </FieldErrorContext.Provider>
   );
