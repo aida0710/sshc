@@ -1,0 +1,24 @@
+/* MermaidDiagram.vue が描く図。図の SVG は v-html で入れるので、scoped にせずここに書く。 */
+.mermaid-diagram {
+  margin: 20px 0;
+  overflow-x: auto;
+}
+
+.mermaid-diagram svg {
+  display: block;
+  margin-inline: auto;
+}
+
+/* Mermaidは本文の外で文字の大きさを測るので、.vp-doc pの余白と行の高さが効くと文字が切れる。 */
+.mermaid-diagram foreignObject p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* 図の箱（フローチャートの箱と囲み、シーケンス図の参加者と注記）の角も、本文のほかの箱と同じ丸めにする。
+   Mermaid が付ける角（四角か 5px）を、テーマの --docs-radius で上書きする。 */
+.mermaid-diagram svg :is(.node, .cluster) > rect,
+.mermaid-diagram svg rect:is(.actor, .note) {
+  rx: var(--docs-radius);
+  ry: var(--docs-radius);
+}

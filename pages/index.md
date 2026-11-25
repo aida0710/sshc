@@ -4,58 +4,97 @@ title: sshc
 description: SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、リモートセッション、Claude Codeの状態の表示、SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPN、エンドツーエンド暗号化（E2EE）の同期に対応。
 sidebar: false
 outline: false
+docsHome:
+  name: sshc
+  lead: >-
+    sshcは、SSHとローカルシェルを扱うターミナルアプリです。<br>今あるOpenSSH設定をそのまま使えます。リモートセッション、Claude Codeの状態の表示、SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPNに加え、利用者が用意したS3互換ストレージを介した、エンドツーエンド暗号化（E2EE）の同期にも対応しています。
+  platforms:
+    label: 対応OS
+    text: macOS / Windows / Linux / Android
+  actions:
+    - { text: インストール, link: "/guide/install", primary: true }
+    - { text: はじめる, link: "/guide/getting-started" }
+    - { text: GitHub, link: "https://github.com/aida0710/sshc" }
+  preview:
+    src: /images/terminal-desktop.png
+    alt: ワークスペース内でローカルシェルを開いたTerminal画面
+    width: 1280
+    height: 720
+  sections:
+    - heading: 主な機能
+      lead: >-
+        SSHとローカルシェルを同じ画面で開けます。SFTPやポート転送にも同じ接続設定を使い、OpenSSH形式のまま管理できます。選んだ接続だけを<a href="./features/vpn">専用のVPN</a>経由で接続することもできます。
+      features:
+        - title: リモートセッション
+          link: /features/remote-session
+          image: /images/remote-session-desktop-ja.png
+          alt: リモートセッションのメニューで、接続先のsshcエンジンを選んだ画面
+          body: >-
+            常時動いているサーバーのsshcエンジンでターミナルを動かし、このマシンのブラウザやAndroidアプリから操作できます。ブラウザやこのマシンを閉じても、Claude Codeなどのプログラムはサーバーで動き続けます。
+          wide: true
+        - title: Claude Codeの状態を自動で表示
+          link: /terminal/notifications#claude-codeの状態
+          image: /images/program-status-desktop-ja.png
+          alt: セッションの一覧に、許可待ち、作業中、完了を表示した画面
+          body: >-
+            Claude Codeを起動するだけで、作業中、許可待ち、回答待ち、完了をセッションの一覧に表示します。設定やフックは必要ありません。許可や回答を待ち始めると、ブラウザやAndroidの通知でも知らせます。
+          wide: true
+        - title: SSHとローカルシェル
+          image: /images/terminal-desktop.png
+          alt: ワークスペース内でローカルシェルを開いたTerminal
+          body: >-
+            セッションの一覧から切り替えて使えます。再接続、検索、ポート転送にも対応しています。
+        - title: OpenSSH設定をそのまま使う
+          image: /images/connections-desktop.png
+          alt: OpenSSH接続を整理するConnections画面
+          body: >-
+            <code>~/.ssh/config</code>の<code>Include</code>や<code>Match</code>をそのまま扱っています。通常の<code>ssh</code>やVS Codeでも、同じエイリアスを使えます。
+        - title: 認証情報は一度保存
+          image: /images/credentials-desktop.png
+          alt: 保存済みパスワードを複数ホストへ割り当てたVault画面
+          body: >-
+            パスワードや鍵のパスフレーズはVaultに一度保存すれば、Terminal、SFTP、CLIでそのまま使えます。機能ごとに設定し直す必要はありません。
+        - title: ワンタイムパスワード
+          image: /images/otp-desktop-ja.png
+          alt: 現在のコードと割り当て先を表示したOTP画面
+          body: >-
+            TOTPのセットアップキーをVaultに保存すると、現在のコードを確認できます。接続先に割り当てておけば、サーバーが求めたときにコードを自動で入力します。
+        - title: AIエージェントから使えるCLI
+          image: /images/cli-desktop.png
+          alt: sshcの非対話CLIを実行したTerminal画面
+          body: >-
+            CodexなどのAIエージェントからsshcを直接実行できます。接続にはVaultに保存した認証情報を使っています。
+        - title: SFTP
+          image: /images/sftp-desktop.png
+          alt: リモートファイルを操作するSFTP画面
+          body: >-
+            リモートファイルの編集、フォルダ転送、2つの接続先の比較と直接コピーを、Terminalと行き来しながら操作できます。
+        - title: E2EEの暗号化同期
+          image: /images/sync-desktop-ja.png
+          alt: 暗号化スナップショットを管理するSync画面
+          body: >-
+            接続設定、認証情報、スニペット、同期対象のSSH鍵をこのマシン上で暗号化し、利用者が用意したS3互換ストレージを介して同期できます。復号できるのは、同じ同期キーを設定したマシンだけです。ストレージ事業者もsshcの開発者も、内容を平文では取得できません。
+        - title: 接続ごとのVPN
+          image: /images/vpn-desktop-ja.png
+          alt: VPNプロファイルと使用する接続を並べたVPN画面
+          body: >-
+            選んだ接続だけを、その接続専用のVPN経由で接続します。このマシンのルーティングとDNSは変更しません。WireGuard、OpenVPN、IKEv2/IPsecなどに対応しています。
+        - title: Androidアプリ
+          image: /images/android-features.png
+          alt: AndroidアプリのHome画面とConnections画面
+          body: >-
+            同じ画面をAndroidでも使えます。SSH、SFTP、ローカルシェルを、下部のナビゲーションと補助キーで操作できます。
+    - heading: デモを試す
+      lead: >-
+        ブラウザの中でLinuxのVMを3台起動し、sshcのWeb UIとCLIからSSH接続やSFTPを試せます。デスクトップのブラウザでお試しください。
+      actions:
+        - { text: デモを開く, link: "https://sshc-demo.aida0710.work/index.html", primary: true }
+    - heading: インストール
+      lead: >-
+        macOSとLinuxではHomebrewからインストールできます。Windows向けには、GitHub Releasesで検証済みのPowerShellインストーラーを配布しています。
+      command:
+        code: brew install aida0710/tap/sshc
+        label: macOS / Linux
 ---
 
-<main class="sshc-home">
-  <section class="sshc-hero">
-    <div>
-      <h1 class="sshc-title">sshc</h1>
-      <p class="sshc-lead">sshcは、SSHとローカルシェルを扱うターミナルアプリです。<br>今あるOpenSSH設定をそのまま使えます。リモートセッション、Claude Codeの状態の表示、SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPNに加え、利用者が用意したS3互換ストレージを介した、エンドツーエンド暗号化（E2EE）の同期にも対応しています。</p>
-      <p class="sshc-platforms"><span>対応OS</span>macOS / Windows / Linux / Android</p>
-      <div class="sshc-actions">
-        <a class="sshc-action primary" href="./guide/install">インストール</a>
-        <a class="sshc-action" href="./guide/getting-started">はじめる</a>
-        <a class="sshc-action" href="https://github.com/aida0710/sshc">GitHub</a>
-      </div>
-    </div>
-    <div class="sshc-preview">
-      <img src="/images/terminal-desktop.png" alt="ワークスペース内でローカルシェルを開いたTerminal画面" width="1280" height="720">
-    </div>
-  </section>
-
-  <section class="sshc-home-section">
-    <div class="sshc-section-heading">
-      <h2>主な機能</h2>
-      <p>SSHとローカルシェルを同じ画面で開けます。SFTPやポート転送にも同じ接続設定を使い、OpenSSH形式のまま管理できます。選んだ接続だけを<a href="./features/vpn">専用のVPN</a>経由で接続することもできます。</p>
-    </div>
-    <div class="sshc-feature-grid">
-      <article class="sshc-feature sshc-feature-wide"><img class="sshc-feature-image" src="/images/remote-session-desktop-ja.png" alt="リモートセッションのメニューで、接続先のsshcエンジンを選んだ画面" width="1720" height="968"><div class="sshc-feature-body"><span class="index">01</span><h3><a href="./features/remote-session">リモートセッション</a></h3><p>常時動いているサーバーのsshcエンジンでターミナルを動かし、このマシンのブラウザやAndroidアプリから操作できます。ブラウザやこのマシンを閉じても、Claude Codeなどのプログラムはサーバーで動き続けます。</p></div></article>
-      <article class="sshc-feature sshc-feature-wide"><img class="sshc-feature-image" src="/images/program-status-desktop-ja.png" alt="セッションの一覧に、許可待ち、作業中、完了を表示した画面" width="1720" height="968"><div class="sshc-feature-body"><span class="index">02</span><h3><a href="./terminal/notifications#claude-codeの状態">Claude Codeの状態を自動で表示</a></h3><p>Claude Codeを起動するだけで、作業中、許可待ち、回答待ち、完了をセッションの一覧に表示します。設定やフックは必要ありません。許可や回答を待ち始めると、ブラウザやAndroidの通知でも知らせます。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/terminal-desktop.png" alt="ワークスペース内でローカルシェルを開いたTerminal" width="1280" height="720"><div class="sshc-feature-body"><span class="index">03</span><h3>SSHとローカルシェル</h3><p>セッションの一覧から切り替えて使えます。再接続、検索、ポート転送にも対応しています。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/connections-desktop.png" alt="OpenSSH接続を整理するConnections画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">04</span><h3>OpenSSH設定をそのまま使う</h3><p><code>~/.ssh/config</code>の<code>Include</code>や<code>Match</code>をそのまま扱っています。通常の<code>ssh</code>やVS Codeでも、同じエイリアスを使えます。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/credentials-desktop.png" alt="保存済みパスワードを複数ホストへ割り当てたVault画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">05</span><h3>認証情報は一度保存</h3><p>パスワードや鍵のパスフレーズはVaultに一度保存すれば、Terminal、SFTP、CLIでそのまま使えます。機能ごとに設定し直す必要はありません。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/otp-desktop-ja.png" alt="現在のコードと割り当て先を表示したOTP画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">06</span><h3>ワンタイムパスワード</h3><p>TOTPのセットアップキーをVaultに保存すると、現在のコードを確認できます。接続先に割り当てておけば、サーバーが求めたときにコードを自動で入力します。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/cli-desktop.png" alt="sshcの非対話CLIを実行したTerminal画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">07</span><h3>AIエージェントから使えるCLI</h3><p>CodexなどのAIエージェントからsshcを直接実行できます。接続にはVaultに保存した認証情報を使っています。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/sftp-desktop.png" alt="リモートファイルを操作するSFTP画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">08</span><h3>SFTP</h3><p>リモートファイルの編集、フォルダ転送、2つの接続先の比較と直接コピーを、Terminalと行き来しながら操作できます。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/sync-desktop-ja.png" alt="暗号化スナップショットを管理するSync画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">09</span><h3>E2EEの暗号化同期</h3><p>接続設定、認証情報、スニペット、同期対象のSSH鍵をこのマシン上で暗号化し、利用者が用意したS3互換ストレージを介して同期できます。復号できるのは、同じ同期キーを設定したマシンだけです。ストレージ事業者もsshcの開発者も、内容を平文では取得できません。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/vpn-desktop-ja.png" alt="VPNプロファイルと使用する接続を並べたVPN画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">10</span><h3>接続ごとのVPN</h3><p>選んだ接続だけを、その接続専用のVPN経由で接続します。このマシンのルーティングとDNSは変更しません。WireGuard、OpenVPN、IKEv2/IPsecなどに対応しています。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/android-features.png" alt="AndroidアプリのHome画面とConnections画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">11</span><h3>Androidアプリ</h3><p>同じ画面をAndroidでも使えます。SSH、SFTP、ローカルシェルを、下部のナビゲーションと補助キーで操作できます。</p></div></article>
-    </div>
-  </section>
-
-  <section class="sshc-home-section">
-    <div class="sshc-section-heading">
-      <h2>デモを試す</h2>
-      <p>ブラウザの中でLinuxのVMを3台起動し、sshcのWeb UIとCLIからSSH接続やSFTPを試せます。デスクトップのブラウザでお試しください。</p>
-    </div>
-    <div class="sshc-actions"><a class="sshc-action primary" href="https://sshc-demo.aida0710.work/index.html">デモを開く</a></div>
-  </section>
-
-  <section class="sshc-home-section">
-    <div class="sshc-section-heading">
-      <h2>インストール</h2>
-      <p>macOSとLinuxではHomebrewからインストールできます。Windows向けには、GitHub Releasesで検証済みのPowerShellインストーラーを配布しています。</p>
-    </div>
-    <div class="sshc-command"><code>brew install aida0710/tap/sshc</code><span>macOS / Linux</span></div>
-  </section>
-</main>
+<DocsHome />
