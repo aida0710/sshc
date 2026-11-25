@@ -1,6 +1,7 @@
 package buildcontract
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -59,9 +60,8 @@ func TestTheFormulaBuildsSomethingThatExists(t *testing.T) {
 // version と status しか見ないので、そこでは気付けない。
 func TestTheFormulaBuildsTheWebUIBeforeTheBinary(t *testing.T) {
 	formula := readFormula(t)
-	// CI とリリースと同じ Node 26 で組み立てる。Node が違うと組み立ての結果が変わる。
-	if !strings.Contains(formula, `depends_on "node@26" => :build`) || !strings.Contains(formula, `ENV.prepend_path "PATH", Formula["node@26"].opt_bin`) {
-		t.Fatal(`formula は node@26 で画面を組み立てていない（depends_on "node@26" => :build と、その bin を PATH の先頭に置く行が要る）`)
+	if node := formulaNode(t, formula); !strings.Contains(formula, `ENV.prepend_path "PATH", Formula["node@`+node+`"].opt_bin`) {
+		t.Fatalf("formula は keg-only の node@%s の bin を PATH の先頭に置いていない", node)
 	}
 	webBuild := regexp.MustCompile(`(?s)cd "web" do\s*\n\s*system "npm", "ci"[^\n]*\n\s*system "npm", "run", "build"\s*\n\s*end`).FindStringIndex(formula)
 	if webBuild == nil {
@@ -71,6 +71,45 @@ func TestTheFormulaBuildsTheWebUIBeforeTheBinary(t *testing.T) {
 	if goBuild < 0 || goBuild < webBuild[1] {
 		t.Fatal("formula は画面を組み立てる前に go build している")
 	}
+}
+
+// formula の Node は CI・リリースの Node と版が違う（利用者の PATH の node を替えないため）。CI が formula の
+// Node でも組み立て、リリースと同じ画面になることを確かめる。ここが無いと、組み立ての失敗や画面の違いに、
+// 利用者が brew で入れるまで気付けない。
+func TestCIWorkflowBuildsTheSameWebUIWithTheNodeOfTheFormula(t *testing.T) {
+	const buildStep = "Build the same web UI with the Node of the Homebrew formula"
+	node := formulaNode(t, readFormula(t))
+	checks, present := readWorkflowDocument(t).Jobs["web-checks"]
+	if !present {
+		t.Fatal("jobs.web-checks is missing")
+	}
+	nodeVersion := ""
+	for _, step := range checks.Steps {
+		if strings.HasPrefix(step.Uses, "actions/setup-node@") {
+			nodeVersion = fmt.Sprint(step.With["node-version"])
+		}
+		if step.Name == buildStep {
+			break
+		}
+	}
+	if nodeVersion != node {
+		t.Errorf("jobs.web-checks runs %q with Node %q, want the formula's %q", buildStep, nodeVersion, node)
+	}
+	build, found := namedStep(checks, buildStep)
+	if !found || !strings.Contains(build.Run, "npm run build") || !strings.Contains(build.Run, `diff -r "$RUNNER_TEMP/web-ui-app" ../internal/ui/dist/app`) {
+		t.Errorf("jobs.web-checks must build the web UI again in %q and compare it with the first build", buildStep)
+	}
+}
+
+// formulaNode は、formula が画面を組み立てる Node のメジャー版を返す。版の付かない node は、入れると利用者の PATH の
+// node を替えるので、版の付いた keg-only の formula（node@24 など）でなければならない。
+func formulaNode(t *testing.T, formula string) string {
+	t.Helper()
+	dependency := regexp.MustCompile(`depends_on "node@(\d+)" => :build`).FindStringSubmatch(formula)
+	if dependency == nil {
+		t.Fatal(`formula に depends_on "node@<版>" => :build が無い`)
+	}
+	return dependency[1]
 }
 
 func TestTheFormulaInstallsShellCompletions(t *testing.T) {

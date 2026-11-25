@@ -8,7 +8,7 @@ sshcは、macOS、Linux、FreeBSD、OpenBSD、Windows向けのCLIバイナリと
 brew install aida0710/tap/sshc
 ```
 
-Homebrewのformulaはソースからビルドするため、GoとNode.js 26もHomebrewによってインストールされます（どちらもビルドのときだけ使います）。
+Homebrewのformulaはソースからビルドするため、GoとNode.js 24もHomebrewによってインストールされます（どちらもビルドのときだけ使います）。
 
 ## インストールスクリプト（macOS / Linux / FreeBSD / OpenBSD）
 
