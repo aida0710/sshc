@@ -2,6 +2,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { formatBytes } from "../ui/format";
 import type { RemoteSearchResult } from "./api";
+import { hintText } from "../ui/form";
 
 type ContentMatch = NonNullable<RemoteSearchResult["matches"]>[number];
 
@@ -21,7 +22,7 @@ export function SFTPContentSearchResults({ search, disabled, onOpen }: {
   const t = useTranslate();
   const matches = search.matches ?? [];
   return <div className="text-sm">
-    <p className="px-3 py-2 text-xs text-ink-muted">{t("sftp.search.bytesRead", { bytes: formatBytes(search.bytesRead ?? 0) })}</p>
+    <p className={`px-3 py-2 ${hintText}`}>{t("sftp.search.bytesRead", { bytes: formatBytes(search.bytesRead ?? 0) })}</p>
     {(search.omissions ?? []).length === 0 ? null : <ul aria-label={t("sftp.search.omissions")} className="border-b border-line/50 px-3 pb-2 text-xs text-ink-muted">
       {search.omissions?.map(({ reason, count }) => <li key={reason}>{t(omissionLabels[reason] ?? "sftp.search.skip.unsupported", { count })}</li>)}
     </ul>}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Notice } from "../ui/surface";
-import { sectionHeading, sizedControl } from "../ui/form";
+import { hintText, sectionHeading, sizedControl } from "../ui/form";
 import type { HostEntry, HostMetadata, Metadata } from "../api/config";
 import { useTranslate, type Translate } from "../i18n/context";
 import { identityKey } from "./connectionBrowser";
@@ -74,7 +74,7 @@ export function OrphanPanel({ metadata, hosts, onSave }: OrphanPanelProps) {
       <h3 id="orphan-heading" className={sectionHeading}>
         {t("orphan.heading")}
       </h3>
-      <p className="text-xs text-ink-muted">{t("orphan.explain")}</p>
+      <p className={hintText}>{t("orphan.explain")}</p>
       {error === "" ? null : (
         <Notice tone="danger" compact>{error}</Notice>
       )}
@@ -86,7 +86,7 @@ export function OrphanPanel({ metadata, hosts, onSave }: OrphanPanelProps) {
               <p className="text-sm text-ink">
                 {t("orphan.entry", { alias: entry.identity.alias, path: entry.identity.path })}
               </p>
-              <p className="text-xs text-ink-muted">{describe(entry, t)}</p>
+              <p className={hintText}>{describe(entry, t)}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <label htmlFor={`orphan-target-${key}`} className="sr-only">
                   {t("orphan.reassociateWith", { alias: entry.identity.alias })}

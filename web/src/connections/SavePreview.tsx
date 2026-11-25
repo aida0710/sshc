@@ -6,7 +6,7 @@ import { useTranslate } from "../i18n/context";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { Notice as Band } from "../ui/surface";
 import { NoticeList } from "./NoticeList";
-import { sectionHeading } from "../ui/form";
+import { hintText, sectionHeading } from "../ui/form";
 
 function DiffView({ lines }: { lines: DiffLine[] }) {
   return (
@@ -80,7 +80,7 @@ export function SavePreviewPanel({
           <DiffView lines={conflict.externalChange} />
           <h4 className="text-xs font-semibold text-ink-muted">{t("preview.pendingChange")}</h4>
           <DiffView lines={conflict.localChange} />
-          <p className="text-xs text-ink-muted">{t("preview.mergeByHand")}</p>
+          <p className={hintText}>{t("preview.mergeByHand")}</p>
         </div>
       )}
 

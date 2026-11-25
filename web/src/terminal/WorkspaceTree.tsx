@@ -33,6 +33,7 @@ import {
 } from "./workspaceGrouping";
 import { useWorkspaceReorderDrag } from "./useWorkspaceReorderDrag";
 import { IconButton } from "../ui/IconButton";
+import { hintText } from "../ui/form";
 
 type WorkspaceTreeProps = {
   workspaces: TerminalWorkspacesState;
@@ -353,7 +354,7 @@ export function WorkspaceTree({
         <Icon name="plus" className="size-3.5" aria-hidden="true" />
         {t("terminal.newSession")}
       </button>
-      {atSessionLimit ? <p className="px-2 text-xs text-ink-muted">{t("terminal.limitReached", { max: terminalSessions.maxSessions })}</p> : null}
+      {atSessionLimit ? <p className={`px-2 ${hintText}`}>{t("terminal.limitReached", { max: terminalSessions.maxSessions })}</p> : null}
       <HostPickerDialog
         open={pickerWorkspace !== null}
         heading={t("terminal.newSession")}

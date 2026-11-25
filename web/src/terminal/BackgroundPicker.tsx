@@ -4,7 +4,7 @@ import { settingsApi, type SettingsApi, type TerminalBackground } from "../api/s
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { control, sectionHeading, sizedControl } from "../ui/form";
+import { control, hintText, sectionHeading, sizedControl } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { InputDialog } from "../ui/InputDialog";
 import { ModalShell } from "../ui/ModalShell";
@@ -213,7 +213,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
           ) : filtered.length === 0 ? (
             <div className="flex min-h-48 flex-col items-center justify-center rounded-md bg-surface-subtle px-4 text-center">
               <p className="text-sm font-medium text-ink">{t("terminal.backgroundEmpty")}</p>
-              <p className="mt-1 text-xs text-ink-muted">{t("terminal.backgroundEmptyHint")}</p>
+              <p className={`mt-1 ${hintText}`}>{t("terminal.backgroundEmptyHint")}</p>
             </div>
           ) : (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

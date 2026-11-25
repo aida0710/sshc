@@ -13,6 +13,7 @@ import { Button, Notice } from "../ui/surface";
 import { Tag } from "../ui/Tag";
 import { historyOperationLabelKey } from "./historyLabels";
 import { ActionArea } from "../ui/ActionArea";
+import { hintText } from "../ui/form";
 
 const MonacoDiffEditor = lazy(() => loadMonacoDiffEditor().then(({ MonacoDiffEditor }) => ({ default: MonacoDiffEditor })));
 
@@ -112,7 +113,7 @@ export function PendingChangeDialog({
         <h2 id={headingId} className="truncate text-sm font-medium">
           {t("history.change.heading", { operation: t(historyOperationLabelKey(transaction.operation, transaction.paths)) })}
         </h2>
-        <p className="mt-1 text-xs text-ink-muted">
+        <p className={`mt-1 ${hintText}`}>
           {t("history.change.summary", {
             startedAt: formatDateTime(transaction.startedAt, locale),
             committed: transaction.committed,
@@ -140,7 +141,7 @@ export function PendingChangeDialog({
         </nav>
         <div className="min-h-0">{body()}</div>
       </div>
-      <ActionArea placement="band" className="px-4 py-3" start={<p className="text-xs text-ink-muted">{t("history.change.choice")}</p>}>
+      <ActionArea placement="band" className="px-4 py-3" start={<p className={hintText}>{t("history.change.choice")}</p>}>
         <Button onClick={onDismiss}>{t("history.close")}</Button>
         <Button onClick={() => onRecover("rollback")}>{t("history.rollBack")}</Button>
         <Button disabled={!transaction.canComplete} onClick={() => onRecover("complete")}>{t("history.complete")}</Button>

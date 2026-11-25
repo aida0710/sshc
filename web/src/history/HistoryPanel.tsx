@@ -15,7 +15,7 @@ import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { historyOperationLabelKey, historyStatusLabelKey, restorableFileName, shownHistoryPaths } from "./historyLabels";
 import { PendingChangeDialog } from "./PendingChangeDialog";
 import { useToast } from "../ui/useToast";
-import { sectionHeading } from "../ui/form";
+import { hintText, sectionHeading } from "../ui/form";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -120,7 +120,7 @@ export function HistoryPanel() {
               <article key={item.id} className="grid grid-cols-[minmax(0,1fr)] gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-ink">{t(historyOperationLabelKey(item.operation, item.paths))}</p>
-                  <p className="mt-1 text-xs text-ink-muted">
+                  <p className={`mt-1 ${hintText}`}>
                     {t("history.interruptedDetail", {
                       operation: t(historyOperationLabelKey(item.operation, item.paths)),
                       startedAt: formatDateTime(item.startedAt, locale),

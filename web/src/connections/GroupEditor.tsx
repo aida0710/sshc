@@ -102,7 +102,7 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
             {parent === "" ? null : <span className="font-normal text-ink-faint">{parent}</span>}
             {label}
           </h3>
-          <p className="mt-0.5 text-xs text-ink-muted">{t("groupEditor.members", { count: memberCount })}</p>
+          <p className={`mt-0.5 ${hintText}`}>{t("groupEditor.members", { count: memberCount })}</p>
         </div>
         <ActionMenu
           label={t("tree.groupActions", { name: group.name })}

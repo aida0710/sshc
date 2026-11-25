@@ -13,7 +13,7 @@ import {
 import { ActionArea } from "../ui/ActionArea";
 import { FieldRow, FieldRowNote } from "../ui/FieldRow";
 import { Button, Notice } from "../ui/surface";
-import { CheckboxField, control } from "../ui/form";
+import { CheckboxField, control, hintText } from "../ui/form";
 import { PageHeader, PageSection } from "../ui/page";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { RemoteKeyHostPicker } from "./RemoteKeyHostPicker";
@@ -333,7 +333,7 @@ export function RemoteKeyPanel({
         />
         <ActionArea
           start={plannedTargets.length === 0 ? undefined : (
-            <p className="text-xs text-ink-muted">{t("rk.plannedHosts", { count: plannedTargets.length })}</p>
+            <p className={hintText}>{t("rk.plannedHosts", { count: plannedTargets.length })}</p>
           )}
         >
           <div className="flex flex-wrap justify-end gap-2">
