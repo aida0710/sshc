@@ -197,7 +197,8 @@ export function SyncSettingsSection({ status, busy, form, exportSection, onCheck
                     </Button>
                   </div>
                 )}
-                <ActionArea>
+                {/* 線は、確かめた結果とこの行を包む枠の上の線が受け持つので、行には引かない。 */}
+                <ActionArea placement="inline">
                   <Button
                     busy={pending.running === "check"}
                     busyLabel={t("busy.checking")}
