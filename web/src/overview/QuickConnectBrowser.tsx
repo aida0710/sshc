@@ -199,7 +199,6 @@ export function QuickConnectBrowser({
             alias={alias}
             path={server.identity.path}
             busy={launching !== ""}
-            opening={opening}
             onOpenSettings={onOpenSettings}
             onConnect={connect}
           />
