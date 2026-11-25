@@ -127,6 +127,9 @@ test("adds Local, reverse and SOCKS forwarding from the advanced tab", async ({ 
   expect(await installation.read("config")).toContain("RemoteForward 19080 127.0.0.1:3000");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    // 保存したときの短い知らせが消え、タブの行が上の端に見えてから撮る。
+    await expect(page.getByText("Saved your changes.")).toBeHidden({ timeout: 10_000 });
+    await page.getByRole("tablist").first().evaluate((tabs) => tabs.scrollIntoView({ block: "start" }));
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/port-forwarding-settings-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(350);

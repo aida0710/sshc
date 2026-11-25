@@ -308,8 +308,9 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     });
     await expect(page.getByText(/Upload failed: broken\.bin/)).toBeVisible();
     await changeDisplayLanguage(page, "ja");
-    await page.getByRole("button", { name: "転送マネージャーを展開" }).click();
+    // スマホの幅では、アップロードを積むと転送マネージャーが開く。閉じているときだけ開く。
     const mobileTransferManager = page.getByRole("dialog", { name: "転送マネージャー" });
+    if (!(await mobileTransferManager.isVisible())) await page.getByRole("button", { name: "転送マネージャーを展開" }).click();
     await expect(mobileTransferManager).toBeVisible();
     await expect(mobileTransferManager.getByRole("separator")).toHaveCount(0);
     await expect(mobileTransferManager.getByText("失敗", { exact: true })).toBeVisible();

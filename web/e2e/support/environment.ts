@@ -219,6 +219,7 @@ export const test = base.extend<{ installation: Installation }>({
     await page.route(/\/api\/v1\/update(?:\/check)?$/, (route) => route.fulfill({
       json: { current, available: false, canUpdate: false },
     }));
+    if (process.env.SSHC_VISUAL_DIR !== undefined) await prepareForScreenshots(page);
     await use(page);
   },
   installation: async ({}, use) => {
@@ -254,6 +255,16 @@ export const test = base.extend<{ installation: Installation }>({
     });
   },
 });
+
+// prepareForScreenshots は、ドキュメントなどに載せる画像を撮るときだけ使う。
+// - 撮ったマシンの名前・メモリ・起動からの時間が画像に写らないよう、Home などのマシンの状態を決まった値で答える。
+// - メニューや知らせが出る途中・消える途中で写らないよう、動きを減らす（アプリは OS の「動きを減らす」に従う）。
+async function prepareForScreenshots(page: Page): Promise<void> {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/api/v1/terminal/machine", (route) => route.fulfill({
+    json: { hostname: "workstation", os: "linux", uptimeSeconds: 3 * 86_400, cpuPercent: 12, memoryTotalBytes: 32 * 2 ** 30, memoryUsedBytes: 9 * 2 ** 30 },
+  }));
+}
 
 export const masterPassword = "an end to end master password";
 
