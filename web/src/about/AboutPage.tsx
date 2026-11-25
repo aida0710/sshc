@@ -71,7 +71,8 @@ export function AboutPage({ api = aboutApi, updates = updateApi, sessions = term
   const currentState = getUpdateStateMessage();
 
   function getUpdateStateMessage(): string | null {
-    if (!checkedOnThisPage || status === null) return checking ? t("about.checking") : null;
+    // 確かめている間は［更新を確認］が「確認中…」と言うので、ここには書かない。
+    if (!checkedOnThisPage || status === null) return null;
     if (status.checkError) return null;
     if (status.latest === undefined) return t("about.noRelease");
     return status.available ? t("about.available", { version: status.latest }) : t("about.noNewerVersion", { version: status.current });
@@ -92,10 +93,10 @@ export function AboutPage({ api = aboutApi, updates = updateApi, sessions = term
         <div className="grid grid-cols-[minmax(0,1fr)] gap-3 text-sm text-ink-muted">
           {currentState === null ? null : <p role="status" className="[overflow-wrap:anywhere]">{currentState}</p>}
           <FactRows facts={updateFacts} />
-          {checkFailure === "" ? null : <Notice tone="danger"><span className="grid gap-1"><span>{t("update.checkFailed")}</span><span className="break-words">{checkFailure}</span></span></Notice>}
+          {checkFailure === "" ? null : <Notice tone="danger">{t("update.checkFailed")}<span className="mt-1 block text-ink-muted">{checkFailure}</span></Notice>}
           {reason === undefined ? null : <p>{t(updateMessage(reason))}</p>}
           <div className="flex flex-wrap items-baseline gap-4">
-            <Button disabled={checking} onClick={() => { void checkUpdate(); }}>{t(checking ? "about.checking" : "about.check")}</Button>
+            <Button busy={checking} busyLabel={t("busy.checking")} onClick={() => { void checkUpdate(); }}>{t("about.check")}</Button>
             {status === null ? null : <UpdateControls status={status} api={updates} sessions={sessions} onStart={(job) => setStatus({ ...status, canUpdate: false, job })} />}
             {status === null ? null : <ReleasePageLink status={status} />}
             {/* The sidebar's progress dialog stays closed here, so its reload button is offered on the page. */}

@@ -29,6 +29,7 @@ export function SessionCloseConfirmation({
         </>
       }
       confirmLabel={t("terminal.closeConfirm")}
+      busyLabel={null}
       cancelLabel={t("terminal.closeCancel")}
       onConfirm={onConfirm}
       onCancel={onCancel}

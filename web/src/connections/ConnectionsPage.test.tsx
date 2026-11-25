@@ -173,7 +173,8 @@ describe("ConnectionsPage", () => {
       const dialog = screen.getByRole("dialog", { name: "Move 2 connections" });
       await user.click(within(dialog).getByRole("button", { name: "work" }));
 
-      await waitFor(() => expect(within(dialog).getByRole("button", { name: "work" })).toHaveAttribute("aria-busy", "true"));
+      // 押した行は、グループ名を残したまま、右の端に回る印と「Moving…」を添える。
+      await waitFor(() => expect(within(dialog).getByRole("button", { name: "work Moving…" })).toHaveAttribute("aria-busy", "true"));
       expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled();
       finish();
       await waitFor(() => expect(screen.queryByRole("dialog", { name: "Move 2 connections" })).not.toBeInTheDocument());
@@ -631,7 +632,7 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2222");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(configApi.updateConnection).toHaveBeenCalledWith({
       identity: { path: "config", alias: "bastion" },
@@ -792,7 +793,7 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2222");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText(
       "The settings were saved, but the updated connection could not be loaded. Reload this connection.",
@@ -841,7 +842,7 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2222");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText(failure)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^edge/ }));
@@ -906,7 +907,7 @@ describe("ConnectionsPage", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^bastion/ })).not.toHaveAttribute("draggable", "true");
 
-    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledTimes(1));
     // 送るのはこの接続 1 件と、読み込んだときのその値だけで、metadata 全体は送らない。
@@ -917,7 +918,7 @@ describe("ConnectionsPage", () => {
       hostMetadataBase: { identity: { path: "config", alias: "bastion" } },
       hostMetadata: { identity: { path: "config", alias: "bastion" }, encoding: "shift_jis" },
     });
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Save sshc-only settings" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument());
     expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
     expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
@@ -954,7 +955,7 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
-    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     await chooseEdgeRightAfterTheWrite(user);
 
     expect(screen.queryByRole("dialog", { name: "Discard changes" })).not.toBeInTheDocument();
@@ -969,7 +970,7 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await chooseConnectionAction(user, "bastion", "Edit as text");
     await user.type(screen.getByLabelText(/Block text/), "\tCompression yes\n");
-    await user.click(screen.getByRole("button", { name: "Save block" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     await chooseEdgeRightAfterTheWrite(user);
 
     expect(screen.queryByRole("dialog", { name: "Discard changes" })).not.toBeInTheDocument();
@@ -988,11 +989,11 @@ describe("ConnectionsPage", () => {
     const port = await screen.findByLabelText("Port");
     await user.clear(port);
     await user.type(port, "2222");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(configApi.overview).toHaveBeenCalledTimes(2));
 
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
-    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
     await act(async () => finishListReload());
   });
 
@@ -1007,7 +1008,7 @@ describe("ConnectionsPage", () => {
     const port = await screen.findByLabelText("Port");
     await user.clear(port);
     await user.type(port, "2222");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(configApi.overview).toHaveBeenCalledTimes(2));
     await user.click(screen.getByRole("button", { name: /^edge/ }));
 
@@ -1029,7 +1030,7 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
-    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     const reload = await screen.findByRole("button", { name: "Reload saved connection" });
     expect(reload).toHaveFocus();
@@ -1050,7 +1051,7 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
-    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled());
     expect(screen.queryByRole("button", { name: "Reload saved connection" })).not.toBeInTheDocument();
@@ -1068,7 +1069,7 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
-    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("The sshc-only settings could not be saved. Check the error and save again."))
       .toBeInTheDocument();
@@ -1076,7 +1077,7 @@ describe("ConnectionsPage", () => {
     expect(preview).toHaveTextContent("Nothing was written.");
     expect(preview).not.toHaveTextContent("metadata_invalid");
     expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
-    expect(screen.getByRole("button", { name: "Save sshc-only settings" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
@@ -1091,7 +1092,7 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: "bastion" }));
     await user.click(await screen.findByRole("tab", { name: "Display & terminal" }));
     await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
-    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText(/sshc settings changed in another window, the CLI or sync/)).toBeInTheDocument();
     expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
@@ -1168,7 +1169,7 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2299");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(configApi.host).toHaveBeenCalledTimes(2));
     await act(async () => {
@@ -1206,7 +1207,7 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2299");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByText(/Port 2299/);
 
     await user.click(screen.getByRole("button", { name: "nas" }));
@@ -1284,7 +1285,7 @@ describe("ConnectionsPage", () => {
     const input = await screen.findByLabelText("Port");
     await user.clear(input);
     await user.type(input, "2222");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/changed outside this application/i);
     expect(screen.getByText("Changed on disk since you loaded it")).toBeInTheDocument();

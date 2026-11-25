@@ -244,6 +244,27 @@ func TestCIWorkflowSplitsTheWebUnitTestsWithoutLeavingAnyOut(t *testing.T) {
 	}
 }
 
+// Gradle は、30日使われていないファイルを終わりに掃除する。キャッシュから復元したファイルは保存した日のままなので、
+// 2回に分けて流すと、2回目が依存を取り直し、Maven Central の 429 で落ちることがある。
+func TestCIWorkflowRunsGradleOnceInTheAndroidJob(t *testing.T) {
+	document := readWorkflowDocument(t)
+	android, present := document.Jobs["android"]
+	if !present {
+		t.Fatal("jobs.android is missing")
+	}
+	var runs []string
+	for _, step := range android.Steps {
+		for _, line := range strings.Split(step.Run, "\n") {
+			if strings.Contains(line, "gradlew") {
+				runs = append(runs, strings.TrimSpace(line))
+			}
+		}
+	}
+	if !slices.Equal(runs, []string{"./gradlew --no-daemon test assembleDebug"}) {
+		t.Errorf("jobs.android Gradle runs = %q, want the tests and the APK in a single run", runs)
+	}
+}
+
 // 必須の検査「Web」は、分けた画面の job をまとめる。どれかが成功以外で終われば失敗し、
 // 依存先の失敗で飛ばされないよう !cancelled() で必ず走る。
 func TestCIWorkflowReportsWebOnlyWhenEveryWebJobSucceeded(t *testing.T) {

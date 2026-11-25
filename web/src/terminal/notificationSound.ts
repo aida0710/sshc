@@ -1,5 +1,5 @@
-import { updatePresetInterface } from "../settings/presetInterface";
-import { currentSettings, presetInUse, type SettingsPreset } from "../settings/settingsStore";
+import type { InterfaceChange } from "../settings/presetInterface";
+import { currentSettings, presetInUse, type InterfaceSettings, type SettingsPreset } from "../settings/settingsStore";
 
 // The sound played when a terminal asks for attention while sshc is out of
 // sight. The choice is kept in the preset this machine uses; the engine never
@@ -37,11 +37,11 @@ export function loadNotificationSoundPreferences(): NotificationSoundPreferences
   return notificationSoundOf(presetInUse(currentSettings()));
 }
 
-// saveNotificationSoundPreferences keeps the sound in a preset (the one this machine uses when presetId is left
-// out). The default sound is not written, so a preset holds only a sound someone chose.
-export function saveNotificationSoundPreferences(preferences: NotificationSoundPreferences, presetId?: string): Promise<void> {
+// withNotificationSound is a preset's screen settings with the sound. The default sound is not written, so a preset
+// holds only a sound someone chose.
+export function withNotificationSound(settings: InterfaceSettings, preferences: NotificationSoundPreferences): InterfaceChange {
   const isDefault = preferences.sound === defaultNotificationSoundPreferences.sound && preferences.volume === defaultNotificationSoundPreferences.volume;
-  return updatePresetInterface((settings) => ({ ...settings, notificationSound: isDefault ? undefined : preferences }), presetId);
+  return { ...settings, notificationSound: isDefault ? undefined : preferences };
 }
 
 function notificationAudioContext(target: Window): AudioContext | null {

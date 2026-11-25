@@ -26,7 +26,7 @@ test("searches hosts, config files and settings from the keyboard", async ({ pag
   await page.getByLabel("Name", { exact: true }).fill("Update packages");
   await replaceCodeFieldText(codeField(page, "Command"), "sudo apt update");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("Snippet saved.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved your changes.", { exact: true })).toBeVisible();
 
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" });
@@ -172,5 +172,9 @@ test("changes the theme and OSC 52 by name, and says which is in use", async ({ 
   await palette(page).getByRole("searchbox").fill("osc 52");
   await expect(palette(page).getByRole("option").first()).toHaveAccessibleName(/Turn OSC 52 off/);
   await page.keyboard.press("Escape");
-  await expect.poll(async () => JSON.parse(await installation.read("sshc/metadata.json")).settings?.terminal?.osc52).toBe(true);
+  // The settings file is written when the first setting is saved: until then there is nothing to read.
+  await expect.poll(async () => {
+    const saved = await installation.read("sshc/metadata.json").catch(() => null);
+    return saved === null ? undefined : (JSON.parse(saved) as { settings?: { terminal?: { osc52?: boolean } } }).settings?.terminal?.osc52;
+  }).toBe(true);
 });

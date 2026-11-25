@@ -1,7 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../api/client";
 import { fakeSettingsServer } from "../testing/settingsServer";
 import { AccentProvider, useAccent } from "./accentContext";
 
@@ -12,13 +10,8 @@ afterEach(() => {
 });
 
 function Probe() {
-  const { accent, chooseAccent } = useAccent();
-  return (
-    <div>
-      <span>{`accent ${accent}`}</span>
-      <button type="button" onClick={() => void chooseAccent("pink").catch(() => undefined)}>choose pink</button>
-    </div>
-  );
+  const { accent } = useAccent();
+  return <span>{`accent ${accent}`}</span>;
 }
 
 describe("AccentProvider", () => {
@@ -53,28 +46,5 @@ describe("AccentProvider", () => {
     render(<AccentProvider><Probe /></AccentProvider>);
 
     await waitFor(() => expect(document.documentElement).toHaveAttribute("data-accent", "pink"));
-  });
-
-  it("shows a chosen accent at once and saves it in the preset in use", async () => {
-    const server = fakeSettingsServer();
-    render(<AccentProvider><Probe /></AccentProvider>);
-
-    await userEvent.click(screen.getByRole("button", { name: "choose pink" }));
-
-    expect(document.documentElement).toHaveAttribute("data-accent", "pink");
-    await waitFor(() => expect(server.writesTo("/api/v1/settings/presets/default")).toEqual([
-      { base: { id: "default" }, preset: { id: "default", appearance: { accent: "pink" } } },
-    ]));
-  });
-
-  it("puts the saved accent back when saving fails", async () => {
-    fakeSettingsServer();
-    render(<AccentProvider><Probe /></AccentProvider>);
-    const { apiClient } = await import("../api/client");
-    vi.mocked(apiClient.mutate).mockRejectedValue(new ApiError("disk_full", 500, null));
-
-    await userEvent.click(screen.getByRole("button", { name: "choose pink" }));
-
-    await waitFor(() => expect(document.documentElement).toHaveAttribute("data-accent", "lavender"));
   });
 });

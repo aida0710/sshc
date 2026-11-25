@@ -32,6 +32,7 @@ export function SessionSettingsSection({ terminalSessions, showHeading }: { term
       )}>
         <Button
           busy={closing.pending}
+          busyLabel={t("busy.closing")}
           disabled={terminalSessions.busy || terminalSessions.sessions.length === 0}
           onClick={() => live === 0 ? closeEverySession() : setConfirming(true)}
         >
@@ -49,6 +50,7 @@ export function SessionSettingsSection({ terminalSessions, showHeading }: { term
             </>
           )}
           confirmLabel={t("desktop.closeAllConfirm")}
+          busyLabel={null}
           cancelLabel={t("desktop.closeAllCancel")}
           onCancel={() => setConfirming(false)}
           onConfirm={() => {

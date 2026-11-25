@@ -3,6 +3,7 @@ import type { Translate } from "../i18n/context";
 import { CheckboxField, hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
+import { usePendingAction } from "../ui/usePendingAction";
 import { ModalShell } from "../ui/ModalShell";
 import { SyncErrorNotice } from "./SyncErrorNotice";
 
@@ -17,9 +18,9 @@ type SyncPullPreviewDialogProps = {
   direction: SyncDirection;
   t: Translate;
   onAcceptRemovals: (accepted: boolean) => void;
-  onApply: () => void;
+  onApply: () => Promise<void>;
   onClose: () => void;
-  onResolve: (choice: "local" | "remote") => void;
+  onResolve: (choice: "local" | "remote") => Promise<void>;
 };
 
 export function SyncPullPreviewDialog({
@@ -37,6 +38,8 @@ export function SyncPullPreviewDialog({
   onResolve,
 }: SyncPullPreviewDialogProps) {
   const conflicted = preview.conflicts.length > 0;
+  // 押したボタンだけを busy にする（SyncOverviewCard と同じ形）。失敗は SyncPanel が文にして出す。
+  const pending = usePendingAction<"keepMine" | "takeTheirs" | "apply">();
   return (
     <ModalShell
       labelledBy="sync-pull-preview-heading"
@@ -73,11 +76,21 @@ export function SyncPullPreviewDialog({
             </Notice>
           ) : null}
           {conflicted ? (
-            <>
-              <p className="text-sm text-notice-ink">
-                {t("sync.conflictExplain")}
-              </p>
-              <ul className="flex flex-col gap-2 text-xs text-notice-ink">
+            <Notice
+              live={false}
+              actions={(
+                <>
+                  <Button busy={pending.running === "keepMine"} busyLabel={t("busy.checking")} disabled={busy} onClick={() => void pending.start("keepMine", () => onResolve("local"))}>
+                    {t("sync.keepMine")}
+                  </Button>
+                  <Button busy={pending.running === "takeTheirs"} busyLabel={t("busy.checking")} disabled={busy} onClick={() => void pending.start("takeTheirs", () => onResolve("remote"))}>
+                    {t("sync.takeTheirs")}
+                  </Button>
+                </>
+              )}
+            >
+              {t("sync.conflictExplain")}
+              <ul className="mt-2 flex flex-col gap-2 text-xs">
                 {preview.conflicts.map((conflict) => {
                   const modeChanged =
                     conflict.baseMode !== conflict.localMode ||
@@ -98,21 +111,7 @@ export function SyncPullPreviewDialog({
                   );
                 })}
               </ul>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  disabled={busy}
-                  onClick={() => onResolve("local")}
-                >
-                  {t("sync.keepMine")}
-                </Button>
-                <Button
-                  disabled={busy}
-                  onClick={() => onResolve("remote")}
-                >
-                  {t("sync.takeTheirs")}
-                </Button>
-              </div>
-            </>
+            </Notice>
           ) : null}
           {preview.written.length === 0 ? null : (
             <>
@@ -140,20 +139,21 @@ export function SyncPullPreviewDialog({
                 label={t("sync.confirmOverwrite")}
                 checked={acceptedRemovals}
                 onChange={onAcceptRemovals}
-                tone="notice"
                 className="rounded-inset border border-notice-line bg-notice p-3"
               />
             </>
           )}
           <Button
             kind="primary"
+            busy={pending.running === "apply"}
+            busyLabel={t(acceptRemoteHead ? "busy.receiving" : "busy.applying")}
             disabled={
               busy ||
               conflicted ||
               direction === "push" ||
               (preview.removed.length > 0 && !acceptedRemovals)
             }
-            onClick={onApply}
+            onClick={() => void pending.start("apply", onApply)}
             className="self-start"
           >
             {t(acceptRemoteHead ? "sync.remoteHeadApply" : "sync.apply")}

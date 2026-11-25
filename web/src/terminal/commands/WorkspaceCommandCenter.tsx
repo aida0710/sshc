@@ -6,7 +6,7 @@ import { commandSnippets } from "../../snippets/snippetKind";
 import { describeTerminalCommandFailure, terminalCommandProblemText } from "./terminalCommandProblem";
 import { Button, Notice, Segmented } from "../../ui/surface";
 import { ModalShell } from "../../ui/ModalShell";
-import { codeBlock, control, iconAction } from "../../ui/form";
+import { codeBlock, control } from "../../ui/form";
 import { SnippetVariableInputs } from "../../snippets/SnippetVariableInputs";
 import {
   terminalCommandApi,
@@ -16,6 +16,7 @@ import {
   type TerminalCommandRequest,
 } from "./commandApi";
 import { literalTextEntry } from "../../ui/softKeyboard";
+import { IconButton } from "../../ui/IconButton";
 
 export type WorkspaceCommandTarget = {
   targetId: string;
@@ -53,7 +54,9 @@ export function WorkspaceCommandCenter({
     null,
   );
   const [problem, setProblem] = useState("");
-  const [busy, setBusy] = useState(false);
+  // running は、待っている操作（下見を作る、送る）。押したボタンだけを busy にする。
+  const [running, setRunning] = useState<"preview" | "send" | null>(null);
+  const busy = running !== null;
   const operationSequence = useRef(0);
   const closeButton = useRef<HTMLButtonElement>(null);
 
@@ -91,7 +94,7 @@ export function WorkspaceCommandCenter({
     operationSequence.current += 1;
     setPrepared(null);
     setDispatch(null);
-    setBusy(false);
+    setRunning(null);
   }, [targetFingerprint]);
 
   function invalidate() {
@@ -99,7 +102,7 @@ export function WorkspaceCommandCenter({
     setPrepared(null);
     setDispatch(null);
     setProblem("");
-    setBusy(false);
+    setRunning(null);
   }
 
   function request(): TerminalCommandRequest | null {
@@ -121,7 +124,7 @@ export function WorkspaceCommandCenter({
     const next = request();
     if (next === null) return;
     const operation = ++operationSequence.current;
-    setBusy(true);
+    setRunning("preview");
     setProblem("");
     setDispatch(null);
     try {
@@ -132,14 +135,14 @@ export function WorkspaceCommandCenter({
       if (operationSequence.current === operation)
         setProblem(describeTerminalCommandFailure(t, error));
     } finally {
-      if (operationSequence.current === operation) setBusy(false);
+      if (operationSequence.current === operation) setRunning(null);
     }
   }
 
   async function run() {
     if (prepared === null) return;
     const operation = ++operationSequence.current;
-    setBusy(true);
+    setRunning("send");
     setProblem("");
     try {
       const nextDispatch = await api.dispatch(
@@ -154,7 +157,7 @@ export function WorkspaceCommandCenter({
       if (operationSequence.current === operation)
         setProblem(describeTerminalCommandFailure(t, error));
     } finally {
-      if (operationSequence.current === operation) setBusy(false);
+      if (operationSequence.current === operation) setRunning(null);
     }
   }
 
@@ -193,16 +196,9 @@ export function WorkspaceCommandCenter({
               {t("workspace.broadcastDescription")}
             </p>
           </div>
-          <button
-            ref={closeButton}
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-            aria-label={t("workspace.commandClose")}
-            className={`${iconAction} size-8`}
-          >
+          <IconButton ref={closeButton} label={t("workspace.commandClose")} size="panel" disabled={busy} onClick={onClose}>
             <Icon name="close" className="size-4" />
-          </button>
+          </IconButton>
         </div>
         {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
         <div className="grid gap-3 lg:grid-cols-[minmax(18rem,0.9fr)_minmax(20rem,1.1fr)]">
@@ -311,6 +307,8 @@ export function WorkspaceCommandCenter({
             </p>
             <Button
               className="self-start"
+              busy={running === "preview"}
+              busyLabel={t("busy.checking")}
               disabled={busy || request() === null}
               onClick={() => void makePreview()}
             >
@@ -338,6 +336,8 @@ export function WorkspaceCommandCenter({
             <Button
               kind="primary"
               className="mt-3"
+              busy={running === "send"}
+              busyLabel={t("busy.sending")}
               disabled={busy}
               onClick={() => void run()}
             >

@@ -55,15 +55,14 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
 
       <EditorSection title={t("conn.analysisAuthoritative")}>
         <div className="flex flex-col gap-3">
-          <Button className="self-start" disabled={inspection.busy || disabled} onClick={() => void inspect()}>
-            {inspection.busy ? t("conn.analysisRunning") : t("conn.analysisRun")}
+          <Button className="self-start" busy={inspection.busy} busyLabel={t("busy.checking")} disabled={disabled} onClick={() => void inspect()}>
+            {t("conn.analysisRun")}
           </Button>
           {inspection.error === "" ? null : <Notice tone="danger">{inspection.error}</Notice>}
 
           {effective !== null && effective.executableDirectives.length > 0 ? (
-            <div className="rounded-inset bg-notice px-3 py-2.5 text-xs">
-              <h4 className="font-medium text-notice-ink">{t("conn.analysisExecutableHeading")}</h4>
-              <p className="text-xs text-notice-ink">{t("conn.analysisTokenWarning")}</p>
+            <Notice compact live={false} titleLevel={4} title={t("conn.analysisExecutableHeading")}>
+              <p>{t("conn.analysisTokenWarning")}</p>
               <ul className="mt-2 flex flex-col gap-2">
                 {effective.executableDirectives.map((directive) => (
                   <li key={`${directive.path}:${directive.line}:${directive.keyword}`}>
@@ -78,7 +77,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
                   </li>
                 ))}
               </ul>
-            </div>
+            </Notice>
           ) : null}
 
           {effective !== null && effective.sources.length > 0 ? (

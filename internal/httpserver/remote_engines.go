@@ -27,11 +27,17 @@ type RemoteEngineDirectory interface {
 	StartAction(ctx context.Context, alias string, action remoteengine.EngineAction) (uint64, error)
 	ActionLog(alias string, cursor uint64, limit int) (remoteengine.ActionLogRead, error)
 	UnlockVault(ctx context.Context, alias, passphrase string) error
-	ForwardTerminalAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
+	ForwardAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
+	// ForwardSlowAPI は、接続先がよそのマシンを待ってから答える操作を、長い上限で取り次ぐ。
+	ForwardSlowAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
+	// ForwardFileAPI は、ファイルの中身を運ぶ操作を、要求と答えの本文を流して取り次ぐ。
+	ForwardFileAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
+	// ForwardMediaAPI は、トークン無しで読めるメディアを取り次ぎ、音声か動画の答えだけを渡す。
+	ForwardMediaAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
 	// DialRunTargetLoopback は、実行先の 127.0.0.1:port へ、取り次ぎの SSH の接続の上で TCP を開く。
 	DialRunTargetLoopback(ctx context.Context, alias string, port int) (net.Conn, error)
-	// CallTerminalAPI は、このマシンのエンジン自身が、実行先のエンジンのターミナルの API へ送る。
-	CallTerminalAPI(ctx context.Context, alias string, call remoteengine.TerminalCall) (remoteengine.TerminalAnswer, error)
+	// CallAPI は、このマシンのエンジン自身が、実行先のエンジンのターミナルの API へ送る。
+	CallAPI(ctx context.Context, alias string, call remoteengine.APICall) (remoteengine.APIAnswer, error)
 	ForwardTerminalStream(w http.ResponseWriter, r *http.Request, alias string) error
 }
 
@@ -51,13 +57,14 @@ type RemoteEngineHandlers struct {
 	forwards *runTargetForwardRelays
 }
 
-// enginesPrefix は、実行先のエンジンの受け口の頭である。:alias のあとの /terminal… は、
-// 接続先のエンジンの /api/v1/terminal… へそのまま取り次ぐ。
+// enginesPrefix は、実行先のエンジンの受け口の頭である。:alias のあとの経路は、
+// 接続先のエンジンの /api/v1/… へそのまま取り次ぐ。
 const enginesPrefix = "/api/v1/engines"
 
 // registerRemoteEngineRoutes は、実行先のエンジンの受け口を登録する。取り次ぐのは、画面が
-// 使うターミナルの操作だけである。制御用の読み取りは取り次がない（画面が出さない）。経路は
-// 契約の検査がソースから読むので、一本ずつ書く。
+// リモートセッションの実行先のものとして出す操作だけで、名指しで書いたものに限る。ターミナルの
+// 操作はここに、ほかの画面の操作は forwardedRoutes に書く。制御用の読み取りは取り次がない
+// （画面が出さない）。ここの経路は契約の検査がソースから読むので、一本ずつ書く。
 func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers) {
 	// 登録する受け口はどれも handlers の写しを持つので、共有する状態は登録の前に作る。
 	if handlers.commands == nil {
@@ -105,6 +112,7 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.PATCH("/api/v1/engines/:alias/terminal/workspaces/:id", handlers.ForwardTerminal)
 	engine.DELETE("/api/v1/engines/:alias/terminal/workspaces/:id", handlers.ForwardTerminal)
 	engine.PUT("/api/v1/engines/:alias/terminal/workspaces/:id/position", handlers.ForwardTerminal)
+	registerForwardedRoutes(engine, handlers)
 	engine.GET(remoteEngineStreamRoute, handlers.ForwardStream)
 }
 
@@ -293,7 +301,7 @@ func (h RemoteEngineHandlers) ForwardTerminal(c *echo.Context) error {
 	if h.forwards.has(alias) {
 		return h.forwardWithLocalListens(c, alias, remotePath)
 	}
-	if err := h.Engines.ForwardTerminalAPI(c.Response(), c.Request(), alias, remotePath); err != nil {
+	if err := h.Engines.ForwardAPI(c.Response(), c.Request(), alias, remotePath); err != nil {
 		return remoteEngineProblem(c, err)
 	}
 	return nil

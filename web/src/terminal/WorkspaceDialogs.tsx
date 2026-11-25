@@ -27,6 +27,7 @@ export function WorkspaceNameDialog({
       label={t("workspace.nameLabel")}
       initialValue={initialName}
       submitLabel={submitLabel}
+      busyLabel={null}
       cancelLabel={t("workspace.cancel")}
       validate={(value) => value === "" && !allowEmpty ? t("workspace.nameRequired") : ""}
       onSubmit={onSubmit}
@@ -61,6 +62,7 @@ export function DeleteWorkspaceDialog({
         </p>
       }
       confirmLabel={t("workspace.confirmDelete")}
+      busyLabel={null}
       cancelLabel={t("workspace.cancel")}
       onCancel={onCancel}
       onConfirm={onDelete}

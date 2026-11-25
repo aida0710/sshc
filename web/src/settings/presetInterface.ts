@@ -21,14 +21,18 @@ export function usePresetInterface(presetId?: string): InterfaceSettings {
 // InterfaceChange is the screen's settings after a change; undefined removes a setting.
 export type InterfaceChange = { [Key in keyof InterfaceSettings]?: InterfaceSettings[Key] | undefined };
 
-// updatePresetInterface changes the screen's settings of a preset. A setting left at its default is removed
-// rather than written, so a preset holds only what was chosen.
+// withInterface is preset with the screen's settings changed. A setting left at its default is removed rather than
+// written, so a preset holds only what was chosen.
+export function withInterface(preset: SettingsPreset, change: (settings: InterfaceSettings) => InterfaceChange): SettingsPreset {
+  const next = Object.fromEntries(
+    Object.entries(change({ ...preset.interface })).filter(([, value]) => value !== undefined && value !== false && value !== ""),
+  ) as InterfaceSettings;
+  const { interface: _previous, ...rest } = preset;
+  return Object.keys(next).length === 0 ? rest : { ...rest, interface: next };
+}
+
+// updatePresetInterface changes the screen's settings of a preset and saves them at once, for the controls outside
+// the settings pages (a terminal's "…").
 export function updatePresetInterface(change: (settings: InterfaceSettings) => InterfaceChange, presetId?: string): Promise<void> {
-  return updatePreset(presetId ?? presetInUse(currentSettings()).id, (preset) => {
-    const next = Object.fromEntries(
-      Object.entries(change({ ...preset.interface })).filter(([, value]) => value !== undefined && value !== false && value !== ""),
-    ) as InterfaceSettings;
-    const { interface: _previous, ...rest } = preset;
-    return Object.keys(next).length === 0 ? rest : { ...rest, interface: next };
-  });
+  return updatePreset(presetId ?? presetInUse(currentSettings()).id, (preset) => withInterface(preset, change));
 }

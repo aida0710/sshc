@@ -3,6 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { CheckboxField } from "../ui/form";
 import { PageSection } from "../ui/page";
 import { PasswordInput } from "../ui/PasswordField";
+import { usePendingAction } from "../ui/usePendingAction";
 import { Button } from "../ui/surface";
 import type { SyncSetupForm } from "./useSyncSetupForm";
 
@@ -14,8 +15,10 @@ export function SyncKeySection({ status, busy, form, onSave }: {
   status: SyncStatus;
   busy: boolean;
   form: Pick<SyncSetupForm, "chooseOwn" | "setChooseOwn" | "ownKey" | "setOwnKey" | "confirmHistoryLoss" | "setConfirmHistoryLoss">;
-  onSave: () => void;
+  onSave: () => Promise<void>;
 }) {
+  // 鍵を保存している間は、このボタンだけを busy にする。ほかの同期の操作で待っているときは押せなくするだけ。
+  const pending = usePendingAction<"save">();
   const t = useTranslate();
   const { chooseOwn, setChooseOwn, ownKey, setOwnKey, confirmHistoryLoss, setConfirmHistoryLoss } = form;
   return (
@@ -53,12 +56,14 @@ export function SyncKeySection({ status, busy, form, onSave }: {
           ) : null}
           <Button
             kind="primary"
+            busy={pending.running === "save"}
+            busyLabel={t(status.keyConfigured ? "busy.replacing" : "busy.creating")}
             disabled={
               busy ||
               (chooseOwn && ownKey === "") ||
               (status.keyConfigured && !confirmHistoryLoss)
             }
-            onClick={onSave}
+            onClick={() => void pending.start("save", onSave)}
             className="self-start"
           >
             {status.keyConfigured

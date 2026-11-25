@@ -161,7 +161,7 @@ describe("ConnectionBasicForm", () => {
     expect(await screen.findByLabelText("Host name or IP address")).toBeDisabled();
     expect(screen.getByLabelText("User")).toBeDisabled();
     expect(screen.getByLabelText("Port")).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
   });
 
   it("keeps the draft when the display language changes", async () => {
@@ -198,9 +198,9 @@ describe("ConnectionBasicForm", () => {
     await waitFor(() => expect(screen.getByLabelText("SSH private key")).toHaveValue(secondKey.id));
     expect(screen.getByText(/staged for this connection/)).toBeInTheDocument();
     expect(harness.onSave).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
 
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith(expect.objectContaining({
       identityFile: { action: "set", keyId: secondKey.id },
@@ -218,7 +218,7 @@ describe("ConnectionBasicForm", () => {
 
     await waitFor(() => expect(screen.getByLabelText("SSH private key")).toHaveValue(secondKey.id));
     await user.selectOptions(screen.getByLabelText("SSH private key"), privateKey.id);
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith(expect.objectContaining({
       identityFile: { action: "set", keyId: privateKey.id },
@@ -230,7 +230,7 @@ describe("ConnectionBasicForm", () => {
     const first = renderForm({
       problem: { code: "connection_hostname_invalid", message: "invalid host" },
     });
-    expect(screen.getByText("Enter a DNS name, IPv4 address, or unbracketed IPv6 address.")).toBeInTheDocument();
+    expect(screen.getByText("Host name or IP address: Enter a DNS name, IPv4 address, or unbracketed IPv6 address.")).toBeInTheDocument();
     first.unmount();
 
     const second = renderForm({
@@ -256,7 +256,7 @@ describe("ConnectionBasicForm", () => {
     expect(screen.getByTitle(/SSH default/)).toHaveTextContent("default");
     expect(screen.queryByRole("button", { name: "Use inherited/default host name" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Loading authentication options…")).not.toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
   });
 
   it("keeps a typed value shown even when it equals the inherited one, and goes back from the field", async () => {
@@ -268,12 +268,12 @@ describe("ConnectionBasicForm", () => {
     expect(port).toHaveValue(22);
     await user.clear(port);
     await user.type(port, "2201");
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Use inherited/default port" }));
     expect(port).toHaveValue(null);
     expect(port).toHaveAttribute("placeholder", "22");
-    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
   });
 
   it("goes back to inheritance when a value written on the connection is emptied", async () => {
@@ -284,7 +284,7 @@ describe("ConnectionBasicForm", () => {
 
     await user.clear(screen.getByLabelText("Host name or IP address"));
     expect(screen.getByLabelText("Host name or IP address")).toHaveAttribute("placeholder", "Inherited or default");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith(expect.objectContaining({ hostName: { action: "inherit" } }));
   });
@@ -302,7 +302,7 @@ describe("ConnectionBasicForm", () => {
     await user.type(screen.getByLabelText("Host name or IP address"), "198.51.100.7");
     await user.clear(screen.getByLabelText("User"));
     await user.click(screen.getByRole("button", { name: "Use inherited/default port" }));
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: detail.form.entry.identity,
@@ -355,7 +355,7 @@ describe("ConnectionBasicForm", () => {
 
     await user.selectOptions(screen.getByLabelText("One-time password"), "saved_totp");
     await user.selectOptions(screen.getByLabelText("Saved TOTP"), "pelican-otp");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: buildDetail().form.entry.identity,
@@ -376,7 +376,7 @@ describe("ConnectionBasicForm", () => {
     expect(await screen.findByLabelText("One-time password")).toHaveDisplayValue("pelican-otp");
 
     await user.selectOptions(screen.getByLabelText("One-time password"), "remove");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: buildDetail().form.entry.identity,
@@ -403,7 +403,7 @@ describe("ConnectionBasicForm", () => {
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
     expect(screen.queryByLabelText("Connection password")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("SSH private key"), secondKey.id);
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: detail.form.entry.identity,
@@ -436,8 +436,8 @@ describe("ConnectionBasicForm", () => {
     expect(await screen.findByText(/will remove this connection's assignment/i)).toBeInTheDocument();
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /Confirm stored password removal/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: detail.form.entry.identity,
       base: detail.file.contents,
@@ -466,13 +466,13 @@ describe("ConnectionBasicForm", () => {
     await user.clear(screen.getByLabelText("Host name or IP address"));
     await user.type(screen.getByLabelText("Host name or IP address"), "draft.example");
     expect(await screen.findByText("Unlock the encrypted vault before saving.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 
     await user.type(screen.getByLabelText("Master password"), "the master password");
     await user.click(screen.getByRole("button", { name: "Unlock vault" }));
     await waitFor(() => expect(harness.unlockVault).toHaveBeenCalledWith("the master password"));
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("draft.example");
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
   it("saves config-only changes from shared state when credential metadata is unavailable", async () => {
@@ -508,8 +508,8 @@ describe("ConnectionBasicForm", () => {
     await user.clear(screen.getByLabelText("Host name or IP address"));
     await user.type(screen.getByLabelText("Host name or IP address"), "retry.example");
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: detail.form.entry.identity,
@@ -558,7 +558,7 @@ describe("ConnectionBasicForm", () => {
 
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("");
     expect(screen.getByLabelText("Host name or IP address")).toHaveAttribute("placeholder", "inherited.example");
-    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
   });
 
   it("requires explicit confirmation before removing an assigned password", async () => {
@@ -575,10 +575,10 @@ describe("ConnectionBasicForm", () => {
 
     expect(screen.getByLabelText("Password")).toHaveDisplayValue("office (saved password)");
     await user.selectOptions(screen.getByLabelText("Password"), "remove");
-    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Confirm stored password removal" }));
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: detail.form.entry.identity,
@@ -612,7 +612,7 @@ describe("ConnectionBasicForm", () => {
     await user.type(screen.getByLabelText("Host name or IP address"), "new.example");
     expect(screen.queryByText(/confirms the assigned password for the new authentication route/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/confirms the assigned TOTP for the new authentication route/i)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("heading", { name: "Use saved credentials with the changed settings?" })).toBeInTheDocument();
     expect(harness.onSave).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Save and confirm" }));
@@ -643,8 +643,8 @@ describe("ConnectionBasicForm", () => {
 
     expect(await screen.findByLabelText("Password")).toHaveDisplayValue("office (saved password)");
     expect(screen.getByText(/The saved password is not used because the destination settings changed/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByText(/saving allows the assigned password or one-time password/i)).toBeInTheDocument();
     expect(harness.onSave).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Save and confirm" }));
@@ -684,7 +684,7 @@ describe("ConnectionBasicForm", () => {
     await user.type(screen.getByLabelText("Host name or IP address"), "retry.example");
     await user.selectOptions(screen.getByLabelText("Password"), "dedicated_password");
     await user.type(screen.getByLabelText("Connection password"), "must-clear");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Basic settings could not be saved");
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("retry.example");
@@ -701,7 +701,7 @@ describe("ConnectionBasicForm", () => {
 
     await user.selectOptions(screen.getByLabelText("Password"), "dedicated_password");
     await user.type(screen.getByLabelText("Connection password"), "password-only");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(screen.getByLabelText("Password")).toHaveDisplayValue("Password for this connection"));
     expect(screen.getByLabelText("Password")).toHaveValue("unchanged");
@@ -820,14 +820,14 @@ describe("ConnectionBasicForm", () => {
     });
     await screen.findByText("No passphrase is saved for this key.");
     await user.type(screen.getByLabelText("New saved key passphrase"), "correct phrase");
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await user.type(screen.getByLabelText("Confirm saved key passphrase"), "wrong phrase");
     expect(screen.getByText("The key passphrases do not match.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await user.clear(screen.getByLabelText("Confirm saved key passphrase"));
     await user.type(screen.getByLabelText("Confirm saved key passphrase"), "correct phrase");
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: detail.form.entry.identity,
@@ -849,7 +849,7 @@ describe("ConnectionBasicForm", () => {
 
     await user.type(await screen.findByLabelText("Confirm saved key passphrase"), "confirmation only");
     expect(screen.getByText("The key passphrases do not match.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("keeps a key-passphrase draft while another Basic field changes", async () => {
@@ -892,7 +892,7 @@ describe("ConnectionBasicForm", () => {
     const success = renderForm({ detail });
     await user.type(await screen.findByLabelText("New saved key passphrase"), "success phrase");
     await user.type(screen.getByLabelText("Confirm saved key passphrase"), "success phrase");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.getByLabelText("New saved key passphrase")).toHaveValue(""));
     expect(screen.getByLabelText("Confirm saved key passphrase")).toHaveValue("");
     success.unmount();
@@ -900,7 +900,7 @@ describe("ConnectionBasicForm", () => {
     renderForm({ detail, onSave: vi.fn().mockRejectedValue(new Error("wrong")) });
     await user.type(await screen.findByLabelText("New saved key passphrase"), "failure phrase");
     await user.type(screen.getByLabelText("Confirm saved key passphrase"), "failure phrase");
-    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.getByLabelText("New saved key passphrase")).toHaveValue(""));
     expect(screen.getByLabelText("Confirm saved key passphrase")).toHaveValue("");
   });

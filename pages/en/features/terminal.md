@@ -11,14 +11,14 @@ Open SSH and local shells in the same interface, with search, Quick Commands, an
 
 ## When no session is open
 
-While no session is open, the tiles **Open a session** and **Add connection** are shown. **Open a session** opens the same picker as **New session** in the sidebar, to choose a connection or a local shell. Until sync is set up, **Receive by sync** is shown too.
+While no session is open, Home is shown in place of the terminal: after the last session is closed, when Terminal is chosen in a phone's bottom bar, and when the [remote session](./remote-session) changes to an sshc engine with no session. While a remote session is being connected to, and when it refuses, the terminal says so.
 
-Below the tiles is what the sshc engine new shells open on can tell about itself. With a [remote session](./remote-session) chosen, it is that sshc engine.
+The foot of Home shows what the sshc engine new shells open on can tell about itself. With a remote session chosen, it is that sshc engine.
 
-- Activity: the terminal SSH connections per day. On a PC the recent connections are listed beside it, and choosing one opens it. It is left out until a connection has been opened
 - The machine: its name, operating system, CPU use, memory, and uptime. Values the operating system does not give are left out (macOS gives neither the CPU use nor the memory in use; FreeBSD and OpenBSD do not give the memory in use)
+- Activity: the terminal SSH connections per day. It is left out until a connection has been opened
 
-A moving picture is drawn behind them. Choose it under **Background with no session** in **Settings → Appearance**: network (the default), contours, globe, aquarium, or none. On a phone the picture is a banner above the tiles. It moves only while this screen is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
+A moving picture is drawn behind Home. Choose it under **Home background** in **Settings → Appearance**: network (the default), contours, globe, aquarium, or none. It moves only while Home is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
 
 The fish of the aquarium are the recent connections. The more a connection was opened over the last 30 days, the larger its fish, and on a PC each fish's connection name is written under it. Fish come to the mouse, and clicking an empty place (tapping, on a phone) drops food there that they come to eat. On a phone a fish's name shows only while it eats. The colours follow the terminal's colours.
 
@@ -228,6 +228,9 @@ Besides the configurable font size, pinching two fingers on a terminal, or turni
 - The page does not zoom.
 - The size applies only to that terminal's display and is not saved.
 - Changing the font size in the settings returns to the configured size.
+- When the size changes, the terminal shows the current size at its top right for about 3 seconds. While it differs from the configured size, a [Reset] button beside it returns to the configured size.
+- Pressing Ctrl in the middle of a scroll does not change the size. A trackpad keeps sending the scroll for a while after the fingers lift, and Ctrl+Space or the like may be pressed during it.
+- With the font size left blank in the settings, the text is 13 px on a phone and on a PC alike. To make it larger on a phone only, create a [preset](/en/reference/settings#presets) for the phone and set its font size.
 
 ### Rendering and display
 
@@ -334,7 +337,7 @@ While the line holding the cursor ends in a question such as `Password:` or `パ
 
 OSC 8 links and detected URLs open in the system browser. Ctrl-click (⌘-click on a Mac) opens one at once, except an OSC 8 link whose text is a different address from where it goes: that opens a menu showing the real destination first.
 
-A long URL that wraps at the right edge opens as one URL however many rows it takes, including when a program such as Claude Code breaks it at the edge itself and indents the rest.
+A long URL that wraps at the right edge opens as one URL however many rows it takes, including when a program such as Claude Code breaks it at the edge itself and indents the rest. A URL broken over the rows of a table cell also opens as one URL from any of those rows. On a phone or tablet, a tap on a URL or an OSC 8 link opens a menu showing the destination. An OSC 8 link opens the destination its program named, however many rows its text takes.
 
 URLs and paths on the screen are underlined in the accent colour.
 
@@ -377,7 +380,7 @@ flowchart TD
   kind -- SSH --> host["That host"]
 ```
 
-An SSH session opened in a remote session is read from this machine with the same alias only when this machine has that alias and it takes it to the same destination (HostName, Port and User) as the remote sshc engine does. Otherwise, so that no other machine's file is shown, clicking the path opens a menu with **Copy link** only.
+The files of a session opened in a remote session are read by the engine that runs the session. For an SSH session, that is the connection of that name in that engine's configuration.
 
 ### Which paths become links
 
@@ -422,7 +425,6 @@ If the home folder cannot be read, sshc explains why the path cannot be opened.
 While a preview is open, the left and right arrow keys, or **Previous** and **Next**, move to the other files the same terminal printed (paths ending in the extensions above).
 
 - While text is shown, the arrow keys inside the editor move its cursor.
-- In an SSH session opened in a remote session, it works only when the file can be read as above.
 
 ## Images and character widths
 
@@ -482,7 +484,7 @@ In a local shell on Windows, mode 2027 and the VT320 status line have no effect:
 | **Local shell** at the top | The shell chosen in **Default local shell** under **Settings** → **Terminal**, or the system login shell when none is chosen |
 | Search, recent connections and groups | An SSH host |
 | Type `user@host[:port]` in the search, then **Connect** | Connects without saving |
-| Type `user@host[:port]` in the search, then **Save as a connection and connect** | Writes a Host block and connects (not offered in a [remote session](./remote-session#which-engine-a-session-opens-on)) |
+| Type `user@host[:port]` in the search, then **Save as a connection and connect** | Writes a Host block and connects (in a [remote session](./remote-session#which-engine-a-session-opens-on), on the remote engine's machine) |
 
 A session opened without saving has no connection name, so SFTP, startup Snippets and saving a forward to the connection are not available for it.
 

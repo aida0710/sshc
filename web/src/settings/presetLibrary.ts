@@ -4,7 +4,7 @@ import { putJSON } from "../api/guards";
 import type { Metadata } from "../api/config";
 import { validateOpenAPISchema } from "../api/validators.generated";
 import { usePolling } from "../ui/usePolling";
-import { presetInterfaceOf, updatePresetInterface } from "./presetInterface";
+import { presetInterfaceOf, updatePresetInterface, type InterfaceChange } from "./presetInterface";
 import { currentSettings, useSettings, type InterfaceSettings, type SettingsDocument } from "./settingsStore";
 
 // A preset library is a list of named presets synced in the metadata (the shortcut presets, the key bar
@@ -24,16 +24,17 @@ export type LibraryPreset = { id: string; name: string };
 export type PresetLibraryState<Preset> = { presets: Preset[]; loading: boolean; busy: boolean; error: boolean };
 
 export type PresetLibrary<Preset extends LibraryPreset> = {
+  // choice is the setting of a settings preset that holds its choice.
+  choice: PresetChoice;
   // usePresets is the library and the preset a settings preset chose (the one this machine uses when
   // settingsPresetId is left out). presets holds the saved ones only. A choice of a deleted preset is shown as the
-  // defaults, which are in force.
-  usePresets(settingsPresetId?: string): PresetLibraryState<Preset> & { selected: string };
-  // useChosen is the preset in force for a settings preset, or undefined for the defaults.
-  useChosen(settingsPresetId?: string): Preset | undefined;
+  // defaults, which are in force. document is the settings the choice is read from: the saved ones, or the settings
+  // pages' draft.
+  usePresets(settingsPresetId?: string, document?: SettingsDocument | null): PresetLibraryState<Preset> & { selected: string };
+  // useChosen is the preset a settings preset chose, or undefined for the defaults.
+  useChosen(settingsPresetId?: string, document?: SettingsDocument | null): Preset | undefined;
   // currentChosen is the preset in force on this machine, for handlers outside React.
   currentChosen(): Preset | undefined;
-  // select makes a settings preset take the preset id.
-  select(id: string, settingsPresetId?: string): Promise<void>;
   // update replaces the list and makes a settings preset take selected.
   update(next: Preset[], selected: string, settingsPresetId?: string): Promise<void>;
   // saveChosen keeps an edit in the preset a settings preset chose; build is given undefined when it chose
@@ -41,7 +42,12 @@ export type PresetLibrary<Preset extends LibraryPreset> = {
   saveChosen(build: (chosen: Preset | undefined) => Preset, settingsPresetId?: string): Promise<void>;
 };
 
-type ChoiceKey = "shortcutPreset" | "keyBarPreset";
+export type PresetChoice = "shortcutPreset" | "keyBarPreset";
+
+// withPresetChoice is a preset's screen settings choosing the preset id of a library.
+export function withPresetChoice(settings: InterfaceSettings, choice: PresetChoice, id: string): InterfaceChange {
+  return { ...settings, [choice]: id === defaultPresetId ? undefined : id };
+}
 
 type Registration = {
   // begin notes the library's state before the metadata is read; the returned function takes the metadata,
@@ -52,12 +58,22 @@ type Registration = {
 
 const registrations = new Set<Registration>();
 let generation = 0;
-let refreshing = false;
+// syncing is whether the metadata may be read: the vault is open, and usePresetLibrarySync keeps the libraries in step.
+let syncing = false;
+// refreshing is the read under way, or null.
+let refreshing: Promise<void> | null = null;
+
+// A library whose screen is loaded later (the key bar's) registers after the first read, and cannot take the answer of
+// one already under way. It is read at once, not at the next poll, so that the person's own preset shows with its screen.
+function register(registration: Registration) {
+  registrations.add(registration);
+  if (syncing) void (refreshing ?? Promise.resolve()).then(() => syncing ? refreshPresetLibraries() : undefined);
+}
 
 export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, read, choice, builtIn = [] }: {
   endpoint: string;
   read: (metadata: Metadata) => Preset[] | undefined;
-  choice: ChoiceKey;
+  choice: PresetChoice;
   // builtIn are presets that ship with sshc: a settings preset chooses one by id like a saved one, but they are not
   // in the list that is saved.
   builtIn?: readonly Preset[];
@@ -75,7 +91,7 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
   const savedIn = (presets: Preset[], id: string) => presets.find((preset) => preset.id === id);
   const chosenIn = (presets: Preset[], id: string) => savedIn(presets, id) ?? builtIn.find((preset) => preset.id === id);
 
-  registrations.add({
+  register({
     begin(atGeneration) {
       if (state.busy) return null;
       const atRevision = revision;
@@ -90,7 +106,7 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
   });
 
   const select = (id: string, settingsPresetId?: string) =>
-    updatePresetInterface((settings): InterfaceSettings => ({ ...settings, [choice]: id === defaultPresetId ? undefined : id }), settingsPresetId);
+    updatePresetInterface((settings) => withPresetChoice(settings, choice, id), settingsPresetId);
 
   async function update(next: Preset[], selected: string, settingsPresetId?: string) {
     if (state.busy || state.loading || state.error) throw new Error("Presets are not ready; reload before saving");
@@ -107,17 +123,19 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
   }
 
   return {
-    usePresets(settingsPresetId) {
+    choice,
+    usePresets(settingsPresetId, document) {
       const library = useSyncExternalStore(subscribe, snapshot);
-      const chosen = chosenId(useSettings().document, settingsPresetId);
+      const saved = useSettings().document;
+      const chosen = chosenId(document === undefined ? saved : document, settingsPresetId);
       return { ...library, selected: chosenIn(library.presets, chosen) === undefined ? defaultPresetId : chosen };
     },
-    useChosen(settingsPresetId) {
+    useChosen(settingsPresetId, document) {
       const library = useSyncExternalStore(subscribe, snapshot);
-      return chosenIn(library.presets, chosenId(useSettings().document, settingsPresetId));
+      const saved = useSettings().document;
+      return chosenIn(library.presets, chosenId(document === undefined ? saved : document, settingsPresetId));
     },
     currentChosen: () => chosenIn(state.presets, chosenId(currentSettings())),
-    select,
     update,
     async saveChosen(build, settingsPresetId) {
       const saved = savedIn(state.presets, chosenId(currentSettings(), settingsPresetId));
@@ -130,14 +148,17 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
 
 // refreshPresetLibraries reads the metadata once and gives every library its list.
 export async function refreshPresetLibraries() {
-  if (refreshing) return;
-  refreshing = true;
+  if (refreshing !== null) return;
+  refreshing = readPresetLibraries().finally(() => { refreshing = null; });
+  await refreshing;
+}
+
+async function readPresetLibraries() {
   const finishers = [...registrations].map((registration) => registration.begin(generation)).filter((finish) => finish !== null);
   try {
     const metadata = validateOpenAPISchema<Metadata>("Metadata", await apiClient.read("/api/v1/metadata"));
     finishers.forEach((finish) => finish(metadata));
   } catch { finishers.forEach((finish) => finish(null)); }
-  finally { refreshing = false; }
 }
 
 // usePresetLibrarySync keeps every library in step with the metadata while the vault is open (ready).
@@ -145,11 +166,12 @@ export function usePresetLibrarySync(ready: boolean) {
   useEffect(() => {
     if (!ready) return;
     ++generation;
+    syncing = true;
     registrations.forEach((registration) => registration.setLoading());
     void refreshPresetLibraries();
     const refresh = () => { void refreshPresetLibraries(); };
     window.addEventListener("focus", refresh);
-    return () => { ++generation; window.removeEventListener("focus", refresh); };
+    return () => { ++generation; syncing = false; window.removeEventListener("focus", refresh); };
   }, [ready]);
   usePolling(refreshPresetLibraries, { intervalMs: presetPollIntervalMs, enabled: ready, whileHidden: true });
 }

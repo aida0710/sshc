@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { expect, openApplication, openSection, openSettingsPage, test } from "./support/environment";
+import { saveSettings } from "./support/saveBar";
 
 // The speed limit belongs to the preset, so each machine can choose its own; recovery after a lost connection
 // is a global setting, the same on every machine.
@@ -22,19 +23,13 @@ test("saves the aggregate speed limit in the preset and bounded recovery in the 
   await expect(speed).toHaveValue("128");
 
   await openSettingsPage(page, "General");
-  const globalSaved = () => page.waitForResponse((response) =>
-    new URL(response.url()).pathname === "/api/v1/settings/global" && response.request().method() === "PUT");
   const recovery = page.getByRole("checkbox", { name: "Resume automatically", exact: true });
-  const recoverySaved = globalSaved();
   await recovery.click();
-  expect((await recoverySaved).status()).toBe(200);
   await expect(recovery).toBeChecked();
   const attempts = page.getByRole("spinbutton", { name: "Reconnect limit", exact: true });
   await expect(attempts).toHaveValue("3");
-  const attemptsSaved = globalSaved();
   await attempts.fill("2");
-  await attempts.press("Enter");
-  expect((await attemptsSaved).status()).toBe(200);
+  await saveSettings(page, "global");
 
   const saved = JSON.parse(await installation.read("sshc/metadata.json")) as {
     settings?: { fileTransfers?: { autoReconnect?: boolean; maxReconnectAttempts?: number } };

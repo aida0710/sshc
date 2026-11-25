@@ -12,12 +12,8 @@ export function VPNUnavailableNotice({ overview }: { overview: VPNOverview }) {
   const detail = overview.detail ?? "";
   return (
     <Notice>
-      <span className="flex min-w-0 flex-col gap-1">
-        <span>{reason}</span>
-        {detail === "" ? null : (
-          <span className="break-words text-xs opacity-80">{t("vpn.unavailableDetail", { detail })}</span>
-        )}
-      </span>
+      {reason}
+      {detail === "" ? null : <span className="mt-1 block text-xs text-ink-muted">{t("vpn.unavailableDetail", { detail })}</span>}
     </Notice>
   );
 }

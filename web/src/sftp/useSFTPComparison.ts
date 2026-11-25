@@ -1,18 +1,21 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState } from "react";
 import { useTranslate } from "../i18n/context";
-import { sftpApi, type DirectoryComparison } from "./api";
+import { type DirectoryComparison } from "./api";
 import type { ComparisonMode } from "./contentToolTypes";
 import type { SFTPLocation } from "./sftpLocation";
 import { comparisonTransfers } from "./comparisonTransfers";
 import { localHostAlias } from "./localHost";
 import { sftpProblemText } from "./sftpProblemText";
-import { sftpTransferManager } from "./transferManager";
 
 export function useSFTPComparison({ left, right, onCopied }: {
   left: SFTPLocation;
   right: SFTPLocation;
   onCopied: () => void;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
+  const { sftp: { files: sftpApi } } = useEngineApis();
   const t = useTranslate();
   const readOnly = left.alias === localHostAlias || right.alias === localHostAlias;
   const [mode, setMode] = useState<ComparisonMode>("metadata");
@@ -20,6 +23,8 @@ export function useSFTPComparison({ left, right, onCopied }: {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(true);
+  // copying は、写している向き。押したほうのボタンだけに回る印を出す。
+  const [copying, setCopying] = useState<"left" | "right" | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -58,6 +63,7 @@ export function useSFTPComparison({ left, right, onCopied }: {
     const transfers = comparisonTransfers({ comparison, selected, direction, left, right });
     if (transfers.length === 0) return;
     setBusy(true);
+    setCopying(direction);
     setProblem("");
     try {
       await sftpTransferManager.addRemoteTransfers(transfers, "copy");
@@ -65,8 +71,9 @@ export function useSFTPComparison({ left, right, onCopied }: {
     } catch (error) {
       setProblem(sftpProblemText(t, error));
       setBusy(false);
+      setCopying(null);
     }
   }
 
-  return { comparison, changes, selected, problem, busy, readOnly, mode, setMode, toggle, copySelectedDifferences };
+  return { comparison, changes, selected, problem, busy, copying, readOnly, mode, setMode, toggle, copySelectedDifferences };
 }

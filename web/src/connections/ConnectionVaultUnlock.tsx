@@ -28,14 +28,14 @@ export function ConnectionVaultUnlock({
   const t = useTranslate();
   return (
     <div className="flex flex-col gap-2.5 rounded-inset bg-notice p-3">
-      <p className="text-xs leading-[18px] text-notice-ink">
+      <p className="text-xs leading-[18px] text-ink">
         {t(vault.exists ? "conn.vaultLockedBeforeSave" : "conn.vaultMissingBeforeSave")}
       </p>
       <PasswordField label={t("conn.createMasterPassword")} value={masterPassword} onChange={onMasterPasswordChange} />
       {vault.exists ? null : (
         <PasswordField label={t("conn.createConfirmMaster")} value={masterConfirmation} onChange={onMasterConfirmationChange} />
       )}
-      <Button kind="primary" className="self-start" disabled={!canOpen} busy={busy} onClick={onOpen}>
+      <Button kind="primary" className="self-start" disabled={!canOpen} busy={busy} busyLabel={t(vault.exists ? "busy.unlocking" : "busy.creating")} onClick={onOpen}>
         {t(vault.exists ? "conn.createUnlockVault" : "conn.createInitialiseVault")}
       </Button>
     </div>

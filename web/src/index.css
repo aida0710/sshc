@@ -147,6 +147,8 @@
   --color-notice-ink: var(--ui-notice-ink);
   --color-danger: var(--ui-danger);
   --color-live: var(--ui-live);
+  --color-remote: var(--ui-remote);
+  --color-remote-ink: var(--ui-remote-ink);
   --color-kind-image: var(--ui-kind-image);
   --color-kind-video: var(--ui-kind-video);
   --color-code-bg: var(--ui-code-bg);
@@ -525,6 +527,23 @@
   font-display: block;
 }
 
+/* BIZ UDGothic draws the Japanese of the font that pairs it with JetBrains Mono. It has no italic design: the
+   browser slants the upright faces. Each file holds every glyph and is fetched only once that font is chosen. */
+@font-face {
+  font-family: "BIZ UDGothic";
+  src: url("/fonts/BIZUDGothic-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "BIZ UDGothic";
+  src: url("/fonts/BIZUDGothic-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
 /* The symbols Android's fonts lack (scripts/fonts/generate-terminal-symbols.py). The range keeps the browser from
    fetching the file for a terminal that never prints them, and leaves the cell's measure to the fonts before it. */
 @font-face {
@@ -779,6 +798,18 @@
   height: var(--app-viewport-height, 100dvh);
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
+/* リモートセッションの名札（RemoteSessionFrame）の高さ。枠の太さ（3px）と名札の行の高さ（18px）を足した値。
+   スマホの組み方では、アプリはこの高さを上に空けて名札の下から始まる（remoteSessionTagRoom）。ダイアログも同じだけ
+   下げ、全画面のもの（SFTP のプレビューなど）の上の端に名札が重ならないようにする。 */
+:root {
+  --remote-session-tag-room: 21px;
+}
+:root:has([data-remote-session-frame]) .sshc-modal-frame {
+  @variant mobile-layout {
+    top: calc(var(--app-viewport-top, 0px) + var(--remote-session-tag-room));
+    height: calc(var(--app-viewport-height, 100dvh) - var(--remote-session-tag-room));
+  }
+}
 .sshc-modal-panel {
   min-height: 0;
   max-height: 100%;
@@ -813,12 +844,13 @@ select:not([multiple]):not([size]) {
     min-width: 44px;
     touch-action: manipulation;
   }
-  /* A packed list of rows (the sidebar's workspace tree) uses 36px, so that more rows fit on the screen. The
-     minimum stays here, rather than in the rows' classes, because a touch screen 768px to 1023px wide is laid
-     out as a phone while the md: classes already draw the PC's 20px buttons. */
+  /* 詰めた一覧（サイドバーのワークスペースの木）は、行とボタンの高さを 36px にして、画面に多くの行を収める。
+     幅はほかと同じ 44px にし、行の右に並ぶ「…」「×」を指で押し分けやすくする。幅を足しても行は高くならない。
+     最小値を行のクラスではなくここに置くのは、768〜1023px のタッチの画面がスマホの組み方になる一方で、
+     md: のクラスが PC の 20px のボタンを描くからである。 */
   :where(button[data-touch-dense]) {
     min-height: 36px;
-    min-width: 36px;
+    min-width: 44px;
     touch-action: manipulation;
   }
   :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):not(.monaco-editor *):not(.xterm *) {
@@ -937,6 +969,16 @@ select:not([multiple]):not([size]) {
   to { opacity: 1; transform: translateY(0); }
 }
 :root[data-motion="reduce"] .sshc-modal-panel { animation: none; }
+
+/* 値に誤りのある入力欄は、枠を赤にする。直し方の文は欄を並べたまとまりの下に出すので（FieldProblems）、どの欄かは
+   枠で示す（利用者が選んだ形、2026-11-24）。誤りではない注意（書けない理由など）は data-field-tone="notice" で琥珀に
+   する。layer の外にあるので、枠の色のクラスに負けない。見た目を自分で描く Monaco とターミナルは除く。 */
+:where(input, select, textarea)[aria-invalid="true"]:not(.monaco-editor *):not(.xterm *) {
+  border-color: var(--ui-danger);
+  &:where([data-field-tone="notice"]) {
+    border-color: var(--ui-notice-ink);
+  }
+}
 
 /* Keyboard focus uses the same accent as the current page and selection.
    Terminal and editor surfaces keep their own focus/selection rendering.

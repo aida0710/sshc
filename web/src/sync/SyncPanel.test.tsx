@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import { vaultStatus } from "../testing/vaultStatus";
 import { formatDateTime } from "../ui/format";
+import { ToastProvider } from "../ui/ToastProvider";
 import { SyncPanel } from "./SyncPanel";
 import type { PullResponse, SyncStatus } from "../api/sync";
 import type { SyncPanelApi } from "./SyncPanel";
@@ -491,7 +492,7 @@ describe("SyncPanel", () => {
 
   it("sets the machine up from an exported file and the encryption key, without the bucket form", async () => {
     const api = buildApi(unconfigured, nothingToDo);
-    const { container } = render(<SyncPanel api={api} />);
+    const { container } = render(<ToastProvider><SyncPanel api={api} /></ToastProvider>);
 
     await screen.findByRole("heading", { name: "Import exported settings" });
     const chooser = container.querySelector<HTMLInputElement>('input[type="file"]');
@@ -754,7 +755,7 @@ describe("SyncPanel", () => {
 
   it("says so when there is nothing to do", async () => {
     const api = buildApi(configured, nothingToDo);
-    render(<SyncPanel api={api} />);
+    render(<ToastProvider><SyncPanel api={api} /></ToastProvider>);
 
     await userEvent.click(
       await screen.findByRole("button", { name: "Check for changes" }),

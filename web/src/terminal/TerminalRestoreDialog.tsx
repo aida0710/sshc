@@ -66,6 +66,7 @@ export function TerminalRestoreDialog({
       }
       confirmKind="primary"
       confirmLabel={t("terminal.restoreConfirm")}
+      busyLabel={t("busy.restoring")}
       cancelLabel={t("terminal.restoreDecline")}
       onConfirm={restore}
       onCancel={onDecline}

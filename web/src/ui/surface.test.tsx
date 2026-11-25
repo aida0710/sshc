@@ -1,5 +1,5 @@
 import { createRef } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Button, Card, Notice, Row } from "./surface";
@@ -97,6 +97,50 @@ describe("Notice", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Saved.");
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("puts what happened first, and keeps the details folded until they are opened", async () => {
+    const user = userEvent.setup();
+    render(
+      <Notice tone="danger" title="Could not sync." details={{ label: "More details", content: <code>sync_internal_failed</code> }}>
+        The other machine did not answer.
+      </Notice>,
+    );
+
+    const notice = screen.getByRole("alert");
+    expect(within(notice).getByText("Could not sync.")).toBeVisible();
+    expect(within(notice).getByText("The other machine did not answer.")).toBeVisible();
+    expect(within(notice).getByText("sync_internal_failed")).not.toBeVisible();
+    await user.click(within(notice).getByText("More details"));
+    expect(within(notice).getByText("sync_internal_failed")).toBeVisible();
+  });
+
+  it("stays quiet when it is a warning placed with the page, and can be named by a dialog", () => {
+    render(<Notice live={false} id="purge-warning">Purging cannot be undone.</Notice>);
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(document.getElementById("purge-warning")).toHaveTextContent("Purging cannot be undone.");
+  });
+
+  it("makes its title a heading of its own section when it holds a list", () => {
+    render(
+      <Notice live={false} titleLevel={4} title="Commands this connection runs">
+        <ul><li>ProxyCommand nc %h %p</li></ul>
+      </Notice>,
+    );
+
+    expect(screen.getByRole("heading", { level: 4, name: "Commands this connection runs" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Commands this connection runs" })).toHaveTextContent("ProxyCommand nc %h %p");
+  });
+
+  it("can be hidden when it is given a way to hide", async () => {
+    const user = userEvent.setup();
+    const dismiss = vi.fn();
+    render(<Notice tone="danger" onDismiss={dismiss}>Could not remove r100.</Notice>);
+
+    await user.click(screen.getByRole("button", { name: "Hide this notice" }));
+
+    expect(dismiss).toHaveBeenCalledOnce();
+  });
 });
 
 describe("Button", () => {
@@ -129,18 +173,23 @@ describe("Card", () => {
 });
 
 describe("Button while it waits", () => {
-  it("keeps its label while it waits, and cannot be pressed again", async () => {
+  it("says what it waits for, and cannot be pressed again", async () => {
     const onClick = vi.fn();
-    render(<Button busy onClick={onClick}>Save</Button>);
-    const button = screen.getByRole("button", { name: "Save" });
+    render(<Button busy busyLabel="Saving…" onClick={onClick}>Save</Button>);
+    const button = screen.getByRole("button", { name: "Saving…" });
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button).toBeDisabled();
     await userEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("keeps its label while it waits when it has no waiting wording", () => {
+    render(<Button busy busyLabel={null}>Stop</Button>);
+    expect(screen.getByRole("button", { name: "Stop" })).toHaveAttribute("aria-busy", "true");
+  });
+
   it("says nothing about waiting when it is idle", () => {
-    render(<Button>Save</Button>);
+    render(<Button busy={false} busyLabel="Saving…">Save</Button>);
     expect(screen.getByRole("button", { name: "Save" })).not.toHaveAttribute("aria-busy");
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });

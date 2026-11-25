@@ -51,7 +51,7 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
       </h3>
       {state === "confirm" && (
         <>
-          <p className="mt-3 rounded-inset bg-notice px-3 py-2 text-sm text-notice-ink">{t("reveal.warning")}</p>
+          <div className="mt-3"><Notice live={false}>{t("reveal.warning")}</Notice></div>
           <MoreDetails className="mt-2">{t("reveal.warningMore")}</MoreDetails>
           <Button
             ref={showButton}

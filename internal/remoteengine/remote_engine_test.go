@@ -158,6 +158,26 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"code":"vault_locked","message":"request rejected"}`)
 	case "/api/v1/terminal/shell-profiles":
 		w.WriteHeader(http.StatusForbidden)
+	case "/api/v1/sftp/media/a-video":
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Header().Set("Set-Cookie", "leaked=1")
+		fmt.Fprint(w, "the bytes of a video")
+	case "/api/v1/sftp/media/a-page":
+		// 乗っ取られた接続先が、メディアの代わりにページを返す。
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, "<script>steal()</script>")
+	case "/api/v1/sftp/media/a-script":
+		w.Header().Set("Content-Type", "text/javascript")
+		fmt.Fprint(w, "steal()")
+	case "/api/v1/sftp/media/gone":
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"code":"sftp_not_found","message":"request rejected"}`)
+	case "/api/v1/keys":
+		// 入口の断り: このマシンのエンジンからの要求の CSRF のトークンが合わない。
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"code":"invalid_csrf","message":"request rejected"}`)
 	case "/api/v1/terminal/restore":
 		// fetch は Location の無い 3xx を追わず、画面は code で読む。
 		w.Header().Set("Content-Type", "application/problem+json")
@@ -246,7 +266,7 @@ func forward(t *testing.T, manager *Manager, method, body string) (int, string, 
 	request.Header.Set("Cookie", "sshc_session=this-machine")
 	request.Header.Set(handoff.CSRFHeader, "this-machine-csrf")
 	recorder := httptest.NewRecorder()
-	if err := manager.ForwardTerminalAPI(recorder, request, "r100", "/api/v1/terminal/sessions"); err != nil {
+	if err := manager.ForwardAPI(recorder, request, "r100", "/api/v1/terminal/sessions"); err != nil {
 		t.Fatal(err)
 	}
 	return recorder.Code, recorder.Body.String(), recorder.Header()
@@ -330,7 +350,7 @@ func TestACallToTheRemoteTerminalAPICarriesTheActionTokenAndRenewsAnExpiredSessi
 		t.Fatal(err)
 	}
 	remote.expired.Store(true)
-	answer, err := manager.CallTerminalAPI(context.Background(), "r100", TerminalCall{
+	answer, err := manager.CallAPI(context.Background(), "r100", APICall{
 		Method: http.MethodPost, Path: "/api/v1/terminal/commands", ContentType: "application/json",
 		Body: []byte(`{}`), ActionToken: "remote-token",
 	})
@@ -408,11 +428,90 @@ func TestAnEngineThatCannotProveItsSecretIsRefused(t *testing.T) {
 	}
 }
 
+// 接続先が操作そのものを断った理由（マスターパスワードの間違いなど）は、画面がその code で文を出すので、
+// そのまま返す。接続先の入口の断りは、このマシンの画面が自分のセッションの終わりと読まない code にする。
+func TestARefusalOfTheOperationItselfReachesTheScreenAndARefusalAtTheEntranceDoesNot(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		remotePath string
+		status     int
+		code       string
+	}{
+		{"/api/v1/passwords/unlock", http.StatusForbidden, "wrong_passphrase"},
+		{"/api/v1/keys", http.StatusBadGateway, "remote_engine_refused"},
+		{"/api/v1/terminal/shell-profiles", http.StatusBadGateway, "remote_engine_refused"},
+	} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100"+strings.TrimPrefix(tc.remotePath, "/api/v1"), nil)
+		if err := manager.ForwardAPI(recorder, request, "r100", tc.remotePath); err != nil {
+			t.Fatal(err)
+		}
+		if recorder.Code != tc.status || !strings.Contains(recorder.Body.String(), `"code":"`+tc.code+`"`) {
+			t.Errorf("%s = %d %s, want %d %s", tc.remotePath, recorder.Code, recorder.Body.String(), tc.status, tc.code)
+		}
+	}
+}
+
+// メディアの経路は、ブラウザが CSRF のトークン無しで開ける。接続先がページやスクリプトを返しても、
+// このマシンの画面のオリジンで開かないよう、音声か動画の答えだけを渡す。
+func TestTheForwardedMediaRouteHandsOverOnlyAudioAndVideo(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
+		t.Fatal(err)
+	}
+	media := func(ticket string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100/sftp/media/"+ticket, nil)
+		if err := manager.ForwardMediaAPI(recorder, request, "r100", "/api/v1/sftp/media/"+ticket); err != nil {
+			t.Fatal(err)
+		}
+		return recorder
+	}
+	video := media("a-video")
+	if video.Code != http.StatusOK || video.Body.String() != "the bytes of a video" || video.Header().Get("Content-Type") != "video/mp4" || video.Header().Get("Set-Cookie") != "" {
+		t.Fatalf("a video = %d %q, headers %v", video.Code, video.Body.String(), video.Header())
+	}
+	for _, ticket := range []string{"a-page", "a-script"} {
+		refused := media(ticket)
+		if refused.Code != http.StatusBadGateway || strings.Contains(refused.Body.String(), "steal") || !strings.Contains(refused.Body.String(), "remote_engine_refused") {
+			t.Errorf("%s = %d %q (%s)", ticket, refused.Code, refused.Body.String(), refused.Header().Get("Content-Type"))
+		}
+	}
+	// 接続先の断りは、理由ごと届く。
+	if gone := media("gone"); gone.Code != http.StatusNotFound || !strings.Contains(gone.Body.String(), "sftp_not_found") {
+		t.Errorf("a ticket the remote does not know = %d %q", gone.Code, gone.Body.String())
+	}
+}
+
+// 実行先の操作を確認するトークンは、実行先のエンジンが出して画面が持つ。取り次ぐときに落とすと、
+// 実行先は確認の無い操作として断る。
+func TestAForwardedRequestCarriesTheConfirmationTokenToTheRemoteEngine(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/engines/r100/terminal/commands", strings.NewReader("{}"))
+	request.Header.Set(handoff.ActionHeader, "token-the-remote-issued")
+	recorder := httptest.NewRecorder()
+	if err := manager.ForwardAPI(recorder, request, "r100", "/api/v1/terminal/commands"); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Body.String() != `{"action":"token-the-remote-issued"}` {
+		t.Fatalf("the remote engine received %s", recorder.Body.String())
+	}
+}
+
 func TestOnlyAnAddedEngineIsForwardedToAndRemovingItKeepsTheRemoteRunning(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
 	manager := newEngineManager(t, remote, "v9")
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100/terminal/sessions", nil)
-	if err := manager.ForwardTerminalAPI(httptest.NewRecorder(), request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrNotAdded) {
+	if err := manager.ForwardAPI(httptest.NewRecorder(), request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrNotAdded) {
 		t.Fatalf("forward before adding = %v, want ErrNotAdded", err)
 	}
 	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
@@ -421,7 +520,7 @@ func TestOnlyAnAddedEngineIsForwardedToAndRemovingItKeepsTheRemoteRunning(t *tes
 	if err := manager.RemoveEngine("r100"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.ForwardTerminalAPI(httptest.NewRecorder(), request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrNotAdded) {
+	if err := manager.ForwardAPI(httptest.NewRecorder(), request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrNotAdded) {
 		t.Fatalf("forward after removing = %v, want ErrNotAdded", err)
 	}
 }
@@ -485,7 +584,7 @@ func TestTheRemoteEnginesOwnRefusalsAreNotMistakenForThisMachines(t *testing.T) 
 	} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100/terminal/x", nil)
-		if err := manager.ForwardTerminalAPI(recorder, request, "r100", path); err != nil {
+		if err := manager.ForwardAPI(recorder, request, "r100", path); err != nil {
 			t.Fatal(err)
 		}
 		if recorder.Code != http.StatusBadGateway || !strings.Contains(recorder.Body.String(), want) {

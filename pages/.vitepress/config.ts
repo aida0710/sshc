@@ -1,4 +1,4 @@
-import { defineConfig } from "vitepress";
+import { defineDocsConfig } from "@aida0710/app-docs-theme/config";
 import { renderMermaidFences } from "./mermaidFence";
 
 const repository = "https://github.com/aida0710/sshc";
@@ -88,73 +88,36 @@ const enSidebar = [
   ] },
 ];
 
-export default defineConfig({
-  title: "sshc",
-  description: "A terminal app for SSH and local shells that uses existing OpenSSH configuration.",
-  lang: "ja",
+const jaDescription = "SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、暗号化同期に対応。";
+const enDescription = "A terminal app that uses existing OpenSSH configuration, with SFTP, reusable credentials, an AI-friendly CLI, and encrypted sync.";
+
+export default defineDocsConfig({
+  name: "sshc",
+  description: jaDescription,
+  repository,
   base,
-  cleanUrls: true,
-  lastUpdated: true,
-  markdown: { config: renderMermaidFences },
-  sitemap: { hostname: "https://aida0710.github.io/sshc/" },
-  head: [
-    ["meta", { name: "theme-color", content: "#111416" }],
-    ["meta", { property: "og:type", content: "website" }],
-    ["meta", { property: "og:title", content: "sshc" }],
-    ["meta", { property: "og:description", content: "SSHとローカルシェルを扱うターミナルアプリ。OpenSSH設定をそのまま使い、SFTP、認証情報の再利用、AIエージェント向けCLI、暗号化同期に対応。" }],
-    ["meta", { property: "og:image", content: "https://aida0710.github.io/sshc/images/terminal-desktop.png" }],
-    ["meta", { name: "twitter:card", content: "summary_large_image" }],
-    ["link", { rel: "icon", href: `${base}logo.svg`, type: "image/svg+xml" }],
+  siteUrl: "https://aida0710.github.io/sshc/",
+  ogImage: "/images/terminal-desktop.png",
+  logo: "/logo.svg",
+  favicon: { path: "/logo.svg", type: "image/svg+xml" },
+  themeColor: "#111416",
+  nav: [
+    { text: "はじめる", link: "/guide/getting-started" },
+    { text: "機能", link: "/features/" },
+    { text: "リファレンス", link: "/reference/cli" },
+    { text: "Releases", link: `${repository}/releases` },
   ],
-  locales: {
-    root: {
-      label: "日本語",
-      lang: "ja",
-      themeConfig: {
-        nav: [
-          { text: "はじめる", link: "/guide/getting-started" },
-          { text: "機能", link: "/features/" },
-          { text: "リファレンス", link: "/reference/cli" },
-          { text: "Releases", link: `${repository}/releases` },
-        ],
-        sidebar: jaSidebar,
-        editLink: { pattern: `${repository}/edit/main/pages/:path`, text: "このページを編集" },
-        outlineTitle: "このページの内容",
-        lastUpdatedText: "最終更新",
-        docFooter: { prev: "前のページ", next: "次のページ" },
-      },
-    },
-    en: {
-      label: "English",
-      lang: "en",
-      link: "/en/",
-      description: "A terminal app that uses existing OpenSSH configuration, with SFTP, reusable credentials, an AI-friendly CLI, and encrypted sync.",
-      head: [
-        ["meta", { property: "og:title", content: "sshc" }],
-        ["meta", { property: "og:description", content: "A terminal app that uses existing OpenSSH configuration, with SFTP, reusable credentials, an AI-friendly CLI, and encrypted sync." }],
-      ],
-      themeConfig: {
-        nav: [
-          { text: "Get started", link: "/en/guide/getting-started" },
-          { text: "Features", link: "/en/features/" },
-          { text: "Reference", link: "/en/reference/cli" },
-          { text: "Releases", link: `${repository}/releases` },
-        ],
-        sidebar: enSidebar,
-        editLink: { pattern: `${repository}/edit/main/pages/:path`, text: "Edit this page" },
-        outlineTitle: "On this page",
-        lastUpdatedText: "Last updated",
-        docFooter: { prev: "Previous page", next: "Next page" },
-      },
-    },
+  sidebar: jaSidebar,
+  footer: { copyright: "Copyright © www.aida0710.work" },
+  english: {
+    description: enDescription,
+    nav: [
+      { text: "Get started", link: "/en/guide/getting-started" },
+      { text: "Features", link: "/en/features/" },
+      { text: "Reference", link: "/en/reference/cli" },
+      { text: "Releases", link: `${repository}/releases` },
+    ],
+    sidebar: enSidebar,
   },
-  themeConfig: {
-    logo: "/logo.svg",
-    siteTitle: "sshc",
-    search: { provider: "local" },
-    socialLinks: [{ icon: "github", link: repository }],
-    footer: {
-      copyright: "Copyright © www.aida0710.work",
-    },
-  },
+  markdown: renderMermaidFences,
 });

@@ -11,16 +11,17 @@ import { CommandOutput } from "../ui/CommandOutput";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
+import { RunTargetProblemNotice } from "../terminal/RunTargetProblemNotice";
 
 // engineActions are listed in the order the dialog offers them.
 const engineActions: RemoteEngineAction[] = ["update", "restart", "stop"];
 
 // actionLabels name each action: its button, the button while it runs, the
 // confirmation heading and the line once the host's sshc succeeded.
-const actionLabels: Record<RemoteEngineAction, { button: MessageKey; running: MessageKey; confirm: MessageKey; done: MessageKey }> = {
-  update: { button: "engineInfo.update", running: "engineInfo.updating", confirm: "engineInfo.confirmUpdate", done: "engineInfo.updated" },
-  restart: { button: "engineInfo.restart", running: "engineInfo.restarting", confirm: "engineInfo.confirmRestart", done: "engineInfo.restarted" },
-  stop: { button: "engineInfo.stop", running: "engineInfo.stopping", confirm: "engineInfo.confirmStop", done: "engineInfo.stopped" },
+const actionLabels: Record<RemoteEngineAction, { button: MessageKey; busy: MessageKey; confirm: MessageKey; done: MessageKey }> = {
+  update: { button: "engineInfo.update", busy: "busy.updating", confirm: "engineInfo.confirmUpdate", done: "engineInfo.updated" },
+  restart: { button: "engineInfo.restart", busy: "busy.restarting", confirm: "engineInfo.confirmRestart", done: "engineInfo.restarted" },
+  stop: { button: "engineInfo.stop", busy: "busy.stopping", confirm: "engineInfo.confirmStop", done: "engineInfo.stopped" },
 };
 
 // EngineInfoDialog shows a run-target engine's version, Vault and sessions,
@@ -70,19 +71,19 @@ export function EngineInfoDialog({
         {info.remoteVersion === null ? null : (
           <Notice tone="danger" compact>{t("engineInfo.incompatible", { alias })}</Notice>
         )}
-        {info.problem === "" ? null : <Notice tone="danger" compact>{info.problem}</Notice>}
+        {info.problem === null ? null : <RunTargetProblemNotice problem={{ ...info.problem, alias }} showAlias={false} />}
         <div className="flex flex-wrap gap-2">
           {engineActions.map((action) => (
-            <Button key={action} kind={action === "update" ? "primary" : action === "stop" ? "danger" : "secondary"} disabled={busy} onClick={() => setConfirming(action)}>
-              {info.running === action ? t(actionLabels[action].running) : t(actionLabels[action].button)}
+            <Button key={action} kind={action === "update" ? "primary" : action === "stop" ? "danger" : "secondary"} busy={info.running === action} busyLabel={t(actionLabels[action].busy)} disabled={busy} onClick={() => setConfirming(action)}>
+              {t(actionLabels[action].button)}
             </Button>
           ))}
         </div>
-        {info.actionProblem === "" ? null : <p role="alert" className="text-sm text-danger">{info.actionProblem}</p>}
+        {info.actionProblem === null ? null : <RunTargetProblemNotice problem={{ ...info.actionProblem, alias }} showAlias={false} />}
         {info.lastResult === null ? null : (
-          <p role="status" className={`text-sm ${info.lastResult.succeeded ? "text-ink" : "text-danger"}`}>
+          <Notice tone={info.lastResult.succeeded ? "success" : "danger"} compact>
             {info.lastResult.succeeded ? t(actionLabels[info.lastResult.action].done) : t("engineInfo.actionFailed")}
-          </p>
+          </Notice>
         )}
         <CommandOutput output={info.output} label={t("engineInfo.output")} />
         <div className="flex justify-end">
@@ -100,6 +101,7 @@ export function EngineInfoDialog({
             </>
           )}
           confirmLabel={t(actionLabels[confirming].button)}
+          busyLabel={null}
           cancelLabel={t("engineInfo.cancel")}
           confirmKind={confirming === "stop" ? "danger" : "primary"}
           onConfirm={() => {

@@ -1,5 +1,5 @@
 import { fireEvent } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { attachFontZoom } from "./attachFontZoom";
 
 describe("attachFontZoom", () => {
@@ -20,6 +20,7 @@ describe("attachFontZoom", () => {
   afterEach(() => {
     detach();
     container.remove();
+    vi.useRealTimers();
   });
 
   it("makes the text a pixel larger for each notch of the wheel turned up with Ctrl, and keeps it from the screen", () => {
@@ -61,5 +62,22 @@ describe("attachFontZoom", () => {
     fireEvent.touchEnd(screen, { touches: [{ clientX: 125, clientY: 100 }] });
     fireEvent.touchMove(screen, { touches: [{ clientX: 0, clientY: 100 }, { clientX: 300, clientY: 100 }] });
     expect(size).toBe(8);
+  });
+
+  it("leaves the size alone when Ctrl goes down while a scroll is still coming, and zooms again after a pause", () => {
+    vi.useFakeTimers({ toFake: ["performance"] });
+    fireEvent.wheel(screen, { deltaY: -40 });
+    // The trackpad coasts: a turn every frame, now with Ctrl held.
+    for (let frame = 0; frame < 30; frame += 1) {
+      vi.advanceTimersByTime(16);
+      const turned = fireEvent.wheel(screen, { deltaY: -40, ctrlKey: true });
+      // The page must not zoom either.
+      expect(turned).toBe(false);
+    }
+    expect(size).toBe(14);
+
+    vi.advanceTimersByTime(300);
+    fireEvent.wheel(screen, { deltaY: -100, ctrlKey: true });
+    expect(size).toBe(15);
   });
 });

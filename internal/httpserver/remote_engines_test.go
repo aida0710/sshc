@@ -23,9 +23,15 @@ import (
 // fakeEngineDirectory は、実行先の一覧と、取り次ぎに渡された alias と接続先のパスを覚える。
 type fakeEngineDirectory struct {
 	fakeRemoteEngines
-	engines    []string
-	addErr     error
-	forwarded  []string
+	engines   []string
+	addErr    error
+	forwarded []string
+	// mediaOnly は、音声か動画の答えだけを渡す形で取り次いだ操作である。
+	mediaOnly []string
+	// streamedFiles は、本文を流して取り次いだ操作である。
+	streamedFiles []string
+	// waitedLong は、長い上限で取り次いだ操作である。
+	waitedLong []string
 	streamed   []string
 	statusSeen remoteengine.Status
 	statusErr  error
@@ -43,8 +49,8 @@ func (f *fakeEngineDirectory) Connected(alias string) bool { return f.connected[
 func (f *fakeEngineDirectory) DialRunTargetLoopback(context.Context, string, int) (net.Conn, error) {
 	return nil, remoteengine.ErrNotAdded
 }
-func (f *fakeEngineDirectory) CallTerminalAPI(context.Context, string, remoteengine.TerminalCall) (remoteengine.TerminalAnswer, error) {
-	return remoteengine.TerminalAnswer{}, remoteengine.ErrNotAdded
+func (f *fakeEngineDirectory) CallAPI(context.Context, string, remoteengine.APICall) (remoteengine.APIAnswer, error) {
+	return remoteengine.APIAnswer{}, remoteengine.ErrNotAdded
 }
 func (f *fakeEngineDirectory) AddEngine(_ context.Context, alias string) error {
 	if f.addErr != nil {
@@ -78,8 +84,26 @@ func (f *fakeEngineDirectory) UnlockVault(_ context.Context, alias, passphrase s
 	f.unlocked = append(f.unlocked, alias)
 	return nil
 }
-func (f *fakeEngineDirectory) ForwardTerminalAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+func (f *fakeEngineDirectory) ForwardAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
 	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+func (f *fakeEngineDirectory) ForwardSlowAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	f.waitedLong = append(f.waitedLong, remotePath)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+func (f *fakeEngineDirectory) ForwardFileAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	f.streamedFiles = append(f.streamedFiles, remotePath)
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+func (f *fakeEngineDirectory) ForwardMediaAPI(w http.ResponseWriter, _ *http.Request, alias, remotePath string) error {
+	f.forwarded = append(f.forwarded, alias+" "+remotePath)
+	f.mediaOnly = append(f.mediaOnly, remotePath)
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
@@ -140,6 +164,22 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodDelete, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},
 		{http.MethodGet, "/api/v1/engines/r100/terminal/machine", "r100 /api/v1/terminal/machine"},
 		{http.MethodGet, "/api/v1/engines/r100/terminal/connection-history", "r100 /api/v1/terminal/connection-history"},
+		{http.MethodGet, "/api/v1/engines/r100/config/overview", "r100 /api/v1/config/overview"},
+		{http.MethodGet, "/api/v1/engines/r100/connections/recent", "r100 /api/v1/connections/recent"},
+		{http.MethodPost, "/api/v1/engines/r100/actions", "r100 /api/v1/actions"},
+		{http.MethodGet, "/api/v1/engines/r100/config/host", "r100 /api/v1/config/host"},
+		{http.MethodGet, "/api/v1/engines/r100/passwords/web/eligibility", "r100 /api/v1/passwords/web/eligibility"},
+		{http.MethodDelete, "/api/v1/engines/r100/credentials/password/assign/web", "r100 /api/v1/credentials/password/assign/web"},
+		{http.MethodPost, "/api/v1/engines/r100/keys/k1/reveal", "r100 /api/v1/keys/k1/reveal"},
+		{http.MethodDelete, "/api/v1/engines/r100/vpn/profiles/office/route", "r100 /api/v1/vpn/profiles/office/route"},
+		{http.MethodPost, "/api/v1/engines/r100/diagnostics/reachability", "r100 /api/v1/diagnostics/reachability"},
+		{http.MethodPost, "/api/v1/engines/r100/config/save", "r100 /api/v1/config/save"},
+		{http.MethodPatch, "/api/v1/engines/r100/connections", "r100 /api/v1/connections"},
+		{http.MethodGet, "/api/v1/engines/r100/history/pending/tx-1", "r100 /api/v1/history/pending/tx-1"},
+		{http.MethodGet, "/api/v1/engines/r100/known-hosts", "r100 /api/v1/known-hosts"},
+		{http.MethodPost, "/api/v1/engines/r100/known-hosts/delete", "r100 /api/v1/known-hosts/delete"},
+		{http.MethodPost, "/api/v1/engines/r100/known-hosts/scan", "r100 /api/v1/known-hosts/scan"},
+		{http.MethodPost, "/api/v1/engines/r100/known-hosts/add", "r100 /api/v1/known-hosts/add"},
 	} {
 		directory.forwarded = nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)
@@ -149,6 +189,87 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 	}
 	if recorder := send(t, engine, http.MethodGet, "/api/v1/engines/-oProxy/terminal/sessions", "", nil); recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unsafe alias = %d", recorder.Code)
+	}
+}
+
+// 同期、更新、設定、このマシンのセッション、スニペットは、リモートセッションを選んでいてもこのマシンのものである。
+// 取り次ぐ経路に入ると、画面の操作が実行先のマシンを変えてしまう。
+func TestWhatStaysThisMachinesIsNeverForwarded(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/engines/r100/sync/status"},
+		{http.MethodPost, "/api/v1/engines/r100/sync/push"},
+		{http.MethodGet, "/api/v1/engines/r100/update"},
+		{http.MethodPost, "/api/v1/engines/r100/update"},
+		{http.MethodGet, "/api/v1/engines/r100/settings"},
+		{http.MethodPut, "/api/v1/engines/r100/settings"},
+		{http.MethodGet, "/api/v1/engines/r100/session"},
+		{http.MethodDelete, "/api/v1/engines/r100/session"},
+		{http.MethodGet, "/api/v1/engines/r100/snippets"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/change"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/reset-unsupported"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/recover-compatible-backup"},
+	} {
+		directory.forwarded = nil
+		recorder := send(t, engine, tc.method, tc.path, "", nil)
+		if len(directory.forwarded) != 0 || (recorder.Code != http.StatusNotFound && recorder.Code != http.StatusMethodNotAllowed) {
+			t.Errorf("%s %s = %d, forwarded %v", tc.method, tc.path, recorder.Code, directory.forwarded)
+		}
+	}
+}
+
+// よそのマシンの答えを待つ操作は、実行先がまだ働いているうちに「届かない」と断らないよう、長く待つ。
+func TestOperationsThatWaitForAnotherHostAreForwardedWithTheLongLimit(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	for _, tc := range []struct {
+		method, path string
+		long         bool
+	}{
+		{http.MethodPost, "/api/v1/engines/r100/diagnostics/authentication", true},
+		{http.MethodPost, "/api/v1/engines/r100/known-hosts/scan", true},
+		{http.MethodPost, "/api/v1/engines/r100/vpn/profiles/office/route", true},
+		{http.MethodPost, "/api/v1/engines/r100/remote-keys/register", true},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/web/entries", true},
+		{http.MethodGet, "/api/v1/engines/r100/config/overview", false},
+		{http.MethodPost, "/api/v1/engines/r100/config/save", false},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/transfers", false},
+	} {
+		directory.forwarded, directory.waitedLong = nil, nil
+		recorder := send(t, engine, tc.method, tc.path, "", nil)
+		if recorder.Code != http.StatusOK || len(directory.forwarded) != 1 || (len(directory.waitedLong) == 1) != tc.long {
+			t.Errorf("%s %s = %d, forwarded %v, with the long limit %v", tc.method, tc.path, recorder.Code, directory.forwarded, directory.waitedLong)
+		}
+	}
+}
+
+// ファイルの中身を運ぶ操作は、溜めると上限（1 MiB）で切れるので、流して取り次ぐ。
+func TestOperationsThatCarryAFileAreForwardedAsStreams(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	for _, tc := range []struct {
+		method, path string
+		streamed     bool
+	}{
+		{http.MethodGet, "/api/v1/engines/r100/sftp/web/download", true},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/web/archive", true},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/web/thumbnail", true},
+		{http.MethodPatch, "/api/v1/engines/r100/sftp/web/uploads/u1", true},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/local/download", true},
+		{http.MethodPost, "/api/v1/engines/r100/sftp/web/uploads/u1/complete", false},
+		{http.MethodGet, "/api/v1/engines/r100/sftp/local/entries", false},
+	} {
+		directory.forwarded, directory.streamedFiles = nil, nil
+		recorder := send(t, engine, tc.method, tc.path, "", nil)
+		if recorder.Code != http.StatusOK || len(directory.forwarded) != 1 || (len(directory.streamedFiles) == 1) != tc.streamed {
+			t.Errorf("%s %s = %d, forwarded %v, as a stream %v", tc.method, tc.path, recorder.Code, directory.forwarded, directory.streamedFiles)
+		}
+	}
+	// トークン無しで読めるのはメディアの経路だけで、音声か動画の答えだけを渡す取り次ぎを通る。
+	directory.forwarded, directory.mediaOnly = nil, nil
+	if recorder := send(t, engine, http.MethodGet, "/api/v1/engines/r100/sftp/media/ticket-1", "", nil); recorder.Code != http.StatusOK || len(directory.mediaOnly) != 1 {
+		t.Errorf("the media route = %d, as media only %v", recorder.Code, directory.mediaOnly)
 	}
 }
 

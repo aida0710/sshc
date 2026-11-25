@@ -2,6 +2,7 @@ import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { hintText } from "../ui/form";
 import type { KeyItem } from "./api";
+import { Notice } from "../ui/surface";
 
 // KeyTrashConfirmation asks before a key goes to the trash, as a dialog like the permanent delete: what
 // goes with it (its public key and certificates) and which hosts still name it. error is why the last
@@ -36,21 +37,22 @@ export function KeyTrashConfirmation({
           {item.references.length === 0 ? (
             <p className={hintText}>{t("keys.trashNoReferences")}</p>
           ) : (
-            <>
-              <p className="text-sm text-notice-ink">{t("keys.trashReferences", { count: item.references.length })}</p>
-              <ul className="flex flex-col gap-0.5 font-mono text-xs text-notice-ink">
+            <Notice live={false}>
+              {t("keys.trashReferences", { count: item.references.length })}
+              <ul className="mt-1 flex flex-col gap-0.5 font-mono text-xs text-ink-muted">
                 {item.references.map((reference, index) => (
                   <li key={`${reference.configPath}-${reference.line}-${index}`}>
                     {`${reference.hostPatterns.join(" ")} · ${reference.configPath}:${reference.line}`}
                   </li>
                 ))}
               </ul>
-            </>
+            </Notice>
           )}
           <p className={hintText}>{t("keys.trashIsRecoverable")}</p>
         </div>
       }
       confirmLabel={t("keys.trashConfirm")}
+      busyLabel={t("busy.moving")}
       cancelLabel={t("keys.trashCancel")}
       onConfirm={() => onConfirm(item.id)}
       onCancel={onCancel}

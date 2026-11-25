@@ -1,3 +1,4 @@
+import { localApiBase } from "./remoteEngines";
 import { apiClient } from "./client";
 import { issueAction, postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
@@ -52,71 +53,77 @@ function validateLogs(value: unknown): VPNLogs {
   return validateOpenAPISchema<VPNLogs>("VPNLogs", value);
 }
 
-function profilePath(name: string): string {
-  return `/api/v1/vpn/profiles/${encodeURIComponent(name)}`;
+function profilePath(base: string, name: string): string {
+  return `${base}/vpn/profiles/${encodeURIComponent(name)}`;
 }
 
 // 経路の失敗は、この画面が自分で説明する。Dockerが無いことも、VPNの接続に
 // 失敗したことも、利用者が次に何をするかを決める情報である。
 const locallyExplainedVPNFailures = vpnProblemCodes;
 
-export const vpnApi: VPNApi = {
-  async vpnOverview(options = {}) {
-    const path = options.waitForRoutes === false ? "/api/v1/vpn?waitForRoutes=false" : "/api/v1/vpn";
-    return validateOverview(await apiClient.read(path));
-  },
-  async createVPNProfile(profile, secrets) {
-    return validateOverview(
-      await postJSON<unknown>("/api/v1/vpn/profiles", { profile, secrets }, undefined, locallyExplainedVPNFailures),
-    );
-  },
-  async saveVPNProfile(profile, secrets) {
-    return validateOverview(
-      await putJSON<unknown>(profilePath(profile.name), { profile, secrets }, locallyExplainedVPNFailures),
-    );
-  },
-  async revealVPNSecrets(name) {
-    const token = await issueAction(VPN_REVEAL_ACTION_KIND, name);
-    return validateSecrets(
-      await apiClient.mutate<unknown>(`${profilePath(name)}/reveal`, {
-        method: "POST",
-        headers: { "X-SSHC-Action": token },
-      }, { locallyHandledCodes: locallyExplainedVPNFailures }),
-    );
-  },
-  async removeVPNProfile(name) {
-    return validateOverview(
-      await apiClient.mutate<unknown>(profilePath(name), { method: "DELETE" }, {
-        locallyHandledCodes: locallyExplainedVPNFailures,
-      }),
-    );
-  },
-  async renameVPNProfile(from, to) {
-    return validateOverview(
-      await postJSON<unknown>(`${profilePath(from)}/rename`, { name: to }, undefined, locallyExplainedVPNFailures),
-    );
-  },
-  async vpnLogs(name) {
-    return validateLogs(
-      await apiClient.read(`${profilePath(name)}/logs`, {
-        locallyHandledCodes: locallyExplainedVPNFailures,
-      }),
-    );
-  },
-  async startVPNRoute(name) {
-    return validateOverview(
-      // 本文は送らない。openapi はこの操作に本文を定めておらず、JSON を付けると
-      // 送る前の検査（validateAPIRequest）が断る。
-      await apiClient.mutate<unknown>(`${profilePath(name)}/route`, { method: "POST" }, {
-        locallyHandledCodes: locallyExplainedVPNFailures,
-      }),
-    );
-  },
-  async disconnectVPNRoute(name) {
-    return validateOverview(
-      await apiClient.mutate<unknown>(`${profilePath(name)}/route`, { method: "DELETE" }, {
-        locallyHandledCodes: locallyExplainedVPNFailures,
-      }),
-    );
-  },
-};
+// createVPNApi is this API of the engine at base (engineApiBase): this machine's, or a run target's as this
+// machine's engine forwards it.
+export function createVPNApi(base: string): VPNApi {
+  return {
+    async vpnOverview(options = {}) {
+      const path = options.waitForRoutes === false ? `${base}/vpn?waitForRoutes=false` : `${base}/vpn`;
+      return validateOverview(await apiClient.read(path));
+    },
+    async createVPNProfile(profile, secrets) {
+      return validateOverview(
+        await postJSON<unknown>(`${base}/vpn/profiles`, { profile, secrets }, undefined, locallyExplainedVPNFailures),
+      );
+    },
+    async saveVPNProfile(profile, secrets) {
+      return validateOverview(
+        await putJSON<unknown>(profilePath(base, profile.name), { profile, secrets }, locallyExplainedVPNFailures),
+      );
+    },
+    async revealVPNSecrets(name) {
+      const token = await issueAction(VPN_REVEAL_ACTION_KIND, name, base);
+      return validateSecrets(
+        await apiClient.mutate<unknown>(`${profilePath(base, name)}/reveal`, {
+          method: "POST",
+          headers: { "X-SSHC-Action": token },
+        }, { locallyHandledCodes: locallyExplainedVPNFailures }),
+      );
+    },
+    async removeVPNProfile(name) {
+      return validateOverview(
+        await apiClient.mutate<unknown>(profilePath(base, name), { method: "DELETE" }, {
+          locallyHandledCodes: locallyExplainedVPNFailures,
+        }),
+      );
+    },
+    async renameVPNProfile(from, to) {
+      return validateOverview(
+        await postJSON<unknown>(`${profilePath(base, from)}/rename`, { name: to }, undefined, locallyExplainedVPNFailures),
+      );
+    },
+    async vpnLogs(name) {
+      return validateLogs(
+        await apiClient.read(`${profilePath(base, name)}/logs`, {
+          locallyHandledCodes: locallyExplainedVPNFailures,
+        }),
+      );
+    },
+    async startVPNRoute(name) {
+      return validateOverview(
+        // 本文は送らない。openapi はこの操作に本文を定めておらず、JSON を付けると
+        // 送る前の検査（validateAPIRequest）が断る。
+        await apiClient.mutate<unknown>(`${profilePath(base, name)}/route`, { method: "POST" }, {
+          locallyHandledCodes: locallyExplainedVPNFailures,
+        }),
+      );
+    },
+    async disconnectVPNRoute(name) {
+      return validateOverview(
+        await apiClient.mutate<unknown>(`${profilePath(base, name)}/route`, { method: "DELETE" }, {
+          locallyHandledCodes: locallyExplainedVPNFailures,
+        }),
+      );
+    },
+  };
+}
+
+export const vpnApi = createVPNApi(localApiBase);

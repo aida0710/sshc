@@ -745,7 +745,7 @@ describe("VPNPanel", () => {
 
     await user.click(within(route).getByRole("button", { name: "Connect" }));
 
-    expect(within(route).getByRole("button", { name: "Connect" })).toHaveAttribute("aria-busy", "true");
+    expect(within(route).getByRole("button", { name: "Connecting…" })).toHaveAttribute("aria-busy", "true");
     expect(within(route).getByText("connecting")).toBeVisible();
     const edit = await rowActionItem(user, route, "Edit");
     expect(edit).toBeDisabled();
@@ -1005,11 +1005,11 @@ describe("VPNPanel", () => {
     for (const label of ["Edit", "Rename", "Remove"]) {
       const item = await rowActionItem(user, route, label);
       expect(item).toBeDisabled();
-      expect(item).toHaveAttribute("title", "Save or cancel the edit below first.");
+      expect(item).toHaveAttribute("title", "Close the edit below first.");
       await user.keyboard("{Escape}");
     }
 
-    await user.click(within(screen.getByRole("region", { name: "Edit tundra" })).getByRole("button", { name: "Cancel" }));
+    await user.click(within(screen.getByRole("region", { name: "Edit tundra" })).getByRole("button", { name: "Close" }));
     expect(await rowActionItem(user, route, "Remove")).toBeEnabled();
   });
 
@@ -1090,6 +1090,7 @@ describe("VPNPanel", () => {
       .toBeVisible();
     expect(within(form).getByLabelText("VPN password")).toHaveValue("");
     expect(within(form).getAllByText("Leave blank to keep the stored value.")).toHaveLength(2);
+    await user.type(within(form).getByLabelText("VPN username"), "2");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(saveVPNProfile).toHaveBeenCalledWith(expect.objectContaining({ name: "tundra" }), {});
@@ -1116,7 +1117,7 @@ describe("VPNPanel", () => {
     );
   });
 
-  it("puts the edited profile back as it was when editing is cancelled, and forgets the secrets it took out", async () => {
+  it("asks before closing an edit with changes, puts the profile back as it was, and forgets the secrets it took out", async () => {
     const user = userEvent.setup();
     const saveVPNProfile = vi.fn().mockResolvedValue(overview());
     // 2回目に開いたときは取り出せない。1回目に取り出した値が残っていれば、欄に現れる。
@@ -1128,9 +1129,17 @@ describe("VPNPanel", () => {
 
     await chooseRowAction(user, route, "Edit");
     const form = screen.getByRole("region", { name: "Edit tundra" });
-    await waitFor(() => expect(within(form).getByLabelText("VPN password")).toHaveValue("the stored password"));
-    await user.click(within(form).getByRole("button", { name: "Cancel" }));
+    const password = within(form).getByLabelText("VPN password");
+    await waitFor(() => expect(password).toHaveValue("the stored password"));
+    await user.type(password, "x");
+    await user.click(within(form).getByRole("button", { name: "Close" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Keep editing" }));
+    expect(password).toHaveValue("the stored passwordx");
+    await user.click(within(form).getByRole("button", { name: "Discard changes" }));
+    expect(password).toHaveValue("the stored password");
+    await user.click(within(form).getByRole("button", { name: "Close" }));
 
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("article", { name: "tundra" })).toBeVisible();
     expect(saveVPNProfile).not.toHaveBeenCalled();
     await chooseRowAction(user, screen.getByRole("article", { name: "tundra" }), "Edit");
@@ -1155,6 +1164,7 @@ describe("VPNPanel", () => {
 
     await chooseRowAction(user, route, "Edit");
     const form = screen.getByRole("region", { name: "Edit tundra" });
+    await user.type(within(form).getByLabelText("VPN username"), "2");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(await within(form).findByText("Enter a value.")).toBeVisible();

@@ -1,10 +1,12 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Icon } from "../ui/icons";
 import { useTranslate, type Translate } from "../i18n/context";
 import { showBrowserNotification } from "../ui/browserNotifications";
 import { notifiesTransfersNatively } from "../android/native";
-import { sftpTransferManager, type TransferNotice } from "./transferManager";
+import { type TransferNotice } from "./transferManager";
 import { sftpTransferProblemText } from "./sftpProblemText";
+import { IconButton } from "../ui/IconButton";
 
 export function notifyBackgroundTransfers(
   notices: readonly TransferNotice[],
@@ -29,6 +31,7 @@ export function notifyBackgroundTransfers(
 }
 
 export function TransferNotifications() {
+  const sftpTransferManager = useSftpTransferManager();
   const t = useTranslate();
   const notices = useSyncExternalStore(sftpTransferManager.subscribeNotices, sftpTransferManager.getNoticeSnapshot);
   const delivered = useRef(new Set<string>());
@@ -57,14 +60,14 @@ export function TransferNotifications() {
           >
             <div className="flex items-start gap-2">
               <p className="min-w-0 grow text-sm">{message}</p>
-              <button
-                type="button"
-                className="pointer-events-auto text-xs text-ink-muted"
-                aria-label={t("sftp.notice.dismiss")}
+              <IconButton
+                label={t("sftp.notice.dismiss")}
+                size="compact"
                 onClick={() => sftpTransferManager.dismissNotice(notice.id)}
+                className="pointer-events-auto -my-1 -mr-1"
               >
                 <Icon name="close" className="size-3.5" />
-              </button>
+              </IconButton>
             </div>
           </div>
         );

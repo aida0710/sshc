@@ -15,6 +15,15 @@ export const fonts: readonly Font[] = [
     label: "JetBrains Mono",
     stack: `"JetBrains Mono", ${defaultStack}`,
   },
+  // Japanese drawn with BIZ UDGothic, a universal-design font. Its own Latin letters are not used: it draws ~ at
+  // the top of the line, and its thin hyphen vanishes at 13px on a screen of ordinary density. The browser fetches
+  // every family of the stack when the terminal asks for the font (FontFaceSet.load), so both are there before the
+  // first row is drawn.
+  {
+    name: "jetbrains-mono-biz-udgothic",
+    label: "JetBrains Mono + BIZ UDGothic",
+    stack: `"JetBrains Mono", "BIZ UDGothic", ${defaultStack}`,
+  },
 ];
 export function knownFont(name: string): Font | null {
   return fonts.find((font) => font.name === name) ?? null;

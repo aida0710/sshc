@@ -22,7 +22,7 @@ const session = (id: string, workspaceId: string, extra: Partial<TerminalSession
 
 function workspacesState(overrides: Partial<TerminalWorkspacesState> = {}): TerminalWorkspacesState {
   return {
-    workspaces, maxWorkspaces: 50, problem: "",
+    workspaces, maxWorkspaces: 50, problem: "", dismissProblem: vi.fn(),
     create: vi.fn(async () => null), update: vi.fn(async () => true), remove: vi.fn(async () => true),
     move: vi.fn(async () => true),
     ...overrides,
@@ -31,7 +31,7 @@ function workspacesState(overrides: Partial<TerminalWorkspacesState> = {}): Term
 
 function sessionsState(overrides: Partial<TerminalSessionsState> = {}): TerminalSessionsState {
   return {
-    sessions: [], maxSessions: 50, busy: false, problem: "", remoteRefusal: null, remoteRefusalAt: null, opening: false, loaded: true, restoreOffer: undefined,
+    sessions: [], maxSessions: 50, busy: false, problem: "", dismissProblem: vi.fn(), remoteRefusal: null, remoteRefusalAt: null, opening: false, loaded: true, restoreOffer: undefined,
     rename: vi.fn(async () => true), open: vi.fn(async () => null), openEach: vi.fn(async () => []), reconnect: vi.fn(async () => true),
     stopReconnect: vi.fn(async () => true), answerHostKey: vi.fn(async () => true), answerPasswordSave: vi.fn(async () => true), close: vi.fn(async () => undefined), closeAll: vi.fn(async () => undefined),
     refresh: vi.fn(async () => undefined), markExited: vi.fn(), programStateChanged: vi.fn(), moveSession: vi.fn(async () => true),

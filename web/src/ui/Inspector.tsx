@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject } from "react";
 import { Icon } from "./icons";
 import { useTranslate } from "../i18n/context";
+import { IconButton } from "./IconButton";
 
 export type InspectorContent = { label: string; attention: boolean; body: ReactNode } | null;
 
@@ -73,15 +74,10 @@ export function InspectorPane({
       className={`fixed inset-x-0 bottom-0 z-10 overflow-y-auto bg-sidebar p-3 lg:relative lg:inset-auto lg:z-auto lg:border-l lg:border-line ${underTopBar ? "top-12" : "top-0"}`}
     >
       <div className="sticky top-0 z-[1] -mx-3 -mt-3 mb-1 flex justify-end bg-sidebar px-2 pt-2 lg:hidden">
-        <button
-          type="button"
-          aria-label={t("shell.inspectorHideNamed", { label })}
-          title={t("shell.inspectorHideNamed", { label })}
-          onClick={onClose}
-          className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
-        >
+        <IconButton label={t("shell.inspectorHideNamed", { label })} size="large"
+          onClick={onClose}>
           <Icon name="close" className="size-4" />
-        </button>
+        </IconButton>
       </div>
       {children}
     </aside>

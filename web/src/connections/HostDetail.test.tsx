@@ -193,7 +193,7 @@ describe("HostDetailPanel", () => {
     harness.rerender(<HostDetailPanel {...harness.props} panel="Sshc" advanced="Settings" />);
     expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
 
-    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     expect(harness.props.onMetadataSave).toHaveBeenCalledWith(expect.objectContaining({ encoding: "shift_jis" }));
   });
 

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { TerminalSession } from "../api/terminalSessions";
 import { LanguageProvider } from "../i18n/context";
+import { ToastProvider } from "../ui/ToastProvider";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 
 const session: TerminalSession = {
@@ -145,7 +146,7 @@ describe("TerminalPortForwards", () => {
       host: vi.fn().mockResolvedValue({ file: { contents: "Host bastion\n" } }),
       save: vi.fn().mockResolvedValue({}),
     };
-    render(<LanguageProvider><TerminalPortForwards session={session} api={api} saveApi={saveApi as never} onClose={vi.fn()} /></LanguageProvider>);
+    render(<LanguageProvider><ToastProvider><TerminalPortForwards session={session} api={api} saveApi={saveApi as never} onClose={vi.fn()} /></ToastProvider></LanguageProvider>);
     await userEvent.selectOptions(screen.getByLabelText("Type"), "dynamic");
     expect(screen.queryByLabelText("Destination")).not.toBeInTheDocument();
     expect(screen.getByText("The application using this SOCKS proxy chooses the destination for each connection.")).toBeVisible();
@@ -160,6 +161,7 @@ describe("TerminalPortForwards", () => {
       base: "Host bastion\n",
       fields: [{ action: "add", keyword: "DynamicForward", values: ["1080"] }],
     });
-    expect(screen.getByText("The forwarding is active and was saved to the connection.")).toBeVisible();
+    // 始めたことは、ダイアログに残さずトーストで知らせる。
+    expect(await screen.findByText("The forwarding is active and was saved to the connection.")).toBeVisible();
   });
 });

@@ -1,8 +1,9 @@
 import { Tag } from "../ui/Tag";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
 import { failureCode } from "../api/client";
-import { knownHostsApi, type KnownHostCandidate, type KnownHostEntry, type KnownHostsApi, type KnownHostsResponse } from "../api/knownHosts";
+import { createKnownHostsApi, type KnownHostCandidate, type KnownHostEntry, type KnownHostsApi, type KnownHostsResponse } from "../api/knownHosts";
+import { engineApiBase } from "../api/remoteEngines";
 import {
   CheckboxField,
   Field,
@@ -26,7 +27,12 @@ import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { useToast } from "../ui/useToast";
 import { asciiTextEntry } from "../ui/softKeyboard";
 
-type KnownHostsPanelProps = { api?: KnownHostsApi };
+type KnownHostsPanelProps = {
+  // runTarget is the engine whose known_hosts this is; null is this machine. The panel is mounted anew for another
+  // engine (its key in sections.tsx), so nothing one engine listed is shown as another's.
+  runTarget?: string | null;
+  api?: KnownHostsApi;
+};
 // A key type is one word, so it keeps its line. A fingerprint keeps its line once the window is wide enough for it
 // beside the host (50 letters), so that it reads as one value, and otherwise breaks wherever it has to.
 const keyTypeCell = "whitespace-nowrap font-mono text-xs text-ink-muted";
@@ -50,8 +56,10 @@ function failureMessage(t: Translate, failure: unknown, otherwise: string): stri
   return failureCode(failure) === "known_hosts_symlink" ? t("kh.symlink") : otherwise;
 }
 
-export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
+export function KnownHostsPanel({ runTarget = null, api: apiOverride }: KnownHostsPanelProps) {
   const t = useTranslate();
+  const engineApi = useMemo(() => createKnownHostsApi(engineApiBase(runTarget)), [runTarget]);
+  const api = apiOverride ?? engineApi;
   const [query, setQuery] = useState("");
   const [listing, setListing] = useState<KnownHostsResponse | null>(null);
   const [pending, setPending] = useState<KnownHostEntry | null>(null);
@@ -228,7 +236,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
     />
   );
   const scanButton = (layout: string) => (
-    <Button kind="primary" className={layout} busy={action.running === "scan"} disabled={action.running !== null} onClick={() => void scan()}>
+    <Button kind="primary" className={layout} busy={action.running === "scan"} busyLabel={t("busy.scanning")} disabled={action.running !== null} onClick={() => void scan()}>
       {t("kh.scan")}
     </Button>
   );
@@ -278,7 +286,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
           {scanButton("")}
         </div>
 
-        {scanned ? <p className="mt-3 rounded-inset bg-notice px-3 py-2.5 text-xs leading-[19px] text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}
+        {scanned ? <div className="mt-3"><Notice compact live={false}>{t("kh.unverifiedNotice")}</Notice></div> : null}
         {candidates.length > 0 ? (
           narrowList ? (
             <ul aria-label={t("kh.scanCandidates")} className="mt-3 flex flex-col">
@@ -328,7 +336,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
         {adding ? (
           <div className="mt-3 flex flex-col gap-3 rounded-inset bg-notice p-4 text-sm">
             <div>
-              <h4 className="font-medium text-notice-ink">{t("kh.addHeading")}</h4>
+              <h4 className="font-semibold text-ink">{t("kh.addHeading")}</h4>
               <p className="text-ink-muted">{t("kh.addExplain", { host: adding.host })}</p>
               <p className="font-mono text-xs text-ink-muted">
                 {adding.keyType} · {adding.fingerprint}
@@ -350,6 +358,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
               <Button
                 kind="primary"
                 busy={action.running === "addToKnownHosts"}
+                busyLabel={t("busy.adding")}
                 disabled={!provenOrAcknowledged || action.running !== null}
                 onClick={() => void confirmAdd()}
               >
@@ -406,7 +415,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                   </button>
                   <ActionMenu
                     label={t("kh.entryActions", { host })}
-                    triggerClassName="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+                    triggerSize="bar"
                     items={[{
                       label: t("kh.delete"),
                       tone: "danger",
@@ -462,6 +471,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
           heading={t("kh.delete")}
           body={<p className="text-sm text-ink-muted">{t("kh.confirmRemove", { line: pending.line, fingerprint: pending.fingerprint })}</p>}
           confirmLabel={t("kh.confirmDelete")}
+          busyLabel={t("busy.deleting")}
           cancelLabel={t("kh.cancel")}
           onConfirm={confirmDelete}
           onCancel={() => setPending(null)}

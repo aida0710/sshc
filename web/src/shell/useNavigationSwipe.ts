@@ -1,12 +1,8 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { newVelocityTracker, type VelocityTracker } from "../ui/pointerVelocity";
 import { runSpring, type SpringRun } from "../ui/spring";
+import { swipeDirection } from "../ui/swipeDirection";
 
-// How far a finger moves before the swipe is read as sideways or up and down. Below it a tap stays a tap.
-const directionThreshold = 10;
-// A swipe counts as sideways when it moves this many times further across than up or down, so scrolling a
-// page with a slightly slanted finger does not pull the navigation out.
-const sidewaysRatio = 1.2;
 // Letting go past this share of the panel's width keeps it where the finger took it.
 const settleShare = 0.35;
 // A flick this fast (px per ms) settles it the same way, however short it was.
@@ -177,8 +173,9 @@ export function useNavigationSwipe({ enabled, open, panelRef, backdropRef, onOpe
       const across = touch.clientX - gesture.startX;
       const down = touch.clientY - gesture.startY;
       if (!gesture.dragging) {
-        if (Math.abs(across) < directionThreshold && Math.abs(down) < directionThreshold) return;
-        const sideways = Math.abs(across) > Math.abs(down) * sidewaysRatio;
+        const direction = swipeDirection(across, down);
+        if (direction === "undecided") return;
+        const sideways = direction === "sideways";
         const towardsSettling = gesture.opening ? across > 0 : across < 0;
         const pressedLong = event.timeStamp - gesture.startTime >= longPressMillis;
         if (!sideways || !towardsSettling || pressedLong) {

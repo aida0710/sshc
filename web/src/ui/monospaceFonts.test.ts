@@ -31,15 +31,15 @@ function textFaces(): Face[] {
 }
 
 describe("等幅の字体", () => {
+  // A family with no italic design is slanted by the browser from its upright faces.
+  const familiesWithoutItalic = new Set(["BIZ UDGothic"]);
+
   it("ships every weight and slant the terminal actually draws", () => {
-    const wanted = [
-      ["400", "normal"],
-      ["700", "normal"],
-      ["400", "italic"],
-      ["700", "italic"],
-    ];
+    const upright = [["400", "normal"], ["700", "normal"]];
+    const italic = [["400", "italic"], ["700", "italic"]];
     for (const family of new Set(textFaces().map((face) => face.family))) {
       const mine = textFaces().filter((face) => face.family === family);
+      const wanted = familiesWithoutItalic.has(family) ? upright : [...upright, ...italic];
       const missing = wanted.filter(
         ([weight, style]) => !mine.some((face) => face.weight === weight && face.style === style),
       );
@@ -54,13 +54,11 @@ describe("等幅の字体", () => {
     expect(missing).toEqual([]);
   });
 
-  it("offers every family it bundles, and bundles every family it offers", () => {
-    const bundled = [...new Set(textFaces().map((face) => face.family))].sort();
-    const offered = fonts
-      .map((font) => /^"([^"]+)"/.exec(font.stack)?.[1] ?? "")
-      .filter((family) => family !== "")
-      .sort();
-    expect(offered).toEqual(bundled);
+  it("offers every family it bundles, and starts every font it offers with a bundled family", () => {
+    const bundled = new Set(textFaces().map((face) => face.family));
+    const stacks = fonts.map((font) => font.stack.split(",").map((family) => family.trim().replace(/^"|"$/g, "")));
+    for (const family of bundled) expect(stacks.some((stack) => stack.includes(family)), family).toBe(true);
+    for (const stack of stacks) expect(bundled.has(stack[0] ?? ""), stack[0]).toBe(true);
   });
 
   it("always keeps a fallback behind the bundled name", () => {

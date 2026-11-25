@@ -1,3 +1,4 @@
+import { localApiBase } from "../api/remoteEngines";
 import { postJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
@@ -32,20 +33,26 @@ function validateRegistration(value: unknown): RemoteKeyRegisterResponse {
 }
 
 
-export const remoteKeysApi: RemoteKeysApi = {
-  async plan(input) {
-    return validatePlan(
-      await postJSON<unknown>("/api/v1/remote-keys/plan", { alias: input.alias, keyPath: input.keyPath, publicKey: input.publicKey }),
-    );
-  },
-  async register(input) {
-    return validateRegistration(
-      await postJSON<unknown>("/api/v1/remote-keys/register", {
-        alias: input.alias,
-        keyPath: input.keyPath,
-        publicKey: input.publicKey,
-        acknowledgeExecutable: input.acknowledgeExecutable,
-      }, input.actionToken),
-    );
-  },
-};
+// createRemoteKeysApi is this API of the engine at base (engineApiBase): this machine's, or a run target's as this
+// machine's engine forwards it.
+export function createRemoteKeysApi(base: string): RemoteKeysApi {
+  return {
+    async plan(input) {
+      return validatePlan(
+        await postJSON<unknown>(`${base}/remote-keys/plan`, { alias: input.alias, keyPath: input.keyPath, publicKey: input.publicKey }),
+      );
+    },
+    async register(input) {
+      return validateRegistration(
+        await postJSON<unknown>(`${base}/remote-keys/register`, {
+          alias: input.alias,
+          keyPath: input.keyPath,
+          publicKey: input.publicKey,
+          acknowledgeExecutable: input.acknowledgeExecutable,
+        }, input.actionToken),
+      );
+    },
+  };
+}
+
+export const remoteKeysApi = createRemoteKeysApi(localApiBase);

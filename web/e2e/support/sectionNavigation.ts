@@ -15,7 +15,8 @@ const navigationBySection: Record<Section, SectionNavigation> = {
   Home: { navigation: "Home", heading: "Home" },
   Menu: { navigation: "Menu", heading: "Menu" },
   Connections: { navigation: "Connections", heading: "Connections" },
-  Terminal: { navigation: "Terminal", heading: "No session is open" },
+  // With no session open the terminal shows Home in its place.
+  Terminal: { navigation: "Terminal", heading: "Home" },
   Files: { navigation: "SFTP", heading: "Remote files" },
   Snippets: { navigation: "Snippets", heading: "Snippets" },
   Config: { navigation: "Config", heading: "Configuration files" },

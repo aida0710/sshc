@@ -7,6 +7,7 @@ import { sessionSlotsLeft } from "../terminal/sessions";
 import { PageBoard } from "../ui/PageBoard";
 import { lazyWithPreload } from "../ui/lazyWithPreload";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
+import { saveBarScrollRoom } from "../ui/saveBarSlot";
 import { useTranslate } from "../i18n/context";
 import { menuColumns } from "./menuEntries";
 import { MenuPanel } from "./MenuPanel";
@@ -103,14 +104,18 @@ export type SectionViewProps = {
   navigation: Navigation;
   handoff: Handoff;
   shell: Shell;
+  // declared is what the SSH configuration of the engine the screens work with declares.
   declared: Declared;
+  // thisMachineDeclared は、このマシンの SSH の設定が宣言するもの。リモートセッションを選んでいても
+  // このマシンのものを出す画面（Snippets）が使う。
+  thisMachineDeclared: Declared;
   sftpTarget: SFTPTarget | null;
   onSftpTargetHandled: (request: number) => void;
 };
 
 // pageScroller is what scrolls a page. On a phone the bottom bar floats over its end, so the end is padded
 // to scroll clear of the bar, and scrolling something into view (a form opened in a row) stops above it.
-const pageScroller = "h-full overflow-y-auto pb-(--mobile-navigation-inset) scroll-pb-(--mobile-navigation-inset)";
+const pageScroller = `h-full overflow-y-auto pb-(--mobile-navigation-inset) scroll-pb-(--mobile-navigation-inset) ${saveBarScrollRoom}`;
 
 export function SectionView(props: SectionViewProps) {
   if (props.section === "Terminal") {
@@ -119,6 +124,7 @@ export function SectionView(props: SectionViewProps) {
   if (props.section === "Connections") {
     return (
       <ConnectionsPage
+        key={props.shell.runTarget ?? ""}
         onInspector={props.shell.onInspector}
         creationDraft={props.handoff.connectionDraft}
         onCreationDraftChange={props.handoff.onConnectionDraftChange}
@@ -141,9 +147,10 @@ export function SectionView(props: SectionViewProps) {
     return (
       <div className={pageScroller}>
         <OverviewPanel
+          runTarget={props.shell.runTarget}
           onNavigate={props.navigation.onNavigate}
           onNavigateLocation={props.navigation.onNavigateLocation}
-          onSessionOpened={props.shell.onShowSession}
+          onConnect={props.shell.onOpenSSHSession}
           onAddConnection={props.shell.onAddConnection}
           onOpenLocalShell={props.shell.onOpenLocalShell}
         />
@@ -180,7 +187,7 @@ export function SectionView(props: SectionViewProps) {
   return (
     <div className={pageScroller}>
       {/* Known Hosts puts its empty state in the middle of the card. */}
-      <PageBoard stretch={props.section === "Known Hosts"}>
+      <PageBoard saveBar stretch={props.section === "Known Hosts"}>
         <SectionPage {...props} />
       </PageBoard>
     </div>
@@ -193,6 +200,7 @@ function SectionPage({
   handoff,
   shell,
   declared,
+  thisMachineDeclared,
   sftpTarget,
   onSftpTargetHandled,
 }: SectionViewProps) {
@@ -212,6 +220,7 @@ function SectionPage({
   if (section === "Config") {
     return (
       <ConfigExplorer
+        key={shell.runTarget ?? ""}
         target={fileTarget}
         onTargetHandled={navigation.onFileTargetHandled}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
@@ -222,6 +231,7 @@ function SectionPage({
   if (section === "Files") {
     return (
       <SFTPWorkspace
+        key={shell.runTarget ?? ""}
         title={t(sectionLabels.Files)}
         aliases={declared.knownAliases}
         hosts={declared.hosts}
@@ -237,7 +247,7 @@ function SectionPage({
   if (section === "Snippets") {
     return (
       <SnippetsPanel
-        aliases={declared.knownAliases}
+        aliases={thisMachineDeclared.knownAliases}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
         onNavigateLocation={onNavigateLocation}
         selectedSnippetId={new URLSearchParams(navigation.location.search).get(
@@ -252,7 +262,16 @@ function SectionPage({
       : section === "Key Passphrases"
         ? "key_passphrase"
         : "totp";
-    return <SecretsPanel kind={kind} onLock={onLock} />;
+    // Locking another engine's Vault leaves this machine's as it is, so this machine's lock screen is not shown.
+    return (
+      <SecretsPanel
+        key={shell.runTarget ?? ""}
+        kind={kind}
+        {...(shell.runTarget === null ? { onLock } : {})}
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
+      />
+    );
   }
   if (section === "Settings") {
     return (
@@ -262,26 +281,30 @@ function SectionPage({
         onVaultChanged={onVaultChanged}
         passwordless={passwordless}
         onNavigatePage={(path) => navigation.onNavigateLocation(path)}
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
       />
     );
   }
   if (section === "Sync") {
-    return <SyncPanel />;
+    return <SyncPanel onNavigationBlockerChange={navigation.onNavigationBlockerChange} onNavigateLocation={onNavigateLocation} />;
   }
   if (section === "VPN") {
     return (
       <VPNPanel
+        key={shell.runTarget ?? ""}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
         onNavigateLocation={onNavigateLocation}
       />
     );
   }
   if (section === "History") {
-    return <HistoryPanel />;
+    return <HistoryPanel key={shell.runTarget ?? ""} />;
   }
   if (section === "Keys") {
     return (
       <KeysScreen
+        key={shell.runTarget ?? ""}
         onInspector={onInspector}
         onShowInspector={onShowInspector}
         groups={declared.groups}
@@ -292,11 +315,12 @@ function SectionPage({
     );
   }
   if (section === "Known Hosts") {
-    return <KnownHostsPanel />;
+    return <KnownHostsPanel key={shell.runTarget ?? ""} runTarget={shell.runTarget} />;
   }
   if (section === "Remote Keys") {
     return (
       <RemoteKeyPanel
+        key={shell.runTarget ?? ""}
         hosts={declared.knownAliases}
         preferredPublicKeyPath={handoff.publicKey?.publicRelativePath ?? null}
         onPreferredPublicKeyHandled={handoff.onPublicKeyHandled}
@@ -304,7 +328,7 @@ function SectionPage({
     );
   }
   if (section === "Diagnostics") {
-    return <DiagnosticsPanel hosts={declared.knownAliases} />;
+    return <DiagnosticsPanel key={shell.runTarget ?? ""} hosts={declared.knownAliases} />;
   }
   return (
     <section aria-labelledby="section-heading" className="flex flex-col gap-4">

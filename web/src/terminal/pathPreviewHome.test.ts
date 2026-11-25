@@ -9,27 +9,25 @@ afterEach(() => vi.restoreAllMocks());
 describe("pathPreviewHome", () => {
   it("uses the engine's home for a local shell", async () => {
     const listLocal = vi.spyOn(sftpApi, "listLocal").mockResolvedValue({ home: "/users/local", path: "/users/local", entries: [] });
-    expect(await pathPreviewHome(localHostAlias)).toBe("/users/local");
+    expect(await pathPreviewHome(sftpApi, localHostAlias)).toBe("/users/local");
     expect(listLocal).toHaveBeenCalledWith("~");
   });
 
-  it.each([
-    { session: { kind: "shell" as const }, runTarget: "build-box", alias: "build-box" },
-    { session: { kind: "ssh" as const, alias: "web" }, runTarget: undefined, alias: "web" },
-  ])("uses SFTP's home on $alias", async ({ session, runTarget, alias }) => {
+  it("uses the engine's home for a shell and SFTP's home for an SSH session, whatever engine runs them", async () => {
+    expect(pathPreviewAlias({ kind: "shell" })).toBe(localHostAlias);
     const list = vi.spyOn(sftpApi, "list").mockResolvedValue({ path: "/srv/account", entries: [] });
     const local = vi.spyOn(sftpApi, "listLocal");
-    const previewAlias = pathPreviewAlias(session, runTarget, false);
-    expect(previewAlias).toBe(alias);
-    expect(await pathPreviewHome(previewAlias!)).toBe("/srv/account");
-    expect(list).toHaveBeenCalledWith(alias, "~");
+    const previewAlias = pathPreviewAlias({ kind: "ssh", alias: "web" });
+    expect(previewAlias).toBe("web");
+    expect(await pathPreviewHome(sftpApi, previewAlias!)).toBe("/srv/account");
+    expect(list).toHaveBeenCalledWith("web", "~");
     expect(local).not.toHaveBeenCalled();
   });
 
   it("does not substitute the local home when the remote lookup fails", async () => {
     vi.spyOn(sftpApi, "list").mockRejectedValue(new Error("unavailable"));
     const local = vi.spyOn(sftpApi, "listLocal");
-    await expect(pathPreviewHome("web")).rejects.toThrow("unavailable");
+    await expect(pathPreviewHome(sftpApi, "web")).rejects.toThrow("unavailable");
     expect(local).not.toHaveBeenCalled();
   });
 });

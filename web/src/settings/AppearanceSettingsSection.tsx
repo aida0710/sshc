@@ -1,19 +1,19 @@
 import type { CSSProperties } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { chosenOption, customAccent, presetAccents, type Accent, type AccentOption } from "../theme/accent";
+import { chosenOption, customAccent, presetAccents, type AccentOption } from "../theme/accent";
 import { parseAccentColor } from "../theme/accentColor";
-import { accentChoiceOf, useAccent, withAccent } from "../theme/accentContext";
+import { accentChoiceOf, withAccent } from "../theme/accentContext";
 import { useTheme } from "../theme/context";
 import { defaultTheme, isFirstDarkTheme, isTheme, themeAttributes, themeLabel, themes, type Theme } from "../theme/theme";
-import { Notice } from "../ui/surface";
-import { useAsyncOperation } from "../ui/useAsyncOperation";
-import { CustomAccentColor } from "./CustomAccentColor";
+import { ColorCodeInput } from "./ColorCodeInput";
 import { EmptyTerminalArtField } from "./EmptyTerminalArtField";
 import { ReduceMotionField } from "./ReduceMotionField";
+import { RemoteSessionColorField } from "./RemoteSessionColorField";
 import { SettingsSection } from "./SettingsSection";
 import { FieldRow } from "../ui/FieldRow";
-import { standardPresetId, updatePreset, useSettings, type SettingsPreset } from "./settingsStore";
+import { useSettingsDraft } from "./settingsDraftContext";
+import { standardPresetId, type SettingsPreset } from "./settingsStore";
 
 const accentLabelKeys: Record<AccentOption, MessageKey> = {
   lavender: "appearance.accent.lavender",
@@ -33,43 +33,31 @@ function accentColorOnScreen(): string {
   return parseAccentColor(getComputedStyle(document.documentElement).getPropertyValue("--ui-accent")) ?? "#6550d0"; // palette-exempt
 }
 
-// The look of the app in the preset being edited: the theme, the accent colour, the art of the empty terminal and
-// whether to reduce motion. While it is the preset this machine uses, the screen shows each choice at once; another
-// preset's choices only show on the machines that use it.
+// The look of the app in the preset being edited: the theme, the accent colour, the remote session frame colour,
+// the art behind Home and whether to reduce motion. The screen changes once the choices are saved.
 export function AppearanceSettingsSection({ presetId, showHeading }: { presetId: string; showHeading: boolean }) {
   const t = useTranslate();
-  const settingsDocument = useSettings().document;
-  const preset: SettingsPreset = settingsDocument?.presets.find((candidate) => candidate.id === presetId) ?? { id: presetId };
-  const editsThisMachine = presetId === (settingsDocument?.presetInUse ?? standardPresetId);
-  const themeOnScreen = useTheme();
-  const accentOnScreen = useAccent();
+  const { document, editPreset } = useSettingsDraft();
+  const preset: SettingsPreset = document?.presets.find((candidate) => candidate.id === presetId) ?? { id: presetId };
+  const themeOnScreen = useTheme().theme;
   const storedTheme = preset.appearance?.theme;
-  const theme: Theme = editsThisMachine ? themeOnScreen.theme : isTheme(storedTheme) ? storedTheme : defaultTheme;
-  const setTheme = editsThisMachine ? themeOnScreen.setTheme : (next: Theme) => {
-    void updatePreset(presetId, (current) => ({ ...current, appearance: { ...current.appearance, theme: next } })).catch(() => undefined);
-  };
-  const { accent, customColor, chooseAccent, previewCustomColor, chooseCustomColor } = editsThisMachine ? accentOnScreen : {
-    ...accentChoiceOf(preset),
-    chooseAccent: (next: Accent) => updatePreset(presetId, (current) => withAccent(current, { accent: next, customColor: null })),
-    chooseCustomColor: (color: string) => updatePreset(presetId, (current) => withAccent(current, { accent: accentChoiceOf(current).accent, customColor: color })),
-    // Another preset's colour is not put on this screen while it is chosen.
-    previewCustomColor: () => undefined,
-  };
-  const chosen = chosenOption({ accent, customColor });
-  const saving = useAsyncOperation();
-  const describeFailure = { describe: () => t("appearance.accentSaveFailed") };
+  // While the preset this machine uses has chosen no theme, the one on screen is in force.
+  const inForce = presetId === (document?.presetInUse ?? standardPresetId) ? themeOnScreen : defaultTheme;
+  const theme: Theme = isTheme(storedTheme) ? storedTheme : inForce;
+  const accent = accentChoiceOf(preset);
+  const chosen = chosenOption(accent);
+
+  function setTheme(next: Theme) {
+    editPreset(presetId, "appearance.theme", (current) => ({ ...current, appearance: { ...current.appearance, theme: next } }));
+  }
 
   function choose(next: AccentOption) {
-    if (next === chosen) return;
-    if (next === customAccent) {
-      void saving.run(() => chooseCustomColor(accentColorOnScreen()), describeFailure);
-      return;
-    }
-    void saving.run(() => chooseAccent(next), describeFailure);
+    if (next === customAccent) chooseColor(accentColorOnScreen());
+    else editPreset(presetId, "appearance.accent", (current) => withAccent(current, { accent: next, customColor: null }));
   }
 
   function chooseColor(color: string) {
-    void saving.run(() => chooseCustomColor(color), describeFailure);
+    editPreset(presetId, "appearance.accent", (current) => withAccent(current, { accent: accentChoiceOf(current).accent, customColor: color }));
   }
 
   return (
@@ -106,7 +94,6 @@ export function AppearanceSettingsSection({ presetId, showHeading }: { presetId:
                   name="appearance-accent"
                   value={option}
                   checked={chosen === option}
-                  disabled={saving.busy}
                   onChange={() => choose(option)}
                   className="peer sr-only"
                 />
@@ -114,21 +101,27 @@ export function AppearanceSettingsSection({ presetId, showHeading }: { presetId:
                     The custom swatch is its colour, or every hue until one is chosen. */}
                 <span
                   aria-hidden="true"
-                  data-accent={option === customAccent && customColor === null ? undefined : option}
+                  data-accent={option === customAccent && accent.customColor === null ? undefined : option}
                   className={`size-9 rounded-full ring-offset-2 ring-offset-sidebar peer-checked:ring-2 peer-checked:ring-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent ${
-                    option === customAccent && customColor === null ? "sshc-accent-swatch-unset" : "bg-accent"
+                    option === customAccent && accent.customColor === null ? "sshc-accent-swatch-unset" : "bg-accent"
                   }`}
                 />
                 {t(accentLabelKeys[option])}
               </label>
             ))}
           </div>
-          {customColor !== null ? (
-            <CustomAccentColor color={customColor} disabled={saving.busy} onPreview={previewCustomColor} onChoose={chooseColor} />
+          {accent.customColor !== null ? (
+            <ColorCodeInput
+              color={accent.customColor}
+              labels={{ picker: t("appearance.customColor"), code: t("appearance.customColorCode"), lowContrast: t("appearance.customColorLowContrast") }}
+              // 設定の板はサイドバーの色。
+              contrastAgainst="--ui-sidebar"
+              onChange={chooseColor}
+            />
           ) : null}
-          {saving.error === "" ? null : <div className="mt-4"><Notice tone="danger">{saving.error}</Notice></div>}
         </div>
       </FieldRow>
+      <RemoteSessionColorField presetId={presetId} />
       <EmptyTerminalArtField presetId={presetId} />
       <ReduceMotionField presetId={presetId} />
     </SettingsSection>

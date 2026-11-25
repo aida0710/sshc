@@ -1,5 +1,6 @@
 import { codeField, codeFieldLines, replaceCodeFieldText } from "./support/codeField";
 import { expect, openApplication, openSection, test } from "./support/environment";
+import { saveButton, saveSettings } from "./support/saveBar";
 
 test("saves folder exclusion rules and preserves them while changing other transfer settings", async ({ page, installation }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
@@ -11,14 +12,12 @@ test("saves folder exclusion rules and preserves them while changing other trans
   const patterns = page.getByRole("textbox", { name: "Exclusion patterns (one per line)", exact: true });
   const patternsField = codeField(page, "Exclusion patterns (one per line)");
   await replaceCodeFieldText(patternsField, ".git\nnode_modules\n*.log");
-  const exclusionsSaved = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/settings/presets/default" && response.request().method() === "PUT");
-  // The rules are saved when their box is left.
-  await patterns.press("Tab");
-  expect((await exclusionsSaved).status()).toBe(200);
+  await saveSettings(page);
 
   const speedSaved = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/settings/presets/default" && response.request().method() === "PUT");
   const speed = page.getByRole("spinbutton", { name: "Speed limit", exact: true });
   await speed.fill("128");
+  // Enter in a one-line field saves as the button does.
   await speed.press("Enter");
   expect((await speedSaved).status()).toBe(200);
   const metadata = JSON.parse(await installation.read("sshc/metadata.json")) as {
@@ -29,13 +28,8 @@ test("saves folder exclusion rules and preserves them while changing other trans
 
   await page.reload();
   await expect(codeFieldLines(patternsField)).toHaveText(".git\nnode_modules\n*.log".replaceAll("\n", ""));
-  // A rule that is not valid is not saved when the box is left.
-  const writes: string[] = [];
-  page.on("request", (request) => {
-    if (request.method() === "PUT" && new URL(request.url()).pathname.startsWith("/api/v1/settings/")) writes.push(request.url());
-  });
+  // A rule that is not valid cannot be saved.
   await replaceCodeFieldText(patternsField, "../secret");
-  await patterns.press("Tab");
   await expect(patterns).toHaveAccessibleDescription(/Check the patterns/);
-  expect(writes).toEqual([]);
+  await expect(saveButton(page)).toBeDisabled();
 });

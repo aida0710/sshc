@@ -1,4 +1,4 @@
-import { configApi, type EditRequest, type HostDetail, type Overview } from "../api/config";
+import type { ConfigApi, EditRequest, HostDetail, Overview } from "../api/config";
 import { groupBaseName, isGroupOrDescendant } from "../rules/groupPath";
 import { toProblem } from "../api/guards";
 import type { NavigateLocationOptions } from "../routing/useSectionRoute";
@@ -17,6 +17,8 @@ type MoveSource = { path: string; alias: string; base: string };
 type HostTarget = Pick<DraggedConnection, "path" | "alias">;
 
 type ConnectionManagementOptions = {
+  // config は、操作する相手の sshc エンジンの API である。
+  config: Pick<ConfigApi, "file" | "renameGroup" | "deleteGroup">;
   overview: Overview | null;
   selection: HostSelection | null;
   detail: HostDetail | null;
@@ -34,6 +36,7 @@ type ConnectionManagementOptions = {
 // createConnectionManagement は、管理のパネルとツリーから行う接続の操作（名前の変更、グループや
 // ファイルへの移動、コメント、複製、削除）を持つ。移動した接続を選んでいたら、選択も移動先へ追う。
 export function createConnectionManagement({
+  config: configApi,
   overview,
   selection,
   detail,

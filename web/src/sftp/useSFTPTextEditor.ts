@@ -7,7 +7,8 @@ import { sftpProblemText } from "./sftpProblemText";
 import type { BrowserLocation, NavigationBlocker } from "../routing/useSectionRoute";
 import { useUnsavedDraftGuard } from "../routing/useUnsavedDraftGuard";
 import { useRequestGeneration } from "../ui/useRequestGeneration";
-import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
+import type { RemoteEntry, RemoteTextFile } from "./api";
+import { useEngineApis } from "../shell/engineApis";
 
 export type SFTPTextSource = {
   readText(alias: string, path: string, options?: { expectedRevision: string }): Promise<RemoteTextFile>;
@@ -53,7 +54,7 @@ type OverwriteConfirmation = { revision: string | null };
 // losing an unsaved change by leaving. It does not know what a directory is;
 // the pane tells it what to refresh after a save.
 export function useSFTPTextEditor({
-  source = sftpApi,
+  source: sourceOverride,
   onProblem,
   onSaved,
   onNavigationBlockerChange,
@@ -71,6 +72,8 @@ export function useSFTPTextEditor({
   onDirtyChange?: ((path: string | null) => void) | undefined;
   onNavigateLocation?: ((url: string) => void) | undefined;
 }) {
+  const engineApis = useEngineApis();
+  const source = sourceOverride ?? engineApis.sftp.files;
   const t = useTranslate();
   const [opened, setOpened] = useState<OpenedText | null>(null);
   const [contents, setContents] = useState("");

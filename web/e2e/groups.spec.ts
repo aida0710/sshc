@@ -48,7 +48,7 @@ test("lists a group member once after the group's settings are saved", async ({ 
   await page.getByLabel("Setting", { exact: true }).fill("ServerAliveInterval");
   await page.getByLabel("Value", { exact: true }).fill("15");
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  expect(await clickAndAwait(page, "Save group", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
   // groups.sshc.conf の Host 行は nas の alias を宣言するが、接続先ではない。
   expect(await installation.read("groups.sshc.conf")).toContain("Host nas\n\tServerAliveInterval 15\n");
 

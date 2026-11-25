@@ -3,6 +3,7 @@ import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page } from "@playwright/test";
 import { expect, openApplication, openSection, openSettingsPage, test } from "./support/environment";
+import { saveSettings } from "./support/saveBar";
 import { samplePNG } from "./support/images";
 import { readMachineState } from "./support/settings";
 import { chooseEntryOnPhone, openLocalSFTPDirectory } from "./support/sftp";
@@ -198,6 +199,7 @@ test("Settings > SFTP turns the thumbnails off, and the list asks for nothing", 
   await expect(thumbnails).toBeChecked();
   await thumbnails.click();
   await expect(thumbnails).not.toBeChecked();
+  await saveSettings(page);
 
   await openSection(page, "SFTP");
   await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory });

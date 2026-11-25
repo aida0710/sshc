@@ -1,7 +1,8 @@
+import { useEngineApis } from "../shell/engineApis";
 import { runsInAndroidApp } from "../android/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import { vpnApi, type VPNApi, type VPNOverview, type VPNProfile, type VPNSecrets } from "../api/vpn";
+import { type VPNApi, type VPNOverview, type VPNProfile, type VPNSecrets } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
 import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
@@ -16,6 +17,7 @@ import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { usePendingAction } from "../ui/usePendingAction";
 import { usePolling } from "../ui/usePolling";
 import { describeVPNFieldError, vpnFieldErrorOf, type VPNFieldError } from "./vpnFieldErrors";
+import { useToast } from "../ui/useToast";
 import { VPNLogsDialog } from "./VPNLogsDialog";
 import { VPNProfileListHeader, VPNProfileRow, type VPNProfileRowAction } from "./VPNProfileRow";
 import { VPNProfileForm, type VPNProfileSaveResult } from "./VPNProfileForm";
@@ -43,8 +45,11 @@ type VPNPanelProps = {
   onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 };
 
-export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLocation }: VPNPanelProps) {
+export function VPNPanel({ api: apiOverride, onNavigationBlockerChange, onNavigateLocation }: VPNPanelProps) {
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.vpn;
   const t = useTranslate();
+  const showToast = useToast();
   const operation = useAsyncOperation();
   const [overview, setOverview] = useState<VPNOverview | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState("");
@@ -225,10 +230,13 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
   const updateProfile = useCallback(
     async (profile: VPNProfile, secrets: VPNSecrets) => {
       const result = await saveProfile(() => api.saveVPNProfile(profile, secrets));
-      if (result.saved) setEditingProfile("");
+      if (result.saved) {
+        setEditingProfile("");
+        showToast(t("draft.saved"), { tone: "success" });
+      }
       return result;
     },
-    [api, saveProfile],
+    [api, saveProfile, showToast, t],
   );
 
   // 経路の状態は、この画面の外でも変わる。画面を開いているあいだは読み直し、
@@ -322,7 +330,11 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
                         editing={status.profile}
                         revealSecrets={api.revealVPNSecrets}
                         onSave={updateProfile}
-                        onCancel={() => setEditingProfile("")}
+                        onClose={(forget) => {
+                          const close = () => { forget(); setEditingProfile(""); };
+                          if (editFormDirty) draftDiscard.confirmBefore(close);
+                          else close();
+                        }}
                         onDirtyChange={setEditFormDirty}
                       />
                     ) : null}
@@ -350,6 +362,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
             </p>
           }
           confirmLabel={t("vpn.disconnect")}
+          busyLabel={null}
           cancelLabel={t("vpn.cancel")}
           onCancel={() => setPendingDisconnect(null)}
           onConfirm={() => {
@@ -366,6 +379,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
           heading={t("vpn.removeTitle", { name: pendingRemoval })}
           body={t("vpn.removeBody")}
           confirmLabel={t("vpn.remove")}
+          busyLabel={null}
           cancelLabel={t("vpn.cancel")}
           onCancel={() => setPendingRemoval("")}
           onConfirm={() => {
@@ -384,6 +398,7 @@ export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLo
           label={t("vpn.renameLabel")}
           initialValue={pendingRename}
           submitLabel={t("vpn.renameAction")}
+          busyLabel={null}
           cancelLabel={t("vpn.cancel")}
           validate={(value) => {
             // engine と同じ規則で、名前の誤りをこの欄に出す。

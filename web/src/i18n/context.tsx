@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { updateGlobalSettings, useSettings } from "../settings/settingsStore";
 import { runsInAndroidApp } from "../android/native";
 import { androidCatalogue } from "./androidCatalogue";
@@ -12,8 +12,6 @@ export type Translate = (key: MessageKey, values?: Values) => string;
 type LanguageState = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  // followBrowser drops the chosen language: this browser shows its own language from then on.
-  followBrowser: () => void;
   t: Translate;
 };
 
@@ -32,7 +30,9 @@ function interpolate(template: string, values: Values | undefined): string {
 // that passes initial keeps that language.
 export function LanguageProvider({ children, initial }: { children: ReactNode; initial?: Locale }) {
   const [locale, setLocaleState] = useState<Locale>(() => initial ?? detectLocale());
-  const chosen = useSettings().document?.global.language;
+  const settings = useSettings().document;
+  const settingsRead = settings !== null;
+  const chosen = settings?.global.language;
   const synced = isLocale(chosen) ? chosen : null;
 
   useEffect(() => {
@@ -40,6 +40,17 @@ export function LanguageProvider({ children, initial }: { children: ReactNode; i
     setLocaleState(synced);
     copyLocale(synced);
   }, [initial, synced]);
+
+  // A language the settings chose and then dropped (the settings page, here or on another machine) means following
+  // the browser from then on.
+  const chosenBefore = useRef(synced);
+  useEffect(() => {
+    const dropped = chosenBefore.current !== null && synced === null && settingsRead;
+    chosenBefore.current = synced;
+    if (initial !== undefined || !dropped) return;
+    setLocaleState(browserLocale());
+    forgetLocale();
+  }, [initial, settingsRead, synced]);
 
   // The browser chooses fallback fonts, line breaks and the screen reader's voice from this. A layout
   // effect sets it before the first paint, so the first frame is not drawn with the fonts of another language.
@@ -54,21 +65,14 @@ export function LanguageProvider({ children, initial }: { children: ReactNode; i
     void updateGlobalSettings((settings) => ({ ...settings, language: next })).catch(() => undefined);
   }, []);
 
-  const followBrowser = useCallback(() => {
-    setLocaleState(browserLocale());
-    forgetLocale();
-    void updateGlobalSettings(({ language: _previous, ...settings }) => settings).catch(() => undefined);
-  }, []);
-
   const value = useMemo<LanguageState>(() => {
     const catalogue = runsInAndroidApp() ? androidCatalogue(locale) : messages[locale];
     return {
       locale,
       setLocale,
-      followBrowser,
       t: (key, values) => interpolate(catalogue[key] ?? messages[defaultLocale][key], values),
     };
-  }, [locale, setLocale, followBrowser]);
+  }, [locale, setLocale]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
@@ -76,7 +80,6 @@ export function LanguageProvider({ children, initial }: { children: ReactNode; i
 const fallback: LanguageState = {
   locale: defaultLocale,
   setLocale: () => undefined,
-  followBrowser: () => undefined,
   t: (key, values) => interpolate(messages[defaultLocale][key], values),
 };
 

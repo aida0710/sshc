@@ -9,7 +9,7 @@ import { Icon } from "../ui/icons";
 import { InputDialog } from "../ui/InputDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { usePendingAction } from "../ui/usePendingAction";
 import { BackgroundCapacity } from "./BackgroundCapacity";
 import { BackgroundCard } from "./BackgroundCard";
@@ -203,7 +203,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
                 if (file !== undefined) void add(file);
               }}
             />
-            <Button kind="primary" onClick={() => chooser.current?.click()} busy={library.running === "add"} disabled={busy}>{t("terminal.backgroundAdd")}</Button>
+            <Button kind="primary" onClick={() => chooser.current?.click()} busy={library.running === "add"} busyLabel={t("busy.adding")} disabled={busy}>{t("terminal.backgroundAdd")}</Button>
           </div>
           {libraryState === "failed" ? (
             <PanelState tone="failed" title={t("terminal.backgroundLoadFailed")} action={<Button onClick={() => void loadLibrary()}>{t("shell.bootstrapRetry")}</Button>} />
@@ -237,7 +237,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
             saving={library.running === "capacity"}
             onSave={() => void saveCapacity()}
           />
-          {problem === "" ? null : <p role="alert" className="text-xs text-danger">{problem}</p>}
+          {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-line bg-toolbar px-4 py-3">
           <button type="button" className="text-sm text-ink-muted transition-colors duration-150 hover:text-ink" onClick={() => setDraft("")}>{t("terminal.backgroundUseNone")}</button>
@@ -254,6 +254,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
           label={t("terminal.backgroundRenameLabel")}
           initialValue={renameTarget.name}
           submitLabel={t("terminal.backgroundRenameSubmit")}
+          busyLabel={t("busy.renaming")}
           cancelLabel={t("terminal.backgroundRenameCancel")}
           validate={(next) => next === "" ? t("terminal.backgroundRenameRequired") : ""}
           onSubmit={rename}
@@ -267,6 +268,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
           heading={t("terminal.backgroundDeleteHeading")}
           body={<p className="text-sm text-ink-muted">{t("terminal.backgroundDeleteHint", { name: deleteTarget.name })}</p>}
           confirmLabel={t("terminal.backgroundDeleteAction")}
+          busyLabel={t("busy.deleting")}
           cancelLabel={t("terminal.backgroundRenameCancel")}
           onConfirm={() => drop(deleteTarget.name)}
           onCancel={() => setDeleteTarget(null)}

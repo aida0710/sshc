@@ -7,7 +7,7 @@
 # 基のイメージは digest で固定する。イメージのタグは agent.sh と Dockerfile の
 # 内容から作るので、tag を追いかけると、同じタグのまま中身の違うイメージが機械
 # ごとにできる。上げるときは digest を書き換える。
-FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+FROM ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289
 
 # パッケージのバージョンも固定する。base の digest だけを固定しても、apt はその日の
 # 最新を入れるので、同じタグのままマシンごとに中身が変わる。Ubuntu の snapshot の
@@ -50,7 +50,7 @@ FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f57
 # apt は一時的な失敗を既定で3回（待ちは最長30秒）まで試し直すが、それでは足りずに
 # イメージの作成ごと失敗したことがある。8回・最長60秒（1つのファイルで最長3分ほど）
 # まで待つ。
-RUN snapshot=20261020T000000Z \
+RUN snapshot=20261120T000000Z \
     && printf '%s\n' \
        'Types: deb' \
        "URIs: https://snapshot.ubuntu.com/ubuntu/$snapshot/" \
@@ -64,9 +64,9 @@ RUN snapshot=20261020T000000Z \
     && lists="/var/lib/apt/lists/snapshot.ubuntu.com_ubuntu_${snapshot}_dists" \
     && printf '%s\n' \
        "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0  ${lists}_noble_InRelease" \
-       "52bb7e89f40f411a401f8b1954098b5775a7d0d497dec182f323f4bc009612d0  ${lists}_noble-updates_InRelease" \
-       "f30d04ecd0744399cedb537891d7d1e5a06bd61a019e71cd1e787d4e483e27ca  ${lists}_noble-backports_InRelease" \
-       "7f81a77abbf23458062d0bc98e868e00b4392de0c78d339e58f548e8ff64245b  ${lists}_noble-security_InRelease" \
+       "46d240b50f6c350d1b97d304cc21f876955a36581f55759f46bf2020043e4bb2  ${lists}_noble-updates_InRelease" \
+       "085dfb59fb9302f3d677b0216dbfcad60b7c3898b58759b00fd2945102abad2e  ${lists}_noble-backports_InRelease" \
+       "0d777c6c7bb89cc628003530f84caabca7ac60dfa9c7ca937e5d8e813457c2fe  ${lists}_noble-security_InRelease" \
        | sha256sum --check --strict - \
     && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::https::Verify-Peer=false \
        install -y --no-install-recommends \

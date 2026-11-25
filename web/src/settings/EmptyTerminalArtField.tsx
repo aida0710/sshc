@@ -1,13 +1,11 @@
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { aquariumWater } from "../terminal/emptyState/aquariumWater";
-import { AsciiArtCanvas } from "../terminal/emptyState/AsciiArtCanvas";
-import { emptyTerminalArtOf, emptyTerminalArts, withEmptyTerminalArt, type DrawnArt, type EmptyTerminalArt } from "../terminal/emptyState/emptyTerminalArt";
+import { aquariumWater } from "../overview/dashboard/aquariumWater";
+import { AsciiArtCanvas } from "../overview/dashboard/AsciiArtCanvas";
+import { emptyTerminalArtOf, emptyTerminalArts, withEmptyTerminalArt, type DrawnArt, type EmptyTerminalArt } from "../overview/dashboard/emptyTerminalArt";
 import { FieldRow } from "../ui/FieldRow";
 import { Icon } from "../ui/icons";
-import { Notice } from "../ui/surface";
-import { useAsyncOperation } from "../ui/useAsyncOperation";
-import { updatePreset, useSettings } from "./settingsStore";
+import { useSettingsDraft } from "./settingsDraftContext";
 
 const artLabelKeys: Record<EmptyTerminalArt, MessageKey> = {
   none: "appearance.emptyTerminalArt.none",
@@ -27,16 +25,12 @@ const sampleMoments: Record<DrawnArt, number> = { network: 5, contours: 30.5, gl
 // Which art the terminal of the preset being edited draws while no session is open, chosen from samples.
 export function EmptyTerminalArtField({ presetId }: { presetId: string }) {
   const t = useTranslate();
-  const preset = useSettings().document?.presets.find((candidate) => candidate.id === presetId) ?? { id: presetId };
+  const { document, editPreset } = useSettingsDraft();
+  const preset = document?.presets.find((candidate) => candidate.id === presetId) ?? { id: presetId };
   const chosen = emptyTerminalArtOf(preset);
-  const saving = useAsyncOperation();
 
   function choose(next: EmptyTerminalArt) {
-    if (next === chosen) return;
-    void saving.run(
-      () => updatePreset(presetId, (current) => withEmptyTerminalArt(current, next)),
-      { describe: () => t("appearance.emptyTerminalArtSaveFailed") },
-    );
+    editPreset(presetId, "appearance.emptyTerminalArt", (current) => withEmptyTerminalArt(current, next));
   }
 
   return (
@@ -45,7 +39,7 @@ export function EmptyTerminalArtField({ presetId }: { presetId: string }) {
         <div className="grid grid-cols-2 gap-3.5 md:grid-cols-[repeat(5,minmax(0,132px))]" role="radiogroup" aria-label={t("appearance.emptyTerminalArt")}>
           {emptyTerminalArts.map((art) => (
             <label key={art} className="flex min-w-0 cursor-pointer flex-col gap-2 text-ui">
-              <input type="radio" name="appearance-empty-terminal-art" value={art} checked={chosen === art} disabled={saving.busy}
+              <input type="radio" name="appearance-empty-terminal-art" value={art} checked={chosen === art}
                 onChange={() => choose(art)} className="peer sr-only" />
               <span aria-hidden="true" className="relative block aspect-[16/10] overflow-hidden rounded-inset border border-line bg-[color-mix(in_srgb,var(--ui-ink)_3%,var(--ui-card))] peer-checked:outline-2 peer-checked:outline-offset-2 peer-checked:outline-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
                 {art === "none"
@@ -64,7 +58,6 @@ export function EmptyTerminalArtField({ presetId }: { presetId: string }) {
             </label>
           ))}
         </div>
-        {saving.error === "" ? null : <Notice tone="danger">{saving.error}</Notice>}
       </div>
     </FieldRow>
   );

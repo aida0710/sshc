@@ -10,6 +10,7 @@ export function DiscardDraftDialog({ id, onConfirm, onCancel }: { id: string; on
       heading={t("draft.discardHeading")}
       body={<p className="text-sm text-ink-muted">{t("draft.discardBody")}</p>}
       confirmLabel={t("draft.discardConfirm")}
+      busyLabel={null}
       cancelLabel={t("draft.keepEditing")}
       onConfirm={onConfirm}
       onCancel={onCancel}

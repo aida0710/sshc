@@ -15,7 +15,7 @@ export function HostKeyQuestionCard({ question, hostKeyAnswer, focus, onDismiss 
   onDismiss?: (() => void) | undefined;
 }) {
   const t = useTranslate();
-  const { answer, busy } = hostKeyAnswer;
+  const { answer, answering } = hostKeyAnswer;
   return (
     <NoticeFrame
       tone="question"
@@ -27,8 +27,9 @@ export function HostKeyQuestionCard({ question, hostKeyAnswer, focus, onDismiss 
     >
       {answer === undefined ? null : (
         <>
-          <Button disabled={busy} onClick={() => answer(question.fingerprint, false)} className={noticeCardButton}>{t("terminal.hostKeyReject")}</Button>
-          <Button kind="primary" busy={busy} onClick={() => answer(question.fingerprint, true)} className={noticeCardButton}>{t("terminal.hostKeyAccept")}</Button>
+          {/* busy-label-exempt: ［やめる］は「〇〇中」の形にならないので、文言を替えず回る印だけを添える（2026-11-25 利用者が決めた）。 */}
+          <Button busy={answering === false} busyLabel={null} disabled={answering !== null} onClick={() => answer(question.fingerprint, false)} className={noticeCardButton}>{t("terminal.hostKeyReject")}</Button>
+          <Button kind="primary" busy={answering === true} busyLabel={t("busy.connecting")} disabled={answering !== null} onClick={() => answer(question.fingerprint, true)} className={noticeCardButton}>{t("terminal.hostKeyAccept")}</Button>
         </>
       )}
     </NoticeFrame>

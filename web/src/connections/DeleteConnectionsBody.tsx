@@ -1,6 +1,7 @@
 import type { HostEntry } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { connectionsJumpingThrough } from "./jumpHops";
+import { Notice } from "../ui/surface";
 
 // The names of connections, as small chips in a row that wraps and scrolls when it is long.
 function AliasChips({ aliases }: { aliases: readonly string[] }) {
@@ -29,10 +30,10 @@ export function DeleteConnectionsBody({ body, deleting, hosts, listDeleting = fa
       <p className="text-sm text-ink-muted">{body}</p>
       {listDeleting ? <AliasChips aliases={deleting} /> : null}
       {dependents.length === 0 ? null : (
-        <>
-          <p className="text-sm text-notice-ink">{t("conn.deleteJumpDependents")}</p>
-          <AliasChips aliases={dependents} />
-        </>
+        <Notice live={false}>
+          {t("conn.deleteJumpDependents")}
+          <div className="mt-2"><AliasChips aliases={dependents} /></div>
+        </Notice>
       )}
     </div>
   );

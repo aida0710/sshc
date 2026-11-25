@@ -4,7 +4,7 @@ import type { RemoteEngineAction, RemoteEngineActionLog, RemoteEnginesApi } from
 import type { Translate } from "../i18n/context";
 import { useCommandOutput } from "../ui/useCommandOutput";
 import { usePolling } from "../ui/usePolling";
-import { runTargetFailureText, runTargetProblemText } from "./runTargetProblem";
+import { runTargetFailure, runTargetFailureOfCode, type RunTargetFailure } from "./runTargetProblem";
 
 // engineActionPollMs is how often a running action's output is read. The
 // host's sshc writes a line every few seconds while it downloads and installs,
@@ -25,7 +25,7 @@ export type EngineActionState = {
   // lastResult says how the host's sshc exited; null while an action runs or
   // when it ended for another reason, which actionProblem says.
   lastResult: EngineActionResult | null;
-  actionProblem: string;
+  actionProblem: RunTargetFailure | null;
   run: (action: RemoteEngineAction) => Promise<void>;
 };
 
@@ -51,9 +51,9 @@ export function useEngineAction({
   const [followed, setFollowed] = useState<FollowedAction | null>(null);
   const { output, nextCursor, receive, restart } = useCommandOutput(maxEngineActionOutput);
   const [lastResult, setLastResult] = useState<EngineActionResult | null>(null);
-  const [actionProblem, setActionProblem] = useState("");
+  const [actionProblem, setActionProblem] = useState<RunTargetFailure | null>(null);
 
-  const end = useCallback((result: EngineActionResult | null, problem: string) => {
+  const end = useCallback((result: EngineActionResult | null, problem: RunTargetFailure | null) => {
     setFollowed(null);
     setRunning(null);
     setLastResult(result);
@@ -63,7 +63,7 @@ export function useEngineAction({
 
   const run = useCallback(async (action: RemoteEngineAction) => {
     setRunning(action);
-    setActionProblem("");
+    setActionProblem(null);
     setLastResult(null);
     restart();
     try {
@@ -71,7 +71,7 @@ export function useEngineAction({
       setFollowed({ action, generation: started.generation });
     } catch (error) {
       setRunning(null);
-      setActionProblem(runTargetProblemText(translate, error, alias));
+      setActionProblem(runTargetFailure(translate, error, alias));
     }
   }, [alias, api, restart, translate]);
 
@@ -84,23 +84,23 @@ export function useEngineAction({
       // A request that never got an answer is retried on the next tick; an
       // answer refusing it means the progress is gone.
       if (!isCurrent() || !(error instanceof ApiError)) return;
-      end(null, runTargetProblemText(translate, error, alias));
+      end(null, runTargetFailure(translate, error, alias));
       return;
     }
     if (!isCurrent()) return;
     if (log.generation !== followed.generation) {
       // Another screen started a later action, so this one's output is gone.
-      end(null, runTargetFailureText(translate, "remote_engine_no_action", alias));
+      end(null, runTargetFailureOfCode(translate, "remote_engine_no_action", alias));
       return;
     }
     receive(log);
     // The end is read only once every byte before it has been shown.
     if (!log.done || log.cursor.next < log.cursor.end) return;
     if (log.problem !== undefined) {
-      end(null, runTargetFailureText(translate, log.problem, alias));
+      end(null, runTargetFailureOfCode(translate, log.problem, alias));
       return;
     }
-    end({ action: followed.action, succeeded: log.succeeded }, "");
+    end({ action: followed.action, succeeded: log.succeeded }, null);
   }, { intervalMs: engineActionPollMs, enabled: followed !== null, immediately: true });
 
   return { running, output, lastResult, actionProblem, run };

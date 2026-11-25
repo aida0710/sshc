@@ -206,7 +206,7 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		// <audio> と <video> は見出しを付けられない。代わりに URL のチケットが、
 		// トークンを付けた要求でだけ発行され、このセッションにだけ効く
 		// （mediaTickets）。cookie だけでは引き換えられない点はトークンと同じである。
-		isMediaStream := request.Method == http.MethodGet && c.Path() == sftpMediaRoute
+		isMediaStream := request.Method == http.MethodGet && (c.Path() == sftpMediaRoute || c.Path() == forwardedMediaRoute)
 		if (isStateChanging || claimed) && !isHealth && !isMediaStream &&
 			!s.Sessions.VerifyCSRF(sessionID, request.Header.Get(CSRFHeader)) {
 			return problem(c, http.StatusForbidden, "invalid_csrf")

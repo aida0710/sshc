@@ -2,6 +2,7 @@ import type { IBuffer, IBufferRange } from "@xterm/xterm";
 import { findBufferLinks } from "./bufferLinks";
 import type { TerminalLinkMatch } from "./links";
 import { measureCells, type MeasurableTerminal } from "./metrics";
+import { osc8LinkAtCell } from "./osc8LinkAtCell";
 
 export type ScreenPoint = { clientX: number; clientY: number };
 
@@ -32,11 +33,15 @@ function covers(range: IBufferRange, column: number, line: number): boolean {
 }
 
 // On touch screens the selection overlay lies over xterm's screen, so xterm's
-// own link hover and click never see a finger. A tap looks up the URL or path
-// under it here instead. OSC 8 hyperlinks live inside xterm and are not found.
+// own link hover and click never see a finger. A tap looks up the link under it
+// here instead: the OSC 8 hyperlink a program put on the cell, or else the URL
+// or path read from the text. The hyperlink comes first because it names the
+// address itself, however the program broke the text over rows.
 export function linkAtPoint(view: TappableTerminal, point: ScreenPoint, allowWindowsPaths = false): TerminalLinkMatch | null {
   const cell = cellAtPoint(view, point);
   if (cell === null) return null;
+  const hyperlink = osc8LinkAtCell(view, cell);
+  if (hyperlink !== null) return hyperlink;
   // Link ranges count columns and lines from 1.
   const column = cell.x + 1;
   const line = cell.y + 1;

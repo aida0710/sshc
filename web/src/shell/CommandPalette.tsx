@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject, useContext } from "react";
 import { shownFilePath } from "../android/shownFilePath";
 import type { FileNode, HostEntry, HostIdentity } from "../api/config";
 import { snippetsApi, type Snippet } from "../snippets/api";
@@ -9,6 +9,7 @@ import type { Section } from "../routing/sectionRoute";
 import { shortcutLabel } from "../keyconfig/shortcutLabel";
 import { Icon } from "../ui/icons";
 import type { TerminalSession } from "../api/terminalSessions";
+import { SessionEngineContext } from "../terminal/sessionDestination";
 import { terminalDisplayTitle, terminalSubtitle } from "../terminal/terminalPresentation";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";
@@ -19,6 +20,7 @@ import { hasOnScreenKeyboard, literalTextEntry } from "../ui/softKeyboard";
 import { parseDirectDestination } from "../connections/directDestination";
 import type { DirectDestinationActions } from "./useDirectDestinationActions";
 import { searchPalette } from "./paletteSearch";
+import { IconButton } from "../ui/IconButton";
 
 // A command is something the palette performs, rather than somewhere it goes.
 export type PaletteCommand = {
@@ -116,6 +118,7 @@ export function CommandPalette({
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
+  const sessionEngine = useContext(SessionEngineContext);
   const compact = useMediaQuery(mobileViewportQuery);
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -165,7 +168,7 @@ export function CommandPalette({
     ...sessions.filter((session) => session.exited === undefined).map((session) => {
       const unread = unreadBySession.has(session.id);
       const status = t("terminal.connected");
-      const destination = terminalSubtitle(session, t);
+      const destination = terminalSubtitle(session, t, sessionEngine);
       return {
         id: `session:${session.id}`,
         kind: "session" as const,
@@ -200,7 +203,7 @@ export function CommandPalette({
       action: () => onNavigate(section),
     })),
     ...laterCommands.map(paletteItemOf),
-  ], [commands, laterCommands, files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessions, snippets, t, unreadBySession]);
+  ], [commands, laterCommands, files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessionEngine, sessions, snippets, t, unreadBySession]);
 
   // A destination leads the results whatever else it finds: it is only offered when it was typed whole.
   const directItems = useMemo<PaletteItem[]>(() => {
@@ -283,9 +286,9 @@ export function CommandPalette({
             />
           </label>
           {compact ? (
-            <button type="button" aria-label={t("palette.close")} title={t("palette.close")} onClick={onClose} className="flex shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-surface hover:text-ink">
+            <IconButton label={t("palette.close")} size="panel" ground="surface" onClick={onClose}>
               <Icon name="close" className="size-4" />
-            </button>
+            </IconButton>
           ) : <kbd className="border border-line px-1.5 py-0.5 font-mono text-3xs text-ink-muted">Esc</kbd>}
         </div>
         <div id="command-palette-results" role="listbox" aria-label={t("palette.results")} className="min-h-0 overflow-y-auto p-1.5">
@@ -309,21 +312,16 @@ export function CommandPalette({
                 )}
               </button>
               {item.host === undefined ? null : (
-                <button
-                  type="button"
-                  aria-label={t("palette.openHostSettings", { alias: item.host.alias })}
-                  title={t("home.openConnectionSettings")}
+                <IconButton label={t("palette.openHostSettings", { alias: item.host.alias })} size="large" ground="surface" className="absolute right-1.5 top-1/2 -translate-y-1/2"
                   onMouseEnter={() => setSelected(index)}
                   onClick={() => {
                     const host = item.host;
                     if (host === undefined) return;
                     onClose();
                     onOpenHostSettings(host);
-                  }}
-                  className="absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted hover:bg-surface hover:text-ink"
-                >
+                  }}>
                   <Icon name="settings" className="size-4" />
-                </button>
+                </IconButton>
               )}
             </div>
           ))}

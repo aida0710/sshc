@@ -1,13 +1,15 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
-import { sftpApi, type RemoteEntry } from "./api";
+import { type RemoteEntry } from "./api";
 import { sftpProblemText } from "./sftpProblemText";
 
 export type TextComparisonSide = { alias: string; entry?: RemoteEntry | undefined };
 type TextComparison = { original: string; modified: string };
 
 export function useSFTPTextComparison({ left, right }: { left: TextComparisonSide; right: TextComparisonSide }) {
+  const { sftp: { files: sftpApi } } = useEngineApis();
   const t = useTranslate();
   const [comparison, setComparison] = useState<TextComparison | null>(null);
   const [problem, setProblem] = useState("");

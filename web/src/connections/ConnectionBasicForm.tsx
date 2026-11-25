@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEngineApis } from "../shell/engineApis";
+import { useCallback, useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type { Problem } from "../api/client";
 import type { HostDetail, UpdateConnectionRequest } from "../api/config";
-import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
+import { type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
-import { keysApi, type KeysApi } from "../keys/api";
+import { type KeysApi } from "../keys/api";
 import { Notice } from "../ui/surface";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
@@ -14,7 +15,7 @@ import { BasicPrivateKeyField } from "./BasicPrivateKeyField";
 import { BasicTOTPSection } from "./BasicTOTPSection";
 import { ConnectionDestinationFields } from "./ConnectionDestinationFields";
 import { EditorSection } from "./EditorSection";
-import { DraftSaveBar } from "./DraftSaveBar";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import {
   clearedKeyPassphrase,
   clearedPasswordChoice,
@@ -54,8 +55,8 @@ export function ConnectionBasicForm({
   detail,
   problem,
   onSave,
-  keys = keysApi,
-  secrets: secretsApi = connectionSecretsApi,
+  keys: keysOverride,
+  secrets: secretsOverride,
   preferredKey = null,
   onPreferredKeyApplied,
   savedState,
@@ -65,6 +66,10 @@ export function ConnectionBasicForm({
   checks = null,
 }: ConnectionBasicFormProps) {
   const t = useTranslate();
+  const formId = useId();
+  const engineApis = useEngineApis();
+  const keys = keysOverride ?? engineApis.keys;
+  const secretsApi = secretsOverride ?? engineApis.secrets;
   const identity = detail.form.entry.identity;
   const resetKey = draftResetKey(identity, detail.file.contents);
   const secrets = useConnectionSecrets({ detail, resetKey, keys, secrets: secretsApi, savedState });
@@ -222,7 +227,7 @@ export function ConnectionBasicForm({
   const file = detail.form.entry.file;
 
   return (
-    <form className="flex flex-col" onSubmit={submit}>
+    <form id={formId} className="flex flex-col" onSubmit={submit}>
       {secrets.error === "" || problem !== null ? null : <Notice tone="danger">{secrets.error}</Notice>}
 
       <fieldset disabled={disabled} className="contents">
@@ -267,13 +272,14 @@ export function ConnectionBasicForm({
       </EditorSection>
 
       {dirty ? <DraftSaveBar
+        form={formId}
         note={derived.needsVault
           ? t("conn.basicNeedVault")
           : !derived.passwordAllowed ? t("conn.basicPasswordBlocked") : ""}
-        saveLabel={t("conn.basicSave")}
         saving={saving}
         saveDisabled={!canSave}
-        discardDisabled={saving}
+        inputInvalid={!derived.valid}
+        discardDisabled={disabled}
         onDiscard={discardDraft}
       /> : null}
       </fieldset>
@@ -283,6 +289,7 @@ export function ConnectionBasicForm({
           heading={t("conn.basicRouteConfirmHeading")}
           body={<p className="text-sm text-ink-muted">{t("conn.basicRouteConfirmBody")}</p>}
           confirmLabel={t("conn.basicRouteConfirmSave")}
+          busyLabel={null}
           cancelLabel={t("conn.basicRouteConfirmCancel")}
           confirmKind="primary"
           onConfirm={() => {

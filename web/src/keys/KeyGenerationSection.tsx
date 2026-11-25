@@ -1,6 +1,7 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useState } from "react";
 import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./workflow";
-import { keysApi, type KeyVariant, type KeysApi } from "./api";
+import { type KeyVariant, type KeysApi } from "./api";
 import { useTranslate } from "../i18n/context";
 import { CopyButton } from "../ui/CopyButton";
 import { CheckboxField, control } from "../ui/form";
@@ -18,7 +19,7 @@ import { literalTextEntry } from "../ui/softKeyboard";
 // command to run by hand for hardware-backed ones. A generated key is offered
 // to the connection form and to the server installer right away.
 export function KeyGenerationSection({
-  api = keysApi, variants, groups, onGenerated, runOperation, onAssignGeneratedKey, onInstallGeneratedKey, onClose,
+  api: apiOverride, variants, groups, onGenerated, runOperation, onAssignGeneratedKey, onInstallGeneratedKey, onClose,
 }: {
   api?: Pick<KeysApi, "generate" | "hardwareCommand">;
   variants: KeyVariant[];
@@ -31,6 +32,8 @@ export function KeyGenerationSection({
   // onClose puts the form away; it stays open after a key is made, to offer the next steps.
   onClose: () => void;
 }) {
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.keys;
   const t = useTranslate();
   const {
     algorithm, setAlgorithm, fileName, setFileName, comment, setComment,
@@ -161,7 +164,7 @@ export function KeyGenerationSection({
           />
         )}
         <ActionArea>
-          <Button kind="primary" type="submit" busy={submission.pending}>
+          <Button kind="primary" type="submit" busy={submission.pending} busyLabel={t(inProcess ? "busy.creating" : "busy.loading")}>
             {inProcess ? t("keys.createSubmit") : t("keys.showTerminalCommand")}
           </Button>
           <Button disabled={submission.pending} onClick={onClose}>{t("keys.close")}</Button>

@@ -25,7 +25,9 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   const [pendingDirectives, setPendingDirectives] = useState<ExecutableDirective[]>([]);
   const [reachabilityError, setReachabilityError] = useState("");
   const [authenticationError, setAuthenticationError] = useState("");
-  const [busy, setBusy] = useState<"reachability" | "authentication" | null>(null);
+  // busy は、待っている検査。確かめたあとの認証（acknowledgedAuthentication）は確認の欄の［確認して認証を実行］が
+  // 待つ間の印を出すので、上の［保存済み設定で認証を確認］とは分けて持つ。
+  const [busy, setBusy] = useState<"reachability" | "authentication" | "acknowledgedAuthentication" | null>(null);
 
   useEffect(() => {
     setReachability(null);
@@ -51,7 +53,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   }
 
   async function authenticate(acknowledgeExecutable: boolean) {
-    setBusy("authentication");
+    setBusy(acknowledgeExecutable ? "acknowledgedAuthentication" : "authentication");
     setAuthenticationError("");
     try {
       setAuthentication(await api.authentication(alias, acknowledgeExecutable));
@@ -90,11 +92,11 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   return (
     <section aria-label={t("conn.checksLabel")} className="flex flex-col gap-1.5 pt-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <Button small disabled={blocked} onClick={() => void checkReachability()} className="max-w-full whitespace-normal text-left">
-          {busy === "reachability" ? t("conn.checking") : t("conn.checkReachability")}
+        <Button small busy={busy === "reachability"} busyLabel={t("busy.checking")} disabled={blocked} onClick={() => void checkReachability()} className="max-w-full whitespace-normal text-left">
+          {t("conn.checkReachability")}
         </Button>
-        <Button small disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left">
-          {busy === "authentication" ? t("conn.checking") : t("conn.checkAuthentication")}
+        <Button small busy={busy === "authentication"} busyLabel={t("busy.authenticating")} disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left">
+          {t("conn.checkAuthentication")}
         </Button>
       </div>
 
@@ -102,7 +104,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
       {authenticationError === "" ? null : <CheckLine passed={false} text={authenticationError} />}
 
       {pendingDirectives.length === 0 ? null : (
-        <ExecutableDirectiveConfirmation directives={pendingDirectives} busy={busy === "authentication"} onAcknowledge={() => void authenticate(true)} />
+        <ExecutableDirectiveConfirmation directives={pendingDirectives} busy={busy === "acknowledgedAuthentication"} onAcknowledge={() => void authenticate(true)} />
       )}
 
       {reachability === null ? null : (

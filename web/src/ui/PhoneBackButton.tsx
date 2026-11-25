@@ -2,6 +2,7 @@ import { useContext } from "react";
 import { Icon } from "./icons";
 import { PageChromeContext } from "./pageChrome";
 import { PageChromePortal } from "./PageChromePortal";
+import { IconButton } from "./IconButton";
 
 // PhoneBackButton is a page's way one step back on a phone (from an opened connection to the list), put in
 // the top bar where the menu button is (see pageChrome). Without the top bar's slot (a wide screen) it shows
@@ -11,15 +12,9 @@ export function PhoneBackButton({ label, onBack }: { label: string; onBack: () =
   if (phoneBackSlot === null) return null;
   return (
     <PageChromePortal slot={phoneBackSlot}>
-      <button
-        type="button"
-        aria-label={label}
-        title={label}
-        onClick={onBack}
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
-      >
+      <IconButton label={label} size="bar" onClick={onBack}>
         <Icon name="chevronLeft" className="size-5" />
-      </button>
+      </IconButton>
     </PageChromePortal>
   );
 }

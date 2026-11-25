@@ -132,8 +132,8 @@ test("saves a group's defaults from the editor shown beside its connections", as
   const editor = page.getByRole("region", { name: "work", exact: true });
   await editor.getByLabel("User name").fill("deploy");
   await editor.getByLabel("Jump host").fill("bastion");
-  expect(await clickAndAwait(page, "Save group", "/api/v1/config/save")).toBe(200);
-  await expect(page.getByRole("button", { name: "Save group" })).toHaveCount(0);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 
   const settings = await installation.read("groups.sshc.conf");
   expect(settings).toContain("# group work");

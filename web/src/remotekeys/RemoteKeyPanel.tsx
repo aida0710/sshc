@@ -1,10 +1,10 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import { keysApi, type KeyItem, type KeysApi } from "../keys/api";
+import { type KeyItem, type KeysApi } from "../keys/api";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import {
-  remoteKeysApi,
   type RemoteKeyInput,
   type RemoteKeyPlan,
   type RemoteKeyRegisterResponse,
@@ -50,13 +50,16 @@ const outcomeLabels: Record<string, MessageKey> = {
 };
 
 export function RemoteKeyPanel({
-  api = remoteKeysApi,
-  keys = keysApi,
+  api: apiOverride,
+  keys: keysOverride,
   hosts = [],
   preferredPublicKeyPath = null,
   onPreferredPublicKeyHandled,
 }: RemoteKeyPanelProps) {
   const t = useTranslate();
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.remoteKeys;
+  const keys = keysOverride ?? engineApis.keys;
   const [hostQuery, setHostQuery] = useState("");
   const [selectedAliases, setSelectedAliases] = useState<string[]>([]);
   const [keyPath, setKeyPath] = useState("");
@@ -334,9 +337,9 @@ export function RemoteKeyPanel({
           )}
         >
           <div className="flex flex-wrap justify-end gap-2">
-            <Button busy={planning} disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
+            <Button busy={planning} busyLabel={t("busy.checking")} disabled={busy} onClick={() => void describe()}>{t("rk.showWhatWouldHappen")}</Button>
             {plannedTargets.length > 0 && registerable.length === 0 ? null : (
-              <Button kind="primary" busy={registering} disabled={blocked} onClick={() => void register()}>
+              <Button kind="primary" busy={registering} busyLabel={t("busy.registering")} disabled={blocked} onClick={() => void register()}>
                 {registerable.length > 1 ? t("rk.registerMany", { count: registerable.length }) : t("rk.register")}
               </Button>
             )}
@@ -360,8 +363,7 @@ export function RemoteKeyPanel({
             ))}
           </div>
           {unavoidable.length > 0 ? (
-            <div className="mt-3 rounded-inset bg-notice p-4 text-sm">
-              <h4 className="font-medium text-notice-ink">{t("rk.connectingRuns")}</h4>
+            <div className="mt-3"><Notice live={false} titleLevel={4} title={t("rk.connectingRuns")}>
               <ul className="mt-2 flex flex-col gap-2">
                 {unavoidable.map(({ alias, directive }) => (
                   <li key={`${alias}:${directive.path}:${directive.line}:${directive.keyword}`}>
@@ -372,8 +374,8 @@ export function RemoteKeyPanel({
                   </li>
                 ))}
               </ul>
-              <CheckboxField className="mt-2" label={t("rk.acknowledgeRuns")} checked={acknowledged} onChange={setAcknowledged} tone="notice" />
-            </div>
+              <CheckboxField className="mt-2" label={t("rk.acknowledgeRuns")} checked={acknowledged} onChange={setAcknowledged} />
+            </Notice></div>
           ) : null}
         </PageSection>
       ) : null}

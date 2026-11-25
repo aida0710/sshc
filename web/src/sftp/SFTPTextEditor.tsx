@@ -30,8 +30,9 @@ export function SFTPTextEditor({ editor, busy = false }: {
         >
           <div className="flex items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
             <h2 id={`${id}-editor`} title={opened.entry.path} className="min-w-0 grow font-mono text-xs"><PathText path={opened.entry.path} /></h2>
-            <span role="status" className="shrink-0 text-xs text-ink-muted">{editor.saving ? t("sftp.editorSaving") : dirty ? t("sftp.unsaved") : editor.saved ? t("sftp.editorSaved") : ""}</span>
-            <Button disabled={writeDisabled} className="shrink-0" onClick={() => void editor.save()}>{editor.saving ? t("sftp.editorSaving") : t("sftp.save")}</Button>
+            {/* 保存を待っている間は、隣の［保存］が「保存中…」と言うので、ここには何も出さない。 */}
+            <span role="status" className="shrink-0 text-xs text-ink-muted">{editor.saving ? "" : dirty ? t("sftp.unsaved") : editor.saved ? t("sftp.editorSaved") : ""}</span>
+            <Button busy={editor.saving} busyLabel={t("busy.saving")} disabled={writeDisabled} className="shrink-0" onClick={() => void editor.save()}>{t("sftp.save")}</Button>
             <button type="button" className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted transition-colors duration-150 hover:bg-hover hover:text-ink" onClick={editor.dismiss}>{t("sftp.close")}</button>
           </div>
           {problem === null ? null : (
@@ -62,6 +63,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
           heading={t(confirming === "close" ? "sftp.editorCloseHeading" : editor.local ? "sftp.editorLocalReloadHeading" : "sftp.editorReloadHeading")}
           body={<p className="text-sm text-ink-muted">{t("sftp.leaveBody", { path })}</p>}
           confirmLabel={t(confirming === "close" ? "sftp.editorCloseDiscard" : "sftp.editorReloadDiscard")}
+          busyLabel={null}
           cancelLabel={t("sftp.leaveStay")}
           onConfirm={confirming === "close" ? editor.close : () => void editor.reload()}
           onCancel={editor.keepEditing}
@@ -79,6 +81,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
             </>
           )}
           confirmLabel={t("sftp.editorOverwrite")}
+          busyLabel={null}
           cancelLabel={t("sftp.cancel")}
           confirmDisabled={editor.readingOverwriteRevision}
           onConfirm={() => void editor.overwrite()}
@@ -91,6 +94,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
           heading={t("sftp.leaveHeading")}
           body={<p className="text-sm text-ink-muted">{t("sftp.leaveBody", { path })}</p>}
           confirmLabel={t("sftp.leaveDiscard")}
+          busyLabel={null}
           cancelLabel={t("sftp.leaveStay")}
           onConfirm={editor.discardAndLeave}
           onCancel={editor.stay}

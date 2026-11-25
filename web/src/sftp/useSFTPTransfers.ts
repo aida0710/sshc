@@ -1,12 +1,14 @@
+import { useSftpTransferManager } from "./useSftpTransferManager";
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent, type DragEvent as ReactDragEvent } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { sftpProblemText } from "./sftpProblemText";
-import { sftpApi, type RemoteEntry } from "./api";
+import { type RemoteEntry } from "./api";
 import { localHostAlias } from "./localHost";
 import { localJoin, localParentOf, remoteParentOf, sourceFor } from "./sftpSource";
 import { entryKind, movable } from "./entryKind";
-import { maxTransferJobs, sftpTransferManager } from "./transferManager";
+import { maxTransferJobs } from "./transferManager";
 import { canChooseAndroidFolder, chooseAndroidFolder, loadChosenFolderFiles, type ChosenFolder } from "../android/chosenFolder";
 import { directoryPaths, remoteEntriesMime, safeRelativePath, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
 import { browserUploadExcluded, createTransferExclusions } from "./transferExclusions";
@@ -86,6 +88,9 @@ export function useSFTPTransfers({
   counterpart?: SFTPCounterpart | null;
   onQueueOpen?: (() => void) | undefined;
 }) {
+  const sftpTransferManager = useSftpTransferManager();
+  const { sftp } = useEngineApis();
+  const sftpApi = sftp.files;
   const t = useTranslate();
   const { alias, path, connected, source, setProblem } = browser;
   const [dragging, setDragging] = useState(false);
@@ -358,7 +363,7 @@ export function useSFTPTransfers({
     // Decide from the alias the rows belong to, not from this render's pane:
     // a terminal link can name a host while the pane still shows the engine's
     // disk, and the closure that runs then predates the host switch.
-    if (sourceFor(targetAlias)?.local === true) {
+    if (sourceFor(targetAlias, sftp)?.local === true) {
       if (!counterpartRemote || counterpart === null) return;
       await queueEngineTransfers("put", entries.map((entry) => ({
         sourceAlias: counterpart.alias, sourcePath: entry.path,

@@ -3,15 +3,18 @@ import { defaultBindings, shortcutActions } from "../keyconfig/bindings";
 import { en } from "../i18n/messages/en";
 import type { Translate } from "../i18n/context";
 import { paletteActionCommands } from "./paletteActionCommands";
+import { runTargetNumberActions } from "./runTargetChoice";
 
 const t: Translate = (key) => en[key];
 const everyAppAction = Object.fromEntries(shortcutActions.map((action) => [action, vi.fn()]));
 
 describe("paletteActionCommands", () => {
-  it("lists every shortcut action but the one that opens the palette and SFTP, which it leads with, in the settings' order", () => {
+  // 番号でリモートセッションを選ぶ操作のキーは、リモートセッションごとの項目（paletteRunTargetCommands）に載る。
+  it("lists every shortcut action but the one that opens the palette, SFTP, which it leads with, and the remote session numbers, in the settings' order", () => {
     const commands = paletteActionCommands({ t, bindings: defaultBindings, appActions: everyAppAction, hasSession: true, runOnTerminal: vi.fn() });
+    const numbered: readonly string[] = runTargetNumberActions;
     expect(commands.map((command) => command.id)).toEqual(
-      shortcutActions.filter((action) => action !== "palette" && action !== "sftp").map((action) => `action:${action}`),
+      shortcutActions.filter((action) => action !== "palette" && action !== "sftp" && !numbered.includes(action)).map((action) => `action:${action}`),
     );
   });
 

@@ -99,7 +99,7 @@ export function RelocateForm({
         </FieldRow>
       </div>
       <div className="flex gap-2">
-        <Button kind="primary" type="submit" busy={submission.pending}>
+        <Button kind="primary" type="submit" busy={submission.pending} busyLabel={t("busy.changing")}>
           {t("keys.relocateSubmit")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
@@ -158,7 +158,7 @@ export function PassphraseForm({
         }}
       />
       <div className="flex gap-2">
-        <Button kind="primary" type="submit" busy={submission.pending}>
+        <Button kind="primary" type="submit" busy={submission.pending} busyLabel={t("busy.changing")}>
           {t("keys.savePassphrase")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
@@ -262,7 +262,7 @@ export function AgentForm({
         </div>
       )}
       <div className="flex gap-2">
-        <Button kind="primary" type="submit" busy={submission.pending}>
+        <Button kind="primary" type="submit" busy={submission.pending} busyLabel={t("busy.adding")}>
           {t("keys.registerSubmit")}
         </Button>
         <Button onClick={form.close}>{t("keys.cancel")}</Button>
@@ -354,6 +354,7 @@ export function StoredPassphrasePanel({
         <Button
           kind="primary"
           busy={submission.pending}
+          busyLabel={t("busy.saving")}
           disabled={
             form.storedPhraseName === "" || form.storedPhraseSecret === ""
           }

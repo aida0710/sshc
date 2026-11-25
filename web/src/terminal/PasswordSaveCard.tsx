@@ -31,8 +31,9 @@ export function PasswordSaveCard({ focus, onAnswer }: {
       focus={focus}
       onDismiss={() => void answer(false)}
     >
-      <Button busy={answering === false} disabled={answering === true} onClick={() => void answer(false)} className={noticeCardButton}>{t("terminal.savePasswordDecline")}</Button>
-      <Button kind="primary" busy={answering === true} disabled={answering === false} onClick={() => void answer(true)} className={noticeCardButton}>{t("terminal.savePasswordAccept")}</Button>
+      {/* busy-label-exempt: ［保存しない］は「〇〇中」の形にならないので、文言を替えず回る印だけを添える（2026-11-25 利用者が決めた）。 */}
+      <Button busy={answering === false} busyLabel={null} disabled={answering === true} onClick={() => void answer(false)} className={noticeCardButton}>{t("terminal.savePasswordDecline")}</Button>
+      <Button kind="primary" busy={answering === true} busyLabel={t("busy.saving")} disabled={answering === false} onClick={() => void answer(true)} className={noticeCardButton}>{t("terminal.savePasswordAccept")}</Button>
     </NoticeFrame>
   );
 }

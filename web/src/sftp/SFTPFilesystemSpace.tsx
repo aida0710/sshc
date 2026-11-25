@@ -1,9 +1,9 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useCallback } from "react";
 import { useTranslate } from "../i18n/context";
 import { failureCode } from "../api/client";
 import { formatBytes } from "../ui/format";
 import { useLoad } from "../ui/useLoad";
-import { remoteMetadataApi } from "./remoteMetadataApi";
 
 // The engine sends 64-bit counts as decimal strings. Number loses precision
 // only past 2^53 bytes (8 PiB), and by far less than the one decimal shown.
@@ -13,6 +13,7 @@ function formatFilesystemBytes(bytes: string): string {
 
 // The capacity request has its own state: an unsupported extension never fails the listing.
 export function SFTPFilesystemSpace({ alias, path, refreshKey }: { alias: string; path: string; refreshKey: unknown }) {
+  const { sftp: { remoteMetadata: remoteMetadataApi } } = useEngineApis();
   const t = useTranslate();
   // refreshKey reads the space again after the listing changes; it is not passed to the request.
   // oxlint-disable-next-line react-hooks/exhaustive-deps

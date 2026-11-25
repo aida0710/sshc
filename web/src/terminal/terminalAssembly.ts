@@ -16,6 +16,7 @@ import { createTerminalView } from "./createTerminalView";
 import { resizeRewritingCursorLine } from "./cursorLineRewrite";
 import { textBeforeCursor } from "./cursorLineText";
 import { steppedFontSize } from "./fontSize";
+import { attachHeldButtonMouseModes } from "./heldButtonMouseModes";
 import { encodeIntlYen } from "./intlYenKey";
 import type { LigatureDrawing } from "./ligatures";
 import { attachLinkProvider } from "./linkProvider";
@@ -333,6 +334,7 @@ export function assembleTerminal({ container, live, start, wiring }: {
     selectionHeld: () => selectionHeldIn(container),
     reducedMotion: () => live().reducedMotion,
   });
+  const detachHeldButtonMouseModes = attachHeldButtonMouseModes(view, container);
   const zoomTo = (size: number) => wiring.zoom({ base: live().settingsFontSize, size });
   const detachFontZoom = attachFontZoom(container, {
     fontSize: () => live().shownFontSize,
@@ -432,6 +434,7 @@ export function assembleTerminal({ container, live, start, wiring }: {
       stopObservingSize();
       stopWatchingShown();
       detachTouchScroll();
+      detachHeldButtonMouseModes();
       scrollbackOffset.dispose();
       detachFontZoom();
       detachShortcuts();

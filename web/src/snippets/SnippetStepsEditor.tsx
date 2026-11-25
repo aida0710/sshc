@@ -76,7 +76,7 @@ export function SnippetStepsEditor({ steps, onChange }: { steps: SnippetStep[]; 
                 <span className="flex-1" />
                 <ActionMenu
                   label={t("snippets.stepActions", { number })}
-                  triggerClassName="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink md:size-7"
+                  triggerSize="toolbar"
                   items={[
                     { label: t("snippets.moveStepUp"), onSelect: () => move(index, index - 1), disabled: index === 0 },
                     { label: t("snippets.moveStepDown"), onSelect: () => move(index, index + 1), disabled: index === steps.length - 1 },

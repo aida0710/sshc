@@ -26,6 +26,19 @@ The tag beside a page's name says how far its settings reach.
 
 The switches in a terminal's "…" menu sit under headings with the same tags. A field left empty in a connection's **Display & terminal** tab follows the preset its machine uses.
 
+## Saving settings
+
+Changing a setting brings up a bar at the bottom of the screen with **Discard changes** and **Save**. A change applies only once it is saved. Enter in a one-line field saves as well. A value that cannot be used is explained under its field, and nothing can be saved until it is put right.
+
+Going to another page or another preset with unsaved changes asks whether to discard them. Editing a connection, a group, a VPN profile, a snippet, the SSH config, a Vault entry or the Sync exclusions is saved from the same bar.
+
+These act at once, without the bar:
+
+- Making, renaming and deleting presets, and **Use on this machine**
+- Duplicating, renaming and deleting key bindings and key orders
+- Renaming a machine, changing where its logs are kept, and **Remove from the list**
+- Adding, renaming and deleting background images, allowing notifications, and changing the master password
+
 ## Presets
 
 To use different values on different machines, such as a larger font on a phone than on a PC, make a preset. A preset holds the appearance, the terminal settings, the SFTP transfer settings, the shortcuts, the notification sound, the Vault auto-lock, keeping the screen on, and touch handling. The navigation and connection-list widths, the Home view and the SFTP split are not part of a preset; each browser remembers its own.
@@ -39,7 +52,7 @@ On a phone, the preset is chosen at the top of each settings page.
 
 ## General
 
-Settings that are the same on every machine and every preset. Each change is saved at once.
+Settings that are the same on every machine and every preset.
 
 - **Display language**: **Follow the browser**, English, or 日本語. Preferences in Menu switches it as well
 - Terminal connections: **Reconnect after a dropped connection**, **Connection log**, and OSC 52 (allow writing to the clipboard)
@@ -60,13 +73,15 @@ Desktop uses a device-local stable port so bookmarks and the installed web app k
 
 ## Keyboard shortcuts
 
-Open **Menu → Keyboard shortcuts** to assign command search, terminal search, copy/paste, previous/next prompt, text size (larger, smaller, reset), quick commands, new session, close session, previous/next connection, previous/next pane of a split, splitting right or below, showing or hiding the navigation, Home and SFTP. Click a binding and press a chord with Ctrl, Alt or Win (⌘ on a Mac), or a function key. Escape cancels; Tab moves to the next control.
+Open **Menu → Keyboard shortcuts** to assign command search, terminal search, copy/paste, previous/next prompt, text size (larger, smaller, reset), quick commands, new session, close session, previous/next connection, previous/next pane of a split, splitting right or below, showing or hiding the navigation, Home, SFTP, and switching the remote session (previous/next and by number). Click a binding and press a chord with Ctrl, Alt or Win (⌘ on a Mac), or a function key. Escape cancels; Tab moves to the next control.
 
 Duplicate bindings are rejected. Use **Clear** to disable an action.
 
 | Action | Default keys |
 |---|---|
 | Connection switching | Alt+PageDown / Alt+PageUp |
+| Previous/next remote session | Alt+Shift+PageDown / Alt+Shift+PageUp |
+| Remote session 1 to 9 (Command on a Mac) | Ctrl+1 to Ctrl+9 |
 | Text size (Command on a Mac) | Ctrl+= (also Ctrl+; on a JIS keyboard) for larger, Ctrl+- for smaller and Ctrl+0 to go back to the settings' size |
 | Moving to the previous/next prompt | Ctrl+Shift+Up / Down (Command+Up / Down on a Mac) |
 | New session, close session, the panes, splitting, quick commands and showing or hiding the navigation | None |
@@ -75,6 +90,7 @@ Some actions have no default keys because the ones other terminals use (Ctrl+Shi
 
 - Text size, like a pinch, changes only that terminal and is not saved.
 - Closing a session asks first, as its × does.
+- A remote session's number is its place in the **Remote session** list; the first is localhost. While there is no remote session with a number, its key goes to the program in the terminal, where Ctrl+3 to Ctrl+8 are control characters such as Escape.
 - When the shell marks its prompts through OSC 133 (shell integration), the prompt keys pass over long output to the prompt's line. On mobile, choose it from the terminal's **…** menu.
 - Copy, paste, terminal search, the prompt keys, text size and quick commands apply inside the terminal. Paste retains its normal confirmation and editing flow.
 
@@ -105,20 +121,23 @@ The **Key order** selector switches between named orders. The "…" beside it sa
 
 ## Appearance
 
-**Settings → Appearance** sets the theme, the accent colour, the background with no session, and whether to reduce motion for the whole app in the preset being edited:
+**Settings → Appearance** sets the theme, the accent colour, the remote session frame colour, the Home background, and whether to reduce motion for the whole app in the preset being edited:
 
 - Theme: match the system, light, white blue, white purple, dark, dark blue, or dark purple. Light and dark use greys without a tint; white blue and dark blue tint them blue, and white purple tints them purple. With the lavender accent, white purple uses a slightly deeper purple. Dark purple uses a lighter untinted grey and, with the lavender accent, a purple of its own, which also colours the terminal selection and cursor
 - Accent colour: lavender, blue, sky, pink, mono, or custom. It marks the current item, buttons, and the focused terminal pane. Custom takes one colour of your own from the colour picker or as a code (#rrggbb), used in both the light and the dark theme. A colour that is hard to tell from the background of the theme on screen brings up a notice.
-- Background with no session: none, network, contours, globe, or aquarium. A moving picture in the terminal while no session is open ([Terminal](/en/features/terminal#when-no-session-is-open)). The default is network
+- Remote session frame colour: accent colour or custom. The colour of the frame and its tag around the screen while a remote session is chosen. A remote session whose connection has a colour uses that colour instead ([Remote session](/en/features/remote-session))
+- Home background: none, network, contours, globe, or aquarium. A moving picture behind Home ([Terminal](/en/features/terminal#when-no-session-is-open)). The default is network
 - Reduce motion: system, on, or off. On stops the background picture and leaves out the animation of panels opening and closing and of screens changing. System follows the reduce-motion setting of the OS
 
 Each settings page lists the other settings pages on its left, so you can move between them.
 
-The theme, the accent colour, the background with no session, and reduce motion are preset settings and sync to your other machines. The browser also keeps a copy of the theme, so the first screen is drawn in it the next time sshc opens. Amber, green, and red are not among the offered colours because they already mean an unread notification, connected, and an error.
+The theme, the accent colour, the remote session frame colour, the Home background, and reduce motion are preset settings and sync to your other machines. The browser also keeps a copy of the theme, so the first screen is drawn in it the next time sshc opens. Amber, green, and red are not among the offered colours because they already mean an unread notification, connected, and an error.
 
 **General**, or Preferences in Menu, switches the display language (Japanese or English).
 
 Configure the terminal color scheme, font, background, and tint under **Settings → Terminal**.
+
+The font is the device's monospace font, JetBrains Mono, or “JetBrains Mono + BIZ UDGothic”. JetBrains Mono and BIZ UDGothic ship with the application. “JetBrains Mono + BIZ UDGothic” draws Latin letters and symbols with JetBrains Mono and Japanese with BIZ UDGothic, a font made for reading Japanese. BIZ UDGothic has no italic design, so the browser slants Japanese letters for italic text.
 
 Theme and language controls are also available on vault create and unlock screens.
 
@@ -145,8 +164,6 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 | **Behaviour** | Starting directory, local shell, clipboard and keyboard, touch input and its link underlines |
 
 Reconnecting, the connection log, OSC 52 and session logs are under **General**.
-
-No settings page has a Save button: **Saved** shows under the field you changed for a moment. Choices and checkboxes are saved as soon as they change; numbers and the starting directory are saved when focus leaves them or Enter is pressed.
 
 - Maximum concurrent sessions from 1 to 200, with a default of 50
 - Engine replay buffer from 16 KiB to 4 MiB, with a default of 256 KiB

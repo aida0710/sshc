@@ -1,11 +1,12 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FieldEdit, HostDetail, HostMetadata, SavePreview, UpdateConnectionRequest } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
 import type { Problem } from "../api/client";
-import { diagnosticsApi, type DiagnosticsApi } from "../api/diagnostics";
-import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
+import { type DiagnosticsApi } from "../api/diagnostics";
+import { type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
-import { useMoreToTheRight } from "../ui/useMoreToTheRight";
+import { scrollFade, useScrollGoesOn } from "../ui/useScrollGoesOn";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import {
   type AdvancedArea,
@@ -24,12 +25,9 @@ import { useReportDirty } from "./useReportDirty";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { editorContainer } from "../ui/FieldRow";
 
-// fadeAtTheRight fades the last 2rem of a row that scrolls sideways, where it goes on past the edge.
-const fadeAtTheRight = "[mask-image:linear-gradient(to_right,#000_calc(100%-2rem),transparent)]";
 
 // The detail view checks a host and edits its secrets, so it is handed both.
 export type HostDetailApi = DiagnosticsApi & ConnectionSecretsApi;
-export const hostDetailApi: HostDetailApi = { ...diagnosticsApi, ...connectionSecretsApi };
 
 type HostDetailPanelProps = {
   detail: HostDetail;
@@ -81,7 +79,7 @@ export function HostDetailPanel({
   onBlockRaw,
   onBasicSave,
   onMetadataSave,
-  integrations = hostDetailApi,
+  integrations: integrationsOverride,
   panel: controlledPanel,
   advanced: controlledAdvanced,
   onLocationChange,
@@ -95,6 +93,8 @@ export function HostDetailPanel({
   savedAliases = [],
 }: HostDetailPanelProps) {
   const t = useTranslate();
+  const engineApis = useEngineApis();
+  const integrations = integrationsOverride ?? engineApis.hostDetail;
   const [localPanel, setLocalPanel] = useState<ConnectionPanel>("Basic");
   const [lastAdvanced, setLastAdvanced] = useState<AdvancedArea>("Settings");
   const [basicDirty, setBasicDirty] = useState(false);
@@ -146,7 +146,7 @@ export function HostDetailPanel({
 
   // On a phone the four tabs do not fit; the row scrolls, and fades at the right while a tab is still past it.
   const tabRow = useRef<HTMLDivElement>(null);
-  const tabsGoOn = useMoreToTheRight(tabRow);
+  const tabsGoOn = useScrollGoesOn(tabRow, "right");
 
   function selectAdvanced(area: AdvancedArea) {
     setLastAdvanced(area);
@@ -164,7 +164,7 @@ export function HostDetailPanel({
           role="tablist"
           aria-label={t("conn.editorLabel")}
           data-more-to-the-right={tabsGoOn || undefined}
-          className={`-ml-1 flex gap-3 overflow-x-auto border-b border-line [scrollbar-width:none] ${tabsGoOn ? fadeAtTheRight : ""}`}
+          className={`-ml-1 flex gap-3 overflow-x-auto border-b border-line [scrollbar-width:none] ${tabsGoOn ? scrollFade.right : ""}`}
         >
           {/* タブは左右に4pxずつ余白を持ち、内側に描くフォーカスの枠が文字に触れない。列は同じだけ左へ寄せて、文字の位置を保つ。 */}
           {areas.map((item, index) => (

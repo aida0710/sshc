@@ -124,7 +124,7 @@ describe("TerminalView", () => {
     }
   });
 
-  it("uses the phone font size on a phone viewport and follows the viewport when it changes", () => {
+  it("draws at the same font size on a phone viewport as on a PC when the settings leave the size unset", () => {
     let phone = true;
     const listeners: (() => void)[] = [];
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -144,7 +144,7 @@ describe("TerminalView", () => {
 
     try {
       renderView();
-      expect(view?.options.fontSize).toBe(15);
+      expect(view?.options.fontSize).toBe(13);
 
       phone = false;
       act(() => listeners.forEach((listener) => listener()));
@@ -877,6 +877,45 @@ describe("TerminalView", () => {
 
     expect(latest).toHaveBeenCalledOnce();
     expect(first).not.toHaveBeenCalled();
+  });
+
+  it("leaves the focus in a field being typed in when it appears after its session was opened", async () => {
+    const focus = vi.spyOn(Terminal.prototype, "focus");
+    const name = document.createElement("input");
+    document.body.append(name);
+    name.focus();
+    const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
+    try {
+      const { rerender } = render(<TerminalView session={session} api={api} active focusRequest={1} />);
+      await waitFor(() => expect(streams).toHaveLength(1));
+      expect(focus).not.toHaveBeenCalled();
+      expect(name).toHaveFocus();
+
+      // 出ているセッションを選ぶのは、そこへ打つための操作なので、フォーカスを取る。
+      rerender(<TerminalView session={session} api={api} active focusRequest={2} />);
+      expect(focus).toHaveBeenCalledOnce();
+    } finally {
+      name.remove();
+      focus.mockRestore();
+    }
+  });
+
+  it("takes the focus from another terminal when its session is opened", async () => {
+    const focus = vi.spyOn(Terminal.prototype, "focus");
+    const other = document.createElement("div");
+    other.dataset.terminalHost = "";
+    const otherInput = document.createElement("textarea");
+    other.append(otherInput);
+    document.body.append(other);
+    otherInput.focus();
+    const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
+    try {
+      render(<TerminalView session={session} api={api} active focusRequest={1} />);
+      expect(focus).toHaveBeenCalled();
+    } finally {
+      other.remove();
+      focus.mockRestore();
+    }
   });
 
   it("focuses a terminal whose session was connected again before its stream attached", async () => {

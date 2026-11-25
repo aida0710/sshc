@@ -16,9 +16,9 @@ describe("FieldRow", () => {
     expect(port).toHaveAccessibleDescription("Empty uses this machine's fixed port.");
   });
 
-  it("reads a warning as part of the description and marks the control invalid", () => {
+  it("reads an error as part of the description and marks the control invalid", () => {
     render(
-      <FieldRow label="Port" hint="Inherited from config:3" warning="Use a number from 1 to 65535.">
+      <FieldRow label="Port" hint="Inherited from config:3" error="Use a number from 1 to 65535.">
         <input defaultValue="0" />
       </FieldRow>,
     );
@@ -26,6 +26,18 @@ describe("FieldRow", () => {
     const port = screen.getByLabelText("Port");
     expect(port).toHaveAccessibleDescription("Inherited from config:3 Use a number from 1 to 65535.");
     expect(port).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("reads a warning as part of the description without marking the control invalid", () => {
+    render(
+      <FieldRow label="Jump host" warning="bastion is not a saved connection, so it is taken as a host name.">
+        <input defaultValue="bastion" />
+      </FieldRow>,
+    );
+
+    const jump = screen.getByLabelText("Jump host");
+    expect(jump).toHaveAccessibleDescription("bastion is not a saved connection, so it is taken as a host name.");
+    expect(jump).not.toHaveAttribute("aria-invalid");
   });
 
   it("keeps the row's actions outside the label so a click on them stays on them", () => {

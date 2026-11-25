@@ -80,7 +80,7 @@ func TestAProcessOnTheOldPortReceivesNoCredentialsOrPasswordAfterTheEngineStops(
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100/terminal/sessions", nil)
 	recorder := httptest.NewRecorder()
-	if err := manager.ForwardTerminalAPI(recorder, request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrUnproven) {
+	if err := manager.ForwardAPI(recorder, request, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrUnproven) {
 		t.Fatalf("forward to the squatter = %v (%d %s), want ErrUnproven", err, recorder.Code, recorder.Body.String())
 	}
 	if err := manager.UnlockVault(context.Background(), "r100", "the-users-remote-vault-password"); !errors.Is(err, ErrUnproven) {

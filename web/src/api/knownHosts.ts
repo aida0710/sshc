@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { issueAction, postJSON } from "./guards";
+import { localApiBase } from "./remoteEngines";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -44,50 +45,54 @@ function validateScan(value: unknown): KnownHostsScanResponse {
   return validateOpenAPISchema<KnownHostsScanResponse>("KnownHostsScanResponse", value);
 }
 
-// The OpenSSH known_hosts files: reading, scanning a host for its keys, and
-// the token-guarded add and delete.
-export const knownHostsApi: KnownHostsApi = {
-  async knownHosts(query) {
-    return validateKnownHosts(
-      await apiClient.read(
-        `/api/v1/known-hosts?query=${encodeURIComponent(query)}`,
-      ),
-    );
-  },
-  async deleteKnownHosts(entries, path) {
-    const token = await issueAction(KNOWN_HOSTS_DELETE_ACTION_KIND, path);
-    return validateChange(
-      await postJSON<unknown>("/api/v1/known-hosts/delete", { entries }, token),
-    );
-  },
-  async scanKnownHosts(host, port) {
-    const token = await issueAction(KNOWN_HOSTS_SCAN_ACTION_KIND, host);
-    return validateScan(
-      await postJSON<unknown>(
-        "/api/v1/known-hosts/scan",
-        { host, port },
-        token,
-      ),
-    );
-  },
-  async addKnownHost(candidate, expectedFingerprint, acknowledged) {
-    const token = await issueAction(
-      KNOWN_HOSTS_ADD_ACTION_KIND,
-      candidate.host,
-    );
-    return validateChange(
-      await postJSON<unknown>(
-        "/api/v1/known-hosts/add",
-        {
-          host: candidate.host,
-          port: candidate.port,
-          keyType: candidate.keyType,
-          key: candidate.key,
-          expectedFingerprint,
-          acknowledged,
-        },
-        token,
-      ),
-    );
-  },
-};
+// createKnownHostsApi is the API of the OpenSSH known_hosts files of the engine at base (engineApiBase): reading,
+// scanning a host for its keys, and the token-guarded add and delete.
+export function createKnownHostsApi(base: string): KnownHostsApi {
+  return {
+    async knownHosts(query) {
+      return validateKnownHosts(
+        await apiClient.read(
+          `${base}/known-hosts?query=${encodeURIComponent(query)}`,
+        ),
+      );
+    },
+    async deleteKnownHosts(entries, path) {
+      const token = await issueAction(KNOWN_HOSTS_DELETE_ACTION_KIND, path, base);
+      return validateChange(
+        await postJSON<unknown>(`${base}/known-hosts/delete`, { entries }, token),
+      );
+    },
+    async scanKnownHosts(host, port) {
+      const token = await issueAction(KNOWN_HOSTS_SCAN_ACTION_KIND, host, base);
+      return validateScan(
+        await postJSON<unknown>(
+          `${base}/known-hosts/scan`,
+          { host, port },
+          token,
+        ),
+      );
+    },
+    async addKnownHost(candidate, expectedFingerprint, acknowledged) {
+      const token = await issueAction(
+        KNOWN_HOSTS_ADD_ACTION_KIND,
+        candidate.host, base);
+      return validateChange(
+        await postJSON<unknown>(
+          `${base}/known-hosts/add`,
+          {
+            host: candidate.host,
+            port: candidate.port,
+            keyType: candidate.keyType,
+            key: candidate.key,
+            expectedFingerprint,
+            acknowledged,
+          },
+          token,
+        ),
+      );
+    },
+  };
+}
+
+export const knownHostsApi = createKnownHostsApi(localApiBase);
+

@@ -4,7 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient, ApiError } from "../api/client";
 import { fakeSettingsServer, settingsDocument, testMachineId } from "../testing/settingsServer";
+import { captureNavigationBlocker } from "../testing/navigationBlocker";
+import { discardSettings, saveBar, saveButton, saveSettings, savingButton } from "../testing/settingsDraft";
 import { vaultStatus } from "../testing/vaultStatus";
+import { ToastProvider } from "../ui/ToastProvider";
 import { refreshSettings, resetSettingsForTests, type SettingsPreset } from "./settingsStore";
 import { SettingsPanel } from "./SettingsPanel";
 import type { SettingsPanelApi } from "./SettingsPanel";
@@ -43,13 +46,6 @@ async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {
 // openTerminalTab moves Settings > Terminal to one of its tabs; on a computer each group of fields is a tab.
 function openTerminalTab(region: HTMLElement, name: "Display" | "Connection" | "Behaviour") {
   fireEvent.click(within(region).getByRole("tab", { name }));
-}
-
-// rowOf is the settings row (FieldRow) a control sits in, where "Saved" shows once its change is saved.
-function rowOf(control: HTMLElement): HTMLElement {
-  const row = control.closest<HTMLElement>("[data-field-row]");
-  if (row === null) throw new Error("the control is not in a settings row");
-  return row;
 }
 
 // presetSaved is the preset id as the engine keeps it after the writes so far.
@@ -124,14 +120,14 @@ describe("SettingsPanel", () => {
     expect(within(region).getByLabelText("Sessions open at once")).toHaveValue(3);
     await user.clear(within(region).getByLabelText("Sessions open at once"));
     await user.type(within(region).getByLabelText("Sessions open at once"), "4");
-    await user.tab();
-    await waitFor(() => expect(presetSaved("phone")?.terminal).toEqual({ maxSessions: 4 }));
+    // What acts on the saved presets waits until the changes are saved or discarded.
+    expect(within(navigation).getByRole("button", { name: "Use on this machine" })).toBeDisabled();
+    await saveSettings(user);
+    expect(presetSaved("phone")?.terminal).toEqual({ maxSessions: 4 });
     expect(presetSaved("default")).toEqual({ id: "default" });
 
     await user.click(within(navigation).getByRole("button", { name: "Use on this machine" }));
     await waitFor(() => expect(server.document().machines[0]?.settings.presetId).toBe("phone"));
-    // Made outside the rows, the change is said to be saved beside the page's name.
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Terminal", level: 2 }).parentElement).toHaveTextContent("Saved"));
     expect(await within(navigation).findByText("In use here")).toBeVisible();
   });
 
@@ -186,10 +182,10 @@ describe("SettingsPanel", () => {
     await user.clear(within(region).getByLabelText("Time"));
     await user.type(within(region).getByLabelText("Time"), "45");
     await user.selectOptions(within(region).getByLabelText("Unit"), "minutes");
+    expect(presetSaved()?.vaultAutoLock).toBeUndefined();
 
-    await waitFor(() => expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "idle", value: 45, unit: "minutes" }));
-    await waitFor(() => expect(rowOf(within(region).getByLabelText("Unit"))).toHaveTextContent("Saved"));
-    expect(rowOf(within(region).getByLabelText("Vault auto-lock"))).not.toHaveTextContent("Saved");
+    await saveSettings(user);
+    expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "idle", value: 45, unit: "minutes" });
   });
 
   it("shows a persistent warning and saves restart-only locking", async () => {
@@ -203,7 +199,8 @@ describe("SettingsPanel", () => {
 
     expect(within(region).queryByLabelText("Time")).toBeNull();
     expect(within(region).getByText(/remains unlocked until sshc is restarted/i)).toBeVisible();
-    await waitFor(() => expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "restart" }));
+    await saveSettings(user);
+    expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "restart" });
   });
 
   it("restores restart-only locking and refuses to save a duration outside 1 to 999", async () => {
@@ -217,10 +214,13 @@ describe("SettingsPanel", () => {
     await user.selectOptions(mode, "idle");
     await user.clear(within(region).getByLabelText("Time"));
     await user.type(within(region).getByLabelText("Time"), "1000");
-    await user.tab();
 
     expect(within(region).getByText(/whole number from 1 to 999/i)).toBeVisible();
-    expect(presetSaved()?.vaultAutoLock).not.toMatchObject({ value: 1000 });
+    expect(within(region).getByLabelText("Time")).toBeInvalid();
+    expect(saveButton()).toBeDisabled();
+    // Enter saves no more than the button does.
+    await user.keyboard("{Enter}");
+    expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "restart" });
   });
 
   it("locks the auto-lock fields of a passwordless Vault, says why, and keeps the saved choice", () => {
@@ -245,7 +245,7 @@ describe("SettingsPanel", () => {
     expect(within(region).queryByText(/remains unlocked until sshc is restarted/i)).toBeNull();
   });
 
-  it("saves a typed duration once, when the field is left, not on every key", async () => {
+  it("saves what was typed with Enter, in one write, and not before", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} page="Vault" />);
 
@@ -254,11 +254,105 @@ describe("SettingsPanel", () => {
     await waitFor(() => expect(time).toBeEnabled());
     await user.clear(time);
     await user.type(time, "30");
+    await user.tab();
     expect(server.writesTo("/api/v1/settings/presets/default")).toEqual([]);
 
-    await user.tab();
-    await waitFor(() => expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "idle", value: 30, unit: "hours" }));
+    await user.click(time);
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(saveBar()).toBeNull());
+    expect(presetSaved()?.vaultAutoLock).toEqual({ mode: "idle", value: 30, unit: "hours" });
     expect(server.writesTo("/api/v1/settings/presets/default")).toHaveLength(1);
+  });
+
+  it("puts the saved values back when the changes are discarded", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPanel api={buildApi()} page="Vault" />);
+    const region = screen.getByRole("region", { name: "Vault auto-lock" });
+    const time = within(region).getByLabelText("Time");
+    await user.clear(time);
+    await user.type(time, "1000");
+    await user.selectOptions(within(region).getByLabelText("Unit"), "minutes");
+
+    await discardSettings(user);
+
+    expect(time).toHaveValue(12);
+    expect(within(region).getByLabelText("Unit")).toHaveValue("hours");
+    expect(saveBar()).toBeNull();
+    expect(server.requests).toEqual([]);
+  });
+
+  it("puts the bar away when a change is taken back by hand", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPanel api={buildApi()} page="Vault" />);
+    const mode = within(screen.getByRole("region", { name: "Vault auto-lock" })).getByLabelText("Vault auto-lock");
+
+    await user.selectOptions(mode, "restart");
+    expect(saveBar()).not.toBeNull();
+    await user.selectOptions(mode, "idle");
+    expect(saveBar()).toBeNull();
+  });
+
+  it("asks before another preset is opened over unsaved changes, and keeps them when told to", async () => {
+    const user = userEvent.setup();
+    withSettings({ presets: [{ id: "default" }, { id: "phone", name: "Phone" }] });
+    render(<SettingsPanel api={buildApi()} page="SFTP" onNavigatePage={vi.fn()} />);
+    const picker = screen.getByRole("combobox", { name: "Preset to edit" });
+    const speed = screen.getByRole("spinbutton", { name: "Speed limit" });
+    await user.clear(speed);
+    await user.type(speed, "64");
+
+    await user.selectOptions(picker, "phone");
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Keep editing" }));
+    expect(picker).toHaveValue("default");
+    expect(speed).toHaveValue(64);
+
+    await user.selectOptions(picker, "phone");
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Discard" }));
+    expect(picker).toHaveValue("phone");
+    expect(screen.getByRole("spinbutton", { name: "Speed limit" })).toHaveValue(0);
+    expect(server.requests).toEqual([]);
+  });
+
+  it("asks before leaving the page over unsaved changes, and goes on once they are discarded", async () => {
+    const user = userEvent.setup();
+    const navigation = captureNavigationBlocker();
+    const onNavigateLocation = vi.fn();
+    render(<SettingsPanel api={buildApi()} page="SFTP" onNavigationBlockerChange={navigation.onNavigationBlockerChange} onNavigateLocation={onNavigateLocation} />);
+    expect(navigation.tryNavigate("/connections")).toBe(true);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
+
+    expect(navigation.tryNavigate("/connections")).toBe(false);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Discard" }));
+
+    expect(onNavigateLocation).toHaveBeenCalledWith("/connections");
+    expect(screen.getByRole("combobox", { name: "Concurrent transfers" })).toHaveValue("2");
+    expect(server.requests).toEqual([]);
+  });
+
+  it("keeps what could not be saved, says why, and saves the rest", async () => {
+    const user = userEvent.setup();
+    const laptop = "1111111111111111111111111111111a";
+    withSettings({
+      presets: [{ id: "default" }],
+      machines: [
+        { id: testMachineId, settings: { name: "desk" }, facts: { os: "linux" } },
+        { id: laptop, settings: { name: "laptop" }, facts: { os: "darwin" } },
+      ],
+    });
+    render(<SettingsPanel api={buildApi()} page="Machines" />);
+    const [deskPort, laptopPort] = screen.getAllByRole("spinbutton", { name: "Port" });
+    await user.type(deskPort!, "50001");
+    await user.type(laptopPort!, "50002");
+    const mutate = vi.mocked(apiClient.mutate).getMockImplementation();
+    vi.mocked(apiClient.mutate).mockImplementation((path, init) => path.endsWith(laptop)
+      ? Promise.reject(new ApiError("disk_full", 500, null))
+      : mutate!(path, init));
+
+    await user.click(saveButton());
+
+    await waitFor(() => expect(saveBar()).toHaveTextContent("The settings could not be saved."));
+    expect(server.document().machines.map((machine) => machine.settings.port)).toEqual([50001, undefined]);
+    expect(laptopPort).toHaveValue(50002);
   });
 
   it("keeps the notification sound and volume in the preset being edited", async () => {
@@ -269,7 +363,8 @@ describe("SettingsPanel", () => {
     await user.selectOptions(within(region).getByLabelText("Notification sound"), "pulse");
     fireEvent.change(within(region).getByLabelText("Notification volume"), { target: { value: "35" } });
 
-    await waitFor(() => expect(presetSaved()?.interface?.notificationSound).toEqual({ sound: "pulse", volume: 35 }), { timeout: 3000 });
+    await saveSettings(user);
+    expect(presetSaved()?.interface?.notificationSound).toEqual({ sound: "pulse", volume: 35 });
   });
 
   it("does not accept terminal edits before the settings arrive", async () => {
@@ -299,7 +394,7 @@ describe("SettingsPanel", () => {
     expect(within(region).getByLabelText("Sessions open at once")).toBeDisabled();
   });
 
-  it("saves the starting directory as it was written, once the field is left", async () => {
+  it("saves the starting directory as it was written", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} />);
 
@@ -307,10 +402,9 @@ describe("SettingsPanel", () => {
     openTerminalTab(region, "Behaviour");
     await user.type(within(region).getByLabelText(/^Starting directory/), "~/work");
     expect(server.writesTo("/api/v1/settings/presets/default")).toEqual([]);
-    await user.tab();
 
-    await waitFor(() => expect(presetSaved()?.terminal).toEqual({ startDirectory: "~/work" }));
-    await waitFor(() => expect(rowOf(within(region).getByLabelText(/^Starting directory/))).toHaveTextContent("Saved"));
+    await saveSettings(user);
+    expect(presetSaved()?.terminal).toEqual({ startDirectory: "~/work" });
   });
 
   it("sends nothing for the fields left empty", async () => {
@@ -320,9 +414,9 @@ describe("SettingsPanel", () => {
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Connection");
     await user.type(within(region).getByLabelText("Sessions open at once"), "4");
-    await user.tab();
+    await saveSettings(user);
 
-    await waitFor(() => expect(presetSaved()?.terminal).toEqual({ maxSessions: 4 }));
+    expect(presetSaved()?.terminal).toEqual({ maxSessions: 4 });
   });
 
   it("saves both scrollback scopes, shell profile and the JIS yen key, changed on two tabs", async () => {
@@ -340,6 +434,7 @@ describe("SettingsPanel", () => {
     await user.selectOptions(within(region).getByLabelText(/^Default local shell/), "fish");
     await user.click(within(region).getByRole("checkbox", { name: /Send the JIS/ }));
     await user.click(within(region).getByRole("checkbox", { name: /Use font ligatures/ }));
+    await saveSettings(user);
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({
       scrollbackBytes: 65536,
@@ -379,6 +474,7 @@ describe("SettingsPanel", () => {
 
     await user.click(copy);
     await user.click(paste);
+    await saveSettings(user);
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({ copyOnSelect: false, rightClickPaste: false }));
   });
@@ -392,6 +488,7 @@ describe("SettingsPanel", () => {
     const webgl = await within(region).findByRole("checkbox", { name: "Use WebGL rendering" });
     expect(webgl).toBeChecked();
     await user.click(webgl);
+    await saveSettings(user);
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({ webgl: false }));
   });
@@ -430,7 +527,7 @@ describe("SettingsPanel", () => {
 
     await user.clear(replayBuffer);
     await user.type(replayBuffer, "128");
-    await user.tab();
+    await saveSettings(user);
 
     await waitFor(() => expect(presetSaved()?.terminal).toEqual({ scrollbackBytes: 131072 }));
   });
@@ -444,10 +541,23 @@ describe("SettingsPanel", () => {
     const replayBuffer = within(region).getByLabelText("Engine replay buffer (KiB)");
     await waitFor(() => expect(replayBuffer).toBeEnabled());
     await user.type(replayBuffer, "8");
-    await user.tab();
 
-    expect(await within(region).findByText("Enter a replay buffer from 16 to 4096 KiB.")).toBeVisible();
+    expect(within(region).getByText("Enter a replay buffer from 16 to 4096 KiB.")).toBeVisible();
+    expect(replayBuffer).toBeInvalid();
+    expect(saveButton()).toBeDisabled();
     expect(presetSaved()?.terminal).toBeUndefined();
+  });
+
+  it("says in the bar which number is wrong while its tab is not the one open", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPanel api={buildApi()} page="Terminal" />);
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    openTerminalTab(region, "Connection");
+    await user.type(within(region).getByLabelText("Engine replay buffer (KiB)"), "8");
+    expect(saveBar()).toHaveTextContent("Correct the fields to save");
+
+    openTerminalTab(region, "Display");
+    expect(saveBar()).toHaveTextContent("Enter a replay buffer from 16 to 4096 KiB.");
   });
 
   it("says which way the directory was refused", async () => {
@@ -458,12 +568,12 @@ describe("SettingsPanel", () => {
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Behaviour");
     await user.type(within(region).getByLabelText(/^Starting directory/), "~/nowhere");
-    await user.tab();
+    await user.click(saveButton());
 
-    expect(await within(region).findByText("The specified directory does not exist.")).toBeVisible();
+    expect(await screen.findByText("The specified directory does not exist.")).toBeVisible();
   });
 
-  it("saves what was typed on one tab when another is opened, and keeps it shown", async () => {
+  it("keeps what was typed on one tab while another is open, and saves both", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} page="Terminal" />);
 
@@ -478,7 +588,8 @@ describe("SettingsPanel", () => {
 
     expect(within(region).getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
     expect(within(region).getByLabelText("Sessions open at once")).toHaveValue(7);
-    await waitFor(() => expect(presetSaved()?.terminal).toEqual({ maxSessions: 7, fontSize: 14 }));
+    await saveSettings(user);
+    expect(presetSaved()?.terminal).toEqual({ maxSessions: 7, fontSize: 14 });
   });
 
   it("opens the tab of the field a refused save is about", async () => {
@@ -492,29 +603,46 @@ describe("SettingsPanel", () => {
     await waitFor(() => expect(directory).toBeEnabled());
     await user.type(directory, "~/nowhere");
     await user.click(within(region).getByRole("tab", { name: "Display" }));
+    await user.click(saveButton());
 
-    expect(await within(region).findByText("The specified directory does not exist.")).toBeVisible();
+    expect(await screen.findByText("The specified directory does not exist.")).toBeVisible();
     expect(within(region).getByRole("tab", { name: "Behaviour" })).toHaveAttribute("aria-selected", "true");
     expect(within(region).getByLabelText(/^Starting directory/)).toHaveValue("~/nowhere");
   });
 
-  it("keeps the fields open while a change is being saved, and says when it was", async () => {
+  it("keeps the fields open while the changes are being saved, and says when they were", async () => {
     const user = userEvent.setup();
-    render(<SettingsPanel api={buildApi()} />);
+    render(<ToastProvider><SettingsPanel api={buildApi()} /></ToastProvider>);
     const release = holdWrites();
 
     const region = await screen.findByRole("region", { name: "Terminal" });
     openTerminalTab(region, "Connection");
     const sessions = within(region).getByLabelText("Sessions open at once");
     await user.type(sessions, "3");
-    await user.tab();
+    await user.click(saveButton());
 
     expect(sessions).toBeEnabled();
-    expect(rowOf(sessions)).not.toHaveTextContent("Saved");
+    expect(savingButton()).toHaveAttribute("aria-busy", "true");
     release();
-    await waitFor(() => expect(rowOf(sessions)).toHaveTextContent("Saved"));
-    // Screen readers hear it once, from the page; the row only shows it.
-    expect(screen.getAllByRole("status").filter((status) => status.textContent === "Saved")).toHaveLength(1);
+    expect(await screen.findByText("Saved your changes.")).toBeVisible();
+    expect(saveBar()).toBeNull();
+  });
+
+  it("keeps what was typed while the changes before it were being saved", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPanel api={buildApi()} page="SFTP" />);
+    const release = holdWrites();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
+    await user.click(saveButton());
+    const speed = screen.getByRole("spinbutton", { name: "Speed limit" });
+    await user.clear(speed);
+    await user.type(speed, "64");
+
+    release();
+
+    await waitFor(() => expect(presetSaved()?.fileTransfers).toEqual({ maxConcurrent: 5 }));
+    expect(speed).toHaveValue(64);
+    expect(saveBar()).toHaveTextContent("Unsaved changes");
   });
 
   it("saves not reconnecting as a global choice, not as an empty field", async () => {
@@ -523,8 +651,9 @@ describe("SettingsPanel", () => {
 
     const region = screen.getByRole("region", { name: "General" });
     await user.selectOptions(within(region).getByLabelText(/^Reconnect after a dropped connection/), "0");
+    await saveSettings(user);
 
-    await waitFor(() => expect(server.document().global).toEqual({ terminal: { reconnect: 0 } }));
+    expect(server.document().global).toEqual({ terminal: { reconnect: 0 } });
   });
 
   it("loads a stored choice of never reconnecting", () => {
@@ -537,14 +666,28 @@ describe("SettingsPanel", () => {
   it("turns OSC 52 on for every machine and leaves the language to the browser when asked", async () => {
     const user = userEvent.setup();
     withSettings({ global: { language: "en" } });
-    // The language is saved by LanguageProvider, as in the app.
-    render(<LanguageProvider><SettingsPanel api={buildApi()} page="General" /></LanguageProvider>);
+    render(<SettingsPanel api={buildApi()} page="General" />);
     const region = screen.getByRole("region", { name: "General" });
 
     await user.click(within(region).getByRole("checkbox", { name: "Allow writing to the clipboard" }));
-    await waitFor(() => expect(server.document().global.terminal).toEqual({ osc52: true }));
     await user.selectOptions(within(region).getByLabelText("Display language"), "");
-    await waitFor(() => expect(server.document().global.language).toBeUndefined());
+    await saveSettings(user);
+    expect(server.document().global).toEqual({ terminal: { osc52: true } });
+  });
+
+  it("shows the chosen language only once it is saved, and the browser's once the choice is dropped", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
+    render(<LanguageProvider><SettingsPanel api={buildApi()} page="General" /></LanguageProvider>);
+
+    await user.selectOptions(screen.getByLabelText("Display language"), "ja");
+    expect(screen.getByRole("region", { name: "General" })).toBeVisible();
+    await user.click(saveButton());
+    const language = await screen.findByLabelText("表示言語");
+
+    await user.selectOptions(language, "");
+    await user.click(within(saveBar()!).getByRole("button", { name: "保存" }));
+    expect(await screen.findByLabelText("Display language")).toHaveValue("");
   });
 
   it("keeps session logs for every connection but those the rules leave out, and saves only rules the engine takes", async () => {
@@ -554,17 +697,16 @@ describe("SettingsPanel", () => {
     expect(within(region).queryByRole("textbox", { name: "Connections not logged" })).not.toBeInTheDocument();
 
     await user.click(within(region).getByRole("checkbox", { name: "Save a log of each session to a file" }));
-    await waitFor(() => expect(server.document().global.terminal).toEqual({ sessionLog: true }));
     const rules = await within(region).findByRole("textbox", { name: "Connections not logged" });
     await user.type(rules, "[[prod");
-    await user.tab();
     expect(within(region).getByText("A line is not a pattern.")).toBeInTheDocument();
-    expect(server.document().global.terminal).toEqual({ sessionLog: true });
+    expect(saveButton()).toBeDisabled();
 
     await user.clear(rules);
+    // Enter starts a line in a box of lines.
     await user.type(rules, "prod-*{Enter}!prod-web");
-    await user.tab();
-    await waitFor(() => expect(server.document().global.terminal).toEqual({ sessionLog: true, sessionLogRules: "prod-*\n!prod-web" }));
+    await saveSettings(user);
+    expect(server.document().global.terminal).toEqual({ sessionLog: true, sessionLogRules: "prod-*\n!prod-web" });
   });
 
   it("changes where a machine keeps its session logs, and offers nothing on a machine that keeps none", async () => {
@@ -614,15 +756,16 @@ describe("SettingsPanel", () => {
     expect(within(region).getByText("Linux · sshc 0.59.0")).toBeVisible();
     const [, laptopPreset] = within(region).getAllByRole("combobox", { name: "Preset" });
     await user.selectOptions(laptopPreset!, "phone");
-    await waitFor(() => expect(server.document().machines[1]?.settings).toEqual({ name: "laptop", port: 54447, presetId: "phone" }));
-
     const [, laptopPort] = within(region).getAllByRole("spinbutton", { name: "Port" });
     await user.clear(laptopPort!);
     await user.type(laptopPort!, "80{Enter}");
-    expect(laptopPort).toHaveValue(54447);
+    expect(laptopPort).toBeInvalid();
+    expect(laptopPort).toHaveAccessibleDescription("Port: enter a whole number from 1024 to 65535.");
+    expect(server.document().machines[1]?.settings).toEqual({ name: "laptop", port: 54447 });
+    // A blank port is the engine's own choice.
     await user.clear(laptopPort!);
-    await user.tab();
-    await waitFor(() => expect(server.document().machines[1]?.settings).toEqual({ name: "laptop", presetId: "phone" }));
+    await saveSettings(user);
+    expect(server.document().machines[1]?.settings).toEqual({ name: "laptop", presetId: "phone" });
   });
 
   it("offers no port for the Android app, and names a machine called after its system as people know the system", () => {
@@ -687,7 +830,8 @@ describe("SettingsPanel", () => {
     await user.click(within(region).getByRole("button", { name: "Enable notifications" }));
 
     await waitFor(() => expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1));
-    expect(await within(region).findByRole("status")).toHaveTextContent("Notifications enabled");
+    // 許可されたことは、操作の上の文が言う（同じことを緑の知らせで重ねない）。
+    expect(await within(region).findByText(/^Browser notifications are allowed\./)).toBeVisible();
     expect(within(region).getByRole("button", { name: "Send test notification" })).toBeVisible();
     expect(delivered).toEqual([{
       title: "sshc",

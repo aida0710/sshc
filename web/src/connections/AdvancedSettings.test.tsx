@@ -95,7 +95,7 @@ describe("AdvancedSettings", () => {
     const harness = renderAdvanced("Settings");
     await user.clear(screen.getByLabelText("ProxyJump"));
     await user.type(screen.getByLabelText("ProxyJump"), "gateway");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.props.onFieldEdits).toHaveBeenCalledWith([
       { action: "set", line: 2, values: ["gateway"] },
@@ -108,10 +108,10 @@ describe("AdvancedSettings", () => {
     const harness = renderAdvanced();
     harness.props.onBlockRaw.mockResolvedValue(undefined);
     await user.type(screen.getByLabelText(/Block text/), "\tPort 2200\n");
-    await user.click(screen.getByRole("button", { name: "Save block" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.props.onBlockRaw).toHaveBeenCalledWith(`${detail.form.raw}\tPort 2200\n`);
-    expect(screen.queryByRole("button", { name: "Save block" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(false);
     expect(screen.getByLabelText(/Block text/)).toHaveValue(`${detail.form.raw}\tPort 2200\n`);
   });
@@ -122,10 +122,10 @@ describe("AdvancedSettings", () => {
     harness.props.onFieldEdits.mockRejectedValue(new Error("stale_base"));
     await user.clear(screen.getByLabelText("ProxyJump"));
     await user.type(screen.getByLabelText("ProxyJump"), "gateway");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(screen.getByLabelText("ProxyJump")).toHaveValue("gateway");
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
   });
 
@@ -180,7 +180,7 @@ describe("AdvancedSettings", () => {
     await user.click(screen.getByLabelText("New value"));
     await user.paste("sh -c 'echo $PPID'");
     await user.click(screen.getAllByRole("button", { name: "Add" })[1]!);
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.props.onFieldEdits).toHaveBeenCalledWith([
       { action: "set", line: 4, values: ["awk -F: '{print $1}' /etc/passwd"] },
@@ -196,7 +196,7 @@ describe("AdvancedSettings", () => {
     await user.type(screen.getByLabelText("Destination"), "127.0.0.1:3000");
     await user.click(screen.getAllByRole("button", { name: "Add" })[0]!);
     expect(screen.getByRole("cell", { name: /127\.0\.0\.1:3000/ })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     expect(harness.props.onFieldEdits).toHaveBeenCalledWith([{ action: "add", keyword: "RemoteForward", values: ["9080", "127.0.0.1:3000"] }]);
   });
 
@@ -206,9 +206,9 @@ describe("AdvancedSettings", () => {
       { line: 4, keyword: "RemoteForward", values: ["9080", "127.0.0.1:3000"], category: "advanced", editable: true },
     ] } };
     const harness = renderAdvanced("Settings", saved);
-    expect(screen.getByRole("row", { name: /Remote tunnel 9080 127\.0\.0\.1:3000/ })).toBeVisible();
+    expect(screen.getByRole("row", { name: /Remote tunnel.*9080 127\.0\.0\.1:3000/ })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Remove RemoteForward" }));
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(harness.props.onFieldEdits).toHaveBeenCalledWith([{ action: "remove", line: 4 }]);
   });
 
@@ -229,7 +229,7 @@ describe("AdvancedSettings", () => {
     await user.type(screen.getByLabelText("Local port"), "8080");
     await user.type(screen.getByLabelText("Destination"), "db.internal:5432");
     await user.click(screen.getAllByRole("button", { name: "Add" })[0]!);
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.props.onFieldEdits).toHaveBeenCalledWith([
       { action: "remove", line: 4 },
@@ -269,7 +269,7 @@ describe("AdvancedSettings", () => {
     const direct: HostDetail = { ...detail, form: { ...detail.form, fields: detail.form.fields.filter((field) => field.keyword !== "ProxyJump") } };
     const harness = renderAdvanced("Settings", direct);
     await user.type(screen.getByLabelText("Connect through"), "bastion");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.props.onFieldEdits).toHaveBeenCalledWith([{ action: "add", keyword: "ProxyJump", values: ["bastion"] }]);
   });

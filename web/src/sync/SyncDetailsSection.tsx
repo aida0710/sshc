@@ -35,7 +35,7 @@ export function SyncDetailsSection({
   selectedHistoryKey: string | null;
   onRefreshHistory: () => void;
   onSelectHistory: (key: string) => void;
-  onPreviewHistory: (key: string) => void;
+  onPreviewHistory: (key: string) => Promise<void>;
 }) {
   const t = useTranslate();
   return (

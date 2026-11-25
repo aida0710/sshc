@@ -412,7 +412,7 @@ describe("KnownHostsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Scan" }));
 
     expect(host).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Scan" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Scanning…" })).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByText("Loading known_hosts…")).not.toBeInTheDocument();
   });
 

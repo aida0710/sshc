@@ -2,7 +2,7 @@ import { useId, useRef, useState } from "react";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { useTranslate } from "../i18n/context";
 import { ModalShell } from "../ui/ModalShell";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { inspectTerminalPaste, removeFinalTerminalLineBreak } from "./pasteGuard";
 
 export function TerminalPasteDialog({
@@ -36,10 +36,12 @@ export function TerminalPasteDialog({
       <p id={descriptionId} className="text-sm text-ink-muted">
         {t("terminal.pasteDescription", { lines: String(inspection.lineCount) })}
       </p>
-      <ul className="list-disc space-y-1 pl-5 text-sm text-notice-ink">
-        {inspection.risks.includes("line-break") ? <li>{t("terminal.pasteRiskLineBreak")}</li> : null}
-        {inspection.risks.includes("control-character") ? <li>{t("terminal.pasteRiskControl")}</li> : null}
-      </ul>
+      <Notice live={false}>
+        <ul className="list-disc space-y-1 pl-5">
+          {inspection.risks.includes("line-break") ? <li>{t("terminal.pasteRiskLineBreak")}</li> : null}
+          {inspection.risks.includes("control-character") ? <li>{t("terminal.pasteRiskControl")}</li> : null}
+        </ul>
+      </Notice>
       <label className="flex flex-col gap-1 text-sm text-ink">
         {t("terminal.pasteEdit")}
         <textarea
@@ -67,7 +69,7 @@ export function TerminalPasteDialog({
           <p className="border-t border-control-line px-3 py-2 text-xs text-ink-muted">{t("terminal.pastePreviewTruncated")}</p>
         ) : null}
       </details>
-      <p className="text-xs font-medium text-notice-ink">{t("terminal.pasteNotSent")}</p>
+      <p className="text-xs font-medium text-ink-muted">{t("terminal.pasteNotSent")}</p>
       <div className="flex flex-wrap justify-end gap-2">
         <Button ref={cancel} onClick={onCancel}>{t("terminal.pasteCancel")}</Button>
         {inspection.endsWithLineBreak ? (

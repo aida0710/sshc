@@ -6,7 +6,6 @@ type ConnectionActionsProps = {
   alias: string;
   path: string;
   busy: boolean;
-  opening?: boolean;
   onOpenSettings: (location: string) => void;
   onConnect: () => void;
 };
@@ -15,7 +14,6 @@ export function ConnectionActions({
   alias,
   path,
   busy,
-  opening = false,
   onOpenSettings,
   onConnect,
 }: ConnectionActionsProps) {
@@ -25,10 +23,11 @@ export function ConnectionActions({
   return (
     <ActionMenu
       label={t("home.connectionActions", { alias })}
-      triggerClassName="pointer-events-auto flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+      triggerSize="panel"
+      triggerClassName="pointer-events-auto"
       items={[
         { label: t("home.openConnectionSettings"), onSelect: () => onOpenSettings(settingsLocation) },
-        { label: opening ? t("home.opening") : t("home.connect"), onSelect: onConnect, disabled: busy },
+        { label: t("home.connect"), onSelect: onConnect, disabled: busy },
       ]}
     />
   );

@@ -139,6 +139,7 @@ export function VPNProfileRow({
         <Button
           small
           busy={starting}
+          busyLabel={t("busy.connecting")}
           disabled={busy || preparing || checking || !available}
           title={starting ? undefined : waitingForOperation}
           onClick={actions.onStart}
@@ -148,6 +149,7 @@ export function VPNProfileRow({
         <Button
           small
           busy={busyWith("disconnect")}
+          busyLabel={t("busy.disconnecting")}
           disabled={busy || checking || !(status.running || preparing)}
           title={busyWith("disconnect") ? undefined : waitingForOperation}
           onClick={actions.onStop}
@@ -162,7 +164,8 @@ export function VPNProfileRow({
           <ActionMenu
             label={t("vpn.rowActions", { name })}
             items={menu}
-            triggerClassName={`flex size-10 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink @2xl:size-7 ${revealOnHover}`}
+            triggerSize="toolbar"
+            triggerClassName={revealOnHover}
           />
         )}
       </div>

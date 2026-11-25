@@ -32,12 +32,16 @@ var ShortcutModifiers = []string{"Ctrl", "Alt", "Shift", "Meta"}
 var ShortcutCommandModifiers = []string{"Ctrl", "Alt", "Meta"}
 
 // ShortcutActions は、ショートカットを割り当てられる操作である。並びは設定画面の
-// 並びでもある。
+// 並びでもある。runTarget1〜9 は、リモートセッションの一覧の N 番目（1 番目はこのマシン）へ
+// 切り替える。
 var ShortcutActions = []string{
 	"palette", "terminalSearch", "copy", "paste", "previousPrompt", "nextPrompt",
 	"increaseFontSize", "decreaseFontSize", "resetFontSize", "quickCommands",
 	"newSession", "closeSession", "nextSession", "previousSession", "nextPane", "previousPane",
 	"splitRight", "splitBelow", "toggleNavigation", "home", "sftp",
+	"nextRunTarget", "previousRunTarget",
+	"runTarget1", "runTarget2", "runTarget3", "runTarget4", "runTarget5",
+	"runTarget6", "runTarget7", "runTarget8", "runTarget9",
 }
 
 // ショートカットのプリセットの上限。API（api/openapi.yaml の Metadata.shortcutPresets と

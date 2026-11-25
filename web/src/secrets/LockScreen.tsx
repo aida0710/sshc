@@ -6,7 +6,6 @@ import { useLanguage } from "../i18n/context";
 import { CheckboxField, control } from "../ui/form";
 import { EntryPreferences } from "../ui/EntryPreferences";
 import { EntryScreen } from "../ui/EntryScreen";
-import { Icon } from "../ui/icons";
 import { PasswordField } from "../ui/PasswordField";
 import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { Button, Notice } from "../ui/surface";
@@ -52,7 +51,9 @@ export function LockScreen({
     required: number;
   } | null>(null);
   const [resetAcknowledged, setResetAcknowledged] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // running は、待っている操作（開く・作る、互換のバックアップから戻す、作り直す）。押したボタンだけを busy にする。
+  const [running, setRunning] = useState<"submit" | "recover" | "reset" | null>(null);
+  const busy = running !== null;
   const [withoutPassword, setWithoutPassword] = useState(false);
   const noPassword = exists ? passwordless : withoutPassword;
   const tooShort = !noPassword && (exists ? password === "" : !meetsMasterPasswordMinimum(password, minPassphraseLength));
@@ -60,7 +61,7 @@ export function LockScreen({
 
   async function submit() {
     if (busy || tooShort || mismatched) return;
-    setBusy(true);
+    setRunning("submit");
     setError("");
     setDiagnostic(null);
     setVersionMismatch(null);
@@ -158,12 +159,12 @@ export function LockScreen({
           setError(failureMessage);
       }
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
   async function recoverCompatibleBackup() {
-    setBusy(true);
+    setRunning("recover");
     setError("");
     try {
       const status = await api.recoverCompatibleVault(password);
@@ -183,13 +184,13 @@ export function LockScreen({
           setError(t("lock.recoveryFailed"));
       }
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
   async function resetUnsupportedVault() {
     if (!resetAcknowledged) return;
-    setBusy(true);
+    setRunning("reset");
     setError("");
     try {
       const status = await api.resetUnsupportedVault(password);
@@ -201,15 +202,12 @@ export function LockScreen({
       const code = caught instanceof ApiError ? caught.code : "network_request_failed";
       setError(t(code === "vault_backups_too_many" ? "lock.tooManyBackups" : "lock.resetFailed"));
     } finally {
-      setBusy(false);
+      setRunning(null);
     }
   }
 
   const noRecovery = exists || noPassword ? undefined : (
-    <p className="flex gap-2.5 rounded-inset bg-notice px-3 py-2.5 text-xs leading-[19px] text-notice-ink">
-      <Icon name="warning" className="mt-0.5 size-[15px]" />
-      {t("lock.noRecovery")}
-    </p>
+    <Notice compact live={false}>{t("lock.noRecovery")}</Notice>
   );
   return (
     <EntryScreen
@@ -233,13 +231,15 @@ export function LockScreen({
         {versionMismatch === null ? null : (
           <div className="flex flex-col gap-3 rounded-inset bg-well p-4">
             <p className="text-sm leading-6 text-ink-muted">{t("lock.schemaRecoveryHint")}</p>
-            <Button type="button" disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
+            <Button type="button" busy={running === "recover"} busyLabel={t("busy.restoring")} disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
               {t("lock.restoreCompatibleBackup")}
             </Button>
             <CheckboxField label={t("lock.resetUnsupportedAcknowledge")} checked={resetAcknowledged} onChange={setResetAcknowledged} tone="danger" />
             <Button
               kind="danger"
               type="button"
+              busy={running === "reset"}
+              busyLabel={t("busy.creating")}
               disabled={busy || tooShort || !resetAcknowledged}
               onClick={() => void resetUnsupportedVault()}
             >
@@ -255,7 +255,7 @@ export function LockScreen({
           )}
         </>}
         {!exists && !noPassword && isAcceptedButShort(password, minPassphraseLength) ? <p className="text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
-        <Button kind="primary" className="h-[38px] w-full text-sm" type="submit" disabled={busy || tooShort || mismatched}>
+        <Button kind="primary" className="h-[38px] w-full text-sm" type="submit" busy={running === "submit"} busyLabel={t(exists ? "busy.unlocking" : "busy.creating")} disabled={busy || tooShort || mismatched}>
           {exists ? t("lock.open") : t("lock.create")}
         </Button>
       </form>

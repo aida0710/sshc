@@ -5,6 +5,7 @@ import { act, render, renderHook, screen, waitFor, within } from "@testing-libra
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
+import type { HostEntry } from "../api/config";
 import type { RemoteEnginesApi } from "../api/remoteEngines";
 import { engineActionLog } from "../testing/engineActionLog";
 import { useRemoteVaultUnlock, type RemoteVaultUnlockState } from "../terminal/useRemoteVaultUnlock";
@@ -32,7 +33,7 @@ function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi
 
 function targets(overrides: Partial<RunTargetsState> = {}): RunTargetsState {
   return {
-    engines: ["r100"], selected: null, problem: "", busy: false,
+    engines: ["r100"], selected: null, problem: null, dismissProblem: vi.fn(), retryProblem: vi.fn(async () => undefined), busy: false,
     select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
     api: enginesApi(), localVersion: "v0.53.0", vaultUnlock: vaultUnlockState(),
     engineInfo: { openFor: null, ask: vi.fn(), close: vi.fn() },
@@ -62,7 +63,7 @@ function incompatibleEngine() {
 function SwitcherWithDialogs({ state }: { state: RunTargetsState }) {
   const [openFor, setOpenFor] = useState<string | null>(null);
   const engineInfo = { openFor, ask: setOpenFor, close: () => setOpenFor(null) };
-  return <RunTargetSwitcher targets={{ ...state, engineInfo }} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />;
+  return <RunTargetSwitcher targets={{ ...state, engineInfo }} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />;
 }
 
 describe("useRemoteVaultUnlock", () => {
@@ -82,7 +83,7 @@ describe("useRunTargets", () => {
     const api = enginesApi();
     const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v1", api }));
     await waitFor(() => expect(result.current.engines).toEqual(["r100"]));
-    act(() => result.current.select("r100"));
+    act(() => { result.current.select("r100"); });
     expect(result.current.selected).toBe("r100");
     expect(currentSettings()?.state.interface?.runTarget).toBe("r100");
 
@@ -97,9 +98,45 @@ describe("useRunTargets", () => {
     const api = enginesApi({ open });
     const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v0.53.0", api }));
     await act(async () => { await result.current.openInNewTab("r100"); });
-    expect(result.current.problem).toBe("");
+    expect(result.current.problem).toBeNull();
     expect(result.current.engineInfo.openFor).toBe("r100");
     expect(closeTab).toHaveBeenCalled();
+  });
+
+  it("keeps the reason while the failed addition is tried again, and forgets it once the engine is added", async () => {
+    fakeSettingsServer();
+    let answer = () => {};
+    const add = vi.fn()
+      .mockRejectedValueOnce(new ApiError("remote_engine_not_running", 502, null))
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { answer = resolve; }));
+    const api = enginesApi({ add });
+    const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v0.53.0", api }));
+    await act(async () => { await result.current.add("r200"); });
+    expect(result.current.problem).toMatchObject({ alias: "r200", code: "remote_engine_not_running", action: "add" });
+
+    let retried = Promise.resolve();
+    act(() => { retried = result.current.retryProblem(); });
+    expect(add).toHaveBeenLastCalledWith("r200");
+    expect(result.current.problem).not.toBeNull();
+    await act(async () => { answer(); await retried; });
+    expect(result.current.problem).toBeNull();
+    expect(result.current.selected).toBe("r200");
+  });
+
+  it.each([
+    ["remove", "remove"],
+    ["openInNewTab", "open"],
+  ] as const)("tries a failed %s again on the same engine", async (action, method) => {
+    vi.spyOn(window, "open").mockReturnValue({ close: vi.fn(), location: {} } as unknown as Window);
+    const failing = vi.fn().mockRejectedValue(new ApiError("remote_engine_unreachable", 502, null));
+    const api = enginesApi({ [method]: failing });
+    const { result } = renderHook(() => useRunTargets({ translate, enabled: true, localVersion: "v0.53.0", api }));
+    await act(async () => { await result.current[action]("r100"); });
+    expect(result.current.problem).toMatchObject({ alias: "r100", action });
+
+    await act(async () => { await result.current.retryProblem(); });
+    expect(failing).toHaveBeenCalledTimes(2);
+    expect(failing).toHaveBeenLastCalledWith("r100");
   });
 
 });
@@ -108,29 +145,29 @@ describe("RunTargetSwitcher says how the connection is going", () => {
   const chosen = targets({ selected: "r100" });
 
   it("names the run target as usual once it answered", () => {
-    render(<RunTargetSwitcher targets={chosen} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Choose the remote session engine (now: r100)" })).toHaveTextContent("Remote sessionr100");
   });
 
   it("says it is connecting while the host has not answered", () => {
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "connecting", connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "connecting", connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Choose the remote session engine (now: r100, Connecting)" })).toHaveTextContent("Connectingr100");
   });
 
   it("says the same while only the engine has not answered", () => {
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "awaitingEngine" })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "awaitingEngine" })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: /Connecting/ })).toBeInTheDocument();
   });
 
   it("says this machine is loading while its sessions are read", () => {
-    render(<RunTargetSwitcher targets={targets()} link={linkState({ phase: "loading" })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={targets()} link={linkState({ phase: "loading" })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Choose the remote session engine (now: localhost, Loading)" })).toHaveTextContent("Loadinglocalhost");
   });
 
   it("does not show a green mark for a host it cannot reach, and gives the reason in the list", async () => {
     const user = userEvent.setup();
     const refusal = new ApiError("remote_engine_unreachable", 502, { code: "remote_engine_unreachable", message: "request rejected" });
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     const trigger = screen.getByRole("button", { name: "Choose the remote session engine (now: r100, Can't connect)" });
     expect(trigger.querySelector("[data-link-mark]")).toHaveAttribute("data-link-mark", "failed");
     await user.click(trigger);
@@ -144,7 +181,7 @@ describe("RunTargetSwitcher says how the connection is going", () => {
     const refusal = new ApiError("remote_engine_vault_locked", 423, { code: "remote_engine_vault_locked", message: "request rejected" });
     const state = targets({ selected: "r100" });
     const onShowTerminal = vi.fn();
-    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal })} aliases={["r100"]} hosts={[]} onShowTerminal={onShowTerminal} />);
+    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal })} aliases={["r100"]} hosts={[]} onShowTerminal={onShowTerminal} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /Choose the remote session engine/ }));
     await user.click(screen.getByRole("button", { name: /^r100/ }));
     expect(state.vaultUnlock.ask).toHaveBeenCalledWith("r100");
@@ -157,7 +194,7 @@ describe("RunTargetSwitcher says how the connection is going", () => {
     const refusal = new ApiError("remote_engine_unreachable", 502, { code: "remote_engine_unreachable", message: "request rejected" });
     const state = targets({ selected: "r100" });
     const onShowTerminal = vi.fn();
-    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={onShowTerminal} />);
+    render(<RunTargetSwitcher targets={state} link={linkState({ phase: "refused", refusal, connectedEngines: new Set() })} aliases={["r100"]} hosts={[]} onShowTerminal={onShowTerminal} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /Choose the remote session engine/ }));
     await user.click(screen.getByRole("button", { name: /^r100/ }));
     expect(onShowTerminal).toHaveBeenCalledOnce();
@@ -166,13 +203,13 @@ describe("RunTargetSwitcher says how the connection is going", () => {
 
   it("names a locked Vault rather than a failed connection", () => {
     const refusal = new ApiError("remote_engine_vault_locked", 423, { code: "remote_engine_vault_locked", message: "request rejected" });
-    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={chosen} link={linkState({ phase: "refused", refusal })} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     expect(screen.getByRole("button", { name: /Locked/ })).toBeInTheDocument();
   });
 
   it("marks the other run targets by whether this machine is connected to them", async () => {
     const user = userEvent.setup();
-    render(<RunTargetSwitcher targets={targets({ engines: ["r100", "nas"] })} link={linkState()} aliases={["r100", "nas"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={targets({ engines: ["r100", "nas"] })} link={linkState()} aliases={["r100", "nas"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /Choose the remote session engine/ }));
     expect(screen.getByRole("button", { name: /^r100/ })).toHaveTextContent("Connected");
     expect(screen.getByRole("button", { name: /^nas/ })).toHaveTextContent("Not connected");
@@ -184,7 +221,7 @@ describe("RunTargetSwitcher says how the connection is going", () => {
 describe("RunTargetSwitcher", () => {
   it("marks the switch and the engine whose terminals sent a notification nobody has seen", async () => {
     const user = userEvent.setup();
-    render(<RunTargetSwitcher targets={targets({ unread: new Set(["r100"]) })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={targets({ unread: new Set(["r100"]) })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     const trigger = screen.getByRole("button", { name: /^Choose the remote session engine/ });
     expect(within(trigger).getByText("Another engine has new notifications")).toBeInTheDocument();
     await user.click(trigger);
@@ -195,17 +232,59 @@ describe("RunTargetSwitcher", () => {
   it("chooses an engine from the list that opens upward", async () => {
     const user = userEvent.setup();
     const state = targets();
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     const list = screen.getByRole("list", { name: "Engines" });
     await user.click(within(list).getByRole("button", { name: /^r100/ }));
     expect(state.select).toHaveBeenCalledWith("r100");
   });
 
+  const notRunning = { message: "The sshc engine is not running on r100.", alias: "r100", code: "remote_engine_not_running", action: "add" } as const;
+
+  it("says the engine is not running and folds the commands that start it under How to fix", async () => {
+    const user = userEvent.setup();
+    render(<RunTargetSwitcher targets={targets({ problem: notRunning })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    const notice = screen.getByRole("alert");
+    expect(within(notice).getByText("The sshc engine is not running")).toBeVisible();
+    expect(within(notice).getByText("r100")).toBeVisible();
+    expect(within(notice).getByText("sshc service install")).not.toBeVisible();
+    await user.click(within(notice).getByText("How to fix"));
+    expect(within(notice).getByText("sshc service install")).toBeVisible();
+    expect(within(notice).getByText("sshc open")).toBeVisible();
+  });
+
+  it("shows another reason as it is", () => {
+    const problem = { message: "The SSH server on r100 does not allow forwarding.", alias: "r100", code: "remote_engine_forwarding_refused", action: "add" } as const;
+    render(<RunTargetSwitcher targets={targets({ problem })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("The SSH server on r100 does not allow forwarding.");
+    expect(screen.queryByText("How to fix")).not.toBeInTheDocument();
+  });
+
+  it("shows it is waiting while the failed step is tried again", async () => {
+    const user = userEvent.setup();
+    let finish = () => {};
+    const retryProblem = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<RunTargetSwitcher targets={targets({ problem: notRunning, retryProblem })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    const tryAgain = screen.getByRole("button", { name: "Try again" });
+    await user.click(tryAgain);
+    expect(retryProblem).toHaveBeenCalledOnce();
+    expect(tryAgain).toHaveAttribute("aria-busy", "true");
+    await act(async () => { finish(); });
+    expect(tryAgain).not.toHaveAttribute("aria-busy");
+  });
+
+  it("lets the reason an engine could not be added be dismissed", async () => {
+    const user = userEvent.setup();
+    const state = targets({ problem: notRunning });
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Hide this notice" }));
+    expect(state.dismissProblem).toHaveBeenCalledOnce();
+  });
+
   it("offers opening the full screen in a new tab and removing an engine, not this machine", async () => {
     const user = userEvent.setup();
     const state = targets();
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     expect(screen.getAllByRole("button", { name: /^Actions for engine/ })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
@@ -213,6 +292,26 @@ describe("RunTargetSwitcher", () => {
     expect(state.openInNewTab).toHaveBeenCalledWith("r100");
     await user.click(screen.getByRole("button", { name: "Remove from the list" }));
     expect(state.remove).toHaveBeenCalledWith("r100");
+  });
+
+  // 色などの設定は、このマシンの Connections の接続先にある。リモートセッションを選んでいる間は localhost に戻って開くと言う。
+  it("opens the settings of the engine's connection on this machine, saying it goes back to localhost while a remote session is chosen", async () => {
+    const user = userEvent.setup();
+    const onOpenConnectionSettings = vi.fn();
+    const r100 = { identity: { path: "conf.d/20-lab.conf", alias: "r100" } } as HostEntry;
+    render(<RunTargetSwitcher targets={targets({ selected: "r100" })} link={linkState()} aliases={["r100"]} hosts={[r100]} onShowTerminal={vi.fn()} onOpenConnectionSettings={onOpenConnectionSettings} />);
+    await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
+    await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
+    await user.click(screen.getByRole("button", { name: "Open connection settings (back to localhost)" }));
+    expect(onOpenConnectionSettings).toHaveBeenCalledWith({ path: "conf.d/20-lab.conf", alias: "r100" });
+  });
+
+  it("does not offer the connection settings of an engine whose connection this machine no longer has", async () => {
+    const user = userEvent.setup();
+    render(<RunTargetSwitcher targets={targets()} link={linkState()} aliases={[]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
+    await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
+    expect(screen.queryByRole("button", { name: /^Open connection settings/ })).toBeNull();
   });
 
   it("shows the engine's version, Vault and sessions, and restarts it after saying its sessions end", async () => {
@@ -253,7 +352,7 @@ describe("RunTargetSwitcher", () => {
     });
     const vaultUnlock = vaultUnlockState({ unlockFor: "r100" });
     const status = vi.fn(async () => ({ alias: "r100", version: "v0.53.0", vault: true, unlocked: false, passwordless: false, sessions: 2 }));
-    render(<RunTargetSwitcher targets={targets({ api: enginesApi({ unlockVault, status }), vaultUnlock })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={targets({ api: enginesApi({ unlockVault, status }), vaultUnlock })} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
 
     const dialog = screen.getByRole("dialog", { name: "Unlock the vault on r100" });
     const field = within(dialog).getByLabelText("Vault password for r100");
@@ -273,7 +372,7 @@ describe("RunTargetSwitcher", () => {
     const user = userEvent.setup();
     const status = vi.fn(async () => ({ alias: "r100", version: "v0.53.0", vault: false, unlocked: false, passwordless: false, sessions: 0 }));
     const state = targets({ api: enginesApi({ status }), vaultUnlock: vaultUnlockState({ unlockFor: "r100" }) });
-    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} />);
+    render(<RunTargetSwitcher targets={state} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
 
     const dialog = await screen.findByRole("dialog", { name: "r100 has no vault" });
     await user.click(within(dialog).getByRole("button", { name: "Open its full screen in a new tab" }));
@@ -306,6 +405,18 @@ describe("EngineInfoDialog", () => {
     expect(within(dialog).getAllByText("Version")).toHaveLength(1);
     expect(within(dialog).getByText("v0.53.0")).toBeInTheDocument();
     expect(within(dialog).getByText("Vault")).toBeInTheDocument();
+  });
+
+  it("says the engine is not running with the commands that start it, without naming the host again", async () => {
+    const user = userEvent.setup();
+    const status = vi.fn().mockRejectedValue(new ApiError("remote_engine_not_running", 502, null));
+    render(<EngineInfoDialog alias="r100" targets={targets({ api: enginesApi({ status }) })} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog", { name: "Engine on r100" });
+    const notice = await within(dialog).findByRole("alert");
+    expect(within(notice).getByText("The sshc engine is not running")).toBeVisible();
+    expect(within(notice).queryByText("r100")).not.toBeInTheDocument();
+    await user.click(within(notice).getByText("How to fix"));
+    expect(within(notice).getByText("sshc service install")).toBeVisible();
   });
 
   it("names the sessions on the run target that stopping it ends, and keeps to the count when they cannot be read", async () => {
@@ -341,7 +452,7 @@ describe("EngineInfoDialog", () => {
     await within(dialog).findByText("v0.51.0");
     await user.click(within(dialog).getByRole("button", { name: "Update" }));
     await user.click(within(screen.getByRole("dialog", { name: "Update sshc on r100?" })).getByRole("button", { name: "Update" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("failed");
+    expect(await within(dialog).findByText("sshc on that host failed. Check its output.")).toBeInTheDocument();
     expect(within(dialog).getByText(/Cannot connect to r100/)).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Update" })).toBeEnabled();
   });

@@ -83,7 +83,7 @@ export function NewGroupField({ groupNames, onCreate, onCreated }: NewGroupField
           aria-invalid={problem !== ""}
           className={`${control} min-w-0 flex-[999_1_9rem]`}
         />
-        <Button busy={busy} disabled={name === ""} onClick={() => void create()}>{t("groupDialog.create")}</Button>
+        <Button busy={busy} busyLabel={t("busy.creating")} disabled={name === ""} onClick={() => void create()}>{t("groupDialog.create")}</Button>
         <Button disabled={busy} onClick={close}>{t("groupDialog.cancel")}</Button>
       </div>
       {problem === "" ? null : <p role="alert" className="text-xs text-danger">{problem}</p>}

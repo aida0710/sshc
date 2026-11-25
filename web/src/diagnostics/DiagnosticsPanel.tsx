@@ -1,6 +1,7 @@
+import { useEngineApis } from "../shell/engineApis";
 import { useEffect, useState } from "react";
 import { ConfigDiagnosticList } from "../sshconfig/ConfigDiagnosticList";
-import { diagnosticsApi, type AuthenticationResponse, type ConfigCheckResponse, type DiagnosticsApi, type EffectiveResponse, type ReachabilityResponse } from "../api/diagnostics";
+import { type AuthenticationResponse, type ConfigCheckResponse, type DiagnosticsApi, type EffectiveResponse, type ReachabilityResponse } from "../api/diagnostics";
 import {
   Field,
   control,
@@ -30,13 +31,17 @@ const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
 type AuthenticationTest = { confirm: ExecutableDirective[] } | { result: AuthenticationResponse };
 
+type DiagnosticCheck = "explain" | "reachability" | "authentication";
+
 type DiagnosticsPanelProps = {
   api?: DiagnosticsApi;
   hosts?: string[];
   host?: string;
 };
 
-export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ api: apiOverride, host, hosts = [] }: DiagnosticsPanelProps) {
+  const engineApis = useEngineApis();
+  const api = apiOverride ?? engineApis.diagnostics;
   const t = useTranslate();
   const embedded = host !== undefined;
   const [typedAlias, setTypedAlias] = useState("");
@@ -48,6 +53,8 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
   // pendingDirectives are the commands an authentication test would run; the test waits until they are confirmed.
   const [pendingDirectives, setPendingDirectives] = useState<ExecutableDirective[]>([]);
   const check = useAsyncOperation();
+  // startedCheck は、最後に押した検査のボタン。待っている間、そのボタンだけを回る印と待つ間の文言にする。
+  const [startedCheck, setStartedCheck] = useState<DiagnosticCheck | null>(null);
   const { fail: reportFailure, clearError } = check;
   // The alias can change while a check runs (typed, or a new fixed host), and a
   // result does not name the alias it is for. A check whose alias has changed
@@ -91,17 +98,23 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
   const directives = effective?.executableDirectives ?? [];
 
-  const checks: { label: string; start: () => void }[] = [
+  const checks: { id: DiagnosticCheck; label: string; busyLabel: string; start: () => void }[] = [
     {
+      id: "explain",
       label: t("diag.explain"),
+      busyLabel: t("busy.checking"),
       start: () => void run(() => api.effective(alias), setEffective, t("diag.explainFailed")),
     },
     {
+      id: "reachability",
       label: t("diag.checkReachability"),
+      busyLabel: t("busy.checking"),
       start: () => void run(() => api.reachability(alias), setReach, t("diag.reachabilityFailed")),
     },
     {
+      id: "authentication",
       label: t("diag.testAuthentication"),
+      busyLabel: t("busy.authenticating"),
       start: () => void run(() => testAuthentication(), applyAuthenticationTest, t("diag.authenticationFailed")),
     },
   ];
@@ -122,7 +135,9 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
     setAuth(test.result);
   }
 
+  // 確かめたあとの認証の検査は、確認の欄の［確認して認証を実行］が待つ間の印を出すので、上の［認証を確認］には出さない。
   function acknowledgeAndTestAuthentication() {
+    setStartedCheck(null);
     void run(async () => ({ result: await api.authentication(alias, true) }), applyAuthenticationTest, t("diag.authenticationFailed"));
   }
   const blocked = check.busy || alias === "";
@@ -166,22 +181,30 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
               </div>
             )}
             <div className="flex flex-wrap gap-2">
-              {checks.map((check, index) => (
+              {checks.map((diagnostic, index) => (
                 <Button
-                  key={check.label}
+                  key={diagnostic.id}
                   kind={index === 0 ? "primary" : "secondary"}
-                  onClick={check.start}
+                  busy={check.busy && startedCheck === diagnostic.id}
+                  busyLabel={diagnostic.busyLabel}
+                  onClick={() => {
+                    setStartedCheck(diagnostic.id);
+                    diagnostic.start();
+                  }}
                   disabled={blocked}
                 >
-                  {check.label}
+                  {diagnostic.label}
                 </Button>
               ))}
             </div>
           </div>
-          <p aria-live="polite" className="flex items-center gap-2 text-xs text-ink-muted">
-            <span className={`h-2 w-2 rounded-full ${check.busy ? "bg-notice-ink" : alias === "" ? "bg-ink-faint" : "bg-live"}`} />
-            {check.busy ? t("diag.running") : alias === "" ? t("diag.needsAlias") : t("diag.idle")}
-          </p>
+          {/* 検査を待っている間は、押したボタンが待つ間の文言（「確認中…」）を言うので、この行は出さない。 */}
+          {check.busy ? null : (
+            <p aria-live="polite" className="flex items-center gap-2 text-xs text-ink-muted">
+              <span className={`h-2 w-2 rounded-full ${alias === "" ? "bg-ink-faint" : "bg-live"}`} />
+              {alias === "" ? t("diag.needsAlias") : t("diag.idle")}
+            </p>
+          )}
         </div>
       </section>
 
@@ -191,9 +214,8 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
       {hasResults ? <div className="flex flex-col border-t border-line">
       {directives.length > 0 ? (
-        <section className="mt-5 rounded-inset bg-notice px-4 py-4 text-sm">
-          <h3 className="font-medium text-notice-ink">{t("diag.canRunCommand")}</h3>
-          <p className="text-ink-muted">{t("conn.analysisTokenWarning")}</p>
+        <div className="mt-5"><Notice live={false} titleLevel={3} title={t("diag.canRunCommand")}>
+          <p>{t("conn.analysisTokenWarning")}</p>
           <ul className="mt-2 flex flex-col gap-1">
             {directives.map((directive) => (
               <li key={`${directive.path}:${directive.line}:${directive.keyword}`}>
@@ -208,7 +230,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
               </li>
             ))}
           </ul>
-        </section>
+        </Notice></div>
       ) : null}
 
 
@@ -251,9 +273,8 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
 
 
       {effective && effective.complexities.length > 0 ? (
-        <section className="my-3 rounded-inset bg-notice px-4 py-4 text-sm">
-          <h3 className="font-medium text-notice-ink">{t("diag.notSimple")}</h3>
-          <p className="text-ink-muted">{t("diag.notSimpleDetail")}</p>
+        <div className="my-3"><Notice live={false} titleLevel={3} title={t("diag.notSimple")}>
+          <p>{t("diag.notSimpleDetail")}</p>
           <ul className="mt-2 flex flex-col gap-1">
             {effective.complexities.map((note, index) => (
               <li key={`${note.code}-${note.path}-${note.line}-${index}`}>
@@ -264,7 +285,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
               </li>
             ))}
           </ul>
-        </section>
+        </Notice></div>
       ) : null}
 
       {reach || auth ? <div className="grid border-t border-line md:grid-cols-2 md:divide-x md:divide-line">

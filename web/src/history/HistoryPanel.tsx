@@ -1,10 +1,11 @@
+import { useEngineApis } from "../shell/engineApis";
 import { Tag } from "../ui/Tag";
 import { useCallback, useEffect, useState } from "react";
 import { MoreDetails } from "../ui/MoreDetails";
 import { toProblem } from "../api/guards";
 import { useLanguage } from "../i18n/context";
 import type { Problem } from "../api/client";
-import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
+import { type HistoryEntry, type PendingTransaction } from "../api/config";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader, PageSection, PageStateFrame, SummaryStat, SummaryStats } from "../ui/page";
 import { Icon } from "../ui/icons";
@@ -13,6 +14,7 @@ import { formatDateTime } from "../ui/format";
 import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { historyOperationLabelKey, historyStatusLabelKey, restorableFileName, shownHistoryPaths } from "./historyLabels";
 import { PendingChangeDialog } from "./PendingChangeDialog";
+import { useToast } from "../ui/useToast";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -25,6 +27,7 @@ const entryColumns = "grid grid-cols-[minmax(0,1fr)] gap-4 py-3.5 md:grid-cols-[
 const restoreButtonWraps = "min-w-0 whitespace-normal! text-left [overflow-wrap:anywhere]";
 
 export function HistoryPanel() {
+  const { config: configApi } = useEngineApis();
   const { t, locale } = useLanguage();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [pending, setPending] = useState<PendingTransaction[]>([]);
@@ -32,7 +35,8 @@ export function HistoryPanel() {
   // was attempted, so "nothing was written" would not be an answer.
   const [problem, setProblem] = useState<Problem | null>(null);
   const [readFailed, setReadFailed] = useState(false);
-  const [message, setMessage] = useState("");
+  // 戻した・片付けた結果はトーストで知らせる（済んだ操作の結果は、画面に出し続けない）。
+  const showToast = useToast();
   const [inspected, setInspected] = useState<PendingTransaction | null>(null);
 
   const reload = useCallback(async () => {
@@ -51,7 +55,7 @@ export function HistoryPanel() {
     }
 
     setReadFailed(historyResult.status === "rejected" || overviewResult.status === "rejected");
-  }, []);
+  }, [configApi]);
 
   useEffect(() => {
     void reload();
@@ -60,7 +64,7 @@ export function HistoryPanel() {
   async function restore(transactionId: string, path: string) {
     try {
       await configApi.restore(transactionId, path);
-      setMessage(t("history.restored", { path: restorableFileName(path, t) }));
+      showToast(t("history.restored", { path: restorableFileName(path, t) }), { tone: "success" });
       setProblem(null);
       await reload();
     } catch (error) {
@@ -71,7 +75,7 @@ export function HistoryPanel() {
   async function recover(transactionId: string, action: "complete" | "rollback") {
     try {
       await configApi.recover(transactionId, action);
-      setMessage(t(action === "complete" ? "history.completedTransaction" : "history.rolledBack"));
+      showToast(t(action === "complete" ? "history.completedTransaction" : "history.rolledBack"), { tone: "success" });
       setProblem(null);
       await reload();
     } catch (error) {
@@ -101,7 +105,6 @@ export function HistoryPanel() {
         <Notice tone="danger">{saveProblemMessage(problem, t)}</Notice>
       )}
       {readFailed ? <Notice tone="danger">{t("history.readFailed")}</Notice> : null}
-      {message === "" ? null : <Notice tone="success">{message}</Notice>}
 
       {pending.length === 0 ? null : (
         <section aria-labelledby="pending-heading" className="rounded-inset bg-notice">
@@ -109,7 +112,7 @@ export function HistoryPanel() {
             <span className="flex size-[30px] items-center justify-center rounded-md bg-card text-notice-ink">
               <Icon name="history" className="size-4" />
             </span>
-            <h3 id="pending-heading" className="text-sm font-semibold text-notice-ink">{t("history.interrupted")}</h3>
+            <h3 id="pending-heading" className="text-sm font-semibold text-ink">{t("history.interrupted")}</h3>
           </header>
           <div className="divide-y divide-notice-line">
             {pending.map((item) => (

@@ -2,10 +2,10 @@ import type { MessageKey } from "../i18n/messages";
 import type { KeyInventoryResponse } from "./api";
 import { useTranslate } from "../i18n/context";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
-import { Icon } from "../ui/icons";
 import { PageSection } from "../ui/page";
 import { SortableTableHeader } from "../ui/tableSort";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
+import { Notice } from "../ui/surface";
 
 type AgentSort = "algorithm" | "fingerprint" | "comment";
 type AgentIdentity = KeyInventoryResponse["agentIdentities"][number];
@@ -77,10 +77,7 @@ export function AgentSection({ inventory, engineOS }: {
           </table>
         )
       ) : (
-        <p className="flex gap-2.5 rounded-inset bg-notice px-3 py-2.5 text-xs leading-[19px] text-notice-ink">
-          <Icon name="warning" className="mt-0.5 size-[15px]" />
-          {t(agentUnavailableKey(engineOS))}
-        </p>
+        <Notice compact live={false}>{t(agentUnavailableKey(engineOS))}</Notice>
       )}
       {inventory.agentDelegations.length > 0 && (
         <>

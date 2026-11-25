@@ -42,7 +42,7 @@ export function SyncSetupExportSection({ busy, exported, onExport, onClose }: {
     <PageSection
       heading={t("sync.export.heading")}
       hint={t("sync.export.hint")}
-      actions={exported === null ? <Button busy={busy} onClick={onExport}>{t("sync.export.start")}</Button> : undefined}
+      actions={exported === null ? <Button busy={busy} busyLabel={t("busy.exporting")} onClick={onExport}>{t("sync.export.start")}</Button> : undefined}
     >
       {exported === null ? null : (
         <div className="flex flex-col items-start gap-3">

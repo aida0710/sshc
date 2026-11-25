@@ -35,7 +35,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
   // A phone has no width for a column per side: each side's fact goes under the name, and the table fits the screen.
   const compact = useMediaQuery(mobileViewportQuery);
   const [textDifference, setTextDifference] = useState<DirectoryDifference | null>(null);
-  const { comparison, changes, selected, problem, busy, readOnly, mode, setMode, toggle, copySelectedDifferences } = useSFTPComparison({ left, right, onCopied: onDismiss });
+  const { comparison, changes, selected, problem, busy, copying, readOnly, mode, setMode, toggle, copySelectedDifferences } = useSFTPComparison({ left, right, onCopied: onDismiss });
   const leftLabel = left.alias === localHostAlias ? t("sftp.local.connection") : left.alias;
   const rightLabel = right.alias === localHostAlias ? t("sftp.local.connection") : right.alias;
 
@@ -93,8 +93,8 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: SFTPLocati
         <footer className="flex flex-wrap justify-end gap-2 border-t border-line/60 px-5 py-4">
           <Button onClick={onDismiss}>{t("sftp.cancel")}</Button>
           {readOnly ? null : <>
-            <Button disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("right")}>{t("sftp.compare.rightToLeft")}</Button>
-            <Button kind="primary" disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("left")}>{t("sftp.compare.leftToRight")}</Button>
+            <Button busy={copying === "right"} busyLabel={t("busy.copying")} disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("right")}>{t("sftp.compare.rightToLeft")}</Button>
+            <Button kind="primary" busy={copying === "left"} busyLabel={t("busy.copying")} disabled={busy || selected.size === 0} onClick={() => void copySelectedDifferences("left")}>{t("sftp.compare.leftToRight")}</Button>
           </>}
         </footer>
       </ModalShell>

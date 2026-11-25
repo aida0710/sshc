@@ -1,6 +1,6 @@
-import { useContext, useId, type ReactNode, type SyntheticEvent } from "react";
+import { useCallback, useId, useState, type ReactNode } from "react";
 import { describeControl } from "./describeControl";
-import { FieldSavedContext, isChangeEvent } from "./fieldSaved";
+import { FieldErrorContext } from "./fieldError";
 
 // The two columns of a form: the names, then the controls. FieldRowNote lines up with the second. The names'
 // column fits twelve characters, so names such as 現在のマスターパスワード do not break mid-word. Other
@@ -13,6 +13,8 @@ export const formColumns = "lg:grid-cols-[184px_minmax(0,1fr)] lg:gap-x-6";
 export const editorContainer = "@container/editor";
 
 type Density = "page" | "editor";
+
+const noErrors: ReadonlyMap<string, string> = new Map();
 
 // A page row's one column below lg is minmax(0, 1fr), not the implicit auto: a control that is itself an
 // auto-fill grid (Appearance's themes) needs a definite width to count its columns, or it lays all of them in
@@ -38,6 +40,7 @@ const looks: Record<Density, { row: string; name: string; pair: string; second: 
 export function FieldRow({
   label,
   hint,
+  error,
   warning,
   actions,
   interactiveChildren = false,
@@ -46,9 +49,12 @@ export function FieldRow({
 }: {
   label: ReactNode;
   hint?: string | undefined;
-  // warning is what is wrong with the value, in amber under the hint. The control reads it as a description
-  // and is marked invalid. It is announced politely when it changes: some warnings are there from the start
-  // (a value written in a form the editor cannot change), and an alert would interrupt as the form opens.
+  // error は、値のどこが誤りか。hint の下に赤い字で出し、入力欄は aria-invalid で枠が赤になる（index.css）。
+  // 入力欄はこれを説明として読む。変わったときに控えめに読み上げる。最初から出ている誤りもあり、alert にすると
+  // 画面を開いたときに読み上げが割り込むため。
+  error?: string | undefined;
+  // warning は、誤りではないが知っておいてほしいこと（保存していない踏み台の名前など）。琥珀の字で出し、入力欄は
+  // 誤りにしない（枠は赤くしない）。
   warning?: string | undefined;
   // actions are buttons about the field (such as going back to the inherited value), under the hint and
   // outside the <label>, so a click on them does not land on the control.
@@ -61,33 +67,41 @@ export function FieldRow({
   children: ReactNode;
 }) {
   const look = looks[density];
-  const rowId = useId();
   const hintId = useId();
+  const errorId = useId();
   const warningId = useId();
-  const saved = useContext(FieldSavedContext);
-  const noteChange = saved === null ? undefined : (event: SyntheticEvent) => {
-    if (isChangeEvent(event)) saved.noteChange(rowId);
-  };
+  // reported は、行の中の部品が伝えた誤り（useFieldError）。
+  const [reported, setReported] = useState<ReadonlyMap<string, string>>(noErrors);
+  const reportError = useCallback((id: string, text: string) => setReported((current) => {
+    if ((current.get(id) ?? "") === text) return current;
+    const next = new Map(current);
+    if (text === "") next.delete(id);
+    else next.set(id, text);
+    return next;
+  }), []);
   const name = <span className={look.name}>{label}</span>;
   const control = (
     <span className="flex min-w-0 flex-col">
       {describeControl(children, {
-        descriptionIds: [hint === undefined ? undefined : hintId, warning === undefined ? undefined : warningId],
-        invalid: warning !== undefined,
+        descriptionIds: [hint === undefined ? undefined : hintId, error === undefined ? undefined : errorId, warning === undefined ? undefined : warningId],
+        invalid: error !== undefined,
       })}
     </span>
   );
   // The name and the control share a subgrid, so the <label> holds just them and the hint below stays out
   // of the control's accessible name (it is its description instead).
   return (
-    <div data-field-row className={look.row} onChangeCapture={noteChange} onClickCapture={noteChange}>
-      {interactiveChildren ? <div className={look.pair}>{name}{control}</div> : <label className={look.pair}>{name}{control}</label>}
+    <div data-field-row className={look.row}>
+      <FieldErrorContext.Provider value={reportError}>
+        {interactiveChildren ? <div className={look.pair}>{name}{control}</div> : <label className={look.pair}>{name}{control}</label>}
+      </FieldErrorContext.Provider>
       {hint === undefined ? null : <span id={hintId} className={`text-xs leading-[18px] text-ink-faint ${look.second}`}>{hint}</span>}
+      {error === undefined ? null : <span id={errorId} aria-live="polite" className={`text-xs leading-[18px] text-danger ${look.second}`}>{error}</span>}
+      {[...reported].map(([id, text]) => (
+        <span key={id} id={id} aria-live="polite" className={`text-xs leading-[18px] text-danger ${look.second}`}>{text}</span>
+      ))}
       {warning === undefined ? null : <span id={warningId} aria-live="polite" className={`text-xs leading-[18px] text-notice-ink ${look.second}`}>{warning}</span>}
       {actions === undefined ? null : <div className={`flex flex-wrap gap-2 ${look.second}`}>{actions}</div>}
-      {/* Under the row, for a moment, once a change made in it was saved (a page that saves at once, FieldSaved).
-          The page announces it once for screen readers, so this is only seen. */}
-      {saved?.savedRow === rowId ? <span aria-hidden="true" className={`text-xs leading-[18px] text-ink-faint ${look.second}`}>{saved.savedText}</span> : null}
     </div>
   );
 }

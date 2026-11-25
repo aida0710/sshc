@@ -3,7 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { Spinner } from "../ui/Spinner";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { usePendingResult } from "../ui/usePendingResult";
 import type { GroupListing } from "./groupListing";
 
@@ -50,6 +50,7 @@ export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCan
           const moving = move.pending && picked === row.name;
           return (
             <li key={row.name || "ungrouped"}>
+              {/* busy-label-exempt: 行の名前はグループ名なので残し、右の端に回る印と「移動中…」を添える。 */}
               <button
                 type="button"
                 disabled={row.name === currentGroup || move.pending}
@@ -63,13 +64,14 @@ export function MoveToGroupDialog({ aliases, groups, currentGroup, onPick, onCan
               >
                 <Icon name="groups" className="size-4 text-ink-faint" />
                 <span title={row.label} className="min-w-0 flex-1 truncate">{row.label}</span>
-                {moving ? <Spinner /> : null}
+                {/* 前の空白は、読み上げの名前を「work 移動中…」と区切るため。 */}
+                {moving ? <>{" "}<span className="flex shrink-0 items-center gap-2 text-ink-muted"><Spinner />{t("busy.moving")}</span></> : null}
               </button>
             </li>
           );
         })}
       </ul>
-      {error === "" ? null : <p id={errorId} role="alert" className="px-4 py-2 text-sm text-danger">{error}</p>}
+      {error === "" ? null : <div className="px-4 py-2"><Notice tone="danger" id={errorId}>{error}</Notice></div>}
       <div className="flex justify-end border-t border-line px-4 py-3">
         <Button disabled={move.pending} onClick={onCancel}>{t("groupDialog.cancel")}</Button>
       </div>

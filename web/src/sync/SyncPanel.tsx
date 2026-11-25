@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { vaultApi, type VaultApi } from "../api/vault";
 import { syncApi, type SyncApi, type PushResponse, type SyncHistoryDiff, type SyncSetupExport } from "../api/sync";
 import { useLanguage, useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button, Notice } from "../ui/surface";
+import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
 import { PanelState } from "../ui/PanelState";
+import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
+import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
 import { SyncResultCard } from "./SyncResultCard";
 import { SyncPageFrame } from "./SyncPageFrame";
 import { SyncDetailsSection } from "./SyncDetailsSection";
@@ -30,7 +33,12 @@ import { syncPathRefusals, syncRefusals } from "./syncRefusals";
 export type SyncPanelApi = SyncApi & Pick<VaultApi, "unlockVault">;
 const syncPanelApi: SyncPanelApi = { ...syncApi, ...vaultApi };
 
-type SyncPanelProps = { api?: SyncPanelApi };
+type SyncPanelProps = {
+  api?: SyncPanelApi;
+  // Used to ask before leaving while the exclusions have unsaved changes.
+  onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
+  onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
+};
 
 // The three things to do, in order, before sync is set up.
 function SyncFlowSteps() {
@@ -56,8 +64,17 @@ function SyncFlowSteps() {
   );
 }
 
-export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
+export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNavigateLocation }: SyncPanelProps) {
   const { locale, t } = useLanguage();
+  const [exclusionsDirty, setExclusionsDirty] = useState(false);
+  const discardExclusions = useRef<(() => void) | null>(null);
+  const keepDiscardExclusions = useCallback((discard: (() => void) | null) => { discardExclusions.current = discard; }, []);
+  const draftDiscard = useDraftDiscardConfirmation({
+    dirty: exclusionsDirty,
+    discard: () => discardExclusions.current?.(),
+    onNavigationBlockerChange,
+    onNavigateLocation,
+  });
   const form = useSyncSetupForm();
   const importForm = useSyncSetupImport();
   // The settings sealed for another machine, while their QR code is on the screen.
@@ -88,7 +105,6 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   const operation = useSyncOperation(t, syncRefusals, syncPathRefusals);
   const {
     resultView,
-    notice,
     error,
     errorCode,
     busy,
@@ -186,10 +202,9 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   if (statusState.phase === "error") {
     return (
       <SyncPageFrame>
-        <Notice tone="danger">{statusState.message}</Notice>
-        <Button onClick={() => void reload()} className="self-start">
-          {t("shell.bootstrapRetry")}
-        </Button>
+        <Notice tone="danger" actions={<Button small onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>}>
+          {statusState.message}
+        </Notice>
       </SyncPageFrame>
     );
   }
@@ -240,11 +255,6 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
       {/* 強制送信と適用のダイアログは、同じ失敗を自分の中に出す。背面にも出すと、
           スクリーンリーダーが同じ文を 2 回読み上げる。 */}
       {forcePushOpen || preview !== null ? null : <SyncErrorNotice message={error} code={errorCode} />}
-      {notice === "" ? null : (
-        <p role="status" className="text-sm text-ink-muted">
-          {notice}
-        </p>
-      )}
       {revealed === "" ? null : (
         <Notice tone="notice">
           <span className="block">{t("sync.keyShownOnce")}</span>
@@ -288,6 +298,8 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           onSaved={() => {
             void refreshPushDraft();
           }}
+          onDirtyChange={setExclusionsDirty}
+          onDiscardReady={keepDiscardExclusions}
         />
       ) : null}
 
@@ -331,15 +343,15 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           />
         )}
         onCheckSetup={() =>
-          void run(() => api.checkSyncSetup(form.setupInput), {
+          run(() => api.checkSyncSetup(form.setupInput), {
             apply: form.acceptSetupCheck,
             failure: t("sync.configureFailed"),
           })
         }
-        onCompleteSetup={() => {
+        onCompleteSetup={async () => {
           const request = form.setupRequest();
           if (request === null) return;
-          void run(() => api.completeSyncSetup(request), {
+          await run(() => api.completeSyncSetup(request), {
             apply: (next) => {
               adoptAndRefresh(next.status);
               setRevealed(next.generatedKey ?? "");
@@ -353,7 +365,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
         }}
         onSaveKey={() => {
           const { chooseOwn, ownKey } = form;
-          void run(
+          return run(
             () =>
               status.keyConfigured
                 ? api.setSyncKey(
@@ -386,12 +398,12 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           pushMessage={pushMessage}
           onMessageChange={editPushMessage}
           onPush={() =>
-            void run(() => api.pushSnapshot(pushMessage.trim()), {
+            run(() => api.pushSnapshot(pushMessage.trim()), {
               apply: (next) => adoptPush(next, "sync.pushed"),
               failure: t("sync.pushFailed"),
             })
           }
-          onPreview={() => void previewWith(undefined)}
+          onPreview={() => previewWith(undefined)}
         />
       ) : null}
 
@@ -409,7 +421,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           selectedHistoryKey={selectedHistoryKey}
           onRefreshHistory={() => void refreshHistory()}
           onSelectHistory={(key) => void selectHistory(key)}
-          onPreviewHistory={(key) => void previewWith(undefined, key)}
+          onPreviewHistory={(key) => previewWith(undefined, key)}
         />
       ) : null}
 
@@ -455,9 +467,9 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           t={t}
           onAcceptRemovals={pull.acceptRemovals}
           onClose={pull.close}
-          onResolve={(choice) => void previewWith(choice, previewHistoryKey)}
+          onResolve={(choice) => previewWith(choice, previewHistoryKey)}
           onApply={() =>
-            void run(
+            run(
               () =>
                 previewAcceptRemoteHead
                   ? api.pullSnapshot(
@@ -481,6 +493,9 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           }
         />
       )}
+      {draftDiscard.confirming ? (
+        <DiscardDraftDialog id="sync-exclusions-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />
+      ) : null}
     </SyncPageFrame>
   );
 }

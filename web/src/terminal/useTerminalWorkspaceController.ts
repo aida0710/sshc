@@ -31,13 +31,12 @@ export function useTerminalWorkspaceController({
   closeNavigation,
   vaultRevision = 0,
 }: TerminalWorkspaceControllerOptions) {
-  const splitView = useSplitView({ sessions: terminalSessions.sessions, runTarget, maxSessions: terminalSessions.maxSessions });
+  const splitView = useSplitView({ sessions: terminalSessions.sessions, sessionsLoaded: terminalSessions.loaded, runTarget, maxSessions: terminalSessions.maxSessions });
   const { selectSession: setActiveSessionId, dispatch: dispatchSplit } = splitView;
   const { activeSessionId } = splitView.state;
   const pendingSessionId = useRef<string | null>(null);
   // The session last shown on each run target (null is this machine), shown
-  // again when the person comes back to it. A run target's selection starts
-  // empty in useSplitView, so what is recorded here is always that target's.
+  // again when the person comes back to it after its selection was cleared.
   const lastSessionByRunTarget = useRef(new Map<string | null, string>());
 
   useEffect(() => {

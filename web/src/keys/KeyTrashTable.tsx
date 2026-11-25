@@ -3,7 +3,7 @@ import type { TrashListResponse } from "./api";
 import { useTranslate, type Translate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { SortableTableHeader } from "../ui/tableSort";
 import { useTableSort, type SortValue } from "../ui/useTableSort";
 import { describeBlockers } from "./labels";
@@ -101,8 +101,9 @@ export function KeyTrashTable({ trash, onRestore, onPurge }: {
         <ConfirmDialog
           id="key-purge-heading"
           heading={t("keys.purge")}
-          body={<p className="text-sm text-danger">{t("keys.purgeWarning")}</p>}
+          body={<Notice tone="danger" live={false}>{t("keys.purgeWarning")}</Notice>}
           confirmLabel={t("keys.confirmPurge")}
+          busyLabel={t("busy.deleting")}
           cancelLabel={t("keys.cancel")}
           onConfirm={async () => {
             setPurgeError("");

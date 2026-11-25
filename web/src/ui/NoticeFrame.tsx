@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "./icons";
+import { IconButton } from "./IconButton";
 
 // The colour of a card says what it waits for: a decision of the person (question), the engine working on it
 // (notice), or the person after it stopped (ended).
@@ -89,15 +90,10 @@ export function NoticeFrame({ tone, kicker, title, body, detail, focus, onDismis
       {detail}
       <div className="mt-3 flex flex-wrap gap-2">{children}</div>
       {onDismiss === undefined ? null : (
-        <button
-          type="button"
-          aria-label={t("terminal.noticeDismiss")}
-          title={t("terminal.noticeDismiss")}
-          onClick={onDismiss}
-          className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink mobile-layout:right-0.5 mobile-layout:top-0.5 mobile-layout:size-11"
-        >
+        <IconButton label={t("terminal.noticeDismiss")} size="panel" className="absolute right-2 top-2 mobile-layout:right-0.5 mobile-layout:top-0.5"
+          onClick={onDismiss}>
           <Icon name="close" className="size-4" />
-        </button>
+        </IconButton>
       )}
     </section>
   );

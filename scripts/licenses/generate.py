@@ -77,6 +77,7 @@ for relative, package in sorted(lock["packages"].items()):
     add(metadata["name"], package["version"], "Web", "https://www.npmjs.com/package/" + metadata["name"], notices, metadata.get("license"))
 
 add("JetBrains Mono", "", "Font", "https://github.com/JetBrains/JetBrainsMono", [{"name": "OFL.txt", "text": (ROOT / "web/public/fonts/OFL.txt").read_text()}], "OFL-1.1")
+add("BIZ UDGothic", "", "Font", "https://github.com/googlefonts/morisawa-biz-ud-gothic", [{"name": "OFL.txt", "text": (ROOT / "web/public/fonts/OFL-BIZUDGothic.txt").read_text()}], "OFL-1.1")
 add("Devicon", "7330accdbc47", "Icons", "https://github.com/devicons/devicon", documents(ROOT / "web/src/ui/os-icons"), "MIT")
 
 # Use Gradle's selected runtime versions, not all versions present in its cache.
@@ -126,5 +127,5 @@ output = ROOT / "web/src/licenses/catalogue.generated.json"
 output.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n")
 print(f"Collected {len(entries)} components into {output.relative_to(ROOT)}")
 
-inputs = ["go.mod", "go.sum", "web/package-lock.json", "android/app/build.gradle.kts", "LICENSE", "web/public/fonts/OFL.txt", "web/src/ui/os-icons/LICENSE", "web/src/ui/os-icons/README.md", "third_party/go-serial/LICENSE", "third_party/vt/LICENSE", "scripts/licenses/generate.py", "scripts/licenses/artifacts.gradle"]
+inputs = ["go.mod", "go.sum", "web/package-lock.json", "android/app/build.gradle.kts", "LICENSE", "web/public/fonts/OFL.txt", "web/public/fonts/OFL-BIZUDGothic.txt", "web/src/ui/os-icons/LICENSE", "web/src/ui/os-icons/README.md", "third_party/go-serial/LICENSE", "third_party/vt/LICENSE", "scripts/licenses/generate.py", "scripts/licenses/artifacts.gradle"]
 (ROOT / "web/src/licenses/sources.generated.json").write_text(json.dumps({name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in inputs}, indent=2) + "\n")
