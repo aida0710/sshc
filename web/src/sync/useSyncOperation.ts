@@ -3,6 +3,7 @@ import { failureCode, failurePath } from "../api/client";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { SyncResultView } from "./SyncResultCard";
+import { useToast } from "../ui/useToast";
 
 type Refusals = Readonly<Partial<Record<string, MessageKey>>>;
 type Recover = (code: string) => Promise<boolean>;
@@ -27,7 +28,8 @@ export function useSyncOperation(
   pathRefusals: Refusals,
 ) {
   const [resultView, setResultView] = useState<SyncResultView | null>(null);
-  const [notice, setNotice] = useState("");
+  // 済んだ操作の結果（送信した、適用した）はトーストで知らせ、画面に出し続けない。
+  const showToast = useToast();
   const [error, setError] = useState("");
   const [errorCode, setErrorCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,7 +54,6 @@ export function useSyncOperation(
   async function execute<T>(operation: () => Promise<T>, options: SyncExecuteOptions<T>) {
     const { apply, failure, explain, recover } = options;
     clearError();
-    setNotice("");
     setBusy(true);
     try {
       apply(await operation());
@@ -70,13 +71,14 @@ export function useSyncOperation(
 
   return {
     resultView,
-    notice,
     error,
     errorCode,
     busy,
     execute,
     clearError,
-    showNotice: setNotice,
+    showNotice: (message: string) => {
+      if (message !== "") showToast(message, { tone: "success" });
+    },
     showResult: setResultView,
   };
 }

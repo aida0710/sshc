@@ -948,7 +948,6 @@ export const en = {
     "Notifications are turned off for sshc. Allow them in Android Settings → Apps → sshc → Notifications.",
   "terminal.browserNotificationsEnable": "Enable notifications",
   "terminal.browserNotificationsTest": "Send test notification",
-  "terminal.browserNotificationsEnabled": "Notifications enabled",
   "terminal.browserNotificationsReady": "Terminal and transfer notifications are ready.",
   "terminal.browserNotificationsRequestFailed":
     "Notification permission could not be requested.",
@@ -1298,9 +1297,6 @@ export const en = {
   "terminal.forwardRetryHint":
     "Fix the local port conflict, then reconnect this SSH session to retry the saved forwarding.",
   "terminal.forwardAgentLabel": "SSH agent",
-  "terminal.forwardCopy": "Copy address",
-  "terminal.forwardCopied": "The address was copied.",
-  "terminal.forwardCopyFailed": "The address could not be copied.",
   "terminal.forwardStop": "Stop",
   "terminal.forwardStopped": "The forwarding was stopped.",
   "terminal.forwardRemoteAddress": "SSH server {listen} → engine {to}",
@@ -2169,6 +2165,8 @@ export const en = {
   "copy.keyLine": "key line",
   "copy.remoteCommand": "remote command",
   "copy.diagnosticReport": "diagnostic report",
+  "copy.copied": "Copied",
+  "copy.address": "address",
 
   "diagnostic.requestFailed": "The operation could not be completed",
   "diagnostic.requestFailedHint":

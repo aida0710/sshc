@@ -953,7 +953,6 @@ export const ja = {
     "sshcの通知がオフになっています。Androidの［設定］→［アプリ］→［sshc］→［通知］で許可してください。",
   "terminal.browserNotificationsEnable": "通知を有効にする",
   "terminal.browserNotificationsTest": "テスト通知を送る",
-  "terminal.browserNotificationsEnabled": "通知は有効です",
   "terminal.browserNotificationsReady": "ターミナルとファイル転送の通知を利用できます。",
   "terminal.browserNotificationsRequestFailed":
     "通知の許可をリクエストできませんでした。",
@@ -1301,9 +1300,6 @@ export const ja = {
   "terminal.forwardRetryHint":
     "ローカルポートの競合を解消し、このSSHセッションを再接続すると保存済み転送を再試行します。",
   "terminal.forwardAgentLabel": "SSHエージェント",
-  "terminal.forwardCopy": "アドレスをコピー",
-  "terminal.forwardCopied": "アドレスをコピーしました。",
-  "terminal.forwardCopyFailed": "アドレスをコピーできませんでした。",
   "terminal.forwardStop": "停止",
   "terminal.forwardStopped": "転送を停止しました。",
   "terminal.forwardRemoteAddress": "SSH接続先{listen} → sshcエンジン側{to}",
@@ -2167,6 +2163,8 @@ export const ja = {
   "copy.keyLine": "鍵の行",
   "copy.remoteCommand": "リモートコマンド",
   "copy.diagnosticReport": "診断レポート",
+  "copy.copied": "コピーしました",
+  "copy.address": "アドレス",
 
   "diagnostic.requestFailed": "操作を完了できませんでした",
   "diagnostic.requestFailedHint":

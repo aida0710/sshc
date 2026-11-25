@@ -830,7 +830,8 @@ describe("SettingsPanel", () => {
     await user.click(within(region).getByRole("button", { name: "Enable notifications" }));
 
     await waitFor(() => expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1));
-    expect(await within(region).findByRole("status")).toHaveTextContent("Notifications enabled");
+    // 許可されたことは、操作の上の文が言う（同じことを緑の知らせで重ねない）。
+    expect(await within(region).findByText(/^Browser notifications are allowed\./)).toBeVisible();
     expect(within(region).getByRole("button", { name: "Send test notification" })).toBeVisible();
     expect(delivered).toEqual([{
       title: "sshc",

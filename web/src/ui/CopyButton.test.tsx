@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CopyButton } from "./CopyButton";
+import { copiedVisibleMs } from "./useClipboardCopy";
 
 describe("CopyButton", () => {
   it("writes exactly the value it was given", async () => {
@@ -36,6 +37,23 @@ describe("CopyButton", () => {
 
     expect(screen.queryByText("Copied.")).not.toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("first");
+  });
+
+  it("shows the copy on the pressed button for a moment, then offers it again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<CopyButton value="ssh -- bastion" label="copy.remoteCommand" />);
+
+      await user.click(screen.getByRole("button", { name: "Copy remote command" }));
+      expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+
+      await act(async () => { vi.advanceTimersByTime(copiedVisibleMs); });
+      expect(screen.getByRole("button", { name: "Copy remote command" })).toBeInTheDocument();
+      expect(screen.queryByText("Copied.")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("names what it copies, so two buttons on one screen are distinguishable", () => {

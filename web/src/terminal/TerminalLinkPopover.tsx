@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
 import { isSafeHttpURL, type TerminalLinkMatch } from "./links";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { useToast } from "../ui/useToast";
 
 export type TerminalLinkSelection = {
   link: TerminalLinkMatch;
@@ -30,6 +31,7 @@ export function TerminalLinkPopover({
   onClose: () => void;
 }) {
   const t = useTranslate();
+  const showToast = useToast();
   const panel = useRef<HTMLDivElement>(null);
   const firstAction = useRef<HTMLButtonElement>(null);
 
@@ -44,8 +46,12 @@ export function TerminalLinkPopover({
     trapFocus: true,
   });
 
+  // 吹き出しは押すと閉じるので、コピーできたかはトーストで知らせる。
   function copy() {
-    void clipboard.writeText(selection.link.target).finally(onClose);
+    void clipboard.writeText(selection.link.target)
+      .then(() => showToast(t("copy.done"), { tone: "success" }))
+      .catch(() => showToast(t("copy.refused")))
+      .finally(onClose);
   }
 
   function openURL() {

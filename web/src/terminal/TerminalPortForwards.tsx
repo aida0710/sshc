@@ -6,10 +6,11 @@ import { useTranslate } from "../i18n/context";
 import { forwardDirective, forwardHintKeys, validForwardDestination, validForwardPort, type PortForwardKind } from "../forwarding/portForwarding";
 import { describeForwardProblem, forwardProblemIsSpecific } from "./forwardProblem";
 import { savedConnectionOf, terminalSubtitle } from "./terminalPresentation";
-import { clipboard } from "../ui/clipboard";
+import { CopyButton } from "../ui/CopyButton";
 import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
+import { useToast } from "../ui/useToast";
 import { asciiTextEntry, hasOnScreenKeyboard } from "../ui/softKeyboard";
 
 type ForwardApi = Pick<TerminalSessionsApi, "startTerminalForward" | "stopTerminalForward">;
@@ -40,7 +41,8 @@ export function TerminalPortForwards({
   const [save, setSave] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState("");
-  const [notice, setNotice] = useState("");
+  // 始めた・止めたことはトーストで知らせる（済んだ操作の結果は、画面に出し続けない）。
+  const showToast = useToast();
   const [error, setError] = useState("");
 
   useEffect(() => setForwards(session.forwards ?? []), [session.forwards]);
@@ -57,7 +59,6 @@ export function TerminalPortForwards({
     if (!canStart) return;
     setBusy(true);
     setError("");
-    setNotice("");
     try {
       const listed = await api.startTerminalForward(session.id, {
         kind,
@@ -71,14 +72,14 @@ export function TerminalPortForwards({
           await saveToConnection({ kind, listenPort, destination, session, api: saveApi });
         } catch {
           setError(t("terminal.forwardSaveFailed"));
-          setNotice(t("terminal.forwardStarted"));
+          showToast(t("terminal.forwardStarted"), { tone: "success" });
           setListenPort("");
           setDestination("");
           await onChanged?.();
           return;
         }
       }
-      setNotice(t(save ? "terminal.forwardStartedAndSaved" : "terminal.forwardStarted"));
+      showToast(t(save ? "terminal.forwardStartedAndSaved" : "terminal.forwardStarted"), { tone: "success" });
       setListenPort("");
       setDestination("");
       await onChanged?.();
@@ -93,12 +94,11 @@ export function TerminalPortForwards({
     if (forward.id === "") return;
     setStopping(forward.id);
     setError("");
-    setNotice("");
     try {
       const listed = await api.stopTerminalForward(session.id, forward.id);
       const current = listed.sessions.find((candidate) => candidate.id === session.id);
       setForwards(current?.forwards ?? []);
-      setNotice(t("terminal.forwardStopped"));
+      showToast(t("terminal.forwardStopped"), { tone: "success" });
       await onChanged?.();
     } catch (caught) {
       setError(forwardError(t, caught));
@@ -125,7 +125,6 @@ export function TerminalPortForwards({
 
         <div className="flex min-h-0 flex-col gap-5 overflow-y-auto p-4 sm:p-5">
           {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-          {notice === "" ? null : <Notice tone="success">{notice}</Notice>}
           {session.state === "reconnecting" ? <Notice>{t("terminal.forwardPausedReconnect")}</Notice> : null}
 
           <section aria-labelledby="terminal-forward-active" className="flex flex-col gap-2">
@@ -146,7 +145,7 @@ export function TerminalPortForwards({
                       {forward.problem === "" ? null : <p className={`mt-1 ${hintText}`}>{t("terminal.forwardRetryHint")}</p>}
                     </div>
                     <div className="flex shrink-0 gap-2">
-                      {forward.kind === "agent" ? null : <Button onClick={() => void copyForward(forward, setNotice, setError, t)}>{t("terminal.forwardCopy")}</Button>}
+                      {forward.kind === "agent" ? null : <CopyButton value={forwardCopyValue(forward)} label="copy.address" small={false} />}
                       {forward.kind === "agent" || forward.id === "" || forward.problem !== "" ? null : (
                         <Button kind="danger" busy={stopping === forward.id} disabled={stopping !== ""} onClick={() => void stop(forward)}>
                           {t("terminal.forwardStop")}
@@ -243,20 +242,9 @@ function forwardAddress(forward: TerminalForward, t: ReturnType<typeof useTransl
   return `${forward.listen} → ${forward.to}`;
 }
 
-async function copyForward(
-  forward: TerminalForward,
-  setNotice: (value: string) => void,
-  setError: (value: string) => void,
-  t: ReturnType<typeof useTranslate>,
-) {
-  try {
-    await clipboard.writeText(forward.kind === "dynamic" ? `socks5://${forward.listen}` : forward.listen);
-    setError("");
-    setNotice(t("terminal.forwardCopied"));
-  } catch {
-    setNotice("");
-    setError(t("terminal.forwardCopyFailed"));
-  }
+// forwardCopyValue は、ほかのプログラムに貼る宛先。SOCKS の転送は、そのまま設定に書ける形にする。
+function forwardCopyValue(forward: TerminalForward): string {
+  return forward.kind === "dynamic" ? `socks5://${forward.listen}` : forward.listen;
 }
 
 function forwardError(t: ReturnType<typeof useTranslate>, caught: unknown): string {
