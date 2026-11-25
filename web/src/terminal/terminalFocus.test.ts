@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { isInNoticeCard, isTypingElsewhere } from "./terminalFocus";
+import { isInNoticeCard, isTypingElsewhere, isTypingOutsideTerminals } from "./terminalFocus";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -22,6 +22,25 @@ describe("isTypingElsewhere", () => {
 
     document.querySelector<HTMLButtonElement>("button")!.focus();
     expect(isTypingElsewhere(terminal)).toBe(false);
+  });
+});
+
+describe("isTypingOutsideTerminals", () => {
+  it("is true while a text field that is not a terminal's holds the focus", () => {
+    document.body.innerHTML = `<div data-terminal-host><textarea></textarea></div><input aria-label="New name">`;
+    document.querySelector<HTMLInputElement>("input")!.focus();
+
+    expect(isTypingOutsideTerminals()).toBe(true);
+  });
+
+  it("is false while any terminal's input or a button holds the focus", () => {
+    document.body.innerHTML = `<div data-terminal-host><textarea></textarea></div><button>New session</button>`;
+
+    document.querySelector<HTMLTextAreaElement>("textarea")!.focus();
+    expect(isTypingOutsideTerminals()).toBe(false);
+
+    document.querySelector<HTMLButtonElement>("button")!.focus();
+    expect(isTypingOutsideTerminals()).toBe(false);
   });
 });
 

@@ -67,7 +67,7 @@ import { useReducedMotion } from "../theme/motionContext";
 import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
-import { isTypingElsewhere } from "./terminalFocus";
+import { isTypingElsewhere, isTypingOutsideTerminals } from "./terminalFocus";
 import { IconButton } from "../ui/IconButton";
 
 type TerminalViewProps = {
@@ -453,8 +453,13 @@ export function TerminalView({
   // セッションを出す（開く、選ぶ、ほかを閉じて残った）と、そのセッションにフォーカスする。タッチのターミナルは
   // そのままにする。フォーカスするとソフトウェアキーボードが上がる。キーボードは、ターミナルを押したときだけ
   // 上がる。
+  const focusRequestAtMount = useRef(focusRequest);
   useEffect(() => {
-    if (focusRequest !== undefined && live.current.active && !live.current.touch && !region.current?.contains(document.activeElement)) terminal.current?.focus();
+    if (focusRequest === undefined || !live.current.active || live.current.touch || region.current?.contains(document.activeElement)) return;
+    // 開く操作から画面が出るまでには間がある（この画面のコードの読み込みなど）。そのあいだに、利用者がほかの欄に
+    // 打ち始めていたら（開いた直後にサイドバーで名前を変える）、打っている文字がシェルへ行かないよう、取らない。
+    if (focusRequest === focusRequestAtMount.current && isTypingOutsideTerminals()) return;
+    terminal.current?.focus();
   }, [focusRequest]);
 
   useEffect(() => {
