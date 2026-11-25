@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { expect, openApplication, openSection, test } from "./support/environment";
+import { saveEverything } from "./support/saveBar";
 
 // Shortcut presets are shared by every machine; each settings preset chooses the one it uses.
 test("shares shortcut presets between settings presets, each choosing the one it uses", async ({ page, installation }) => {
@@ -13,6 +14,9 @@ test("shares shortcut presets between settings presets, each choosing the one it
   // Editing the default shortcuts creates a shortcut preset of one's own, chosen by the preset being edited.
   await commandSearch.click();
   await page.keyboard.press("Alt+k");
+  await expect(commandSearch).toHaveText("Alt+K");
+  await expect(selector).toHaveValue("default");
+  await saveEverything(page);
   await expect(selector.locator("option:checked")).toHaveText("My key bindings");
   await expect(commandSearch).toHaveText("Alt+K");
   await page.getByRole("button", { name: "Actions for My key bindings" }).click();
@@ -33,6 +37,7 @@ test("shares shortcut presets between settings presets, each choosing the one it
   await expect(selector).toHaveValue(id);
   await selector.selectOption("default");
   await expect(commandSearch).not.toHaveText("Alt+K");
+  await saveEverything(page);
 
   // The shortcut presets themselves are shared: a change made under one settings preset shows under the other.
   await presetToEdit.selectOption({ label: "Standard" });
@@ -40,10 +45,12 @@ test("shares shortcut presets between settings presets, each choosing the one it
   await commandSearch.click();
   await page.keyboard.press("Alt+j");
   await expect(commandSearch).toHaveText("Alt+J");
+  await saveEverything(page);
   await presetToEdit.selectOption({ label: "Phone" });
   await expect(selector).toHaveValue("default");
   await selector.selectOption(id);
   await expect(commandSearch).toHaveText("Alt+J");
+  await saveEverything(page);
   if (process.env.SSHC_PRESETS_VISUAL_DIR) {
     await mkdir(process.env.SSHC_PRESETS_VISUAL_DIR, { recursive: true });
     await page.setViewportSize({ width: 1440, height: 1050 });

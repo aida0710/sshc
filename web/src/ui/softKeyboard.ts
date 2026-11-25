@@ -3,7 +3,13 @@ import { matchesMediaQuery, mobileViewportQuery } from "./useMediaQuery";
 // The phone's on-screen keyboard comes up for the element that has the focus when it takes text.
 export function isTextEntry(element: Element | null): element is HTMLElement {
   return element instanceof HTMLElement &&
-    (element.matches("input:not([type=checkbox]):not([type=radio]), textarea") || element.isContentEditable);
+    (element.matches("input:not([type=checkbox]):not([type=radio]), textarea") || element.isContentEditable || hasEditContext(element));
+}
+
+// Monaco's fields take text through the browser's EditContext, where it has one (Chromium): an element that is neither
+// a field nor editable itself.
+function hasEditContext(element: HTMLElement): boolean {
+  return "editContext" in element && element.editContext !== null && element.editContext !== undefined;
 }
 
 // hasOnScreenKeyboard says a text field that takes the focus brings up a keyboard over half the screen. Such a screen

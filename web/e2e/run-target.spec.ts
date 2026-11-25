@@ -455,7 +455,7 @@ test("opens the settings of a remote session's connection on this machine from i
   await expect(frame).toHaveCount(0);
   await expect(page).toHaveURL(/\/connections\/servers\?.*host=bastion&panel=sshc/);
   await page.getByLabel("Colour", { exact: true }).fill("#2f7fd8");
-  const save = page.getByRole("button", { name: "Save sshc-only settings", exact: true });
+  const save = page.getByRole("button", { name: "Save", exact: true });
   await save.click();
   await expect(save).toBeHidden();
   expect(asked.filter((path) => path.startsWith("/api/v1/engines/bastion/config"))).toEqual([]);

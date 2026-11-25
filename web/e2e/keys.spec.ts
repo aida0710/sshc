@@ -24,7 +24,7 @@ test("hands a generated private key to one connection exactly once", async ({
     true,
   );
   await expect(page.getByText(/staged for this connection/)).toBeVisible();
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(200);
   expect(await installation.read("config")).toContain("IdentityFile ~/.ssh/id_handoff_connection");
 
   await page

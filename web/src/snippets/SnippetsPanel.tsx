@@ -19,7 +19,9 @@ import {
 } from "../ui/workspaceLayout";
 import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
 import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
+import { saveBarSlotClass, SaveBarSlotContext, useSaveBarSlot } from "../ui/saveBarSlot";
 import { usePolling } from "../ui/usePolling";
+import { useToast } from "../ui/useToast";
 import { describeSnippetFailure } from "./snippetFailure";
 import { variablesFor } from "./snippetVariables";
 import { hasSteps, templateText } from "./snippetKind";
@@ -83,7 +85,9 @@ export function SnippetsPanel({
   onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 }) {
   const t = useTranslate();
+  const showToast = useToast();
   const compact = useMediaQuery(mobileViewportQuery);
+  const saveBar = useSaveBarSlot();
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [startupAssignments, setStartupAssignments] = useState<Startup[]>([]);
   const [opened, setOpened] = useState<Opened>(nothingOpened);
@@ -99,10 +103,10 @@ export function SnippetsPanel({
   const { clearError, touch } = operation;
   const pending = usePendingAction<SnippetAction>();
   const busy = pending.running !== null;
-  // 保存できたことは、次に編集欄を変えるか、別の操作を始めるまで編集欄に出す。operation.saved は
-  // どの操作が成功しても立つので、最後に始めたのが保存だったかを覚えておく。
+  // 保存できなかった理由は、保存の帯に出す。operation.error はどの操作の失敗でも立つので、最後に始めたのが保存だった
+  // かを覚えておく。
   const [lastStarted, setLastStarted] = useState<SnippetAction | null>(null);
-  const savedJustNow = operation.saved && lastStarted === "save";
+  const saveFailure = lastStarted === "save" ? operation.error : "";
   const describeFailure = (error: unknown) => describeSnippetFailure(t, error);
   const selected = opened.kind === "saved" ? opened.id : null;
   // ホストの一覧は後から届くので、選んだホストが一覧に無いあいだは先頭を選んでいるとみなす。
@@ -117,9 +121,15 @@ export function SnippetsPanel({
     .map((assignment) => assignment.alias);
   const draftVariables = variablesFor(templateText(draft), draft.variables);
   const draftChanged = JSON.stringify(draft) !== JSON.stringify(draftOf(current));
+  function discardDraft() {
+    setDraft(draftOf(current));
+    clearError();
+    touch();
+  }
+
   const draftDiscard = useDraftDiscardConfirmation({
     dirty: draftChanged,
-    discard: () => setDraft(draftOf(current)),
+    discard: discardDraft,
     onNavigationBlockerChange,
     onNavigateLocation,
   });
@@ -220,6 +230,7 @@ export function SnippetsPanel({
           : await snippetsApi.update(selected, value);
       await reload();
       openSnippet(saved);
+      showToast(t("draft.saved"), { tone: "success" });
     });
   }
 
@@ -316,12 +327,13 @@ export function SnippetsPanel({
             />
           </div>
           <div className={listAlone ? "hidden" : workspaceDetailPane(compact, detailOpen)}>
+            <SaveBarSlotContext.Provider value={saveBar.slot}>
             {compact ? (
               <Button className="mb-3 w-fit" onClick={() => draftDiscard.confirmBefore(closeEditor)}>
                 {t("snippets.allSnippets")}
               </Button>
             ) : null}
-            {operation.error === "" ? null : <div className="mb-4"><Notice tone="danger">{operation.error}</Notice></div>}
+            {operation.error === "" || saveFailure !== "" ? null : <div className="mb-4"><Notice tone="danger">{operation.error}</Notice></div>}
             {opened.kind === "none" ? (
               // スマホでは何も開いていないあいだ一覧だけを見せるので、空の状態は一覧の側に出す。
               compact || libraryState !== "ready" ? null : snippets.length === 0 ? emptyLibrary : (
@@ -334,7 +346,8 @@ export function SnippetsPanel({
                   draft={draft}
                   variables={draftVariables}
                   inputs={inputs}
-                  savedJustNow={savedJustNow}
+                  changed={draftChanged}
+                  saveFailure={saveFailure}
                   deletable={current !== null}
                   saving={pending.running === "save"}
                   deleting={pending.running === "remove"}
@@ -342,6 +355,7 @@ export function SnippetsPanel({
                   onDraftChange={changeDraft}
                   onVariableChange={updateVariable}
                   onInputChange={updateInput}
+                  onDiscard={discardDraft}
                   onSave={() => void save()}
                   onDelete={() => setConfirmingDelete(true)}
                 />
@@ -380,6 +394,8 @@ export function SnippetsPanel({
                 )}
               </div>
             )}
+            <div ref={saveBar.slotRef} className={saveBarSlotClass} />
+            </SaveBarSlotContext.Provider>
           </div>
         </div>
       </PageBoard>

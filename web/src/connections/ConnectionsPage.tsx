@@ -33,6 +33,7 @@ import { Button, Notice } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { PageBoard } from "../ui/PageBoard";
 import { PageHeader } from "../ui/page";
+import { saveBarSlotClass, SaveBarSlotContext, useSaveBarSlot } from "../ui/saveBarSlot";
 import { workspaceColumnsLayout, workspaceDetailPane, workspaceHeaderLayout } from "../ui/workspaceLayout";
 import { useUnsavedDraftGuard } from "../routing/useUnsavedDraftGuard";
 import type {
@@ -121,6 +122,7 @@ export function ConnectionsPage({
   const showToast = useToast();
   const retry = usePendingResult();
   const compact = useMediaQuery(mobileViewportQuery);
+  const saveBar = useSaveBarSlot();
   const [overview, setOverview] = useState<Overview | null>(null);
   useEffect(() => {
     if (overview !== null) onOverviewRead?.(overview);
@@ -555,7 +557,7 @@ export function ConnectionsPage({
           }}
         />
         <div className={`gap-4 ${listAlone ? "hidden" : workspaceDetailPane(compact, detailOpen)}`}>
-
+        <SaveBarSlotContext.Provider value={saveBar.slot}>
         {compact && detailOpen ? (
           <PhoneBackButton
             label={t("conn.backToList")}
@@ -676,6 +678,8 @@ export function ConnectionsPage({
             />
           </>
         )}
+        <div ref={saveBar.slotRef} className={saveBarSlotClass} />
+        </SaveBarSlotContext.Provider>
         </div>
       </div>
     </PageBoard>

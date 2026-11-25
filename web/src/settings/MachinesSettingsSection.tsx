@@ -1,16 +1,17 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useLanguage } from "../i18n/context";
 import { ActionMenu } from "../ui/ActionMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { sizedControl } from "../ui/form";
 import { formatDateTime } from "../ui/format";
 import { InputDialog } from "../ui/InputDialog";
-import { isImeComposing } from "../ui/imeComposition";
 import { PanelState } from "../ui/PanelState";
 import { Notice } from "../ui/surface";
 import { presetName } from "./PresetPicker";
 import { SettingsSection } from "./SettingsSection";
-import { removeMachine, standardPresetId, updateMachine, useSettings, type SettingsDocument } from "./settingsStore";
+import { useSettingsDraft } from "./settingsDraftContext";
+import { removeMachine, standardPresetId, updateMachine, type MachineSettings, type SettingsDocument } from "./settingsStore";
+import { useTypedSetting, type ParsedSetting } from "./useTypedSetting";
 
 type Machine = SettingsDocument["machines"][number];
 
@@ -43,11 +44,11 @@ const columns = "@2xl/machines:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_112px_12
 const whenStackedFullWidth = "col-span-2 @2xl/machines:col-span-1";
 
 // The machines that sync: which preset each uses, the port its engine listens on, and when it last started.
-// Any machine's settings can be changed from here; its engine reads them when it next starts (the port) or at
-// once (the preset).
+// Any machine's settings can be changed from here; its engine reads them when it next starts (the port) or as soon
+// as they are saved (the preset). Renaming a machine, its log folder and removing it are done in their own dialogs.
 export function MachinesSettingsSection({ showHeading }: { showHeading: boolean }) {
   const { t } = useLanguage();
-  const { document, loadFailed } = useSettings();
+  const { document, loadFailed, editMachine } = useSettingsDraft();
   const [failure, setFailure] = useState("");
   const [renaming, setRenaming] = useState<Machine | null>(null);
   const [choosingLogFolder, setChoosingLogFolder] = useState<Machine | null>(null);
@@ -55,9 +56,9 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
 
   const portsOffered = document?.machines.some(hasPort) === true;
 
-  function change(id: string, update: Parameters<typeof updateMachine>[1]) {
+  function changeAtOnce(id: string, update: Parameters<typeof updateMachine>[1]) {
     setFailure("");
-    return updateMachine(id, update).catch(() => setFailure(t("settings.machineSaveFailed")));
+    updateMachine(id, update).catch(() => setFailure(t("settings.machineSaveFailed")));
   }
 
   return (
@@ -80,7 +81,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
                   key={machine.id}
                   machine={machine}
                   document={document}
-                  onChange={change}
+                  onEdit={(field, change) => editMachine(machine.id, field, change)}
                   onRename={() => setRenaming(machine)}
                   onChooseLogFolder={() => setChoosingLogFolder(machine)}
                   onRemove={() => setRemoving(machine)}
@@ -103,7 +104,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
           onSubmit={(value) => {
             const id = renaming.id;
             setRenaming(null);
-            void change(id, (settings) => ({ ...settings, name: value }));
+            changeAtOnce(id, (settings) => ({ ...settings, name: value }));
           }}
           onCancel={() => setRenaming(null)}
         />
@@ -121,7 +122,7 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
           onSubmit={(value) => {
             const id = choosingLogFolder.id;
             setChoosingLogFolder(null);
-            void change(id, ({ sessionLogDirectory: _previous, ...settings }) => value === "" ? settings : { ...settings, sessionLogDirectory: value });
+            changeAtOnce(id, ({ sessionLogDirectory: _previous, ...settings }) => value === "" ? settings : { ...settings, sessionLogDirectory: value });
           }}
           onCancel={() => setChoosingLogFolder(null)}
         />
@@ -145,10 +146,12 @@ export function MachinesSettingsSection({ showHeading }: { showHeading: boolean 
   );
 }
 
-function MachineRow({ machine, document, onChange, onRename, onChooseLogFolder, onRemove }: {
+type EditMachine = (field: string, change: (settings: MachineSettings) => MachineSettings) => void;
+
+function MachineRow({ machine, document, onEdit, onRename, onChooseLogFolder, onRemove }: {
   machine: Machine;
   document: SettingsDocument;
-  onChange: (id: string, update: Parameters<typeof updateMachine>[1]) => Promise<unknown>;
+  onEdit: EditMachine;
   onRename: () => void;
   onChooseLogFolder: () => void;
   onRemove: () => void;
@@ -179,16 +182,15 @@ function MachineRow({ machine, document, onChange, onRename, onChooseLogFolder, 
       <StackedNamedCell name={t("settings.machineColumnPreset")}>
         <select aria-label={t("settings.machineColumnPreset")} className={sizedControl("w-full")} value={presetId}
           onChange={(event) => {
-            // The value is read now: the write runs later, when the control shows the saved value again.
             const chosen = event.target.value;
-            void onChange(machine.id, ({ presetId: _previous, ...settings }) => chosen === standardPresetId ? settings : { ...settings, presetId: chosen });
+            onEdit("preset", ({ presetId: _previous, ...settings }) => chosen === standardPresetId ? settings : { ...settings, presetId: chosen });
           }}>
           {document.presets.map((preset) => <option key={preset.id} value={preset.id}>{presetName(preset, t("settings.presetStandard"))}</option>)}
         </select>
       </StackedNamedCell>
       {hasPort(machine) ? (
         <StackedNamedCell name={t("settings.machineColumnPort")}>
-          <PortInput machine={machine} onChange={onChange} />
+          <PortInput machine={machine} onEdit={onEdit} />
         </StackedNamedCell>
       ) : <span aria-hidden="true" className="hidden @2xl/machines:block" />}
       <StackedNamedCell name={t("settings.machineColumnStarted")}>
@@ -235,52 +237,38 @@ function StackedNamedCell({ name, children }: { name: string; children: ReactNod
   );
 }
 
-// PortInput keeps what is typed until it is confirmed (Enter or leaving the field). An empty field is the
-// machine's own fixed port; a number outside the range is put back.
-function PortInput({ machine, onChange }: {
-  machine: Machine;
-  onChange: (id: string, update: Parameters<typeof updateMachine>[1]) => Promise<unknown>;
-}) {
+// An empty port is the machine's own fixed port.
+function PortInput({ machine, onEdit }: { machine: Machine; onEdit: EditMachine }) {
   const { t } = useLanguage();
-  const saved = machine.settings.port === undefined ? "" : String(machine.settings.port);
-  const [draft, setDraft] = useState(saved);
-  useEffect(() => setDraft(saved), [saved]);
-
-  function commit() {
-    const trimmed = draft.trim();
-    if (trimmed === saved) return;
-    if (trimmed === "") {
-      void onChange(machine.id, ({ port: _previous, ...settings }) => settings);
-      return;
-    }
-    const port = Number(trimmed);
-    if (!Number.isSafeInteger(port) || port < minimumPort || port > maximumPort) {
-      setDraft(saved);
-      return;
-    }
-    void onChange(machine.id, (settings) => ({ ...settings, port }));
-  }
+  const problemId = useId();
+  const typed = useTypedSetting<number | null>({
+    text: machine.settings.port === undefined ? "" : String(machine.settings.port),
+    parse: (text): ParsedSetting<number | null> => {
+      if (text.trim() === "") return { value: null };
+      const port = Number(text);
+      return Number.isSafeInteger(port) && port >= minimumPort && port <= maximumPort
+        ? { value: port }
+        : { problem: t("settings.integerOutOfRange", { name: t("settings.machineColumnPort"), min: minimumPort, max: maximumPort }) };
+    },
+    onChange: (port) => onEdit("port", ({ port: _previous, ...settings }) => port === null ? settings : { ...settings, port }),
+  });
 
   return (
-    <input
-      type="number"
-      inputMode="numeric"
-      min={minimumPort}
-      max={maximumPort}
-      aria-label={t("settings.machineColumnPort")}
-      className={`${sizedControl("w-full")} font-mono tabular-nums`}
-      value={draft}
-      placeholder={t("settings.machinePortAutomatic")}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (isImeComposing(event)) return;
-        if (event.key === "Enter") event.currentTarget.blur();
-        if (event.key === "Escape") {
-          setDraft(saved);
-          event.currentTarget.blur();
-        }
-      }}
-    />
+    <>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={minimumPort}
+        max={maximumPort}
+        aria-label={t("settings.machineColumnPort")}
+        {...(typed.problem === "" ? {} : { "aria-invalid": true, "aria-describedby": problemId })}
+        className={`${sizedControl("w-full")} font-mono tabular-nums`}
+        value={typed.shown}
+        placeholder={t("settings.machinePortAutomatic")}
+        onChange={(event) => typed.type(event.target.value)}
+        onBlur={typed.leave}
+      />
+      {typed.problem === "" ? null : <p id={problemId} className="mt-1 text-xs leading-[18px] text-danger">{typed.problem}</p>}
+    </>
   );
 }

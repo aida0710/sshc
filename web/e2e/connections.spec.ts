@@ -114,7 +114,7 @@ test("adds Local, reverse and SOCKS forwarding from the advanced tab", async ({ 
   await page.getByLabel("Destination").fill("127.0.0.1:5432");
   const forwarding = page.getByRole("region", { name: "Port forwarding" });
   await forwarding.getByRole("button", { name: "Add", exact: true }).click();
-  expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
   await expect(forwarding.getByRole("row", { name: /Local tunnel 18080 127\.0\.0\.1:5432/ })).toBeVisible();
   expect(await installation.read("config")).toContain("LocalForward 18080 127.0.0.1:5432");
 
@@ -122,7 +122,7 @@ test("adds Local, reverse and SOCKS forwarding from the advanced tab", async ({ 
   await page.getByLabel("SSH server port").fill("19080");
   await page.getByLabel("Destination").fill("127.0.0.1:3000");
   await forwarding.getByRole("button", { name: "Add", exact: true }).click();
-  expect(await clickAndAwait(page, "Save changes", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
   await expect(forwarding.getByRole("row", { name: /Remote tunnel 19080 127\.0\.0\.1:3000/ })).toBeVisible();
   expect(await installation.read("config")).toContain("RemoteForward 19080 127.0.0.1:3000");
 
@@ -151,18 +151,16 @@ test("keeps the selected connection open when its tree item is clicked again", a
   expect(page.url()).toBe(connectionURL);
 });
 
-test("shows Basic save actions only after a change and keeps them in the form", async ({
+test("shows Basic save actions only after a change and keeps them at the bottom of the screen", async ({
   page,
   installation,
 }) => {
   await openBastion(page, installation.url);
-  const save = page.getByRole("button", { name: "Save Basic settings" });
+  const save = page.getByRole("button", { name: "Save", exact: true });
 
   await expect(save).toHaveCount(0);
   await page.getByLabel("Port", { exact: true }).fill("2223");
-  // The save actions belong to the Basic form, under its fields, rather than to a bar over the page.
-  await expect(page.getByRole("tabpanel", { name: "Basic" }).getByRole("button", { name: "Save Basic settings" })).toBeVisible();
-  await save.scrollIntoViewIfNeeded();
+  // The save actions stay at the bottom of the screen, whatever the form's length and however far it is scrolled.
   await expect(save).toBeInViewport();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
@@ -313,7 +311,7 @@ test("edits a host through the form and writes only the line that changed", asyn
   await openBastion(page, installation.url);
 
   await page.getByLabel("Port", { exact: true }).fill("2244");
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(200);
 
   const after = await installation.read("config");
   expect(after).toContain("Port 2244");
@@ -347,7 +345,7 @@ test("keeps the committed summary stable while a Basic draft crosses editor area
   await page.getByRole("tab", { name: "Basic" }).click();
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(200);
   await expect(summary.getByText("ops@203.0.113.10:2244", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
   await expect(page.getByRole("button", { name: "Check reachability" })).toBeEnabled();
@@ -440,7 +438,7 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   await expect(page.getByText(/uses the shared saved passphrase “shared-sibling-phrase”/)).toBeVisible();
   await page.getByLabel("New saved key passphrase", { exact: true }).fill(firstPassphrase);
   await page.getByLabel("Confirm saved key passphrase", { exact: true }).fill(firstPassphrase);
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(200);
   await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
   await expect(page.getByLabel("New saved key passphrase", { exact: true })).not.toBeVisible();
 
@@ -475,7 +473,7 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
   await page.getByLabel("New saved key passphrase", { exact: true }).fill(nextPassphrase);
   await page.getByLabel("Confirm saved key passphrase", { exact: true }).fill(nextPassphrase);
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(200);
   await expect(page.getByText("A passphrase is saved only for this key.")).toBeVisible();
   await expect(page.getByLabel("New saved key passphrase", { exact: true })).not.toBeVisible();
   await expect(page.locator("body")).not.toContainText(firstPassphrase);
@@ -522,7 +520,7 @@ test("edits the same host through Raw and keeps every other byte", async ({
 
   const editor = codeField(page, /Block text/);
   await replaceCodeFieldLine(editor, "Port 2222", "Port 2255\n\tCompression yes");
-  expect(await clickAndAwait(page, "Save block", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
 
   const after = await installation.read("config");
   expect(after).toContain("Port 2255");
@@ -534,7 +532,7 @@ test("edits the same host through Raw and keeps every other byte", async ({
 test("shows a save preview diff of exactly what was written", async ({ page, installation }) => {
   await openBastion(page, installation.url);
   await page.getByLabel("Port", { exact: true }).fill("2299");
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(200);
 
   const preview = page.getByRole("region", { name: "Save preview" });
   await expect(preview).toContainText("2299");
@@ -555,7 +553,7 @@ test("refuses a save whose base is stale and shows the three-way conflict", asyn
   await installation.write("config", external);
 
   await page.getByLabel("Port", { exact: true }).fill("2277");
-  expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(409);
+  expect(await clickAndAwait(page, "Save", "/api/v1/connections", "PATCH")).toBe(409);
 
   await expect(page.getByText("Changed on disk since you loaded it")).toBeVisible();
   await expect(page.getByText("Your pending change")).toBeVisible();
@@ -608,7 +606,7 @@ test("edits the display order it stores", async ({
   await page.getByRole("tab", { name: "Display & terminal" }).click();
 
   await page.getByLabel(/Display order/).fill("-1");
-  expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
   expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].order).toBe(-1);
 });
 
@@ -622,7 +620,7 @@ test("keeps sshc changes as a draft until they are saved or discarded", async ({
   page.on("request", (request) => {
     if (request.url().includes("/api/v1/config/save")) saveRequests.push(request.url());
   });
-  const save = page.getByRole("button", { name: "Save sshc-only settings" });
+  const save = page.getByRole("button", { name: "Save", exact: true });
   const encoding = page.getByLabel("Remote text encoding");
 
   await expect(save).toHaveCount(0);
@@ -651,8 +649,8 @@ test("keeps the saved SSH encoding selected after metadata refresh", async ({
 
   const encoding = page.getByLabel("Remote text encoding");
   await encoding.selectOption("shift_jis");
-  expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
-  await expect(page.getByRole("button", { name: "Save sshc-only settings" })).toHaveCount(0);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await expect(encoding).toHaveValue("shift_jis");
   expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].encoding).toBe("shift_jis");
 });
@@ -674,7 +672,7 @@ test("moves to another connection right after the sshc settings are saved, witho
     await reloadHeld;
     await route.continue();
   });
-  expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas", exact: true }).click();
   finishReload();
 
@@ -690,13 +688,16 @@ test("brings the reload button into view when the reload after a save at the bot
   await openBastion(page, installation.url);
   await page.getByRole("tab", { name: "Display & terminal" }).click();
   await page.getByLabel("Remote text encoding").selectOption("shift_jis");
-  const save = page.getByRole("button", { name: "Save sshc-only settings" });
-  await save.scrollIntoViewIfNeeded();
+  await page.getByRole("heading", { name: "bastion" }).evaluate((heading) => {
+    let scroller = heading.parentElement;
+    while (scroller !== null && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    scroller?.scrollTo({ top: scroller.scrollHeight });
+  });
   await expect(page.getByRole("heading", { name: "bastion" })).not.toBeInViewport();
 
   await page.route("**/api/v1/config/overview", (route) =>
     route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "unavailable", message: "unavailable" }) }));
-  expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
+  expect(await clickAndAwait(page, "Save", "/api/v1/config/save")).toBe(200);
 
   const reload = page.getByRole("button", { name: "Reload saved connection" });
   await expect(reload).toBeFocused();

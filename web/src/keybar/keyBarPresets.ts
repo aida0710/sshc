@@ -1,5 +1,6 @@
 import type { components } from "../api/schema";
 import { createPresetLibrary } from "../settings/presetLibrary";
+import type { SettingsDocument } from "../settings/settingsStore";
 import { newIdentifier } from "../ui/randomIdentifier";
 import { claudeCodeKeyBarLayout, defaultKeyBarLayout, type KeyBarLayout } from "./keyBarLayout";
 
@@ -24,8 +25,8 @@ export const useKeyBarPresets = keyBarPresetLibrary.usePresets;
 
 // useKeyBarLayout is the key bar of a settings preset (the one in force when settingsPresetId is left out): its
 // chosen preset, or the default layout.
-export function useKeyBarLayout(settingsPresetId?: string): KeyBarLayout {
-  const chosen = keyBarPresetLibrary.useChosen(settingsPresetId);
+export function useKeyBarLayout(settingsPresetId?: string, document?: SettingsDocument | null): KeyBarLayout {
+  const chosen = keyBarPresetLibrary.useChosen(settingsPresetId, document);
   return chosen === undefined ? defaultKeyBarLayout : { keys: chosen.keys, moreKeys: chosen.moreKeys };
 }
 

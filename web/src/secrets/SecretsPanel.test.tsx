@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { vaultStatus } from "../testing/vaultStatus";
+import { captureNavigationBlocker } from "../testing/navigationBlocker";
 import { SecretsPanel } from "./SecretsPanel";
 import { ApiError } from "../api/client";
 import type { SecretsApi } from "./SecretsPanel";
@@ -234,12 +235,35 @@ describe("SecretsPanel", () => {
     await user.type(name, "office-shared");
     await user.clear(value);
     await user.type(value, "rotated-password");
-    await user.click(within(form).getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api.updateCredential).toHaveBeenCalledWith(
       "password", "office-vm", "office-shared", "rotated-password",
     ));
     await waitFor(() => expect(screen.queryByRole("region", { name: "Edit account password" })).not.toBeInTheDocument());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("asks before the edit of a changed password is closed, another is opened, or the page is left", async () => {
+    const user = userEvent.setup();
+    const navigation = captureNavigationBlocker();
+    render(<SecretsPanel api={buildApi()} kind="password" onNavigationBlockerChange={navigation.onNavigationBlockerChange} onNavigateLocation={vi.fn()} />);
+    const menu = await openRowMenu(user, "office-vm");
+    await user.click(within(menu).getByRole("menuitem", { name: "Edit" }));
+    const form = await screen.findByRole("region", { name: "Edit account password" });
+    const value = await within(form).findByLabelText("Password");
+    expect(navigation.tryNavigate("/connections")).toBe(true);
+
+    await user.type(value, "x");
+    await user.click(within(form).getByRole("button", { name: "Close" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Keep editing" }));
+    expect(value).toHaveValue("original-passwordx");
+    expect(navigation.tryNavigate("/connections")).toBe(false);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Keep editing" }));
+
+    await user.click(within(form).getByRole("button", { name: "Close" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Discard" }));
+    expect(screen.queryByRole("region", { name: "Edit account password" })).not.toBeInTheDocument();
   });
 
   it("uses the same edit form for a named key passphrase", async () => {

@@ -26,6 +26,19 @@ The tag beside a page's name says how far its settings reach.
 
 The switches in a terminal's "…" menu sit under headings with the same tags. A field left empty in a connection's **Display & terminal** tab follows the preset its machine uses.
 
+## Saving settings
+
+Changing a setting brings up a bar at the bottom of the screen with **Discard changes** and **Save**. A change applies only once it is saved. Enter in a one-line field saves as well. A value that cannot be used is explained under its field, and nothing can be saved until it is put right.
+
+Going to another page or another preset with unsaved changes asks whether to discard them. Editing a connection, a group, a VPN profile, a snippet, the SSH config, a Vault entry or the Sync exclusions is saved from the same bar.
+
+These act at once, without the bar:
+
+- Making, renaming and deleting presets, and **Use on this machine**
+- Duplicating, renaming and deleting key bindings and key orders
+- Renaming a machine, changing where its logs are kept, and **Remove from the list**
+- Adding, renaming and deleting background images, allowing notifications, and changing the master password
+
 ## Presets
 
 To use different values on different machines, such as a larger font on a phone than on a PC, make a preset. A preset holds the appearance, the terminal settings, the SFTP transfer settings, the shortcuts, the notification sound, the Vault auto-lock, keeping the screen on, and touch handling. The navigation and connection-list widths, the Home view and the SFTP split are not part of a preset; each browser remembers its own.
@@ -39,7 +52,7 @@ On a phone, the preset is chosen at the top of each settings page.
 
 ## General
 
-Settings that are the same on every machine and every preset. Each change is saved at once.
+Settings that are the same on every machine and every preset.
 
 - **Display language**: **Follow the browser**, English, or 日本語. Preferences in Menu switches it as well
 - Terminal connections: **Reconnect after a dropped connection**, **Connection log**, and OSC 52 (allow writing to the clipboard)
@@ -151,8 +164,6 @@ A passwordless Vault is neither auto-locked nor lockable by hand: it opens when 
 | **Behaviour** | Starting directory, local shell, clipboard and keyboard, touch input and its link underlines |
 
 Reconnecting, the connection log, OSC 52 and session logs are under **General**.
-
-No settings page has a Save button: **Saved** shows under the field you changed for a moment. Choices and checkboxes are saved as soon as they change; numbers and the starting directory are saved when focus leaves them or Enter is pressed.
 
 - Maximum concurrent sessions from 1 to 200, with a default of 50
 - Engine replay buffer from 16 KiB to 4 MiB, with a default of 256 KiB

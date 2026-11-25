@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { saveBarScrollRoom } from "./saveBarSlot";
 
 // The parts of a workspace page (PageBoard fill), as Connections lays them out: the heading row, then a
 // list beside what is open from it, divided by a line. On a phone the list and the open item take turns
@@ -24,7 +25,7 @@ export function workspaceListPane(compact: boolean, detailOpen: boolean, { listA
 // The open item scrolls on its own. On a phone the bottom bar floats over its end, so the end is padded to
 // scroll clear of the bar, and scrolling a field into view stops above it.
 export function workspaceDetailPane(compact: boolean, detailOpen: boolean): string {
-  return `min-h-0 flex-col overflow-y-auto p-4 pb-[calc(1rem+var(--mobile-navigation-inset))] scroll-pb-(--mobile-navigation-inset) md:px-[26px] md:pt-[22px] md:pb-[calc(22px+var(--mobile-navigation-inset))] ${
+  return `min-h-0 flex-col overflow-y-auto [--save-bar-end:1rem] [--save-bar-scroll-end:1rem] [--save-bar-x:1rem] md:[--save-bar-end:22px] md:[--save-bar-scroll-end:22px] md:[--save-bar-x:26px] ${saveBarScrollRoom} p-4 pb-[calc(1rem+var(--mobile-navigation-inset))] scroll-pb-(--mobile-navigation-inset) md:px-[26px] md:pt-[22px] md:pb-[calc(22px+var(--mobile-navigation-inset))] ${
     compact ? "" : "md:flex"
   } ${detailOpen ? "flex" : "hidden"}`;
 }

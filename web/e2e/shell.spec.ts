@@ -1,4 +1,5 @@
 import { expect, openSection, test, openApplication } from "./support/environment";
+import { saveEverything } from "./support/saveBar";
 
 const manyHosts = Array.from(
   { length: 40 },
@@ -238,6 +239,7 @@ test("hides the navigation on a PC with its shortcut and shows it again from the
   await assign.click();
   await page.keyboard.press("Alt+b");
   await expect(assign).toHaveText("Alt+B");
+  await saveEverything(page);
   await page.locator("body").click({ position: { x: 600, y: 10 } });
 
   const navigation = page.getByRole("navigation", { name: "Primary" });

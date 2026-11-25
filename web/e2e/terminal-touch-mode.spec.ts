@@ -1,5 +1,6 @@
 import type { Locator } from "@playwright/test";
 import { expect, openApplication, openLocalShell, openSection, openSettingsPage, test } from "./support/environment";
+import { saveSettings } from "./support/saveBar";
 import { drawnRows, drawnSpan, selectionMarks, terminalKeyboard } from "./support/terminal";
 
 // A touch screen as large as a PC's that the browser reports as touch first,
@@ -49,7 +50,7 @@ test("fixes a touch-first PC to the mouse, so drag selection and link clicks wor
   await expect(actions.locator("p")).toHaveAttribute("title", url);
   await page.keyboard.press("Escape");
 
-  // Settings > Terminal shows the same choice and turns detection back on at once, without Save.
+  // Settings > Terminal shows the same choice and turns detection back on once saved.
   await openSettingsPage(page, "Terminal");
   const settings = page.getByRole("region", { name: "Terminal" });
   await settings.getByRole("tab", { name: "Behaviour", exact: true }).click();
@@ -58,6 +59,7 @@ test("fixes a touch-first PC to the mouse, so drag selection and link clicks wor
   await expect(settings.getByRole("combobox", { name: "Fixed input" })).toHaveValue("mouse");
   await detect.click();
   await expect(settings.getByRole("combobox", { name: "Fixed input" })).toBeDisabled();
+  await saveSettings(page);
   // The choice is kept in the preset this machine uses, and detection, the default, is not written.
   await expect.poll(async () => (JSON.parse(await installation.read("sshc/metadata.json")) as {
     presets: { interface?: { touchMode?: string } }[];
@@ -98,6 +100,7 @@ test("underlines every link a tap opens until Settings turns it off, and the mou
   const settings = page.getByRole("region", { name: "Terminal" });
   await settings.getByRole("tab", { name: "Behaviour", exact: true }).click();
   await settings.getByRole("checkbox", { name: "Always underline links" }).click();
+  await saveSettings(page);
   // The settings file is written when the first setting is saved: until then there is nothing to read, which is
   // not yet the answer either.
   await expect.poll(async () => {

@@ -1,4 +1,5 @@
 import { clickAndAwait, expect, masterPassword, test, openApplication, sessionStatus, openLocalShell } from "./support/environment";
+import { saveEverything } from "./support/saveBar";
 import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard } from "./support/terminal";
 import { everySection } from "./support/sectionNavigation";
 import { answerNoVPNProfiles } from "./support/vpn";
@@ -902,7 +903,6 @@ test("arranges the key bar in the settings, and the terminal's bar follows it", 
   await order.getByRole("button", { name: "Esc", exact: true }).click();
   await page.getByRole("group", { name: "Function keys" }).getByRole("button", { name: "F5", exact: true }).click();
   await expect(order.getByRole("button", { name: "F5", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("combobox", { name: "Key order" }).locator("option:checked")).toHaveText("My key order");
 
   await page.getByRole("button", { name: "Make a key" }).click();
   const making = page.getByRole("dialog", { name: "Your own key" });
@@ -911,6 +911,8 @@ test("arranges the key bar in the settings, and the terminal's bar follows it", 
   await making.getByLabel("Press Enter after sending").check();
   await making.getByRole("button", { name: "Add", exact: true }).click();
   await expect(order.getByRole("button", { name: "hi", exact: true })).toBeVisible();
+  await saveEverything(page);
+  await expect(page.getByRole("combobox", { name: "Key order" }).locator("option:checked")).toHaveText("My key order");
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   await openLocalShell(page);
@@ -946,6 +948,7 @@ test("offers a key bar for Claude Code, whose keys reach the program as the keys
   await expect(order.getByRole("button", { name: "Shift+Tab", exact: true })).toBeVisible();
 
   // The choice is kept in the settings: it is there after a reload.
+  await saveEverything(page);
   await page.reload();
   await expect(preset.locator("option:checked")).toHaveText("Claude Code");
 

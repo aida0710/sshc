@@ -10,7 +10,7 @@ import { Icon } from "../ui/icons";
 import { asciiTextEntry, literalTextEntry } from "../ui/softKeyboard";
 import { Button, Card, Notice } from "../ui/surface";
 import { useToast } from "../ui/useToast";
-import { DraftSaveBar } from "./DraftSaveBar";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import { defaultFields, draftOf, groupFrom, repeatedFieldKeywords } from "./groupSettingsDraft";
 import { IconButton } from "../ui/IconButton";
 
@@ -178,9 +178,6 @@ export function GroupEditor({ group, memberCount, actions, folders, onSave, onDi
       {draftError === "" ? null : <Notice tone="danger">{draftError}</Notice>}
       {dirty ? (
         <DraftSaveBar
-          saveLabel={t("groupEditor.save")}
-          saveDisabled={saving}
-          discardDisabled={saving}
           saving={saving}
           onDiscard={() => setDraft(saved)}
           onSave={() => void save()}

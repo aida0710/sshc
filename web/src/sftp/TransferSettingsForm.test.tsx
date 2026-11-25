@@ -1,6 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderSettings } from "../testing/settingsDraft";
+import { fakeSettingsServer } from "../testing/settingsServer";
 import { TransferSettingsForm, type PresetTransferSettings } from "./TransferSettingsForm";
 
 const savedSettings: PresetTransferSettings = {
@@ -12,33 +14,32 @@ const savedSettings: PresetTransferSettings = {
   excludePatterns: [],
 };
 
+beforeEach(() => { fakeSettingsServer(); });
+
 describe("the SFTP transfer settings form", () => {
-  it("saves a choice as soon as it is made", async () => {
-    const onCommit = vi.fn().mockResolvedValue(true);
-    render(<TransferSettingsForm settings={savedSettings} onCommit={onCommit} />);
+  it("hands on a choice as soon as it is made", async () => {
+    const onChange = vi.fn();
+    renderSettings(<TransferSettingsForm settings={savedSettings} onChange={onChange} />);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
 
-    expect(onCommit).toHaveBeenCalledWith({ maxConcurrent: 5 });
+    expect(onChange).toHaveBeenCalledWith("maxConcurrent", 5);
   });
 
-  it("saves the exclusion rules when their box is left, not while they are typed", async () => {
-    const onCommit = vi.fn().mockResolvedValue(true);
-    render(<TransferSettingsForm settings={savedSettings} onCommit={onCommit} />);
-    await userEvent.type(screen.getByRole("textbox", { name: "Exclusion patterns (one per line)" }), "node_modules");
-    expect(onCommit).not.toHaveBeenCalled();
+  it("hands on a number in the setting's own unit", () => {
+    const onChange = vi.fn();
+    renderSettings(<TransferSettingsForm settings={savedSettings} onChange={onChange} />);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Chunk" }), { target: { value: "64" } });
 
-    await userEvent.tab();
-    expect(onCommit).toHaveBeenCalledWith({ excludePatterns: ["node_modules"] });
+    expect(onChange).toHaveBeenCalledWith("largeFileChunkBytes", 64 << 20);
   });
 
-  it("saves nothing when a number is left without being changed", () => {
-    const onCommit = vi.fn().mockResolvedValue(true);
-    render(<TransferSettingsForm settings={savedSettings} onCommit={onCommit} />);
+  it("hands on nothing when a number is left without being changed", () => {
+    const onChange = vi.fn();
+    renderSettings(<TransferSettingsForm settings={savedSettings} onChange={onChange} />);
     const chunk = screen.getByRole("spinbutton", { name: "Chunk" });
     fireEvent.focus(chunk);
     fireEvent.blur(chunk);
 
-    expect(onCommit).not.toHaveBeenCalled();
-    expect(screen.queryByText("Saving…")).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

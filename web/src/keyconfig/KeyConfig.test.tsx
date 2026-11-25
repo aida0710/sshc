@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiClient } from "../api/client";
+import { renderSettings, saveBar, saveButton, saveSettings } from "../testing/settingsDraft";
 import { fakeSettingsServer } from "../testing/settingsServer";
 import { KeyConfig } from "./KeyConfig";
 import { defaultBindings, matchesShortcut, shortcutKey, shortcutsBlocked } from "./bindings";
@@ -25,38 +26,45 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("application shortcuts", () => {
   it("shows the paste defaults and preserves saved paste bindings", () => {
-    render(<KeyConfig />);
+    renderSettings(<KeyConfig presetId="default" />);
     expect(screen.getByRole("button", { name: "Assign shortcut: Paste" })).toHaveTextContent("Ctrl+V / Win+V / Ctrl+Shift+V");
   });
 
   it("records, persists, disables and restores shortcuts without accepting duplicates", async () => {
-    const view = render(<KeyConfig />);
+    const view = renderSettings(<KeyConfig presetId="default" />);
     const assign = () => screen.getByRole("button", { name: "Assign shortcut: Command search" });
     fireEvent.click(assign());
     fireEvent.keyDown(assign(), { key: "f", ctrlKey: true });
     expect(screen.getByRole("alert")).toHaveTextContent("Terminal search");
     expect(currentBindings().palette).toEqual(defaultBindings.palette);
     fireEvent.keyDown(assign(), { key: "p", ctrlKey: true, shiftKey: true });
-    await waitFor(() => expect(currentBindings().palette).toEqual(["Ctrl+Shift+P"]));
+    expect(assign()).toHaveTextContent("Ctrl+Shift+P");
+    expect(currentBindings().palette).toEqual(defaultBindings.palette);
+    await saveSettings();
+    expect(currentBindings().palette).toEqual(["Ctrl+Shift+P"]);
     view.unmount();
-    render(<KeyConfig />);
+    renderSettings(<KeyConfig presetId="default" />);
     expect(assign()).toHaveTextContent("Ctrl+Shift+P");
     fireEvent.click(screen.getByRole("button", { name: "Clear shortcut: Command search" }));
-    await waitFor(() => expect(currentBindings().palette).toEqual([]));
+    await saveSettings();
+    expect(currentBindings().palette).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Actions for My key bindings" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Back to the default bindings" }));
+    expect(currentBindings().palette).toEqual([]);
+    await userEvent.click(saveButton());
     await waitFor(() => expect(currentBindings()).toEqual(defaultBindings));
   });
 
   it("records a function key with Shift and one past F12, and saves what it recorded", async () => {
-    render(<KeyConfig />);
+    renderSettings(<KeyConfig presetId="default" />);
     const assign = () => screen.getByRole("button", { name: "Assign shortcut: Open Home" });
     fireEvent.click(assign());
     fireEvent.keyDown(assign(), { key: "F2", shiftKey: true });
-    await waitFor(() => expect(currentBindings().home).toEqual(["Shift+F2"]));
+    expect(assign()).toHaveTextContent("Shift+F2");
     fireEvent.click(assign());
     fireEvent.keyDown(assign(), { key: "F13" });
-    await waitFor(() => expect(currentBindings().home).toEqual(["F13"]));
+    await saveSettings();
+    expect(currentBindings().home).toEqual(["F13"]);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -67,15 +75,18 @@ describe("application shortcuts", () => {
   });
 
   it("reports a refused save and leaves current bindings intact", async () => {
-    render(<KeyConfig />);
+    renderSettings(<KeyConfig presetId="default" />);
     failWrites = true;
     fireEvent.click(screen.getByRole("button", { name: "Clear shortcut: Command search" }));
-    await waitFor(() => expect(screen.getAllByRole("alert").some((element) => element.textContent?.includes("Could not save"))).toBe(true));
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(saveBar()).toHaveTextContent("The settings could not be saved."));
+    expect(screen.getByRole("button", { name: "Reload" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Assign shortcut: Command search" })).toHaveTextContent("Unassigned");
     expect(currentBindings().palette).toEqual(defaultBindings.palette);
   });
 
   it("reflects shortcuts changed on another machine", async () => {
-    render(<KeyConfig />);
+    renderSettings(<KeyConfig presetId="default" />);
     presets = [{ id: "work", name: "Work", bindings: { ...defaultBindings, palette: ["Alt+K"] } }];
     await act(async () => {
       await refreshPresets();
@@ -95,7 +106,7 @@ describe("application shortcuts", () => {
     { isComposing: true },
     { isComposing: false, keyCode: 229 },
   ])("keeps recording through IME keys reported as %j", async (composition) => {
-    render(<KeyConfig />);
+    renderSettings(<KeyConfig presetId="default" />);
     const assign = screen.getByRole("button", { name: "Assign shortcut: Open Home" });
     fireEvent.click(assign);
     for (const key of ["Escape", "Enter", "F2"]) {
@@ -103,17 +114,18 @@ describe("application shortcuts", () => {
       expect(shortcutKey(new KeyboardEvent("keydown", { key, ...composition }))).toBeNull();
       expect(shortcutsBlocked(new KeyboardEvent("keydown", { key, ...composition }))).toBe(true);
     }
-    expect(apiClient.mutate).not.toHaveBeenCalled();
+    expect(saveBar()).toBeNull();
 
     fireEvent.keyDown(assign, { key: "F2" });
-    await waitFor(() => expect(currentBindings().home).toEqual(["F2"]));
+    await saveSettings();
+    expect(currentBindings().home).toEqual(["F2"]);
   });
 
   it("keeps shortcuts out of modal dialogs and the binding editor", () => {
     const view = render(<div role="dialog" aria-modal="true" />);
     expect(shortcutsBlocked(new KeyboardEvent("keydown"))).toBe(true);
     view.unmount();
-    render(<KeyConfig />);
+    renderSettings(<KeyConfig presetId="default" />);
     const button = screen.getByRole("button", { name: "Assign shortcut: Command search" });
     let blocked = false;
     button.addEventListener("keydown", (event) => { blocked = shortcutsBlocked(event); });

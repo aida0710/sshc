@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
+import { saveEverything } from "./support/saveBar";
 import { drawnRowsIn, terminalHostBottomOverflow, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
 
 function pane(page: Page, sessionId: string): Locator {
@@ -299,6 +300,7 @@ test("offers a new session after the sessions to choose from, and splits on a sh
   await assign.click();
   await page.keyboard.press("Alt+d");
   await expect(assign).toHaveText("Alt+D");
+  await saveEverything(page);
 
   const first = await openNamedShell(page, "Build");
   await openNamedShell(page, "Logs");

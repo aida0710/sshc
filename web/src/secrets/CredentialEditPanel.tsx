@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import type { CredentialKind, CredentialList, CredentialsApi } from "../api/credentials";
 import { useTranslate } from "../i18n/context";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import { Field, control, hintText } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { hasOnScreenKeyboard } from "../ui/softKeyboard";
@@ -14,13 +15,16 @@ type CredentialEditPanelProps = {
   name: string;
   api: Pick<CredentialsApi, "revealCredential" | "updateCredential">;
   onSaved: (list: CredentialList) => void;
+  // onSaved also closes the panel. onClose asks the page to close it; the page asks first while there are unsaved
+  // changes (onDirtyChange).
   onClose: () => void;
+  onDirtyChange: (dirty: boolean) => void;
 };
 
 // CredentialEditPanel opens under the credential's row: the saved value is read from the engine, shown, and
 // written back with the name, so a rename keeps the assignments. It is not a dialog, so the page stays in
 // reach while it is open.
-export function CredentialEditPanel({ kind, name, api, onSaved, onClose }: CredentialEditPanelProps) {
+export function CredentialEditPanel({ kind, name, api, onSaved, onClose, onDirtyChange }: CredentialEditPanelProps) {
   const t = useTranslate();
   const headingId = useId();
   const reveal = useCallback(() => api.revealCredential(kind, name), [api, kind, name]);
@@ -41,7 +45,7 @@ export function CredentialEditPanel({ kind, name, api, onSaved, onClose }: Crede
       {revealed.state === "loading" ? (
         <>
           <p aria-live="polite" className={hintText}>{t("secrets.revealing")}</p>
-          <CredentialEditActions canSave={false} saving={false} onCancel={onClose} onSave={() => undefined} />
+          <CloseButton onClose={onClose} />
         </>
       ) : (
         // A value that could not be read can still be replaced: the form starts empty, under the failure.
@@ -54,13 +58,14 @@ export function CredentialEditPanel({ kind, name, api, onSaved, onClose }: Crede
           api={api}
           onSaved={onSaved}
           onClose={onClose}
+          onDirtyChange={onDirtyChange}
         />
       )}
     </section>
   );
 }
 
-function CredentialEditForm({ kind, name, initialName, initialSecret, revealFailure, api, onSaved, onClose }: {
+function CredentialEditForm({ kind, name, initialName, initialSecret, revealFailure, api, onSaved, onClose, onDirtyChange }: {
   kind: CredentialKind;
   name: string;
   initialName: string;
@@ -69,6 +74,7 @@ function CredentialEditForm({ kind, name, initialName, initialSecret, revealFail
   api: Pick<CredentialsApi, "updateCredential">;
   onSaved: (list: CredentialList) => void;
   onClose: () => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const t = useTranslate();
   const [nextName, setNextName] = useState(initialName);
@@ -81,15 +87,16 @@ function CredentialEditForm({ kind, name, initialName, initialSecret, revealFail
     if (!hasOnScreenKeyboard()) nameInput.current?.focus();
   }, []);
 
-  const close = useCallback(() => {
-    setSecret("");
-    onClose();
-  }, [onClose]);
+  const changed = nextName !== initialName || secret !== initialSecret;
+  // Closing the panel drops what was typed, so a panel that goes away has no changes.
+  useLayoutEffect(() => {
+    onDirtyChange(changed);
+    return () => onDirtyChange(false);
+  }, [changed, onDirtyChange]);
 
   async function submit() {
-    const saved = await save.run(() => api.updateCredential(kind, name, nextName, secret), {
+    await save.run(() => api.updateCredential(kind, name, nextName, secret), {
       apply: (list) => {
-        setSecret("");
         onSaved(list);
       },
       describe: (caught) => {
@@ -97,7 +104,6 @@ function CredentialEditForm({ kind, name, initialName, initialSecret, revealFail
         return code === "credential_already_exists" ? t("secrets.nameExists") : code || t("secrets.updateFailed");
       },
     });
-    if (saved) onClose();
   }
 
   const valueLabel = kind === "password"
@@ -122,29 +128,28 @@ function CredentialEditForm({ kind, name, initialName, initialSecret, revealFail
           disabled={save.busy}
         />
       </div>
-      <CredentialEditActions
-        canSave={nextName !== "" && secret !== ""}
-        saving={save.busy}
-        onCancel={close}
-        onSave={() => void submit()}
-      />
+      <CloseButton onClose={onClose} disabled={save.busy} />
+      {changed ? (
+        <DraftSaveBar
+          saving={save.busy}
+          inputInvalid={nextName === "" || secret === ""}
+          onDiscard={() => {
+            setNextName(initialName);
+            setSecret(initialSecret);
+            save.clearError();
+          }}
+          onSave={() => void submit()}
+        />
+      ) : null}
     </>
   );
 }
 
-function CredentialEditActions({ canSave, saving, onCancel, onSave }: {
-  canSave: boolean;
-  saving: boolean;
-  onCancel: () => void;
-  onSave: () => void;
-}) {
+function CloseButton({ onClose, disabled = false }: { onClose: () => void; disabled?: boolean }) {
   const t = useTranslate();
   return (
-    <div className="flex justify-end gap-2">
-      <Button onClick={onCancel}>{t("secrets.cancel")}</Button>
-      <Button kind="primary" disabled={!canSave || saving} onClick={onSave}>
-        {saving ? t("secrets.saving") : t("secrets.saveChanges")}
-      </Button>
+    <div className="flex justify-end">
+      <Button disabled={disabled} onClick={onClose}>{t("secrets.closeEditor")}</Button>
     </div>
   );
 }

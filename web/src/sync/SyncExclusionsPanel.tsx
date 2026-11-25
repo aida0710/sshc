@@ -1,18 +1,23 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { failureCode } from "../api/client";
 import type { SyncApi, SyncExclusions } from "../api/sync";
 import { CodeField } from "../editor/CodeField";
 import { useLanguage } from "../i18n/context";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import { control, hintText } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
+import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { useToast } from "../ui/useToast";
 
 type Props = {
   api: Pick<SyncApi, "syncExclusions" | "saveSyncExclusions">;
   initial?: SyncExclusions;
   onSaved?: (value: SyncExclusions) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  // onDiscardReady receives the function that gives up the changes.
+  onDiscardReady?: (discard: (() => void) | null) => void;
 };
 
 function exactPattern(path: string): string {
@@ -25,8 +30,9 @@ function appendRule(document: string, rule: string): string {
   return `${document}${document.endsWith("\n") ? "" : "\n"}${rule}\n`;
 }
 
-export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
+export function SyncExclusionsPanel({ api, initial, onSaved, onDirtyChange, onDiscardReady }: Props) {
   const { t } = useLanguage();
+  const showToast = useToast();
   const [view, setView] = useState<SyncExclusions | null>(initial ?? null);
   const [document, setDocument] = useState(initial?.document ?? "");
   const [loaded, setLoaded] = useState(initial !== undefined);
@@ -43,6 +49,43 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
         setLoaded(true);
       },
       describe: () => t("sync.exclusions.loadFailed"),
+    });
+  }
+
+  const changed = view !== null && document !== view.document;
+  // What was edited here is given up when the page goes away, so a panel that goes away has no changes.
+  useLayoutEffect(() => {
+    onDirtyChange?.(changed);
+    return () => onDirtyChange?.(false);
+  }, [changed, onDirtyChange]);
+
+  function discard() {
+    if (view === null) return;
+    setDocument(view.document);
+    setOverrides({});
+    operation.clearError();
+  }
+  // The page asks to give up the changes when it goes on to another one.
+  const latestDiscard = useRef(discard);
+  latestDiscard.current = discard;
+  useEffect(() => {
+    onDiscardReady?.(() => latestDiscard.current());
+    return () => onDiscardReady?.(null);
+  }, [onDiscardReady]);
+
+  async function save() {
+    await operation.run(() => api.saveSyncExclusions(document), {
+      apply: (next) => {
+        setView(next);
+        setDocument(next.document);
+        setOverrides({});
+        showToast(t("draft.saved"), { tone: "success" });
+        onSaved?.(next);
+      },
+      describe: (caught) =>
+        failureCode(caught) === "sync_ignore_invalid"
+          ? t("sync.exclusions.invalid")
+          : t("sync.exclusions.saveFailed"),
     });
   }
 
@@ -95,9 +138,9 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
           <p role="status" className={hintText}>
             {t("sync.exclusions.loading")}
           </p>
-        ) : operation.error !== "" ? (
-          <Notice tone="danger">{operation.error}</Notice>
-        ) : view === null ? null : (
+        ) : view === null ? (
+          operation.error === "" ? null : <Notice tone="danger">{operation.error}</Notice>
+        ) : (
           <>
             <div>
               <p className="text-sm leading-6 text-ink-muted">
@@ -178,29 +221,10 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
                 </p>
               </div>
             </details>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                kind="primary"
-                disabled={operation.busy || document === view.document}
-                onClick={() => {
-                  void operation.run(() => api.saveSyncExclusions(document), {
-                    apply: (next) => {
-                      setView(next);
-                      setDocument(next.document);
-                      setOverrides({});
-                      onSaved?.(next);
-                    },
-                    describe: (caught) =>
-                      failureCode(caught) === "sync_ignore_invalid"
-                        ? t("sync.exclusions.invalid")
-                        : t("sync.exclusions.saveFailed"),
-                  });
-                }}
-              >
-                {t("sync.exclusions.save")}
-              </Button>
-              <span className={hintText}>{t("sync.exclusions.shared")}</span>
-            </div>
+            <p className={hintText}>{t("sync.exclusions.shared")}</p>
+            {changed ? (
+              <DraftSaveBar saving={operation.busy} failure={operation.error} onDiscard={discard} onSave={() => void save()} />
+            ) : null}
           </>
         )}
       </div>

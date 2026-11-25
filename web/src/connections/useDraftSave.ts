@@ -36,7 +36,7 @@ export function useDraftSave({ draft, saved }: { draft: unknown; saved: unknown 
     try {
       await write();
       setOutcome({ ...started, result: "written" });
-      showToast(t("conn.draftSaved"), { tone: "success" });
+      showToast(t("draft.saved"), { tone: "success" });
       return true;
     } catch {
       setOutcome({ ...started, result: "failed" });

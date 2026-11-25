@@ -1,5 +1,6 @@
 import type { components } from "../api/schema";
 import { createPresetLibrary, refreshPresetLibraries } from "../settings/presetLibrary";
+import type { SettingsDocument } from "../settings/settingsStore";
 import { newIdentifier } from "../ui/randomIdentifier";
 import { defaultBindings, type Bindings } from "./bindings";
 
@@ -22,9 +23,9 @@ function bindingsOf(preset: Preset | undefined): Bindings {
 export const usePresets = shortcutPresetLibrary.usePresets;
 
 // useBindings is the shortcuts of a settings preset (the ones in force when settingsPresetId is left out), for
-// the screens that show or match them.
-export function useBindings(settingsPresetId?: string): Bindings {
-  return bindingsOf(shortcutPresetLibrary.useChosen(settingsPresetId));
+// the screens that show or match them. document is the settings the choice is read from (PresetLibrary.usePresets).
+export function useBindings(settingsPresetId?: string, document?: SettingsDocument | null): Bindings {
+  return bindingsOf(shortcutPresetLibrary.useChosen(settingsPresetId, document));
 }
 
 // currentBindings is the shortcuts in force, for key handlers outside React.

@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useMemo, useState, type ReactNode } from "react
 import type { VPNProfile, VPNSecrets } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import { ActionArea } from "../ui/ActionArea";
+import { DraftSaveBar } from "../ui/DraftSaveBar";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { FieldRow } from "../ui/FieldRow";
 import { PageSection } from "../ui/page";
@@ -56,7 +57,7 @@ export function VPNProfileForm({
   editing,
   revealSecrets,
   onSave,
-  onCancel,
+  onClose,
   onDirtyChange,
 }: {
   busy: boolean;
@@ -65,8 +66,9 @@ export function VPNProfileForm({
   // revealSecrets は、保存済みのプロファイルのシークレットを取り出す。編集のフォームだけが使う。
   revealSecrets?: (name: string) => Promise<VPNSecrets>;
   onSave: (profile: VPNProfile, secrets: VPNSecrets) => Promise<VPNProfileSaveResult>;
-  // onCancel は、編集をやめる。作成のフォームには無い。
-  onCancel?: () => void;
+  // onClose は、編集を閉じる。変更があれば、画面が破棄してよいかを確かめてから、forget を呼んで閉じる。作成の
+  // フォームには無い。
+  onClose?: (forget: () => void) => void;
   // onDirtyChange は、入力を開いたときから変えたかを伝える。画面を離れる前に確かめるため。
   onDirtyChange?: (dirty: boolean) => void;
 }) {
@@ -145,11 +147,18 @@ export function VPNProfileForm({
     });
   }
 
-  // close は、編集をやめる。取り出したシークレットを、フォームの状態にも残さない。
-  function close() {
-    setDraft((current) => ({ ...current, secrets: emptySecrets }));
-    forget();
-    onCancel?.();
+  function discard() {
+    setRefusal(null);
+    setDraft(untouchedDraft);
+  }
+
+  // requestClose は、編集を閉じるよう頼む。取り出したシークレットを、フォームの状態にも残さない。変更があれば、
+  // 閉じてよいかを画面が確かめてから閉じる。
+  function requestClose() {
+    onClose?.(() => {
+      setDraft((current) => ({ ...current, secrets: emptySecrets }));
+      forget();
+    });
   }
 
   // errorFor は、その項目が断られていれば理由の1文を返す。
@@ -340,24 +349,25 @@ export function VPNProfileForm({
     </>
   );
 
-  const saveButton = (
-    <Button
-      kind="primary"
-      busy={saving.pending}
-      disabled={busy || reveal?.state === "revealing" || !hasRequiredValues(draft, stored)}
-      title={busy && !saving.pending ? t("vpn.waitingForOperation") : undefined}
-      onClick={() => void save()}
-    >
-      {t("vpn.save")}
-    </Button>
-  );
+  const waiting = busy || reveal?.state === "revealing";
+  const missingValues = !hasRequiredValues(draft, stored);
 
   if (editing === undefined) {
     return (
       <PageSection heading={heading} hint={t("vpn.addHint")}>
         {/* 最初の行の上に線を引かないよう、行だけを1つの箱に入れる。 */}
         <div>{fields}</div>
-        <ActionArea>{saveButton}</ActionArea>
+        <ActionArea>
+          <Button
+            kind="primary"
+            busy={saving.pending}
+            disabled={waiting || missingValues}
+            title={busy && !saving.pending ? t("vpn.waitingForOperation") : undefined}
+            onClick={() => void save()}
+          >
+            {t("vpn.save")}
+          </Button>
+        </ActionArea>
       </PageSection>
     );
   }
@@ -368,13 +378,20 @@ export function VPNProfileForm({
       {reveal?.state === "failed" ? <Notice>{t("vpn.secretsRevealFailed", { reason: reveal.reason })}</Notice> : null}
       <div className="mt-1">{fields}</div>
       <ActionArea>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button disabled={busy} onClick={close}>
-            {t("vpn.cancel")}
-          </Button>
-          {saveButton}
-        </div>
+        <Button disabled={saving.pending} onClick={requestClose}>
+          {t("vpn.closeEditor")}
+        </Button>
       </ActionArea>
+      {changed ? (
+        <DraftSaveBar
+          saving={saving.pending}
+          saveDisabled={waiting}
+          inputInvalid={missingValues}
+          discardDisabled={busy}
+          onDiscard={discard}
+          onSave={() => void save()}
+        />
+      ) : null}
     </InlineEditor>
   );
 }

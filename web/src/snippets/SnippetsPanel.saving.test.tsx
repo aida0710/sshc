@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
+import { ToastProvider } from "../ui/ToastProvider";
 import { SnippetsPanel } from "./SnippetsPanel";
 import { snippetsApi, type Preview, type Snippet } from "./api";
 
@@ -29,7 +30,7 @@ it("says the library is loading instead of showing an empty list", async () => {
   expect(screen.queryByText("Loading snippets…")).not.toBeInTheDocument();
 });
 
-it("shows the save working, then says the snippet was saved until the next edit", async () => {
+it("shows the save working, then says the changes were saved and puts the bar away", async () => {
   vi.mocked(snippetsApi.library).mockResolvedValue({ snippets: [checkDisk], startup: [] });
   let answer: () => void = () => undefined;
   vi.mocked(snippetsApi.create).mockImplementation(() => new Promise((resolve) => {
@@ -39,7 +40,7 @@ it("shows the save working, then says the snippet was saved until the next edit"
     };
   }));
   const user = userEvent.setup();
-  render(<SnippetsPanel aliases={["test-host"]} />);
+  render(<ToastProvider><SnippetsPanel aliases={["test-host"]} /></ToastProvider>);
   await screen.findByRole("button", { name: /Check disk/ });
   await user.click(screen.getAllByRole("button", { name: "Add snippet" })[0]!);
 
@@ -49,13 +50,28 @@ it("shows the save working, then says the snippet was saved until the next edit"
   await user.click(save);
 
   expect(save).toHaveAttribute("aria-busy", "true");
-  expect(screen.queryByText("Snippet saved.")).not.toBeInTheDocument();
+  expect(screen.queryByText("Saved your changes.")).not.toBeInTheDocument();
   await act(async () => answer());
-  expect(await screen.findByText("Snippet saved.")).toBeInTheDocument();
-  expect(save).not.toHaveAttribute("aria-busy");
+  expect(await screen.findByText("Saved your changes.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+});
 
-  await user.type(screen.getByRole("textbox", { name: "Description" }), "x");
-  expect(screen.queryByText("Snippet saved.")).not.toBeInTheDocument();
+it("offers to save only while there are changes, and puts them back when they are discarded", async () => {
+  vi.mocked(snippetsApi.library).mockResolvedValue({ snippets: [checkDisk], startup: [] });
+  const user = userEvent.setup();
+  render(<SnippetsPanel aliases={["test-host"]} />);
+  await user.click(await screen.findByRole("button", { name: /Check disk/ }));
+  const name = screen.getByRole("textbox", { name: "Name" });
+  expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+
+  await user.type(name, "!");
+  expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  await user.clear(name);
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+  await user.click(screen.getByRole("button", { name: "Discard changes" }));
+  expect(name).toHaveValue(checkDisk.name);
+  expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
 });
 
 it("does not call a finished preview a save", async () => {
@@ -69,5 +85,5 @@ it("does not call a finished preview a save", async () => {
   await user.click(screen.getByRole("button", { name: "Preview execution" }));
 
   expect(await screen.findByText("Review exact commands")).toBeInTheDocument();
-  expect(screen.queryByText("Snippet saved.")).not.toBeInTheDocument();
+  expect(screen.queryByText("Saved your changes.")).not.toBeInTheDocument();
 });

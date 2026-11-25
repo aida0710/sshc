@@ -7,6 +7,7 @@ import {
   sessionStatus,
   test,
 } from "./support/environment";
+import { saveSettings } from "./support/saveBar";
 import type { Page } from "@playwright/test";
 
 // addCredential stores one credential through the page's ［＋ Add］ form, which opens above the list.
@@ -50,7 +51,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
     const saved = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
     );
-    await page.getByRole("button", { name: "Save Basic settings" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     expect((await saved).status()).toBe(200);
     await expect(panel.getByLabel("Password", { exact: true }).locator("option:checked")).toHaveText("office-vm (saved password)");
   }
@@ -128,7 +129,7 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
   const saved = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
   );
-  await page.getByRole("button", { name: "Save Basic settings" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   expect((await saved).status()).toBe(200);
   await expect(authentication.getByLabel("One-time password", { exact: true }).locator("option:checked")).toHaveText("production-otp");
 
@@ -199,7 +200,7 @@ test("opens a named password masked and reveals it only on request", async ({ pa
   await expect(password).toHaveAttribute("type", "text");
   await dialog.getByLabel("Name").fill("office-shared");
   await password.fill("rotated-test-password");
-  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 
   await expect(page.getByRole("article", { name: "office-shared" })).toBeVisible();
   await expect(page.getByRole("article", { name: "office-vm" })).toHaveCount(0);
@@ -258,19 +259,12 @@ test("saves the Vault auto-lock policy and warns when automatic locking is disab
   await expect(autoLock.getByLabel("Time")).toHaveValue("12");
   await expect(autoLock.getByLabel("Unit")).toHaveValue("hours");
 
-  // A choice is saved as it is made; the page says so beside its name.
-  const saved = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/api/v1/settings/presets/default" &&
-      response.request().method() === "PUT",
-  );
   await policy.selectOption("restart");
   await expect(autoLock.getByText(
     "The Vault will not lock automatically. Unless you lock it manually, it remains unlocked until sshc is restarted. Use this setting only on a device you control.",
   )).toBeVisible();
-  expect((await saved).status()).toBe(200);
-  // "Saved" shows under the row that was changed.
-  await expect(autoLock.getByText("Saved", { exact: true })).toBeVisible();
+  await saveSettings(page);
+  await expect(page.getByText("Saved your changes.", { exact: true })).toBeVisible();
 
   await page.reload();
   const restored = page.getByRole("region", { name: "Vault auto-lock" });
@@ -313,7 +307,7 @@ test("lists saved one-time passwords with their current codes in both languages"
   const authentication = page.getByRole("region", { name: "Authentication" });
   await authentication.getByLabel("One-time password", { exact: true }).selectOption("saved_totp");
   await authentication.getByLabel("Saved TOTP").selectOption("bastion-otp");
-  await page.getByRole("button", { name: "Save Basic settings" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(authentication.getByLabel("One-time password", { exact: true }).locator("option:checked")).toHaveText("bastion-otp");
   await openSection(page, "OTP");
   await expect(page.getByRole("article", { name: "bastion-otp" })).toBeVisible();

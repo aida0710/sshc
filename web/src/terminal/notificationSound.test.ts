@@ -5,7 +5,7 @@ import {
   loadNotificationSoundPreferences,
   playNotificationSound,
   primeNotificationSound,
-  saveNotificationSoundPreferences,
+  withNotificationSound,
 } from "./notificationSound";
 import { fakeSettingsServer } from "../testing/settingsServer";
 
@@ -14,22 +14,18 @@ afterEach(() => {
 });
 
 describe("notification sound preferences", () => {
-  it("uses safe defaults and keeps a chosen sound in the preset in use", async () => {
-    const server = fakeSettingsServer();
+  it("uses safe defaults until the preset in use keeps a sound", () => {
+    fakeSettingsServer();
     expect(loadNotificationSoundPreferences()).toEqual(defaultNotificationSoundPreferences);
 
-    await saveNotificationSoundPreferences({ sound: "pulse", volume: 35 });
-
+    fakeSettingsServer({ presets: [{ id: "default", interface: { notificationSound: { sound: "pulse", volume: 35 } } }] });
     expect(loadNotificationSoundPreferences()).toEqual({ sound: "pulse", volume: 35 });
-    expect(server.document().presets[0]).toEqual({ id: "default", interface: { notificationSound: { sound: "pulse", volume: 35 } } });
   });
 
-  it("does not write the default sound into the preset", async () => {
-    const server = fakeSettingsServer({ presets: [{ id: "default", interface: { notificationSound: { sound: "pulse", volume: 35 } } }] });
-
-    await saveNotificationSoundPreferences(defaultNotificationSoundPreferences);
-
-    expect(server.document().presets[0]).toEqual({ id: "default" });
+  it("keeps a chosen sound in the preset, and leaves the default one out", () => {
+    expect(withNotificationSound({ keepScreenAwake: true }, { sound: "pulse", volume: 35 }))
+      .toEqual({ keepScreenAwake: true, notificationSound: { sound: "pulse", volume: 35 } });
+    expect(withNotificationSound({ notificationSound: { sound: "pulse", volume: 35 } }, defaultNotificationSoundPreferences).notificationSound).toBeUndefined();
   });
 
   it("primes one reusable audio context from a user gesture", async () => {

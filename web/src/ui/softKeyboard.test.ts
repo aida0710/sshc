@@ -21,6 +21,14 @@ describe("focusRaisesKeyboard", () => {
     expect(focusRaisesKeyboard(field)).toBe(false);
   });
 
+  it("is true on a phone for an element that takes text through the browser's EditContext, as Monaco's fields do", () => {
+    screenLaidOutAsPhone(true);
+    const field = Object.assign(document.createElement("div"), { editContext: null as object | null });
+    expect(focusRaisesKeyboard(field)).toBe(false);
+    field.editContext = {};
+    expect(focusRaisesKeyboard(field)).toBe(true);
+  });
+
   it("is false on a phone for what takes no text", () => {
     screenLaidOutAsPhone(true);
     expect(focusRaisesKeyboard(document.createElement("button"))).toBeFalsy();
