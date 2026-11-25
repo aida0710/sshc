@@ -1,7 +1,7 @@
 import { useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { menuSurface } from "./menuStyle";
-import { useAnchoredMenu } from "./useAnchoredMenu";
+import { useAnchoredMenu, type MenuAnchor } from "./useAnchoredMenu";
 import { useDismissibleLayer } from "./useDismissibleLayer";
 import { useMenuKeyboard } from "./useMenuKeyboard";
 
@@ -13,27 +13,37 @@ const menuWidths: Record<MenuWidth, string> = {
   wide: "w-72",
 };
 
-// MenuPanel は、ボタンから開くメニューの枠。開いている間だけ描く。開いたボタン（anchorRef）の横に、画面の上に
-// 固定して置き（下に入らなければ上へ）、カードの角や一覧のスクロールで切れないよう body に出す。外を押す・Esc・
-// Android の戻るで onClose を呼び、閉じたらボタンへフォーカスを戻す。矢印キーで項目を移る。中身は MenuItems の
-// 部品で書く。
-export function MenuPanel({ label, anchorRef, width = "regular", onClose, children }: {
+// MenuPlacement は、メニューをどこに開くか。
+// - anchorRef: 開いたボタンの横。align が end（既定）ならボタンの右端に、start なら左端にそろえる。閉じたら
+//   ボタンへフォーカスを戻す。
+// - point: 右クリックした点。閉じたら、開く前にフォーカスがあった所へ戻す。
+type MenuPlacement =
+  | { anchorRef: RefObject<HTMLElement | null>; align?: "start" | "end"; point?: never }
+  | { point: { x: number; y: number }; anchorRef?: never; align?: never };
+
+// MenuPanel は、メニューの枠。開いている間だけ描く。画面の上に固定して置き（下に入らなければ上へ）、カードの角や
+// 一覧のスクロールで切れないよう body に出す。外を押す・Esc・Android の戻るで onClose を呼び、矢印キーで項目を
+// 移る。中身は MenuItems の部品で書く。
+export function MenuPanel({ label, width = "regular", onClose, children, ...placement }: MenuPlacement & {
   // label はメニューの名前。開いたボタンと同じく、何の操作かを言う。
   label: string;
-  anchorRef: RefObject<HTMLElement | null>;
   width?: MenuWidth;
   onClose: () => void;
   children: ReactNode;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const anchorRef = placement.anchorRef;
+  const anchor: MenuAnchor = anchorRef === undefined
+    ? { point: placement.point }
+    : { element: anchorRef, align: placement.align ?? "end" };
   useDismissibleLayer({
     open: true,
-    containerRefs: [menuRef, anchorRef],
+    containerRefs: anchorRef === undefined ? [menuRef] : [menuRef, anchorRef],
     onDismiss: onClose,
-    returnFocusRef: anchorRef,
+    ...(anchorRef === undefined ? {} : { returnFocusRef: anchorRef }),
   });
   useMenuKeyboard({ open: true, menuRef, onClose });
-  useAnchoredMenu({ open: true, anchorRef, menuRef });
+  useAnchoredMenu({ open: true, anchor, menuRef });
 
   return createPortal(
     <div ref={menuRef} role="menu" aria-label={label} className={`fixed z-50 overflow-y-auto ${menuWidths[width]} ${menuSurface}`}>

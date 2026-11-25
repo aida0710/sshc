@@ -12,8 +12,6 @@ import { EmptyState } from "../ui/EmptyState";
 import { PanelState } from "../ui/PanelState";
 import { Button, Notice } from "../ui/surface";
 import { nextSort } from "../ui/tableSort";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
-import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
 import type { RemoteEntry } from "./api";
 import { formatBytes } from "../ui/format";
@@ -53,7 +51,8 @@ import { useSFTPPermissions } from "./useSFTPPermissions";
 import { SFTPPermissionsDialog } from "./SFTPPermissionsDialog";
 import { SFTPWaitingOverlay } from "./SFTPWaitingOverlay";
 import { isImeComposing } from "../ui/imeComposition";
-import { menuItemClass, menuSurface } from "../ui/menuStyle";
+import { MenuItem } from "../ui/MenuItems";
+import { MenuPanel } from "../ui/MenuPanel";
 import { SFTPQuickHosts } from "./SFTPQuickHosts";
 import { literalTextEntry } from "../ui/softKeyboard";
 import { IconButton } from "../ui/IconButton";
@@ -72,8 +71,6 @@ type SFTPMenu =
   | { kind: "selected" }
   | { kind: "context"; x: number; y: number };
 
-const contextMenuWidth = 224;
-const contextMenuItemHeight = 40;
 
 // RemotePathAction is what a terminal asks of a file path of an SSH session: list its folder, edit it, or
 // download it (into the other pane's folder when one is open beside it).
@@ -156,20 +153,10 @@ export function SFTPPanel({
   const mobileInteraction = useMediaQuery(mobileViewportQuery);
   const headingId = useId();
   const handledTarget = useRef(0);
-  const menuRoot = useRef<HTMLDivElement>(null);
-  const toolbarRoot = useRef<HTMLDivElement>(null);
-  const menuPanel = useRef<HTMLDivElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const refreshedDeletes = useRef(new Set<string>());
   const transferJobs = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
 
-  useDismissibleLayer({
-    open: menu !== null && !mobileInteraction,
-    containerRefs: [menuRoot, toolbarRoot],
-    onDismiss: () => setMenu(null),
-    returnFocusRef: menuTrigger,
-  });
-  useMenuKeyboard({ open: menu !== null && !mobileInteraction, menuRef: menuPanel, onClose: () => setMenu(null) });
 
   const browser = useSFTPBrowser({
     aliases,
@@ -509,7 +496,7 @@ export function SFTPPanel({
   return (
     <section ref={panelRoot} className="flex h-full min-h-0 min-w-0 flex-col" aria-labelledby={headingId}>
       <h2 id={headingId} className="sr-only">{t(local ? "sftp.local.heading" : "sftp.heading")}</h2>
-      <div ref={toolbarRoot} className="relative shrink-0">
+      <div className="relative shrink-0">
         <SFTPToolbar
           {...(hostPickerRequest === undefined ? {} : { hostPickerRequest })}
           content={compactControls}
@@ -540,7 +527,11 @@ export function SFTPPanel({
             <IconButton label={t("sftp.mobile.actions")} size={mobileInteraction ? "barLarge" : "large"} className="active:bg-select-fill" aria-haspopup={mobileInteraction ? "dialog" : "menu"} aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)}><Icon name="moreHorizontal" className="size-5" /></IconButton>
           </>}
         />
-      {!mobileInteraction && menu?.kind === "folder" ? <div ref={menuPanel} role="menu" aria-label={t("sftp.mobile.actions")} className={`absolute right-0 top-full z-20 max-h-[70dvh] w-60 overflow-y-auto ${menuSurface}`}><SFTPMenuActionList actions={folderMenuActions()} /></div> : null}
+      {!mobileInteraction && menu?.kind === "folder" ? (
+        <MenuPanel label={t("sftp.mobile.actions")} anchorRef={menuTrigger} onClose={() => setMenu(null)}>
+          <SFTPMenuActionList actions={folderMenuActions()} />
+        </MenuPanel>
+      ) : null}
       </div>
 
       {problem === "" || listingFailed ? null : <Notice tone="danger" onDismiss={() => setProblem("")}>{problem}</Notice>}
@@ -577,7 +568,7 @@ export function SFTPPanel({
           onDrop={(event) => { void transfers.acceptDrop(event); }}
         >
           {/* A pane with nothing listed has nothing to filter. The row stays for the file inputs it holds. */}
-          <div ref={menuRoot} hidden={mobileInteraction || !connected} className={mobileInteraction || !connected ? "hidden" : "relative flex shrink-0 items-center gap-1 border-b border-line px-3 py-1.5"}>
+          <div hidden={mobileInteraction || !connected} className={mobileInteraction || !connected ? "hidden" : "relative flex shrink-0 items-center gap-1 border-b border-line px-3 py-1.5"}>
             {selectedEntries.length > 0 && !(mobileInteraction && search.mobileSearchOpen) ? (
               <>
                 <IconButton label={t("sftp.clearSelection")} size={mobileInteraction ? "barLarge" : "toolbar"} onClick={list.clearSelection}>
@@ -652,36 +643,27 @@ export function SFTPPanel({
               </>
             ) : null}
             {!mobileInteraction && menu?.kind === "create" ? (
-              <div ref={menuPanel} role="menu" aria-label={t("sftp.createActions")} className={`absolute left-2 top-full z-20 mt-1 w-52 ${menuSurface}`}>
+              <MenuPanel label={t("sftp.createActions")} anchorRef={menuTrigger} align="start" onClose={() => setMenu(null)}>
                 {can?.createDirectory ? <>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "mkdir" })} className={menuItemClass()}>{t("sftp.newFolder")}</button>
-                  {can?.createEntries ? <button type="button" role="menuitem" disabled={busy} onClick={() => actions.ask({ kind: "createFile" })} className={menuItemClass()}>{t("sftp.newFile")}</button> : null}
+                  <MenuItem disabled={busy} onSelect={() => actions.ask({ kind: "mkdir" })}>{t("sftp.newFolder")}</MenuItem>
+                  {can?.createEntries ? <MenuItem disabled={busy} onSelect={() => actions.ask({ kind: "createFile" })}>{t("sftp.newFile")}</MenuItem> : null}
                 </> : null}
                 {can?.symlink ? <SFTPMenuActionList actions={folderMenuActions().filter((action) => action.key === "newSymlink")} /> : null}
                 {can?.browserUpload ? <>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFiles(); }} className={menuItemClass()}>{t("sftp.upload")}</button>
-                  <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); transfers.chooseFolder(); }} className={menuItemClass()}>{t("sftp.uploadFolder")}</button>
+                  <MenuItem disabled={busy} onSelect={() => { setMenu(null); transfers.chooseFiles(); }}>{t("sftp.upload")}</MenuItem>
+                  <MenuItem disabled={busy} onSelect={() => { setMenu(null); transfers.chooseFolder(); }}>{t("sftp.uploadFolder")}</MenuItem>
                 </> : null}
-              </div>
+              </MenuPanel>
             ) : null}
             {!mobileInteraction && menu?.kind === "selected" && selectedEntries.length > 0 ? (
-              <div ref={menuPanel} role="menu" aria-label={selectionMenuLabel()} className={`absolute right-2 top-full z-20 mt-1 w-52 ${menuSurface}`}>
+              <MenuPanel label={selectionMenuLabel()} anchorRef={menuTrigger} onClose={() => setMenu(null)}>
                 <SFTPMenuActionList actions={selectedMenuActions()} />
-              </div>
+              </MenuPanel>
             ) : null}
             {!mobileInteraction && menu?.kind === "context" && selectedEntries.length > 0 ? (
-              <div
-                ref={menuPanel}
-                role="menu"
-                aria-label={selectionMenuLabel()}
-                style={{
-                  left: Math.max(8, Math.min(menu.x, window.innerWidth - contextMenuWidth - 8)),
-                  top: Math.max(8, Math.min(menu.y, window.innerHeight - selectedMenuActions().length * contextMenuItemHeight - 16)),
-                }}
-                className={`fixed z-30 w-56 ${menuSurface}`}
-              >
+              <MenuPanel label={selectionMenuLabel()} point={{ x: menu.x, y: menu.y }} onClose={() => setMenu(null)}>
                 <SFTPMenuActionList actions={selectedMenuActions()} />
-              </div>
+              </MenuPanel>
             ) : null}
           </div>
           {mobileInteraction && connected && search.search?.mode !== "content" ? (

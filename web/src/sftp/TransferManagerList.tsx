@@ -6,12 +6,11 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { Notice } from "../ui/surface";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { mobileViewportQuery, navigationRailQuery, useMediaQuery } from "../ui/useMediaQuery";
-import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { keepMachineStateJSON, readMachineStateJSON } from "../settings/machineState";
 import { setTransfersStopped } from "../settings/settingsStore";
-import { menuItemClass, menuSurface } from "../ui/menuStyle";
+import { MenuItem } from "../ui/MenuItems";
+import { MenuPanel } from "../ui/MenuPanel";
 import { settingsPagePath } from "../settings/settingsRoute";
 import { type ManagedTransferJob } from "./transferManager";
 import { getTransferQueueSummary } from "./transferQueueSummaryModel";
@@ -78,8 +77,6 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
   const [menuOpen, setMenuOpen] = useState(false);
   const { problem: controlProblem, runControl, dismissProblem } = useTransferControl();
   const collapsed = compactViewport ? !sheetOpen : view.collapsed;
-  const menuRoot = useRef<HTMLDivElement>(null);
-  const menuPanel = useRef<HTMLDivElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const jobs = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   const batches = useMemo(() => {
@@ -153,13 +150,6 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
     dismissSheet();
     onNavigateLocation?.(settingsPagePath("SFTP"));
   }
-  useDismissibleLayer({
-    open: menuOpen,
-    containerRefs: [menuRoot],
-    onDismiss: () => setMenuOpen(false),
-    returnFocusRef: menuTrigger,
-  });
-  useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
   const content = (
     <section className={compactViewport ? "flex min-h-0 flex-1 flex-col text-sm" : `relative shrink-0 overflow-visible text-xs ${divided ? "border-t border-line" : ""}`} aria-labelledby={headingId}>
       {compactViewport || collapsed || jobs.length === 0 ? null : (
@@ -213,18 +203,18 @@ export function TransferManagerList({ openRequest = 0, onNavigateLocation, divid
         </>
         )}
         {onNavigateLocation === undefined ? null : <IconButton label={t("sftp.manager.settings")} size="panel" onClick={openSettings}><Icon name="settings" className="size-4" /></IconButton>}
-        <div ref={menuRoot} className="relative ml-auto">
+        <div className="ml-auto">
           {hasMenuActions ? <IconButton label={t("sftp.manager.actions")} size="panel" className="focus:bg-select-fill" ref={menuTrigger} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>
             <Icon name="moreHorizontal" className="size-4" />
           </IconButton> : null}
           {menuOpen ? (
-            <div ref={menuPanel} role="menu" aria-label={t("sftp.manager.actions")} className={`absolute right-0 z-20 w-48 ${menuSurface} ${compactViewport ? "top-full mt-1" : "bottom-full mb-1"}`}>
-              {canPause ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.pauseAll()); }} className={menuItemClass()}>{t("sftp.manager.pauseAll")}</button> : null}
-              {canResume ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.resumeAll()); }} className={menuItemClass()}>{t("sftp.manager.resumeAll")}</button> : null}
-              {canCancel ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.cancelAll()); }} className={menuItemClass("danger")}>{t("sftp.manager.cancelAll")}</button> : null}
-              {canClear ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.clearFinished()); }} className={menuItemClass()}>{t("sftp.transfer.clear")}</button> : null}
-              {canClearFailed ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.clearFailed()); }} className={menuItemClass()}>{t("sftp.manager.clearFailed")}</button> : null}
-            </div>
+            <MenuPanel label={t("sftp.manager.actions")} anchorRef={menuTrigger} onClose={() => setMenuOpen(false)}>
+              {canPause ? <MenuItem onSelect={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.pauseAll()); }}>{t("sftp.manager.pauseAll")}</MenuItem> : null}
+              {canResume ? <MenuItem onSelect={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.resumeAll()); }}>{t("sftp.manager.resumeAll")}</MenuItem> : null}
+              {canCancel ? <MenuItem tone="danger" onSelect={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.cancelAll()); }}>{t("sftp.manager.cancelAll")}</MenuItem> : null}
+              {canClear ? <MenuItem onSelect={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.clearFinished()); }}>{t("sftp.transfer.clear")}</MenuItem> : null}
+              {canClearFailed ? <MenuItem onSelect={() => { setMenuOpen(false); void runControl(() => sftpTransferManager.clearFailed()); }}>{t("sftp.manager.clearFailed")}</MenuItem> : null}
+            </MenuPanel>
           ) : null}
         </div>
         {compactViewport ? <IconButton ref={closeSheet} label={t("sftp.manager.close")} size="bar" onClick={dismissSheet}><Icon name="close" className="size-4" /></IconButton> : null}
