@@ -543,7 +543,7 @@ export function SFTPPanel({
       {!mobileInteraction && menu?.kind === "folder" ? <div ref={menuPanel} role="menu" aria-label={t("sftp.mobile.actions")} className={`absolute right-0 top-full z-20 max-h-[70dvh] w-60 overflow-y-auto ${menuSurface}`}><SFTPMenuActionList actions={folderMenuActions()} /></div> : null}
       </div>
 
-      {problem === "" || listingFailed ? null : <Notice tone="danger">{problem}</Notice>}
+      {problem === "" || listingFailed ? null : <Notice tone="danger" onDismiss={() => setProblem("")}>{problem}</Notice>}
       {transfers.exclusionNotice === "" ? null : <Notice compact>{transfers.exclusionNotice}</Notice>}
       {searchOptionsOpen && can?.search ? <ModalShell labelledBy={`${headingId}-search-options`} onDismiss={() => setSearchOptionsOpen(false)} closeOnOutside panelClassName="w-full max-w-md p-4">
         <div className="flex items-center justify-between gap-2"><h3 id={`${headingId}-search-options`} className="font-medium">{t("sftp.search.mode")}</h3><IconButton label={t("sftp.close")} size="barLarge" ground="none" onClick={() => setSearchOptionsOpen(false)}><Icon name="close" className="size-5" /></IconButton></div>

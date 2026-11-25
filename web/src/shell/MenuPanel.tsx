@@ -152,7 +152,7 @@ function LanguageRow({ compact }: { compact: boolean }) {
 function SignOutRow({ compact }: { compact: boolean }) {
   const { t } = useLanguage();
   const hintId = useId();
-  const { requestSignOut, busy, error, confirmation } = useSignOutConfirmation();
+  const { requestSignOut, busy, error, dismissError, confirmation } = useSignOutConfirmation();
   // Kept apart from Language on a wide screen, so the two are not pressed by mistake.
   return (
     <li className={compact ? "" : "mt-2.5"}>
@@ -165,7 +165,7 @@ function SignOutRow({ compact }: { compact: boolean }) {
           <span id={hintId} className="block truncate text-xs leading-4 text-ink-faint">{t("menu.signOutRowHint")}</span>
         </span>
       </button>
-      {error === "" ? null : <div className="px-2.5 pb-2"><Notice tone="danger" compact>{error}</Notice></div>}
+      {error === "" ? null : <div className="px-2.5 pb-2"><Notice tone="danger" compact onDismiss={dismissError}>{error}</Notice></div>}
       {confirmation}
     </li>
   );

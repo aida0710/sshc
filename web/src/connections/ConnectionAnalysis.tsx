@@ -58,7 +58,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
           <Button className="self-start" busy={inspection.busy} busyLabel={t("busy.checking")} disabled={disabled} onClick={() => void inspect()}>
             {t("conn.analysisRun")}
           </Button>
-          {inspection.error === "" ? null : <Notice tone="danger">{inspection.error}</Notice>}
+          {inspection.error === "" ? null : <Notice tone="danger" onDismiss={clearError}>{inspection.error}</Notice>}
 
           {effective !== null && effective.executableDirectives.length > 0 ? (
             <Notice compact live={false} titleLevel={4} title={t("conn.analysisExecutableHeading")}>

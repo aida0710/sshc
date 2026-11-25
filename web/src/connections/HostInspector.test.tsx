@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { HostInspector } from "./HostInspector";
@@ -186,6 +186,19 @@ describe("HostInspector", () => {
     await user.click(saveButton()!);
     expect(onSave).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("hides the notice of a failed save on request, and keeps the draft", async () => {
+    const user = userEvent.setup();
+    render(<HostInspector detail={build()} onSave={vi.fn().mockRejectedValue(new Error("metadata_not_saved"))} />);
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
+    await user.click(saveButton()!);
+
+    await user.click(within(await screen.findByRole("alert")).getByRole("button", { name: "Hide this notice" }));
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
+    expect(saveButton()).toBeEnabled();
   });
 
   it("counts the draft as saved as soon as the save succeeds, before the saved metadata is loaded again", async () => {

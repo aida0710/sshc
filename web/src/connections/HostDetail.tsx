@@ -34,6 +34,7 @@ type HostDetailPanelProps = {
   savedState: ConnectionSavedState;
   preview: SavePreview | null;
   problem: Problem | null;
+  onDismissProblem: () => void;
   // onFieldEdits と onBlockRaw は、Advancedタブの下書きを保存する。保存できなかったときは reject する。
   onFieldEdits: (edits: FieldEdit[]) => Promise<void>;
   onBlockRaw: (raw: string) => Promise<void>;
@@ -75,6 +76,7 @@ export function HostDetailPanel({
   savedState,
   preview,
   problem,
+  onDismissProblem,
   onFieldEdits,
   onBlockRaw,
   onBasicSave,
@@ -257,7 +259,7 @@ export function HostDetailPanel({
         </div>
       </div>
 
-      <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />
+      <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} onDismissProblem={onDismissProblem} />
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { fakeAndroidBridge } from "../android/fakeAndroidBridge";
@@ -59,6 +59,19 @@ describe("ConnectionAnalysis", () => {
     render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} disabled />);
 
     expect(screen.getByRole("button", { name: "Show the sources" })).toBeDisabled();
+  });
+
+  it("hides the notice of a failed analysis on request", async () => {
+    const user = userEvent.setup();
+    const api = { effective: vi.fn().mockRejectedValue(new Error("offline")) } as Pick<DiagnosticsApi, "effective">;
+    render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} />);
+    await user.click(screen.getByRole("button", { name: "Show the sources" }));
+    const failure = await screen.findByRole("alert");
+    expect(failure).toHaveTextContent("Could not analyse the settings for this alias.");
+
+    await user.click(within(failure).getByRole("button", { name: "Hide this notice" }));
+
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("shows the resolved saved values without running anything", () => {

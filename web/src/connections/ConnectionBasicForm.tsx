@@ -137,6 +137,14 @@ export function ConnectionBasicForm({
 
   useReportDirty(dirty, onDirtyChange);
 
+  // While the page shows why the save was refused (problem), the form's own "could not be saved" is not drawn over it.
+  // It goes with the reason, so that hiding the reason does not bring it back in its place.
+  const refusalShown = problem !== null;
+  useEffect(() => {
+    if (!refusalShown) return;
+    return () => setError("");
+  }, [refusalShown, setError]);
+
   const discardDraft = useCallback(() => {
     setDraft(initialDraft(detail, keySelection.initialKey));
     setError("");
@@ -228,7 +236,7 @@ export function ConnectionBasicForm({
 
   return (
     <form id={formId} className="flex flex-col" onSubmit={submit}>
-      {secrets.error === "" || problem !== null ? null : <Notice tone="danger">{secrets.error}</Notice>}
+      {secrets.error === "" || problem !== null ? null : <Notice tone="danger" onDismiss={() => setError("")}>{secrets.error}</Notice>}
 
       <fieldset disabled={disabled} className="contents">
       <EditorSection title={t("conn.basicConnection")} meta={<span title={file.absolute}>{file.path ?? file.absolute}</span>}>

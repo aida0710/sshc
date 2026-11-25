@@ -8,14 +8,14 @@ import { useSignOutConfirmation } from "./useSignOutConfirmation";
 // the same.
 export function SignOutButton() {
   const { t } = useLanguage();
-  const { requestSignOut, busy, error, confirmation } = useSignOutConfirmation();
+  const { requestSignOut, busy, error, dismissError, confirmation } = useSignOutConfirmation();
   return (
     <>
       <button type="button" disabled={busy} onClick={requestSignOut}
         className="rounded-md text-xs text-ink-faint hover:text-ink hover:underline">
         {t("menu.signOut")}
       </button>
-      {error === "" ? null : <div className="mt-2"><Notice tone="danger" compact>{error}</Notice></div>}
+      {error === "" ? null : <div className="mt-2"><Notice tone="danger" compact onDismiss={dismissError}>{error}</Notice></div>}
       {confirmation}
     </>
   );

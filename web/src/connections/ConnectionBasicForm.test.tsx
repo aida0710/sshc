@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentType, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -473,6 +473,22 @@ describe("ConnectionBasicForm", () => {
     await waitFor(() => expect(harness.unlockVault).toHaveBeenCalledWith("the master password"));
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("draft.example");
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("hides the notice of a refused unlock on request", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })),
+      unlockVault: vi.fn().mockRejectedValue(new Error("wrong passphrase")),
+    });
+    await user.type(await screen.findByLabelText("Master password"), "a mistyped master");
+    await user.click(screen.getByRole("button", { name: "Unlock vault" }));
+    const failure = await screen.findByRole("alert");
+    expect(failure).toHaveTextContent("The encrypted vault could not be unlocked.");
+
+    await user.click(within(failure).getByRole("button", { name: "Hide this notice" }));
+
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("saves config-only changes from shared state when credential metadata is unavailable", async () => {

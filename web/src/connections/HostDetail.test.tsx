@@ -71,6 +71,7 @@ function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> =
     savedState: savedState(),
     preview: null,
     problem: null,
+    onDismissProblem: vi.fn(),
     onFieldEdits: vi.fn(),
     onBlockRaw: vi.fn(),
     onBasicSave: vi.fn().mockResolvedValue(undefined),

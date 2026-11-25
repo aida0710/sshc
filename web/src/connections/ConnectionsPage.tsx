@@ -139,6 +139,7 @@ export function ConnectionsPage({
     problem, setProblem,
     localError, setLocalError,
   } = feedback;
+  const dismissProblem = () => setProblem(null);
   const editorDirtyRef = useRef(editorDirty);
   editorDirtyRef.current = editorDirty;
   // グループの編集欄に保存していない変更があるか。
@@ -576,7 +577,10 @@ export function ConnectionsPage({
               hosts={overview.hosts}
               onSave={(base, next) => void save.submit(hostMetadataEditRequest(base, next))}
             />
-            {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
+            {/* 読み直しの失敗は、［読み直す］が通るまで接続と編集が止まっている理由なので、消せない。 */}
+            {localError === "" ? null : (
+              <Notice tone="danger" onDismiss={refreshState === "failed" ? undefined : () => setLocalError("")}>{localError}</Notice>
+            )}
           </>
         )}
         {creating ? (
@@ -592,7 +596,7 @@ export function ConnectionsPage({
           />
         ) : editedGroup !== null && selection === null ? (
           <>
-            {problem === null ? null : <Notice tone="danger">{saveProblemMessage(problem, t)}</Notice>}
+            {problem === null ? null : <Notice tone="danger" onDismiss={dismissProblem}>{saveProblemMessage(problem, t)}</Notice>}
             {/* 保存して読み直した設定で下書きを作り直すため、key に保存済みの設定を含める。 */}
             <GroupEditor
               key={`group:${JSON.stringify(editedGroup)}`}
@@ -613,7 +617,7 @@ export function ConnectionsPage({
           <>
             {/* 接続を開いていないと、保存の結果を出す HostDetailPanel が無い。接続先が存在しない
                 設定の関連付け直しや破棄を断られたときは、その理由をここに出す。 */}
-            {problem === null ? null : <Notice tone="danger">{saveProblemMessage(problem, t)}</Notice>}
+            {problem === null ? null : <Notice tone="danger" onDismiss={dismissProblem}>{saveProblemMessage(problem, t)}</Notice>}
             <NoConnectionSelected preferredKey={preferredKey} onBeginCreation={beginCreation} />
           </>
         ) : (
@@ -656,6 +660,7 @@ export function ConnectionsPage({
               savedState={savedState}
               preview={preview}
               problem={problem}
+              onDismissProblem={dismissProblem}
               onFieldEdits={save.onFieldEdits}
               onBlockRaw={save.onBlockRaw}
               onBasicSave={save.onBasicSave}

@@ -803,6 +803,8 @@ describe("ConnectionsPage", () => {
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reload saved connection" })).toBeEnabled();
+    // 編集が止まっている理由なので、読み直しが通るまで消せない。
+    expect(screen.queryByRole("button", { name: "Hide this notice" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Reload saved connection" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled());
@@ -1290,6 +1292,11 @@ describe("ConnectionsPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/changed outside this application/i);
     expect(screen.getByText("Changed on disk since you loaded it")).toBeInTheDocument();
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
+
+    await user.click(within(screen.getByRole("alert")).getByRole("button", { name: "Hide this notice" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Changed on disk since you loaded it")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });
 
   it("shows why a connection cannot be renamed to an existing alias", async () => {
@@ -1329,6 +1336,9 @@ describe("ConnectionsPage", () => {
       newAlias: "bastion-copy",
     }));
     expect(await screen.findByText(/bastion-copy already exists.*cannot be duplicated/i)).toBeInTheDocument();
+
+    await user.click(within(screen.getByRole("alert")).getByRole("button", { name: "Hide this notice" }));
+    expect(screen.queryByText(/bastion-copy already exists/i)).not.toBeInTheDocument();
   });
 
   it("creates a complete connection, refreshes the tree, and opens its Basic detail without launching a terminal", async () => {
