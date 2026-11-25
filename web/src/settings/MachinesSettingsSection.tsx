@@ -1,7 +1,9 @@
-import { useId, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useLanguage } from "../i18n/context";
 import { ActionMenu } from "../ui/ActionMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { FieldErrorContext, useFieldError, useReportedFieldErrors } from "../ui/fieldError";
+import { FieldProblems } from "../ui/FieldProblems";
 import { sizedControl } from "../ui/form";
 import { formatDateTime } from "../ui/format";
 import { InputDialog } from "../ui/InputDialog";
@@ -172,46 +174,51 @@ function MachineRow({ machine, document, onEdit, onRename, onChooseLogFolder, on
   const started = machine.facts.startedAt === undefined
     ? t("settings.machineNeverStarted")
     : formatDateTime(machine.facts.startedAt, locale);
+  // ポートの欄は狭いので、値の誤りは欄のすぐ下でなく、行の下に幅いっぱいで出す（FieldProblems の決まり）。
+  const { reported, reportError } = useReportedFieldErrors();
 
   return (
-    <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 border-t border-line px-3 py-2.5 first-of-type:border-t-0 ${columns} ${self ? "bg-select-fill" : ""}`}>
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5 text-sm font-medium text-ink">
-          <span title={name} className="truncate">{name}</span>
-          {self ? <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 text-xs font-normal leading-5 text-ink">{t("settings.thisMachine")}</span> : null}
+    <FieldErrorContext.Provider value={reportError}>
+      <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 border-t border-line px-3 py-2.5 first-of-type:border-t-0 ${columns} ${self ? "bg-select-fill" : ""}`}>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-sm font-medium text-ink">
+            <span title={name} className="truncate">{name}</span>
+            {self ? <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 text-xs font-normal leading-5 text-ink">{t("settings.thisMachine")}</span> : null}
+          </div>
+          {facts === "" ? null : <div className="text-xs text-ink-faint">{facts}</div>}
         </div>
-        {facts === "" ? null : <div className="text-xs text-ink-faint">{facts}</div>}
-      </div>
-      <StackedNamedCell name={t("settings.machineColumnPreset")}>
-        <select aria-label={t("settings.machineColumnPreset")} className={sizedControl("w-full")} value={presetId}
-          onChange={(event) => {
-            const chosen = event.target.value;
-            onEdit("preset", ({ presetId: _previous, ...settings }) => chosen === standardPresetId ? settings : { ...settings, presetId: chosen });
-          }}>
-          {document.presets.map((preset) => <option key={preset.id} value={preset.id}>{presetName(preset, t("settings.presetStandard"))}</option>)}
-        </select>
-      </StackedNamedCell>
-      {hasPort(machine) ? (
-        <StackedNamedCell name={t("settings.machineColumnPort")}>
-          <PortInput machine={machine} onEdit={onEdit} />
+        <StackedNamedCell name={t("settings.machineColumnPreset")}>
+          <select aria-label={t("settings.machineColumnPreset")} className={sizedControl("w-full")} value={presetId}
+            onChange={(event) => {
+              const chosen = event.target.value;
+              onEdit("preset", ({ presetId: _previous, ...settings }) => chosen === standardPresetId ? settings : { ...settings, presetId: chosen });
+            }}>
+            {document.presets.map((preset) => <option key={preset.id} value={preset.id}>{presetName(preset, t("settings.presetStandard"))}</option>)}
+          </select>
         </StackedNamedCell>
-      ) : <span aria-hidden="true" className="hidden @2xl/machines:block" />}
-      <StackedNamedCell name={t("settings.machineColumnStarted")}>
-        <span className="whitespace-nowrap text-xs text-ink-muted">{started}</span>
-      </StackedNamedCell>
-      <div className="col-start-2 row-start-1 @2xl/machines:col-start-auto @2xl/machines:row-start-auto">
-        <ActionMenu label={t("settings.machineActions", { name })}
-          triggerSize="toolbar"
-          items={[
-          { label: t("settings.machineRename"), onSelect: onRename },
-          {
-            label: t("settings.machineSessionLogFolderAction"), onSelect: onChooseLogFolder,
-            disabled: !keepsSessionLogs(machine), title: keepsSessionLogs(machine) ? undefined : t("settings.machineSessionLogUnsupported"),
-          },
-          { label: t("settings.machineRemove"), onSelect: onRemove, tone: "danger", disabled: self },
-        ]} />
+        {hasPort(machine) ? (
+          <StackedNamedCell name={t("settings.machineColumnPort")}>
+            <PortInput machine={machine} onEdit={onEdit} />
+          </StackedNamedCell>
+        ) : <span aria-hidden="true" className="hidden @2xl/machines:block" />}
+        <StackedNamedCell name={t("settings.machineColumnStarted")}>
+          <span className="whitespace-nowrap text-xs text-ink-muted">{started}</span>
+        </StackedNamedCell>
+        <div className="col-start-2 row-start-1 @2xl/machines:col-start-auto @2xl/machines:row-start-auto">
+          <ActionMenu label={t("settings.machineActions", { name })}
+            triggerSize="toolbar"
+            items={[
+            { label: t("settings.machineRename"), onSelect: onRename },
+            {
+              label: t("settings.machineSessionLogFolderAction"), onSelect: onChooseLogFolder,
+              disabled: !keepsSessionLogs(machine), title: keepsSessionLogs(machine) ? undefined : t("settings.machineSessionLogUnsupported"),
+            },
+            { label: t("settings.machineRemove"), onSelect: onRemove, tone: "danger", disabled: self },
+          ]} />
+        </div>
+        <FieldProblems className="col-span-full" problems={[...reported].map(([id, text]) => ({ id, field: t("settings.machineColumnPort"), text }))} />
       </div>
-    </div>
+    </FieldErrorContext.Provider>
   );
 }
 
@@ -243,7 +250,6 @@ function StackedNamedCell({ name, children }: { name: string; children: ReactNod
 // An empty port is the machine's own fixed port.
 function PortInput({ machine, onEdit }: { machine: Machine; onEdit: EditMachine }) {
   const { t } = useLanguage();
-  const problemId = useId();
   const typed = useTypedSetting<number | null>({
     text: machine.settings.port === undefined ? "" : String(machine.settings.port),
     parse: (text): ParsedSetting<number | null> => {
@@ -255,23 +261,21 @@ function PortInput({ machine, onEdit }: { machine: Machine; onEdit: EditMachine 
     },
     onChange: (port) => onEdit("port", ({ port: _previous, ...settings }) => port === null ? settings : { ...settings, port }),
   });
+  const described = useFieldError(typed.problem, {});
 
   return (
-    <>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={minimumPort}
-        max={maximumPort}
-        aria-label={t("settings.machineColumnPort")}
-        {...(typed.problem === "" ? {} : { "aria-invalid": true, "aria-describedby": problemId })}
-        className={`${sizedControl("w-full")} font-mono tabular-nums`}
-        value={typed.shown}
-        placeholder={t("settings.machinePortAutomatic")}
-        onChange={(event) => typed.type(event.target.value)}
-        onBlur={typed.leave}
-      />
-      {typed.problem === "" ? null : <p id={problemId} className="mt-1 text-xs leading-[18px] text-danger">{typed.problem}</p>}
-    </>
+    <input
+      type="number"
+      inputMode="numeric"
+      min={minimumPort}
+      max={maximumPort}
+      aria-label={t("settings.machineColumnPort")}
+      {...described}
+      className={`${sizedControl("w-full")} font-mono tabular-nums`}
+      value={typed.shown}
+      placeholder={t("settings.machinePortAutomatic")}
+      onChange={(event) => typed.type(event.target.value)}
+      onBlur={typed.leave}
+    />
   );
 }

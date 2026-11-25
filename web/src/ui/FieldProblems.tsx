@@ -1,4 +1,5 @@
 import { useTranslate } from "../i18n/context";
+import { fieldErrorText, fieldNoticeText } from "./form";
 
 // FieldProblem は、欄の名前と、その欄の値の問題（どう直すか）。tone "notice" は誤りではなく、欄を書けない理由などの注意。
 export type FieldProblem = { id: string; field: string; text: string; tone?: "danger" | "notice" };
@@ -14,7 +15,7 @@ export function FieldProblems({ problems, className = "" }: { problems: readonly
   return (
     <div className={`flex flex-col gap-0.5 ${className}`}>
       {shown.map((problem) => (
-        <p key={problem.id} id={problem.id} className={`text-xs leading-[18px] ${problem.tone === "notice" ? "text-notice-ink" : "text-danger"}`}>
+        <p key={problem.id} id={problem.id} className={problem.tone === "notice" ? fieldNoticeText : fieldErrorText}>
           {/* 文が欄の名前で始まるなら（「ポートは1〜65535の…」）、名前を重ねない。 */}
           {problem.text.startsWith(problem.field) ? problem.text : t("form.fieldProblem", { field: problem.field, problem: problem.text })}
         </p>

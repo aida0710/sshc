@@ -1,6 +1,6 @@
-import { useState, type KeyboardEvent } from "react";
+import { useId, useState, type KeyboardEvent } from "react";
 import { useTranslate } from "../i18n/context";
-import { control } from "../ui/form";
+import { control, fieldErrorText } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { Button } from "../ui/surface";
 import { keyboardOwnerProps } from "../ui/useDismissibleLayer";
@@ -21,6 +21,7 @@ export function NewGroupField({ groupNames, onCreate, onCreated }: NewGroupField
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
+  const problemId = useId();
 
   function close() {
     setOpen(false);
@@ -81,12 +82,13 @@ export function NewGroupField({ groupNames, onCreate, onCreated }: NewGroupField
             setProblem("");
           }}
           aria-invalid={problem !== ""}
+          aria-describedby={problem === "" ? undefined : problemId}
           className={`${control} min-w-0 flex-[999_1_9rem]`}
         />
         <Button busy={busy} busyLabel={t("busy.creating")} disabled={name === ""} onClick={() => void create()}>{t("groupDialog.create")}</Button>
         <Button disabled={busy} onClick={close}>{t("groupDialog.cancel")}</Button>
       </div>
-      {problem === "" ? null : <p role="alert" className="text-xs text-danger">{problem}</p>}
+      {problem === "" ? null : <p id={problemId} role="alert" className={fieldErrorText}>{problem}</p>}
     </div>
   );
 }

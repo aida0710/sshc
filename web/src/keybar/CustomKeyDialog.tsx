@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslate, type Translate } from "../i18n/context";
-import { control, dialogHeading, hintText } from "../ui/form";
+import { control, dialogHeading, Field } from "../ui/form";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { literalTextEntry } from "../ui/softKeyboard";
@@ -48,26 +48,15 @@ export function CustomKeyDialog({ initial, onSubmit, onCancel }: {
       panelClassName="flex w-full max-w-md flex-col gap-4 p-4 sm:p-5">
       <h2 id="custom-key-heading" className={dialogHeading}>{t("keyBar.customHeading")}</h2>
       <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="custom-key-label" className="text-xs font-medium tracking-wide text-ink-muted">{t("keyBar.customLabel")}</label>
-          <input {...literalTextEntry} id="custom-key-label" ref={labelRef} value={label} className={`${control} font-mono`}
-            aria-invalid={touched && problem.label !== ""} aria-describedby="custom-key-label-hint"
+        {/* 誤りは確定のボタンを押したあとだけ出す。補足は誤りのときも残し、誤りの文はその下に出す。 */}
+        <Field label={t("keyBar.customLabel")} hint={t("keyBar.customLabelHint", { max: String(maxKeyBarLabelLength) })} error={touched ? problem.label : ""}>
+          <input {...literalTextEntry} ref={labelRef} value={label} className={`${control} font-mono`}
             onChange={(event) => setLabel(event.target.value)} />
-          <span id="custom-key-label-hint" role={touched && problem.label !== "" ? "alert" : undefined}
-            className={touched && problem.label !== "" ? "text-xs text-danger" : hintText}>
-            {touched && problem.label !== "" ? problem.label : t("keyBar.customLabelHint", { max: String(maxKeyBarLabelLength) })}
-          </span>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="custom-key-text" className="text-xs font-medium tracking-wide text-ink-muted">{t("keyBar.customText")}</label>
-          <textarea {...literalTextEntry} id="custom-key-text" rows={3} value={text} className={`${control} min-h-20 font-mono`}
-            aria-invalid={touched && problem.text !== ""} aria-describedby="custom-key-text-hint"
+        </Field>
+        <Field label={t("keyBar.customText")} hint={t("keyBar.customTextHint")} error={touched ? problem.text : ""}>
+          <textarea {...literalTextEntry} rows={3} value={text} className={`${control} min-h-20 font-mono`}
             onChange={(event) => setText(event.target.value)} />
-          <span id="custom-key-text-hint" role={touched && problem.text !== "" ? "alert" : undefined}
-            className={touched && problem.text !== "" ? "text-xs text-danger" : hintText}>
-            {touched && problem.text !== "" ? problem.text : t("keyBar.customTextHint")}
-          </span>
-        </div>
+        </Field>
         <label className="flex items-center gap-2 text-sm text-ink">
           <input type="checkbox" className="size-[15px] shrink-0 accent-accent" checked={enter} onChange={(event) => setEnter(event.target.checked)} />
           {t("keyBar.customEnter")}
