@@ -9,7 +9,8 @@ trap 'rm -rf -- "$visual_dir"' EXIT HUP INT TERM
 cd "$repo_dir"
 make build
 
-visual_version=$(git describe --tags --exact-match --match 'v*' 2>/dev/null || printf 'dev')
+# リリースのタグを打つ前に撮るときは、SSHC_VISUAL_VERSION にこれから出すバージョンを渡す。
+visual_version=${SSHC_VISUAL_VERSION:-$(git describe --tags --exact-match --match 'v*' 2>/dev/null || printf 'dev')}
 SSHC_VISUAL_DIR="$visual_dir" SSHC_VISUAL_VERSION="$visual_version" npm run e2e --prefix web -- \
   e2e/shell.spec.ts \
   e2e/connections.spec.ts \
