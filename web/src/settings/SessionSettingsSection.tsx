@@ -24,7 +24,7 @@ export function SessionSettingsSection({ terminalSessions, showHeading }: { term
     <SettingsSection id="settings-connections" label={t("desktop.closeAllHeading")} icon="connections" showHeading={showHeading}>
       <p className="max-w-2xl text-sm leading-6 text-ink-muted">{t("desktop.closeAllNote")}</p>
       {terminalSessions.sessions.length === 0 ? null : <div className="mt-3"><SessionNamesList sessions={terminalSessions.sessions} label={t("desktop.openSessions")} /></div>}
-      <ActionArea status={(
+      <ActionArea start={(
         <p role="status" className="text-sm text-ink-muted">
           <span className="mr-2 inline-block h-2 w-2 rounded-full bg-live" />
           {t("desktop.openCount", { count: terminalSessions.sessions.length })}

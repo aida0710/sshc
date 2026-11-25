@@ -4,6 +4,7 @@ import { control, dialogHeading, Field, hintText } from "./form";
 import { Button, Notice } from "./surface";
 import { ModalShell } from "./ModalShell";
 import { hasOnScreenKeyboard, type asciiTextEntry } from "./softKeyboard";
+import { ActionArea } from "./ActionArea";
 
 // InputDialog は、名前など1つの値を尋ねる。
 //
@@ -98,10 +99,10 @@ export function InputDialog({
           />
         </Field>
         {error === "" ? null : <Notice tone="danger" id={failureId}>{error}</Notice>}
-        <div className="flex justify-end gap-2">
+        <ActionArea placement="inline">
           <Button disabled={submitting} onClick={onCancel}>{cancelLabel}</Button>
           <Button kind="primary" type="submit" busy={submitting} busyLabel={busyLabel}>{submitLabel}</Button>
-        </div>
+        </ActionArea>
       </form>
     </ModalShell>
   );

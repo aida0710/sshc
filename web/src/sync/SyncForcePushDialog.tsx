@@ -4,6 +4,7 @@ import { CheckboxField, Field, control, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
 import { SyncErrorNotice } from "./SyncErrorNotice";
+import { ActionArea } from "../ui/ActionArea";
 
 // 送信の失敗は、このダイアログの中に出す。背面の画面に出すとダイアログに隠れる。
 type SyncForcePushDialogProps = {
@@ -59,16 +60,17 @@ export function SyncForcePushDialog({
             />
           </Field>
           <CheckboxField label={t("sync.forceConfirm")} checked={confirmed} onChange={setConfirmed} tone="danger" />
-          <Button
-            kind="danger"
-            busy={busy}
-            busyLabel={t("busy.replacing")}
-            disabled={!confirmed || !keyConfigured || message.trim() === ""}
-            onClick={onSubmit}
-            className="self-start"
-          >
-            {t("sync.forcePush")}
-          </Button>
+          <ActionArea placement="inline">
+            <Button
+              kind="danger"
+              busy={busy}
+              busyLabel={t("busy.replacing")}
+              disabled={!confirmed || !keyConfigured || message.trim() === ""}
+              onClick={onSubmit}
+            >
+              {t("sync.forcePush")}
+            </Button>
+          </ActionArea>
         </div>
     </ModalShell>
   );

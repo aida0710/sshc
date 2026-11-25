@@ -5,6 +5,7 @@ import { useTranslate } from "../i18n/context";
 import type { KeysApi } from "./api";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
+import { ActionArea } from "../ui/ActionArea";
 
 type RevealDialogProps = {
   keyId: string;
@@ -83,9 +84,11 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
           <Notice tone="danger">{t("reveal.failed")}</Notice>
         </div>
       )}
-      <Button className="mt-4" onClick={close}>
-        {t("reveal.close")}
-      </Button>
+      <ActionArea placement="inline" className="mt-4">
+        <Button onClick={close}>
+          {t("reveal.close")}
+        </Button>
+      </ActionArea>
     </ModalShell>
   );
 }

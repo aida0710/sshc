@@ -332,7 +332,7 @@ export function RemoteKeyPanel({
           onClear={clearSelectedHosts}
         />
         <ActionArea
-          status={plannedTargets.length === 0 ? undefined : (
+          start={plannedTargets.length === 0 ? undefined : (
             <p className="text-xs text-ink-muted">{t("rk.plannedHosts", { count: plannedTargets.length })}</p>
           )}
         >

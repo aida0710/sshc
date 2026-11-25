@@ -7,6 +7,7 @@ import { Button } from "../ui/surface";
 import { updateJobMessage } from "./updateMessage";
 import { rememberShownUpdateResult } from "./updateResultShown";
 import { isUpdateActive } from "./useUpdateStatus";
+import { ActionArea } from "../ui/ActionArea";
 
 export function UpdateResultDialog({ job, onClose }: { job: UpdateJob; onClose: () => void }) {
   const t = useTranslate();
@@ -31,12 +32,12 @@ export function UpdateResultDialog({ job, onClose }: { job: UpdateJob; onClose: 
       <p id={bodyId} role="status" className="text-sm text-ink-muted">
         {t(updateJobMessage(job), { version: job.installedVersion ?? job.target })}
       </p>
-      <div className="flex justify-end gap-2">
+      <ActionArea placement="inline">
         {job.state === "restarting" || job.state === "restart_required" ? (
           <Button onClick={() => window.location.reload()}>{t("update.reload")}</Button>
         ) : null}
         <Button ref={closeRef} kind="primary" onClick={onClose}>{t("update.close")}</Button>
-      </div>
+      </ActionArea>
     </ModalShell>
   );
 }

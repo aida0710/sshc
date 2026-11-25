@@ -12,6 +12,7 @@ import { PanelState } from "../ui/PanelState";
 import { Button, Notice } from "../ui/surface";
 import { Tag } from "../ui/Tag";
 import { historyOperationLabelKey } from "./historyLabels";
+import { ActionArea } from "../ui/ActionArea";
 
 const MonacoDiffEditor = lazy(() => loadMonacoDiffEditor().then(({ MonacoDiffEditor }) => ({ default: MonacoDiffEditor })));
 
@@ -139,12 +140,11 @@ export function PendingChangeDialog({
         </nav>
         <div className="min-h-0">{body()}</div>
       </div>
-      <footer className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
-        <p className="w-full text-xs text-ink-muted md:w-auto md:min-w-0 md:flex-1">{t("history.change.choice")}</p>
+      <ActionArea placement="band" className="px-4 py-3" start={<p className="text-xs text-ink-muted">{t("history.change.choice")}</p>}>
         <Button onClick={onDismiss}>{t("history.close")}</Button>
         <Button onClick={() => onRecover("rollback")}>{t("history.rollBack")}</Button>
         <Button disabled={!transaction.canComplete} onClick={() => onRecover("complete")}>{t("history.complete")}</Button>
-      </footer>
+      </ActionArea>
     </ModalShell>
   );
 }

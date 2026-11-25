@@ -5,6 +5,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { localHostAlias } from "./localHost";
 import type { SFTPLocation } from "./sftpLocation";
+import { ActionArea } from "../ui/ActionArea";
 
 type ComparisonTab = SFTPLocation & { id: string };
 
@@ -52,10 +53,10 @@ export function SFTPCompareTabsDialog({ tabs, currentTabId, onCompare, onDismiss
           {availableTabs.map((tab) => <option key={tab.id} value={tab.id} disabled={tab.id === firstTabId}>{tabLabel(tab)}</option>)}
         </select>
       </label>
-      <div className="flex justify-end gap-2">
+      <ActionArea placement="inline">
         <Button className="min-h-12 min-w-12" onClick={onDismiss}>{t("sftp.cancel")}</Button>
         <Button kind="primary" type="submit" className="min-h-12 min-w-12" disabled={!canCompare}>{t("sftp.compare.action")}</Button>
-      </div>
+      </ActionArea>
     </form>
   </ModalShell>;
 }

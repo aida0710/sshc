@@ -7,6 +7,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { PasswordField } from "../ui/PasswordField";
 import { hasOnScreenKeyboard } from "../ui/softKeyboard";
 import { Button } from "../ui/surface";
+import { ActionArea } from "../ui/ActionArea";
 
 // RemoteVaultUnlockDialog asks for the Vault password of a run-target engine
 // when the user chooses to unlock it from the engine information dialog.
@@ -42,22 +43,22 @@ export function RemoteVaultUnlockDialog({
         <div className="flex flex-col gap-3">
           <h2 id={headingId} className={dialogHeading}>{t("runTarget.vaultMissingHeading", { alias })}</h2>
           <p className="text-sm text-ink-muted">{t("runTarget.vaultMissingBody", { alias })}</p>
-          <div className="flex justify-end gap-2">
+          <ActionArea placement="inline">
             <Button onClick={onClose}>{t("runTarget.unlockCancel")}</Button>
             <Button kind="primary" onClick={onOpenInNewTab}>{t("runTarget.openInNewTab")}</Button>
-          </div>
+          </ActionArea>
         </div>
       ) : (
         <form onSubmit={(event) => void form.unlock(event)} className="flex flex-col gap-3">
           <h2 id={headingId} className={dialogHeading}>{t("runTarget.unlockHeading", { alias })}</h2>
           <p className="text-sm text-ink-muted">{t("runTarget.unlockBody", { alias })}</p>
           <PasswordField label={t("runTarget.unlockPassword", { alias })} value={form.password} onChange={form.setPassword} error={form.error} disabled={busy} autoFocus={!hasOnScreenKeyboard()} />
-          <div className="flex justify-end gap-2">
+          <ActionArea placement="inline">
             <Button disabled={busy} onClick={onClose}>{t("runTarget.unlockCancel")}</Button>
             <Button type="submit" kind="primary" busy={busy} busyLabel={t("busy.unlocking")} disabled={form.password === ""}>
               {t("runTarget.unlock")}
             </Button>
-          </div>
+          </ActionArea>
         </form>
       )}
     </ModalShell>

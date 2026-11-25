@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
 import { inspectTerminalPaste, removeFinalTerminalLineBreak } from "./pasteGuard";
+import { ActionArea } from "../ui/ActionArea";
 
 export function TerminalPasteDialog({
   target,
@@ -70,7 +71,7 @@ export function TerminalPasteDialog({
         ) : null}
       </details>
       <p className="text-xs font-medium text-ink-muted">{t("terminal.pasteNotSent")}</p>
-      <div className="flex flex-wrap justify-end gap-2">
+      <ActionArea placement="inline">
         <Button ref={cancel} onClick={onCancel}>{t("terminal.pasteCancel")}</Button>
         {inspection.endsWithLineBreak ? (
           <Button kind="primary" onClick={() => onPaste(removeFinalTerminalLineBreak(draft))}>
@@ -78,7 +79,7 @@ export function TerminalPasteDialog({
           </Button>
         ) : null}
         <Button kind="danger" onClick={() => onPaste(draft)}>{t("terminal.pasteSend")}</Button>
-      </div>
+      </ActionArea>
     </ModalShell>
   );
 }

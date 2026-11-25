@@ -6,6 +6,7 @@ import { Button, Notice } from "../ui/surface";
 import { localHostAlias } from "./localHost";
 import { loadMonacoDiffEditor } from "../editor/loadMonacoEditor";
 import { useSFTPTextComparison, type TextComparisonSide } from "./useSFTPTextComparison";
+import { ActionArea } from "../ui/ActionArea";
 
 const MonacoDiffEditor = lazy(() => loadMonacoDiffEditor().then(({ MonacoDiffEditor }) => ({ default: MonacoDiffEditor })));
 
@@ -22,6 +23,6 @@ export function SFTPTextCompareDialog({ path, left, right, onDismiss }: { path: 
     <div className="min-h-0 flex-1">
       {problem !== "" ? <div className="p-3"><Notice tone="danger">{problem}</Notice></div> : comparison === null ? <PanelState tone="loading" title={t("sftp.compare.loading")} /> : <Suspense fallback={<PanelState tone="loading" title={t("sftp.compare.loading")} />}><MonacoDiffEditor path={path} original={comparison.original} modified={comparison.modified} /></Suspense>}
     </div>
-    <footer className="flex justify-end border-t border-line px-3 py-2"><Button onClick={onDismiss}>{t("sftp.close")}</Button></footer>
+    <ActionArea placement="band" className="px-3 py-2"><Button onClick={onDismiss}>{t("sftp.close")}</Button></ActionArea>
   </ModalShell>;
 }

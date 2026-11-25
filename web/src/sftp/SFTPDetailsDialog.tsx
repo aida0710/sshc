@@ -16,6 +16,7 @@ import { FilePreviewHeader } from "./FilePreviewHeader";
 import { useFilePreview } from "./useFilePreview";
 import { usePreviewStepping } from "./usePreviewStepping";
 import { useLoad } from "../ui/useLoad";
+import { ActionArea } from "../ui/ActionArea";
 
 function Property({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -189,10 +190,10 @@ export function SFTPDetailsDialog({
       </div>
 
       {mobileViewport || otherActions.length === 0 ? null : (
-        <div className="flex flex-wrap justify-end gap-2 border-t border-line px-3 py-2">
+        <ActionArea placement="band" className="px-3 py-2">
           {editAction.map(({ label, disabled, run }) => <Button key={label} disabled={disabled} onClick={run}>{label}</Button>)}
           {entryActions.map(({ label, disabled, run }) => <Button key={label} disabled={disabled} onClick={run}>{label}</Button>)}
-        </div>
+        </ActionArea>
       )}
     </FilePreviewFrame>
   );

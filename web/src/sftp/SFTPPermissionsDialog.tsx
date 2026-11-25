@@ -7,6 +7,7 @@ import { Button, Notice } from "../ui/surface";
 import { symbolicModeToOctal } from "./transfers";
 import type { SFTPPermissionsModel } from "./useSFTPPermissions";
 import type { PermissionsIntent } from "./permissionsIntent";
+import { ActionArea } from "../ui/ActionArea";
 
 // Common defaults give files read access and folders the traversal permission.
 const defaultFileMode = "644";
@@ -97,10 +98,10 @@ function PermissionsForm({ intent, permissions, returnFocusRef }: {
         {t("sftp.chmodRecurseOption")}
       </label> : null}
       {validation || permissions.problem ? <Notice tone="danger">{validation || permissions.problem}</Notice> : null}
-      <div className="flex justify-end gap-2">
+      <ActionArea placement="inline">
         <Button onClick={permissions.cancel}>{t("sftp.cancel")}</Button>
         <Button kind="primary" type="submit" busy={permissions.planning} busyLabel={t("busy.checking")}>{t("sftp.chmodReview")}</Button>
-      </div>
+      </ActionArea>
     </form>
   </ModalShell>;
 }

@@ -9,6 +9,7 @@ import { Button, Notice } from "../ui/surface";
 import { cameraAvailable } from "../ui/useQRCodeCamera";
 import { SyncDirectionField } from "./SyncDirectionField";
 import type { SyncSetupImport } from "./useSyncSetupImport";
+import { ActionArea } from "../ui/ActionArea";
 
 // Setting this machine up from the settings another machine exported: a file or a QR code, then the
 // encryption key. The engine opens the document with the key, checks the bucket, and saves both.
@@ -69,14 +70,14 @@ export function SyncSetupImportSection({ busy, form, onImport }: {
             </FieldRow>
             <SyncDirectionField direction={form.direction} onChange={form.setDirection} />
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
+          <ActionArea>
             <Button disabled={busy} onClick={form.reset}>
               {t("sync.import.chooseAnother")}
             </Button>
             <Button kind="primary" type="submit" busy={busy} busyLabel={t("busy.importing")} disabled={form.key.trim() === ""}>
               {t("sync.import.submit")}
             </Button>
-          </div>
+          </ActionArea>
         </form>
       )}
     </PageSection>
