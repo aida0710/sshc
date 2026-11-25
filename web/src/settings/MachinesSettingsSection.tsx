@@ -9,6 +9,7 @@ import { formatDateTime } from "../ui/format";
 import { InputDialog } from "../ui/InputDialog";
 import { PanelState } from "../ui/PanelState";
 import { Notice } from "../ui/surface";
+import { Tag } from "../ui/Tag";
 import { presetName } from "./PresetPicker";
 import { SettingsSection } from "./SettingsSection";
 import { useSettingsDraft } from "./settingsDraftContext";
@@ -183,7 +184,7 @@ function MachineRow({ machine, document, onEdit, onRename, onChooseLogFolder, on
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-sm font-medium text-ink">
             <span title={name} className="truncate">{name}</span>
-            {self ? <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 text-xs font-normal leading-5 text-ink">{t("settings.thisMachine")}</span> : null}
+            {self ? <span className="font-normal"><Tag>{t("settings.thisMachine")}</Tag></span> : null}
           </div>
           {facts === "" ? null : <div className="text-xs text-ink-faint">{facts}</div>}
         </div>

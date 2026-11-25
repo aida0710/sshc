@@ -5,6 +5,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { sizedControl } from "../ui/form";
 import { InputDialog } from "../ui/InputDialog";
 import { Button, Notice } from "../ui/surface";
+import { Tag } from "../ui/Tag";
 import { newIdentifier } from "../ui/randomIdentifier";
 import { useSettingsDraft } from "./settingsDraftContext";
 import { standardPresetId, updateMachine, updatePresets, useSettings, type SettingsPreset } from "./settingsStore";
@@ -90,7 +91,7 @@ export function PresetPicker({ editing, onEdit, layout }: {
     </select>
   );
   const status = edited.id === inUse
-    ? <span className="min-w-0 truncate whitespace-nowrap rounded-full bg-accent/15 px-2 text-xs leading-5 text-ink">{t("settings.presetInUse")}</span>
+    ? <Tag tone="accent" truncate>{t("settings.presetInUse")}</Tag>
     : <Button small disabled={blocked} title={blockedReason} onClick={useHere}>{t("settings.presetUseHere")}</Button>;
   const menu = <ActionMenu label={t("settings.presetActions", { name: editedName })} items={actions}
     triggerSize="compact" />;

@@ -8,6 +8,7 @@ import { exitedAbnormally, sessionStateText, sessionStatusTone } from "./session
 import type { StreamLink } from "./streamLink";
 import { terminalDisplayTitle } from "./terminalPresentation";
 import { IconButton } from "../ui/IconButton";
+import { Tag } from "../ui/Tag";
 
 // TerminalHeader は、ターミナルの上の見出しである。広い画面では40pxの行、スマホではアプリの見出しに代わる
 // 上のバーになる（ナビゲーションを開くボタン、名前と行き先、右側の操作）。右側の操作は children で受け取る。
@@ -55,7 +56,7 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
           <span role="status" className={!saysState || mobile ? "sr-only" : `shrink-0 text-xs ${sessionStatusTone(session)}`}>{connectionStatus}</span>
           {mobile ? null : <VPNProfileChip name={vpnProfile} />}
           {mobile || runTarget === undefined ? null : (
-            <span className="shrink-0 rounded-full bg-accent/15 px-2 py-px font-mono text-2xs text-accent">{t("runTarget.runningOn", { alias: runTarget })}</span>
+            <Tag tone="accent">{t("runTarget.runningOn", { alias: runTarget })}</Tag>
           )}
         </div>
         {mobile ? (
