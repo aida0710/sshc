@@ -288,8 +288,8 @@ export function CreateConnectionPane({
           <p className={`basis-full @sm/editor:mr-auto @sm/editor:basis-0 @sm/editor:grow ${hintText}`}>{form.disabledReason}</p>
         )}
         <Button disabled={form.busy || form.vaultBusy} onClick={cancel}>{t("conn.cancelCreate")}</Button>
-        <Button type="submit" kind="primary" disabled={!form.canSubmit}>
-          {form.busy ? t("conn.creating") : t("conn.create")}
+        <Button type="submit" kind="primary" busy={form.busy} disabled={!form.canSubmit}>
+          {t("conn.create")}
         </Button>
       </div>
     </form>

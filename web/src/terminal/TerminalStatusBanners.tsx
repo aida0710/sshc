@@ -151,8 +151,8 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
             {session.problem === "" ? exitText(t, session.exited, session) : t(terminalProblemKey(session.problem))}
           </p>
           {session.kind !== "ssh" || session.alias === undefined || recovery?.reconnect === undefined ? null : (
-            <Button small disabled={recovery.reconnectBusy} onClick={recovery.reconnect} className={bannerButton}>
-              {t(recovery.reconnectBusy ? "terminal.manualReconnecting" : "terminal.manualReconnect")}
+            <Button small busy={recovery.reconnectBusy} onClick={recovery.reconnect} className={bannerButton}>
+              {t("terminal.manualReconnect")}
             </Button>
           )}
         </div>

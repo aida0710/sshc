@@ -236,11 +236,13 @@ test("updates an incompatible engine from the terminal area and recovers", async
   await expect(page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("alert")).toHaveCount(0);
   await screenshotInJapanese(page, "run-target-incompatible");
 
-  await panel.getByRole("button", { name: "Update bastion", exact: true }).click();
+  const update = panel.getByRole("button", { name: "Update bastion", exact: true });
+  await update.click();
   // The first lines show while sshc on bastion still runs.
   const output = panel.getByRole("log", { name: "Output of sshc on that host", exact: true });
   await expect(output).toContainText(`sshc: updating ${remoteVersion} to ${localVersion}`);
-  await expect(panel.getByRole("button", { name: "Updating bastion…", exact: true })).toBeDisabled();
+  await expect(update).toHaveAttribute("aria-busy", "true");
+  await expect(update).toBeDisabled();
   await expect(output).not.toContainText("sshc: updated to");
   remote.finishUpdate();
   await expect(panel).toBeHidden();

@@ -525,7 +525,6 @@ export const en = {
   "sftp.chmodDirectoryMode": "Folder permissions (octal)",
   "sftp.chmodRecurseOption": "Apply to folder contents recursively",
   "sftp.chmodReview": "Review changes",
-  "sftp.chmodPlanning": "Checking targets…",
   "sftp.chmodSummary": "Selected: {selected}. Targets: {files} files and {directories} folders.",
   "sftp.chmodModes": "Files: {files} / Folders: {directories}",
   "sftp.chmodRecursiveEnabled": "Recursive: include folder contents.",
@@ -634,7 +633,6 @@ export const en = {
   "runTarget.openConnectionSettingsLeaving": "Open connection settings (back to localhost)",
   "runTarget.remove": "Remove from the list",
   "runTarget.add": "Add an engine…",
-  "runTarget.adding": "Connecting…",
   "runTarget.addHeading": "Add the engine on an SSH host",
   "runTarget.runningOn": "on {alias}",
   "runTarget.notRunning": "The sshc engine is not running on {alias}. Start it there with sshc service install or sshc open.",
@@ -685,7 +683,6 @@ export const en = {
   "runTarget.errorCode": "Error code",
   "runTarget.errorDetail": "Error detail",
   "runTarget.update": "Update {alias}",
-  "runTarget.updating": "Updating {alias}…",
   "runTarget.updateProgress": "Running sshc update on {alias} ({seconds} s)",
   "runTarget.updateConsequence": "Updating ends every session running on {alias}. It reconnects by itself when done.",
   "engineInfo.open": "Engine information…",
@@ -702,9 +699,6 @@ export const en = {
   "engineInfo.update": "Update",
   "engineInfo.restart": "Restart",
   "engineInfo.stop": "Stop",
-  "engineInfo.updating": "Updating…",
-  "engineInfo.restarting": "Restarting…",
-  "engineInfo.stopping": "Stopping…",
   "engineInfo.confirmUpdate": "Update sshc on {alias}?",
   "engineInfo.confirmRestart": "Restart the engine on {alias}?",
   "engineInfo.confirmStop": "Stop the engine on {alias}?",
@@ -726,7 +720,6 @@ export const en = {
   "runTarget.unlockBody": "The engine on {alias} is locked. Enter its password to unlock it.",
   "runTarget.unlockPassword": "Vault password for {alias}",
   "runTarget.unlock": "Unlock",
-  "runTarget.unlocking": "Unlocking…",
   "runTarget.unlockCancel": "Cancel",
   "runTarget.vaultMissingHeading": "{alias} has no vault",
   "runTarget.vaultMissingBody": "To use the terminals of the engine on {alias}, create its vault first. Open the screen of {alias} in a new tab and create it there.",
@@ -1154,7 +1147,6 @@ export const en = {
   "terminal.stopReconnect": "Stop reconnecting",
   "terminal.reconnectStopped": "The SSH connection was lost and automatic reconnecting was stopped.",
   "terminal.notReconnecting": "This session is not waiting to reconnect.",
-  "terminal.manualReconnecting": "Connecting…",
   "terminal.manualReconnectFailed":
     "The SSH session could not be reconnected. Check the connection settings and network, then try again.",
   "terminal.openFailed": "The terminal could not be opened.",
@@ -1310,7 +1302,6 @@ export const en = {
   "terminal.forwardCopied": "The address was copied.",
   "terminal.forwardCopyFailed": "The address could not be copied.",
   "terminal.forwardStop": "Stop",
-  "terminal.forwardStopping": "Stopping…",
   "terminal.forwardStopped": "The forwarding was stopped.",
   "terminal.forwardRemoteAddress": "SSH server {listen} → engine {to}",
   "terminal.forwardNew": "Start port forwarding",
@@ -1322,7 +1313,6 @@ export const en = {
   "terminal.forwardNeedsConnection":
     "Reconnect this SSH session before starting a forwarding.",
   "terminal.forwardStart": "Start",
-  "terminal.forwardStarting": "Starting…",
   "terminal.forwardStarted": "The forwarding is active for this session.",
   "terminal.forwardStartedAndSaved":
     "The forwarding is active and was saved to the connection.",
@@ -1791,7 +1781,6 @@ export const en = {
   "secrets.nameExists":
     "A credential with that name already exists. Choose another name.",
   "secrets.closeEditor": "Close",
-  "secrets.saving": "Saving…",
   "secrets.cancel": "Cancel",
   "secrets.passwordsHeading": "Account passwords",
   "secrets.passphrasesHeading": "Key passphrases",
@@ -3211,7 +3200,6 @@ export const en = {
   "conn.createUserInvalid":
     "User cannot contain whitespace or control characters.",
   "conn.createPortInvalid": "Port must be a whole number from 1 to 65535.",
-  "conn.creating": "Creating…",
   "conn.createFailed": "The connection could not be created.",
   "conn.createAliasTaken": "Another connection already uses that name.",
   "conn.duplicateAliasTaken":
@@ -3336,7 +3324,6 @@ export const en = {
   "conn.checksLabel": "Connection checks",
   "conn.checkReachability": "Check reachability",
   "conn.checkAuthentication": "Check authentication with saved settings",
-  "conn.checking": "Checking…",
   "conn.checksExecutableHeading": "Authentication may execute SSH directives",
   "conn.checksExecutableHint":
     "Review the exact saved directives before allowing the authentication check to continue.",
@@ -3350,7 +3337,6 @@ export const en = {
     "These are the values used by this connection. They are resolved without executing commands. Settings that cannot be resolved are identified explicitly.",
   "conn.analysisAuthoritative": "Where each value comes from",
   "conn.analysisRun": "Show the sources",
-  "conn.analysisRunning": "Reading…",
   "conn.analysisExecutableHeading":
     "This connection includes directives that may cause OpenSSH to run commands",
   "conn.analysisTokenWarning":
@@ -3399,7 +3385,6 @@ export const en = {
   "conn.advancedFieldsBlockRaw":
     "Directives have unsaved changes. Discard or save them before editing Raw.",
   "conn.connect": "Connect",
-  "conn.opening": "Opening…",
   "conn.manageDraftBlocked":
     "Save or discard the editor draft before changing connection identity or storage.",
   "conn.discardPrompt":

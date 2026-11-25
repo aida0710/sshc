@@ -95,7 +95,7 @@ export function AboutPage({ api = aboutApi, updates = updateApi, sessions = term
           {checkFailure === "" ? null : <Notice tone="danger">{t("update.checkFailed")}<span className="mt-1 block text-ink-muted">{checkFailure}</span></Notice>}
           {reason === undefined ? null : <p>{t(updateMessage(reason))}</p>}
           <div className="flex flex-wrap items-baseline gap-4">
-            <Button disabled={checking} onClick={() => { void checkUpdate(); }}>{t(checking ? "about.checking" : "about.check")}</Button>
+            <Button busy={checking} onClick={() => { void checkUpdate(); }}>{t("about.check")}</Button>
             {status === null ? null : <UpdateControls status={status} api={updates} sessions={sessions} onStart={(job) => setStatus({ ...status, canUpdate: false, job })} />}
             {status === null ? null : <ReleasePageLink status={status} />}
             {/* The sidebar's progress dialog stays closed here, so its reload button is offered on the page. */}

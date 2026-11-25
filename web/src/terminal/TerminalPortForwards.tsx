@@ -148,8 +148,8 @@ export function TerminalPortForwards({
                     <div className="flex shrink-0 gap-2">
                       {forward.kind === "agent" ? null : <Button onClick={() => void copyForward(forward, setNotice, setError, t)}>{t("terminal.forwardCopy")}</Button>}
                       {forward.kind === "agent" || forward.id === "" || forward.problem !== "" ? null : (
-                        <Button kind="danger" disabled={stopping !== ""} onClick={() => void stop(forward)}>
-                          {stopping === forward.id ? t("terminal.forwardStopping") : t("terminal.forwardStop")}
+                        <Button kind="danger" busy={stopping === forward.id} disabled={stopping !== ""} onClick={() => void stop(forward)}>
+                          {t("terminal.forwardStop")}
                         </Button>
                       )}
                     </div>
@@ -193,8 +193,8 @@ export function TerminalPortForwards({
             )}
             {!connected ? <Notice>{t("terminal.forwardNeedsConnection")}</Notice> : null}
             <div className="flex justify-end">
-              <Button kind="primary" disabled={!canStart || busy} onClick={() => void start()}>
-                {busy ? t("terminal.forwardStarting") : t("terminal.forwardStart")}
+              <Button kind="primary" busy={busy} disabled={!canStart} onClick={() => void start()}>
+                {t("terminal.forwardStart")}
               </Button>
             </div>
           </section>

@@ -529,7 +529,6 @@ export const ja = {
   "sftp.chmodDirectoryMode": "フォルダの権限（8進数）",
   "sftp.chmodRecurseOption": "フォルダ配下にも適用する",
   "sftp.chmodReview": "変更内容を確認",
-  "sftp.chmodPlanning": "対象を確認しています…",
   "sftp.chmodSummary": "選択{selected}件。変更対象：ファイル{files}件、フォルダ{directories}件。",
   "sftp.chmodModes": "ファイル：{files}／フォルダ：{directories}",
   "sftp.chmodRecursiveEnabled": "再帰適用：フォルダ配下も変更します。",
@@ -639,7 +638,6 @@ export const ja = {
   "runTarget.openConnectionSettingsLeaving": "接続設定を開く（localhostに戻る）",
   "runTarget.remove": "一覧から外す",
   "runTarget.add": "sshcエンジンを追加…",
-  "runTarget.adding": "接続しています…",
   "runTarget.addHeading": "SSHの接続先のsshcエンジンを追加",
   "runTarget.runningOn": "{alias}で実行中",
   "runTarget.notRunning": "{alias}でsshcエンジンが動いていません。{alias}でsshc service installかsshc openを実行してください。",
@@ -690,7 +688,6 @@ export const ja = {
   "runTarget.errorCode": "エラーの種類",
   "runTarget.errorDetail": "エラーの内容",
   "runTarget.update": "{alias}を更新",
-  "runTarget.updating": "{alias}を更新しています…",
   "runTarget.updateProgress": "{alias}でsshc updateを実行しています（{seconds}秒）",
   "runTarget.updateConsequence": "更新すると、{alias}で動いているセッションはすべて終了します。更新が終わると自動で再接続します。",
   "engineInfo.open": "sshcエンジンの情報…",
@@ -707,9 +704,6 @@ export const ja = {
   "engineInfo.update": "更新",
   "engineInfo.restart": "再起動",
   "engineInfo.stop": "停止",
-  "engineInfo.updating": "更新しています…",
-  "engineInfo.restarting": "再起動しています…",
-  "engineInfo.stopping": "停止しています…",
   "engineInfo.confirmUpdate": "{alias}のsshcを更新しますか？",
   "engineInfo.confirmRestart": "{alias}のsshcエンジンを再起動しますか？",
   "engineInfo.confirmStop": "{alias}のsshcエンジンを停止しますか？",
@@ -731,7 +725,6 @@ export const ja = {
   "runTarget.unlockBody": "{alias}のsshcエンジンがロックされています。解除するためにパスワードを入力してください。",
   "runTarget.unlockPassword": "{alias}のVaultのパスワード",
   "runTarget.unlock": "解除",
-  "runTarget.unlocking": "解除しています…",
   "runTarget.unlockCancel": "キャンセル",
   "runTarget.vaultMissingHeading": "{alias}にVaultがありません",
   "runTarget.vaultMissingBody": "{alias}のsshcエンジンのターミナルを使うには、先にそのVaultを作ります。{alias}の画面を別タブで開いて作ってください。",
@@ -1158,7 +1151,6 @@ export const ja = {
   "terminal.stopReconnect": "再接続を停止",
   "terminal.reconnectStopped": "SSHの接続が切れ、自動再接続を停止しました。",
   "terminal.notReconnecting": "このセッションは再接続待ちではありません。",
-  "terminal.manualReconnecting": "接続中…",
   "terminal.manualReconnectFailed":
     "SSHセッションへ再接続できませんでした。接続設定とネットワークを確認して、もう一度試してください。",
   "terminal.openFailed": "ターミナルを開けませんでした。",
@@ -1313,7 +1305,6 @@ export const ja = {
   "terminal.forwardCopied": "アドレスをコピーしました。",
   "terminal.forwardCopyFailed": "アドレスをコピーできませんでした。",
   "terminal.forwardStop": "停止",
-  "terminal.forwardStopping": "停止中…",
   "terminal.forwardStopped": "転送を停止しました。",
   "terminal.forwardRemoteAddress": "SSH接続先{listen} → sshcエンジン側{to}",
   "terminal.forwardNew": "ポート転送を開始",
@@ -1325,7 +1316,6 @@ export const ja = {
   "terminal.forwardNeedsConnection":
     "SSHセッションを再接続してから転送を開始してください。",
   "terminal.forwardStart": "開始",
-  "terminal.forwardStarting": "開始中…",
   "terminal.forwardStarted": "このセッションで転送を開始しました。",
   "terminal.forwardStartedAndSaved": "転送を開始し、接続設定にも保存しました。",
   "terminal.forwardPausedReconnect": "SSHの再接続中は転送を利用できません。",
@@ -1790,7 +1780,6 @@ export const ja = {
   "secrets.nameExists":
     "同じ名前の認証情報が既にあります。別の名前を指定してください。",
   "secrets.closeEditor": "閉じる",
-  "secrets.saving": "保存中…",
   "secrets.cancel": "キャンセル",
   "secrets.passwordsHeading": "アカウントのパスワード",
   "secrets.passphrasesHeading": "鍵のパスフレーズ",
@@ -3211,7 +3200,6 @@ export const ja = {
     "DNS名、IPv4アドレス、または角括弧なしのIPv6アドレスを入力してください。",
   "conn.createUserInvalid": "ユーザー名に空白や制御文字は使用できません。",
   "conn.createPortInvalid": "ポートは1〜65535の整数にしてください。",
-  "conn.creating": "作成しています…",
   "conn.createFailed": "接続先を作成できませんでした。",
   "conn.createAliasTaken": "この名前は別の接続で使用されています。",
   "conn.duplicateAliasTaken": "{alias}は既に存在するため複製できません。",
@@ -3336,7 +3324,6 @@ export const ja = {
   "conn.checksLabel": "接続確認",
   "conn.checkReachability": "疎通を確認",
   "conn.checkAuthentication": "保存済み設定で認証を確認",
-  "conn.checking": "確認しています…",
   "conn.checksExecutableHeading":
     "認証確認でSSHディレクティブが実行される可能性があります",
   "conn.checksExecutableHint":
@@ -3351,7 +3338,6 @@ export const ja = {
     "この接続先で使う値です。コマンドを実行せずに解析し、値を確定できない設定は理由を表示します。",
   "conn.analysisAuthoritative": "各値の参照元",
   "conn.analysisRun": "参照元を表示",
-  "conn.analysisRunning": "読み取っています…",
   "conn.analysisExecutableHeading":
     "この接続先には、OpenSSHがコマンドを実行する可能性のあるディレクティブがあります",
   "conn.analysisTokenWarning":
@@ -3401,7 +3387,6 @@ export const ja = {
   "conn.advancedFieldsBlockRaw":
     "ディレクティブに未保存の変更があります。保存または破棄してからRawを編集してください。",
   "conn.connect": "接続",
-  "conn.opening": "接続中…",
   "conn.manageDraftBlocked":
     "接続名や保存場所を変更する前に、編集中の下書きを保存または破棄してください。",
   "conn.discardPrompt":

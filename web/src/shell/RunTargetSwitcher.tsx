@@ -135,11 +135,13 @@ export function RunTargetSwitcher({
           <button
             type="button"
             disabled={targets.busy}
+            aria-busy={targets.busy || undefined}
             onClick={() => setPicking(true)}
             className="flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink-muted hover:bg-hover md:min-h-7"
           >
-            <Icon name="plus" className="size-3.5" aria-hidden="true" />
-            {targets.busy ? t("runTarget.adding") : t("runTarget.add")}
+            {/* 足している間は、文言を変えずに＋を回る印に替える（Button の busy と同じ決まり）。 */}
+            {targets.busy ? <Spinner /> : <Icon name="plus" className="size-3.5" aria-hidden="true" />}
+            {t("runTarget.add")}
           </button>
         </div>
       ) : null}
