@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -286,6 +287,23 @@ func TestOperationsThatCarryAFileAreForwardedAsStreams(t *testing.T) {
 	directory.forwarded, directory.mediaOnly = nil, nil
 	if recorder := send(t, engine, http.MethodGet, "/api/v1/engines/r100/sftp/media/ticket-1", "", nil); recorder.Code != http.StatusOK || len(directory.mediaOnly) != 1 {
 		t.Errorf("the media route = %d, as media only %v", recorder.Code, directory.mediaOnly)
+	}
+}
+
+// 実行先のファイルの中身を運ぶ答えは、文書として開かれても（リンクや［新しいタブで動画を開く］）、
+// このマシンの画面のオリジンの外の、スクリプトの動かない文書になる。
+func TestAForwardedFileOrMediaAnswerOpenedAsAPageIsSandboxed(t *testing.T) {
+	directory := &fakeEngineDirectory{}
+	engine := remoteEnginesEngine(directory)
+	for _, path := range []string{
+		"/api/v1/engines/r100/sftp/media/ticket-1",
+		"/api/v1/engines/r100/sftp/web/download",
+		"/api/v1/engines/r100/sftp/local/preview",
+	} {
+		recorder := send(t, engine, http.MethodGet, path, "", nil)
+		if policies := recorder.Header().Values("Content-Security-Policy"); recorder.Code != http.StatusOK || !slices.Contains(policies, "sandbox") {
+			t.Errorf("GET %s = %d, Content-Security-Policy %q, want a sandbox", path, recorder.Code, policies)
+		}
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -68,6 +69,25 @@ func TestThePlayerReadsTheRangesItAsksForWithATicketInsteadOfTheCSRFHeader(t *te
 	}
 	if after := playerRequest(fixture, ticket.Ticket, ""); after.Code != http.StatusNotFound {
 		t.Fatalf("after revoke = %d", after.Code)
+	}
+}
+
+// メディアの答えは、文書として開かれても（リンクや［新しいタブで動画を開く］）、画面のオリジンの外の、
+// スクリプトの動かない文書になる。画面の CSP はそのまま付く。
+func TestAMediaAnswerOpenedAsAPageIsSandboxed(t *testing.T) {
+	fixture := newLocalMutationHTTPFixture(t)
+	filename := filepath.Join(fixture.directory, "take.mp3")
+	if err := os.WriteFile(filename, []byte("0123456789"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var ticket sftpMediaTicketResponse
+	if err := json.Unmarshal(issueMediaTicket(t, fixture, filename).Body.Bytes(), &ticket); err != nil {
+		t.Fatal(err)
+	}
+	played := playerRequest(fixture, ticket.Ticket, "")
+	policies := played.Header().Values("Content-Security-Policy")
+	if played.Code != http.StatusOK || !slices.Equal(policies, []string{contentSecurityPolicy, "sandbox"}) {
+		t.Fatalf("played = %d, Content-Security-Policy %q, want the page's policy and a sandbox", played.Code, policies)
 	}
 }
 

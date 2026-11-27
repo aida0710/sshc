@@ -272,6 +272,17 @@ func (s Security) beginSessionRequest(request *http.Request) (string, func(), st
 	return "", nil, "invalid_session"
 }
 
+// sandboxPolicy は、ファイルの中身を運ぶ答え（メディア、実行先のダウンロードやプレビュー）に、画面の CSP と
+// 並べて足す Content-Security-Policy である。答えが文書として開かれても（リンクや［新しいタブで動画を開く］）、
+// 画面のオリジンの外の、スクリプトの動かない文書になる。<video>・<audio>・fetch で読むときには効かない。
+// 種類をこのマシンが決める守り（remoteengine の handOverMedia）が破れたときの、次の守りである。
+const sandboxPolicy = "sandbox"
+
+// sandboxAsDocument は、header に sandboxPolicy を足す。2つの Content-Security-Policy は両方とも効く。
+func sandboxAsDocument(header http.Header) {
+	header.Add("Content-Security-Policy", sandboxPolicy)
+}
+
 func setSecurityHeaders(header http.Header, apiResponse bool) {
 	header.Set("Content-Security-Policy", contentSecurityPolicy)
 	header.Set("X-Content-Type-Options", "nosniff")
