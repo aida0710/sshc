@@ -83,8 +83,8 @@ type TerminalViewProps = {
   onSplit?: (edge: PaneEdge) => void;
   // onRemoveFromSplit は、このセッションを、出ている分割から外す。
   onRemoveFromSplit?: () => void;
-  // splitRefusal は、このセッションの横に何も置けない理由である。置けるときは undefined。
-  splitRefusal?: string | undefined;
+  // splitRefusal は、このセッションの edge の側に何も置けない理由である。置けるときは undefined。
+  splitRefusal?: ((edge: PaneEdge) => string | undefined) | undefined;
   api?: Pick<TerminalSessionsApi, "terminalStreamTicket" | "streamPath" | "terminalSessionDirectory">;
   // onExit は、ストリームが伝えた、プログラムの終わり方を渡す。
   onExit?: (exit: ExitReport) => void;

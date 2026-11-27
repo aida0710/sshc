@@ -43,8 +43,8 @@ export function TerminalOverflowMenu({
   // The previous and next prompt, offered on a phone, which has no keys for them.
   onPreviousPrompt?: (() => void) | undefined;
   onNextPrompt?: (() => void) | undefined;
-  // splitRefusal says why nothing can go beside this terminal; undefined when something can.
-  splitRefusal?: string | undefined;
+  // splitRefusal は、このターミナルの edge の側に何も置けない理由である。置けるときは undefined。
+  splitRefusal?: ((edge: PaneEdge) => string | undefined) | undefined;
   triggerRef: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
@@ -75,10 +75,13 @@ export function TerminalOverflowMenu({
           {t("shortcuts.nextPrompt")}
         </MenuItem>
       )}
-      {onSplit === undefined ? null : (["right", "bottom"] as const).map((edge) => (
-        <MenuItem key={edge} disabled={splitRefusal !== undefined} title={splitRefusal}
-          onSelect={action(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</MenuItem>
-      ))}
+      {onSplit === undefined ? null : (["right", "bottom"] as const).map((edge) => {
+        const refusal = splitRefusal?.(edge);
+        return (
+          <MenuItem key={edge} disabled={refusal !== undefined} title={refusal}
+            onSelect={action(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</MenuItem>
+        );
+      })}
       {onRemoveFromSplit === undefined ? null : (
         <MenuItem onSelect={action(onRemoveFromSplit)}>
           {t("splitView.remove")}

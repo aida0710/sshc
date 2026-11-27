@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptySplitView, paneSessionIds, reduceSplitView, type PaneEdge } from "./layout";
 import { fitSplitRatio } from "../../ui/SplitResizeHandle";
-import { minimumExtentPx, minimumPanePx, nearestPaneEdge, paneDropZone, splitViewGeometry } from "./geometry";
+import { minimumExtentPx, minimumPanePx, nearestPaneEdge, paneDropZone, splitViewGeometry, type SplitArea } from "./geometry";
 
 const single = reduceSplitView(emptySplitView, { type: "select", sessionId: "one" });
 const pair = reduceSplitView(single, { type: "split", sourceSessionId: "two", targetSessionId: "one", edge: "right" });
@@ -70,7 +70,7 @@ describe("split view layout", () => {
     expect(selected.focusMode).toBe(false);
   });
   it("places nested panes and dividers relative to their own split", () => {
-    const geometry = splitViewGeometry(three.root);
+    const geometry = splitViewGeometry(three.root, null);
     expect(geometry.panes).toEqual([
       { sessionId: "one", style: { left: "0%", top: "0%", width: "50%", height: "100%" } },
       { sessionId: "two", style: { left: "50%", top: "0%", width: "50%", height: "50%" } },
@@ -86,7 +86,7 @@ describe("how small a split pane can be dragged", () => {
     // four: one and four are stacked on the left, two and three on the right.
     expect(minimumExtentPx(four.root!, "vertical")).toBe(2 * minimumPanePx.height);
     expect(minimumExtentPx(four.root!, "horizontal")).toBe(2 * minimumPanePx.width);
-    const { dividers } = splitViewGeometry(four.root);
+    const { dividers } = splitViewGeometry(four.root, null);
     expect(dividers[0]?.minimum).toEqual({ first: minimumPanePx.width, second: minimumPanePx.width });
   });
 
@@ -99,6 +99,65 @@ describe("how small a split pane can be dragged", () => {
     // When neither minimum fits, the two share the room.
     expect(fitSplitRatio(10, 100, minimum)).toBe(50);
     expect(fitSplitRatio(10, 100, { first: 3 * minimumPanePx.height, second: minimumPanePx.height })).toBe(75);
+  });
+});
+
+// panePx は、area の広さに描いた各ペインの幅と高さ（px）である。
+function panePx(root: Parameters<typeof splitViewGeometry>[0], area: SplitArea) {
+  return splitViewGeometry(root, area).panes.map(({ sessionId, style }) => ({
+    sessionId,
+    width: parseFloat(String(style.width)) / 100 * area.width,
+    height: parseFloat(String(style.height)) / 100 * area.height,
+  }));
+}
+
+function splitInRow(count: number, edge: PaneEdge = "right") {
+  let state = single;
+  for (const [index, sessionId] of ["two", "three", "four"].slice(0, count - 1).entries()) {
+    state = reduceSplitView(state, { type: "split", sourceSessionId: sessionId, targetSessionId: index === 0 ? "one" : ["two", "three"][index - 1]!, edge });
+  }
+  return state;
+}
+
+describe("how a pane added to a split is sized", () => {
+  it("divides the row it joins evenly, instead of halving the pane it goes beside", () => {
+    const widths = panePx(splitInRow(4).root, { width: 1000, height: 600 }).map((pane) => Math.round(pane.width));
+    expect(widths).toEqual([250, 250, 250, 250]);
+  });
+
+  it("leaves a split across the row as it was", () => {
+    // one | (two / three / four): the column on the right is divided in three, the row keeps the 70% it was given.
+    const column = reduceSplitView(reduceSplitView(pair, { type: "resize", path: [], ratio: 70 }), { type: "split", sourceSessionId: "three", targetSessionId: "two", edge: "bottom" });
+    const added = reduceSplitView(column, { type: "split", sourceSessionId: "four", targetSessionId: "three", edge: "bottom" });
+    expect(added.root).toMatchObject({ ratio: 70 });
+    const area = { width: 1000, height: 900 };
+    const heights = panePx(added.root, area).filter((pane) => pane.sessionId !== "one").map((pane) => pane.height);
+    // 描くときは比率を整数の％に丸めるので、1%（9px）までずれる。
+    for (const height of heights) expect(Math.abs(height - area.height / 3)).toBeLessThanOrEqual(area.height / 100);
+  });
+
+  it("refuses a pane that would leave some pane less than its minimum, on that side only", () => {
+    const row = splitInRow(3);
+    const area = { width: 3 * minimumPanePx.width + 10, height: 600 };
+    expect(reduceSplitView(row, { type: "split", sourceSessionId: "four", targetSessionId: "three", edge: "right", area })).toBe(row);
+    const below = reduceSplitView(row, { type: "split", sourceSessionId: "four", targetSessionId: "three", edge: "bottom", area });
+    expect(paneSessionIds(below.root)).toEqual(["one", "two", "three", "four"]);
+  });
+
+  it("gives every pane its minimum in an area that holds exactly the minimums", () => {
+    const area = { width: 4 * minimumPanePx.width, height: minimumPanePx.height };
+    for (const pane of panePx(splitInRow(4).root, area)) expect(pane.width).toBeGreaterThanOrEqual(minimumPanePx.width - 1e-9);
+  });
+});
+
+describe("how a split is drawn in an area narrower than its ratios allow", () => {
+  it("draws each pane at least its minimum, and keeps the ratio it was given for a wider area", () => {
+    const wide = reduceSplitView(pair, { type: "resize", path: [], ratio: 90 });
+    const narrow = { width: 600, height: 400 };
+    const [, second] = panePx(wide.root, narrow);
+    expect(second!.width).toBeGreaterThanOrEqual(minimumPanePx.width);
+    expect(splitViewGeometry(wide.root, narrow).dividers[0]!.ratio).toBeLessThan(90);
+    expect(splitViewGeometry(wide.root, { width: 3000, height: 400 }).dividers[0]!.ratio).toBe(90);
   });
 });
 

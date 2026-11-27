@@ -15,6 +15,13 @@ export function clampSplitRatio(ratio: number): number {
 // SplitMinimum is how many px each half needs at least, along the split.
 export type SplitMinimum = { first: number; second: number };
 
+// minimumShareRatio は、2つの半分に、それぞれの最小の大きさに比例して分ける比率である。
+// 最小の大きさが同じペインの並びなら、どのペインも同じ大きさになる。整数に丸めない。3つ並びの 33.3% を
+// 33% にすると、最小の大きさの合計ちょうどの広さで、1つのペインが最小を数px割るため。
+export function minimumShareRatio(minimum: SplitMinimum): number {
+  return Math.min(maximumSplitRatio, Math.max(minimumSplitRatio, minimum.first / (minimum.first + minimum.second) * 100));
+}
+
 // fitSplitRatio is clampSplitRatio that also leaves each half its minimum in
 // px of extentPx. When both minimums do not fit, they share what there is.
 export function fitSplitRatio(ratio: number, extentPx: number, minimum: SplitMinimum): number {
@@ -22,7 +29,7 @@ export function fitSplitRatio(ratio: number, extentPx: number, minimum: SplitMin
   if (extentPx <= 0) return rounded;
   const lowest = Math.max(minimumSplitRatio, Math.ceil(minimum.first / extentPx * 100));
   const highest = Math.min(maximumSplitRatio, Math.floor(100 - minimum.second / extentPx * 100));
-  if (lowest > highest) return clampSplitRatio(minimum.first / (minimum.first + minimum.second) * 100);
+  if (lowest > highest) return minimumShareRatio(minimum);
   return Math.min(highest, Math.max(lowest, rounded));
 }
 

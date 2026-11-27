@@ -98,7 +98,7 @@ export function AppNavigation({
   onShowSplitGroup: (number: number) => void;
   // onShowTerminal shows the terminal area, for the remote session switcher to point at a refusal shown there.
   onShowTerminal: () => void;
-  canSplitSession?: (id: string) => boolean;
+  canSplitSession?: (id: string, edge: PaneEdge) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
   onDuplicateSession: (id: string) => void;
   onOpenShell: (workspaceId: string) => void;

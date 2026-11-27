@@ -14,6 +14,7 @@ import type { ExitReport } from "../terminal/stream";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import type { PaneEdge } from "../terminal/splitView/layout";
 import { maximumSplitGroups } from "../terminal/splitView/splitGroups";
+import { splitRoomRefusalKey } from "../terminal/splitView/splitRoomRefusal";
 import { RunTargetConnectingPanel } from "../terminal/RunTargetConnectingPanel";
 import { RunTargetRefusalPanel } from "../terminal/RunTargetRefusalPanel";
 import type { RunTargetLink } from "../terminal/useRunTargetLink";
@@ -97,12 +98,13 @@ export function TerminalScreen({
     document.title = session === null ? "sshc" : `${session.presentation?.displayTitle ?? session.title} · sshc`;
     return () => { document.title = "sshc"; };
   }, [session]);
-  // Why the terminal's 「…」 cannot split beside a session, for its disabled items; undefined when it can.
-  function splitRefusalText(view: SplitViewController, sessionId: string): string | undefined {
-    switch (view.splitRefusal(sessionId)) {
+  // Why the terminal's 「…」 cannot split on the edge side of a session, for its disabled items; undefined when it can.
+  function splitRefusalText(view: SplitViewController, sessionId: string, edge: PaneEdge): string | undefined {
+    switch (view.splitRefusal(sessionId, edge)) {
       case "ended": return t("splitView.refusedEnded");
       case "groups": return t("splitView.maxGroups", { count: maximumSplitGroups });
       case "sessions": return t("terminal.limitReached", { max: terminalSessions.maxSessions });
+      case "room": return t(splitRoomRefusalKey(edge));
       case null: return undefined;
     }
   }
@@ -128,7 +130,7 @@ export function TerminalScreen({
           focusRequest={shown.splitView.state.focusRevision}
           headerActions={headerActions}
           {...(shown.splitView.compact ? {} : { onSplit: (edge: PaneEdge) => shown.splitView.requestSplit({ targetSessionId: session.id, edge }) })}
-          splitRefusal={splitRefusalText(shown.splitView, session.id)}
+          splitRefusal={(edge: PaneEdge) => splitRefusalText(shown.splitView, session.id, edge)}
           {...(shown.splitView.groupBySession.has(session.id) ? { onRemoveFromSplit: () => shown.splitView.removeFromSplit(session.id) } : {})}
           api={shown.api}
           {...(shown.runTarget === null ? {} : { runTarget: shown.runTarget })}

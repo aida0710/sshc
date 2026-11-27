@@ -781,6 +781,8 @@ export const en = {
   "splitView.resize": "Resize split view",
   "splitView.drop": "Split here",
   "splitView.maxPanes": "Up to {count} panes",
+  "splitView.tooNarrow": "Not wide enough to split side by side",
+  "splitView.tooShort": "Not tall enough to split above or below",
 
   "workspace.heading": "Workspaces",
   "workspace.headingActions": "Workspace list actions",

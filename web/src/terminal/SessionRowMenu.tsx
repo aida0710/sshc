@@ -14,7 +14,7 @@ export function SessionRowMenu({
   session,
   anchorRef,
   canDuplicate,
-  canSplit = false,
+  canSplit = () => false,
   onSplit,
   onRemoveFromSplit,
   canMoveUp,
@@ -31,7 +31,8 @@ export function SessionRowMenu({
   session: TerminalSession;
   anchorRef: RefObject<HTMLButtonElement | null>;
   canDuplicate: boolean;
-  canSplit?: boolean;
+  // canSplit は、edge の側（右か下）に分割して表示できるかである。
+  canSplit?: (edge: PaneEdge) => boolean;
   onSplit?: (edge: PaneEdge) => void;
   // onRemoveFromSplit is offered while the session is in a split. The session goes on outside it.
   onRemoveFromSplit?: () => void;
@@ -62,8 +63,8 @@ export function SessionRowMenu({
       </MenuItem>
       {onSplit === undefined ? null : (
         <>
-          <MenuItem disabled={!canSplit} onSelect={choose(() => onSplit("right"))}>{t("splitView.right")}</MenuItem>
-          <MenuItem disabled={!canSplit} onSelect={choose(() => onSplit("bottom"))}>{t("splitView.below")}</MenuItem>
+          <MenuItem disabled={!canSplit("right")} onSelect={choose(() => onSplit("right"))}>{t("splitView.right")}</MenuItem>
+          <MenuItem disabled={!canSplit("bottom")} onSelect={choose(() => onSplit("bottom"))}>{t("splitView.below")}</MenuItem>
         </>
       )}
       {onRemoveFromSplit === undefined ? null : (

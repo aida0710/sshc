@@ -45,7 +45,7 @@ type WorkspaceTreeProps = {
   unreadBySession?: UnreadSessions;
   seenProgramStatus?: SeenProgramStatus;
   onSelect: (id: string) => void;
-  canSplitSession?: (id: string) => boolean;
+  canSplitSession?: (id: string, edge: PaneEdge) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
   onRemoveSessionFromSplit?: (id: string) => void;
   onDuplicate: (id: string) => void;

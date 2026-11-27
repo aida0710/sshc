@@ -6,8 +6,9 @@ import { SplitResizeHandle } from "../../ui/SplitResizeHandle";
 import { useTouchTerminal } from "../touchMode";
 import { terminalDisplayTitle } from "../terminalPresentation";
 import { splitViewGeometry } from "./geometry";
-import { maximumSplitViewPanes } from "./layout";
+import { maximumSplitViewPanes, type PaneEdge } from "./layout";
 import { maximumSplitGroups } from "./splitGroups";
+import { splitRoomRefusalKey } from "./splitRoomRefusal";
 import { PaneToolbar } from "./PaneToolbar";
 import { useRetainedSessions } from "./retainedSessions";
 import { usePaneDrag } from "./usePaneDrag";
@@ -34,7 +35,7 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
 }) {
   const t = useTranslate();
   const { state, compact, dispatch, selectSession } = splitView;
-  const { panes, dividers } = splitViewGeometry(state.root);
+  const { panes, dividers } = splitViewGeometry(state.root, splitView.area);
   const drag = usePaneDrag(splitView);
   const touchTerminal = useTouchTerminal();
   const multiple = panes.length > 1;
@@ -42,10 +43,12 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
   const retained = useRetainedSessions(panes.map((pane) => pane.sessionId), new Set(sessionById.keys()), retainedTerminals);
   const selected = state.activeSessionId;
-  function dropHint(swapping: boolean): string {
-    if (swapping) return t("splitView.swap");
+  // dropHint は、edge の側（null なら入れ替え）に落としたときにどうなるかを言う。
+  function dropHint(edge: PaneEdge | null): string {
+    if (edge === null) return t("splitView.swap");
     if (drag.atLimit) return t("splitView.maxPanes", { count: maximumSplitViewPanes });
     if (drag.atGroupLimit) return t("splitView.maxGroups", { count: maximumSplitGroups });
+    if (drag.lacksRoom) return t(splitRoomRefusalKey(edge));
     return t("splitView.drop");
   }
   // With no session the app shows Home in place of this section (useHomeWithoutSessions).
@@ -81,7 +84,8 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
       ) : null}
       {/* The panes are placed absolutely, so the outer half of the 8px gap is this wrapper's padding. */}
       <div className={`flex min-h-0 min-w-0 flex-1 ${compact ? "" : "p-1"}`}>
-        <div className="relative min-h-0 min-w-0 flex-1" data-split-view>
+        {/* 後ろに残したリモートセッションの分割表示は、見えていないので広さを測らない。 */}
+        <div className="relative min-h-0 min-w-0 flex-1" data-split-view ref={behind ? undefined : splitView.observeArea}>
           {/* Moving the drag source to make room for this hint interrupts native dragging. */}
           {drag.moving === null ? null : (
             <p role="status" className="pointer-events-none absolute inset-x-2 bottom-2 z-30 rounded-md bg-toolbar px-2 py-1 text-xs text-ink-muted">
@@ -137,7 +141,7 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
                   {renderTerminal(session, headerActions, !hidden)}
                   {target === null || compact ? null : (
                     <div data-pane-drop-preview={target.edge ?? "swap"} className={`pointer-events-none absolute z-20 grid place-items-center border-2 border-accent bg-accent/20 ${target.edge === null ? "inset-0" : previewClass[target.edge]}`}>
-                      <span className="rounded-md bg-card px-2 py-1 text-xs text-ink" role="status">{dropHint(target.edge === null)}</span>
+                      <span className="rounded-md bg-card px-2 py-1 text-xs text-ink" role="status">{dropHint(target.edge)}</span>
                     </div>
                   )}
                 </div>
