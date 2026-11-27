@@ -12,8 +12,6 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/machinestatus"
-	"sshc/internal/recent"
-	"sshc/internal/storage"
 )
 
 func callOverview(t *testing.T, handler func(*echo.Context) error, path string, answer any) {
@@ -72,52 +70,5 @@ func TestMachineStatusGivesTheCPUUseSinceThePreviousRead(t *testing.T) {
 	}
 	if second.CpuPercent == nil || *second.CpuPercent != 25 || second.MemoryUsedBytes == nil || *second.MemoryUsedBytes != 2<<30 {
 		t.Fatalf("second = %+v, want 25%% CPU and 2 GiB used", second)
-	}
-}
-
-func TestConnectionHistoryGivesTheHoursAndTheRecentConnections(t *testing.T) {
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := func() time.Time { return time.Date(2026, 11, 8, 7, 20, 0, 0, time.UTC) }
-	activity := recent.NewActivityStore(workspace, now)
-	recentStore := recent.NewStore(workspace, now)
-	for _, alias := range []string{"web-01", "db"} {
-		if err := activity.Record(alias); err != nil {
-			t.Fatal(err)
-		}
-		if err := recentStore.Record(alias); err != nil {
-			t.Fatal(err)
-		}
-	}
-	handlers := TerminalOverviewHandlers{
-		Activity: activity,
-		Recent: recent.NewService(recentStore, func(alias string) (recent.Target, error) {
-			return recent.Target{Alias: alias, HostName: alias + ".example", User: "deploy", Port: "22"}, nil
-		}),
-	}
-
-	var history api.ConnectionHistory
-	callOverview(t, handlers.ConnectionHistory, "/api/v1/terminal/connection-history", &history)
-
-	if len(history.Hours) != 1 || history.Hours[0].Connections != 2 || len(history.Hours[0].Aliases) != 2 ||
-		!history.Hours[0].Hour.Equal(time.Date(2026, 11, 8, 7, 0, 0, 0, time.UTC)) {
-		t.Fatalf("hours = %+v", history.Hours)
-	}
-	if len(history.Recent) != 2 || history.Recent[0].HostName != "web-01.example" && history.Recent[0].HostName != "db.example" {
-		t.Fatalf("recent = %+v", history.Recent)
-	}
-}
-
-// 画面の検証は hours と recent を配列として読むので、記録が無いときも null にしない。
-func TestConnectionHistoryWithoutRecordsGivesEmptyLists(t *testing.T) {
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/terminal/connection-history", nil)
-	if err := (TerminalOverviewHandlers{}).ConnectionHistory(echo.New().NewContext(request, recorder)); err != nil {
-		t.Fatal(err)
-	}
-	if body := recorder.Body.String(); body != "{\"hours\":[],\"recent\":[]}\n" {
-		t.Fatalf("history = %s", body)
 	}
 }

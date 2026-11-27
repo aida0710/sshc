@@ -97,8 +97,6 @@ type Options struct {
 	RemoteKeys    *remotekey.Service
 	// Recent は、この端末で成功した接続を現在の設定へ解決する。
 	Recent *recent.Service
-	// ConnectionActivity は、ターミナルの SSH 接続の回数を時間ごとに持つ。nil なら空の記録を返す。
-	ConnectionActivity *recent.ActivityStore
 	// MachineStatus は、このエンジンが動くマシンの状態を読む。nil なら CPU の使用率の無い状態を返す。
 	MachineStatus *machinestatus.Sampler
 	SFTP          *sshcSFTP.Service
@@ -460,7 +458,7 @@ func New(options Options) (*Server, error) {
 	if options.Terminals != nil {
 		registerTerminalRoutes(e, newTerminalHandlers(options, actions, host))
 		registerTerminalOverviewRoutes(e, TerminalOverviewHandlers{
-			Machine: options.MachineStatus, Activity: options.ConnectionActivity, Recent: options.Recent,
+			Machine: options.MachineStatus,
 		})
 		if options.RemoteEngines != nil {
 			registerRemoteEngineRoutes(e, RemoteEngineHandlers{

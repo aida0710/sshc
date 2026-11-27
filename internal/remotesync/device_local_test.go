@@ -32,7 +32,7 @@ func ownedDeviceLocalPaths() []string {
 		path.Join(storage.StateDirectoryName, handoff.MutationLockName),
 		keys.TrashPathRelative,
 		recent.PathRelative,
-		recent.ActivityPathRelative,
+		"sshc/connection-activity.json",
 		browserauth.PathRelative,
 		terminalworkspace.PathRelative,
 	}, storage.DeviceLocalPaths()...)

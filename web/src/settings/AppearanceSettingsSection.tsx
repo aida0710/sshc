@@ -7,8 +7,6 @@ import { accentChoiceOf, withAccent } from "../theme/accentContext";
 import { useTheme } from "../theme/context";
 import { defaultTheme, isFirstDarkTheme, isTheme, themeAttributes, themeLabel, themes, type Theme } from "../theme/theme";
 import { ColorCodeInput } from "./ColorCodeInput";
-import { EmptyTerminalArtField } from "./EmptyTerminalArtField";
-import { ReduceMotionField } from "./ReduceMotionField";
 import { RemoteSessionColorField } from "./RemoteSessionColorField";
 import { SettingsSection } from "./SettingsSection";
 import { FieldRow } from "../ui/FieldRow";
@@ -122,8 +120,6 @@ export function AppearanceSettingsSection({ presetId, showHeading }: { presetId:
         </div>
       </FieldRow>
       <RemoteSessionColorField presetId={presetId} />
-      <EmptyTerminalArtField presetId={presetId} />
-      <ReduceMotionField presetId={presetId} />
     </SettingsSection>
   );
 }

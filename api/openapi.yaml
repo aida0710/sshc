@@ -1182,41 +1182,6 @@ paths:
       description: >-
         Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. An engine
         older than this route answers 404, and the screen then leaves the overview out.
-  /api/v1/engines/{alias}/terminal/connection-history:
-    get:
-      operationId: remoteEngineGetTerminalConnectionHistory
-      responses:
-        '400':
-          $ref: '#/components/responses/Problem'
-        '200':
-          description: Terminal SSH connections the remote engine opened
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConnectionHistory'
-        '401':
-          $ref: '#/components/responses/Problem'
-        '403':
-          $ref: '#/components/responses/Problem'
-        '409':
-          $ref: '#/components/responses/Problem'
-        '404':
-          $ref: '#/components/responses/Problem'
-        '500':
-          $ref: '#/components/responses/Problem'
-        '502':
-          $ref: '#/components/responses/Problem'
-      parameters:
-      - name: alias
-        in: path
-        required: true
-        schema:
-          type: string
-          minLength: 1
-          maxLength: 64
-      description: >-
-        Forwarded unchanged to the same terminal operation of the remote engine added as {alias}. An engine
-        older than this route answers 404, and the screen then leaves the overview out.
   /api/v1/engines/{alias}/terminal/sessions/{id}/stream:
     post:
       operationId: remoteEngineIssueTerminalStreamTicket
@@ -1844,21 +1809,6 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/terminal/connection-history:
-    get:
-      operationId: getTerminalConnectionHistory
-      responses:
-        "200":
-          description: >-
-            Terminal SSH connections this engine opened, counted per UTC hour over the last 372 days, and the
-            most recent connections
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ConnectionHistory" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/destinations/{connectionAlias}:
     get:
       operationId: resolveTerminalDestination
@@ -6958,35 +6908,6 @@ components:
         cpuPercent: { type: number, minimum: 0, maximum: 100 }
         memoryTotalBytes: { type: integer, format: int64, minimum: 0 }
         memoryUsedBytes: { type: integer, format: int64, minimum: 0 }
-    # ターミナルの SSH 接続の記録。日の区切りは画面を見る人のタイムゾーンで決まるので、回数は UTC の
-    # 1 時間ごとに渡し、画面が日へまとめる。
-    ConnectionHistory:
-      type: object
-      additionalProperties: false
-      required: [hours, recent]
-      properties:
-        # 古い順。接続の無い時間は含めない。372 日 × 24 時間まで。
-        hours:
-          type: array
-          maxItems: 8928
-          items: { $ref: "#/components/schemas/ConnectionHour" }
-        recent:
-          type: array
-          maxItems: 20
-          items: { $ref: "#/components/schemas/RecentConnection" }
-    ConnectionHour:
-      type: object
-      additionalProperties: false
-      required: [hour, connections, aliases]
-      properties:
-        # その時間の始まり（UTC）。
-        hour: { type: string, format: date-time }
-        connections: { type: integer, minimum: 1 }
-        # その時間に接続した接続先。期間の中の台数を数えるためのもので、32 までしか覚えない。
-        aliases:
-          type: array
-          maxItems: 32
-          items: { type: string, minLength: 1, maxLength: 64 }
     HostEntry:
       type: object
       additionalProperties: false
@@ -7090,10 +7011,6 @@ components:
           pattern: "^(lavender|blue|sky|pink|mono|#[0-9a-f]{6})$"
         # system（OS に合わせる）かテーマの名前。省略は既定の dark。知らない名前は既定として描く。
         theme: { type: string, pattern: '^[a-z0-9-]{1,32}$' }
-        # 開いているセッションが無いときのターミナルに描く絵。省略は none（描かない）。
-        emptyTerminalArt: { type: string, enum: [none, network, contours, globe, aquarium] }
-        # 画面のアニメーションを省くか。省略は OS の設定（prefers-reduced-motion）に従う。
-        reduceMotion: { type: boolean }
         # リモートセッションを選んでいる間の画面の枠と名札の色（#rrggbb、小文字）。接続先の色が先。
         # 省略はさし色（accent）。
         remoteSessionColor: { type: string, pattern: "^#[0-9a-f]{6}$" }

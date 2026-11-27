@@ -35,7 +35,7 @@ test("a theme chosen in Settings applies once it is saved, and the bar stays in 
   expect(await root.getAttribute("data-theme")).toBe(before);
   // The last row can be scrolled clear of the bar.
   await endOfScroll(page);
-  await expectAbove(page.getByRole("group", { name: "Reduce motion" }), saveBar(page));
+  await expectAbove(page.getByRole("group", { name: "Remote session frame colour" }), saveBar(page));
 
   await saveSettings(page);
   await expect(root).toHaveAttribute("data-theme", "light");

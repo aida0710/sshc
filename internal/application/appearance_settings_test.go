@@ -20,41 +20,6 @@ func TestAnAccentAndAThemeAreStoredInThePresetAndReadBack(t *testing.T) {
 	}
 }
 
-func TestTurningMotionReductionOffIsKeptApartFromFollowingTheOS(t *testing.T) {
-	service, _ := newTerminalService(t)
-	off := false
-
-	if err := editStandardPreset(t, service, func(preset *SettingsPreset) {
-		preset.Appearance = &AppearanceSettings{ReduceMotion: &off}
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	appearance := service.EffectiveSettings().Preset.Appearance
-	if appearance == nil || appearance.ReduceMotion == nil || *appearance.ReduceMotion {
-		t.Fatalf("appearance = %+v, want reduce motion stored as false rather than left out", appearance)
-	}
-}
-
-func TestAnEmptyTerminalArtOutsideTheListIsRefused(t *testing.T) {
-	service, _ := newTerminalService(t)
-
-	err := editStandardPreset(t, service, func(preset *SettingsPreset) {
-		preset.Appearance = &AppearanceSettings{EmptyTerminalArt: "lava-lamp"}
-	})
-	if !errors.Is(err, ErrMetadataAppearance) {
-		t.Fatalf("err = %v, want ErrMetadataAppearance", err)
-	}
-	if err := editStandardPreset(t, service, func(preset *SettingsPreset) {
-		preset.Appearance = &AppearanceSettings{EmptyTerminalArt: "aquarium"}
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if appearance := service.EffectiveSettings().Preset.Appearance; appearance == nil || appearance.EmptyTerminalArt != "aquarium" {
-		t.Fatalf("appearance = %+v, want aquarium", appearance)
-	}
-}
-
 func TestACustomColourIsStoredAsTheAccent(t *testing.T) {
 	service, _ := newTerminalService(t)
 

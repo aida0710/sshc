@@ -49,8 +49,6 @@ type engineServices struct {
 	autoSync     *remotesync.Auto
 	recentStore  *recent.Store
 	recent       *recent.Service
-	// activity は、ターミナルの SSH 接続の回数を時間ごとに記録する。
-	activity *recent.ActivityStore
 	// machineStatus は、このエンジンが動くマシンの状態を、CPU の使用率の前の値と一緒に持つ。
 	machineStatus *machinestatus.Sampler
 	sftp          *sshcSFTP.Service
@@ -234,8 +232,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		config:      configService, keys: keyService, diagnostics: diagnosticsService,
 		knownHosts: knownHostsService, vault: vault,
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
-		activity: recent.NewActivityStore(workspace, time.Now), machineStatus: machinestatus.NewSampler(machinestatus.Read),
-		sftp: sftpService, sftpPool: sftpPool, snippets: snippetService,
+		machineStatus: machinestatus.NewSampler(machinestatus.Read), sftp: sftpService, sftpPool: sftpPool, snippets: snippetService,
 		vpn: vpnRoutes, vpnProfiles: vpnProfiles, ssh: inProcessSSH,
 		terminalWorkspaces: terminalworkspace.NewService(workspace, dependencies.Random),
 	}
