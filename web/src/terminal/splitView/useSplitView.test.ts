@@ -94,6 +94,20 @@ describe("what can go beside a session", () => {
     expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["one", "two", "three", "four"]);
   });
 
+  it("says there is no room, not that the splits are used up, beside four panes in a row narrowed below their minimum", () => {
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+    const { result } = setup();
+    act(() => { result.current.splitView.observeArea(document.createElement("div")); });
+    act(() => resizeArea({ width: 4 * minimumPanePx.width, height: 600 }));
+    act(() => result.current.showSession("one"));
+    for (const [source, target] of [["two", "one"], ["three", "two"], ["four", "three"]] as const) {
+      act(() => result.current.splitView.split({ sourceSessionId: source, targetSessionId: target, edge: "right" }));
+    }
+    expect(paneSessionIds(result.current.splitView.state.root)).toHaveLength(4);
+    act(() => resizeArea({ width: 4 * minimumPanePx.width - 10, height: 600 }));
+    expect(result.current.splitView.splitRefusal("four", "right")).toBe("room");
+  });
+
   it("forgets a request for a split when the run target changes", () => {
     const { result, rerender } = setup();
     act(() => result.current.splitView.requestSplit({ targetSessionId: "one", edge: "right" }));

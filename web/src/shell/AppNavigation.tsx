@@ -60,6 +60,7 @@ export function AppNavigation({
   onShowSplitGroup,
   onShowTerminal,
   canSplitSession,
+  splitLacksRoom,
   onSplitSession,
   onDuplicateSession,
   onOpenShell,
@@ -99,6 +100,8 @@ export function AppNavigation({
   // onShowTerminal shows the terminal area, for the remote session switcher to point at a refusal shown there.
   onShowTerminal: () => void;
   canSplitSession?: (id: string, edge: PaneEdge) => boolean;
+  // splitLacksRoom は、セッションの行の［…］で分割の項目を押せない理由が、分割表示の広さかどうかである。
+  splitLacksRoom?: (id: string, edge: PaneEdge) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
   onDuplicateSession: (id: string) => void;
   onOpenShell: (workspaceId: string) => void;
@@ -225,6 +228,7 @@ export function AppNavigation({
           onSelect={onShowSession}
           splitGroupBySession={splitView.groupBySession}
           {...(canSplitSession === undefined ? {} : { canSplitSession })}
+          {...(splitLacksRoom === undefined ? {} : { splitLacksRoom })}
           {...(onSplitSession === undefined ? {} : { onSplitSession })}
           onRemoveSessionFromSplit={splitView.removeFromSplit}
           onDuplicate={onDuplicateSession}

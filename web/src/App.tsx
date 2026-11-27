@@ -553,6 +553,8 @@ export function App({
             }}
             onShowTerminal={showTerminalArea}
             canSplitSession={(id, edge) => id === activeSessionId ? splitBesideActive[edge] !== undefined : splitView.canSplit(id, activeSessionId, edge)}
+            splitLacksRoom={(id, edge) => activeSessionId !== null
+              && (id === activeSessionId ? splitView.splitRefusal(id, edge) === "room" : splitView.lacksRoomFor(activeSessionId, edge, id))}
             onSplitSession={(id, edge) => {
               if (activeSessionId === null) return;
               // The session shown cannot go beside itself: this asks what goes beside it, as the terminal's 「…」 does.

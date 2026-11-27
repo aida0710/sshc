@@ -34,6 +34,7 @@ type SessionListProps = {
   seenProgramStatus?: SeenProgramStatus;
   onSelect: (id: string) => void;
   canSplitSession?: (id: string, edge: PaneEdge) => boolean;
+  splitLacksRoom?: (id: string, edge: PaneEdge) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
   onRemoveSessionFromSplit?: (id: string) => void;
   onClose: (id: string) => void;
@@ -76,6 +77,7 @@ export function SessionList({
   seenProgramStatus = new Map(),
   onSelect,
   canSplitSession,
+  splitLacksRoom,
   onSplitSession,
   onRemoveSessionFromSplit,
   onClose,
@@ -326,6 +328,7 @@ export function SessionList({
                     anchorRef={menuTriggerRef}
                     canDuplicate={!busy && !atSessionLimit}
                     canSplit={(edge) => canSplitSession?.(session.id, edge) ?? false}
+                    splitLacksRoom={(edge) => splitLacksRoom?.(session.id, edge) ?? false}
                     {...(onSplitSession === undefined ? {} : { onSplit: (edge: PaneEdge) => onSplitSession(session.id, edge) })}
                     {...(onRemoveSessionFromSplit === undefined || splitGroup === undefined ? {} : { onRemoveFromSplit: () => onRemoveSessionFromSplit(session.id) })}
                     canMoveUp={index > 0}

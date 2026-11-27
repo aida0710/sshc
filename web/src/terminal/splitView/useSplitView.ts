@@ -84,11 +84,15 @@ export function useSplitView({ sessions, sessionsLoaded = true, runTarget, maxSe
     return acceptsSplit(request, null) && !acceptsSplit(request, area);
   }
   // splitRefusal is why neither a session already open nor a new one can go beside the target, or null when one can.
+  // 開いているセッションか新しいセッションのどれかが、広さだけが理由で置けないなら room とする。4つ並んだ分割を
+  // 狭めたときは、新しいペインはペインの数で、分割の中のペインの移動は広さで断るため。
   function splitRefusal(targetSessionId: string, edge: PaneEdge): SplitRefusal | null {
     if (!liveSessionIds.has(targetSessionId)) return "ended";
-    if (sessions.some((candidate) => canSplit(candidate.id, targetSessionId, edge)) || canOpenBeside(targetSessionId, edge)) return null;
-    if (atSessionLimit) return "sessions";
-    return lacksRoomFor(targetSessionId, edge, null) ? "room" : "groups";
+    const candidates = sessions.filter((candidate) => candidate.id !== targetSessionId && liveSessionIds.has(candidate.id));
+    if (candidates.some((candidate) => canSplit(candidate.id, targetSessionId, edge)) || canOpenBeside(targetSessionId, edge)) return null;
+    const refusedForRoom = [...candidates.map((candidate) => candidate.id), null].some((sourceSessionId) => lacksRoomFor(targetSessionId, edge, sourceSessionId));
+    if (refusedForRoom) return "room";
+    return atSessionLimit ? "sessions" : "groups";
   }
   const cancelSplitRequest = useCallback(() => setSplitRequest(null), []);
   function split({ sourceSessionId, targetSessionId, edge }: { sourceSessionId: string; targetSessionId: string; edge: PaneEdge }) {
