@@ -63,13 +63,13 @@ func (failure *KnownHostsSymlinkError) sentence() string {
 }
 
 // KnownHostsOutsideWorkspaceError は、受け入れたホスト鍵を保存する known_hosts のパスが
-// ~/.ssh の外にあり、StrictHostKeyChecking が accept-new か no の接続で保存できなかったことを
-// 報告する。
+// ~/.ssh の外にあり、保存できなかったことを報告する。
 //
-// sshc は ~/.ssh の中のファイルにだけ書く。外のファイルは照合には読むが、保存しないまま接続を
-// 続けると、鍵はいつまでも未知のままで、次の接続で別の鍵が来ても確認なしに受け入れることになる
-// ので、接続は失敗にする。ask は接続のたびにフィンガープリントを見せて尋ねるので、保存せずに続ける。
-// OpenSSH はそのファイルへ書くので、ssh で一度接続すれば、sshc は次からその鍵と照合する。
+// sshc は ~/.ssh の中のファイルにだけ書く。外のファイルは照合には読むが、StrictHostKeyChecking が
+// accept-new か no のときに保存しないまま接続を続けると、鍵はいつまでも未知のままで、次の接続で
+// 別の鍵が来ても確認なしに受け入れることになるので、接続は失敗にする。ask は接続のたびに
+// フィンガープリントを見せて尋ねるので、保存せずに続ける（HostKeys.accept）。OpenSSH はその
+// ファイルへ書くので、ssh で一度接続すれば、sshc は次からその鍵と照合する。
 type KnownHostsOutsideWorkspaceError struct {
 	// Path は、保存しようとした UserKnownHostsFile の最初のファイルである。
 	Path string

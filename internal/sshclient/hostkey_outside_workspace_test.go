@@ -87,7 +87,8 @@ func mirageAt(server *testServer, strict string, userKnownHostsFiles []string) s
 // SFTP の転送などの尋ねない接続は、未知の鍵を StrictHostKeyChecking に関わらず断るので含めない。
 type connectionRoute struct {
 	name string
-	// connect は接続し、利用者に見せた失敗の文（ターミナルの出力）と、失敗の理由を返す。
+	// connect は接続し、利用者に見せる失敗の文（ターミナルの出力か、SFTP のタブの接続ログの文）と、
+	// 失敗の理由を返す。
 	connect func(t *testing.T, dialer sshclient.Dialer, target sshclient.Target) (string, error)
 }
 
