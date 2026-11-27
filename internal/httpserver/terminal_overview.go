@@ -9,21 +9,16 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/machinestatus"
-	"sshc/internal/recent"
 )
 
-// TerminalOverviewHandlers は、ターミナルの空の状態に出す、このエンジンが動くマシンの状態と
-// ターミナルの SSH 接続の記録を返す。実行先のエンジンのものは registerRemoteEngineRoutes が
-// 取り次ぐ。
+// TerminalOverviewHandlers は、Home の一番下に出す、このエンジンが動くマシンの状態を返す。実行先の
+// エンジンのものは registerRemoteEngineRoutes が取り次ぐ。
 type TerminalOverviewHandlers struct {
-	Machine  *machinestatus.Sampler
-	Activity *recent.ActivityStore
-	Recent   *recent.Service
+	Machine *machinestatus.Sampler
 }
 
 func registerTerminalOverviewRoutes(engine *echo.Echo, handlers TerminalOverviewHandlers) {
 	engine.GET("/api/v1/terminal/machine", handlers.MachineStatus)
-	engine.GET("/api/v1/terminal/connection-history", handlers.ConnectionHistory)
 }
 
 func (h TerminalOverviewHandlers) MachineStatus(c *echo.Context) error {
@@ -53,29 +48,4 @@ func (h TerminalOverviewHandlers) MachineStatus(c *echo.Context) error {
 func optionalInt64(value uint64) *int64 {
 	clamped := int64(min(value, math.MaxInt64))
 	return &clamped
-}
-
-func (h TerminalOverviewHandlers) ConnectionHistory(c *echo.Context) error {
-	history := api.ConnectionHistory{Hours: []api.ConnectionHour{}, Recent: []api.RecentConnection{}}
-	if h.Activity != nil {
-		hours, err := h.Activity.List()
-		if err != nil {
-			return unexpectedProblem(c, "connection_history_failed", err)
-		}
-		for _, hour := range hours {
-			aliases := hour.Aliases
-			if aliases == nil {
-				aliases = []string{}
-			}
-			history.Hours = append(history.Hours, api.ConnectionHour{Hour: hour.Hour, Connections: hour.Connections, Aliases: aliases})
-		}
-	}
-	if h.Recent != nil {
-		connections, err := h.Recent.List()
-		if err != nil {
-			return unexpectedProblem(c, "connection_history_failed", err)
-		}
-		history.Recent = recentConnectionsForAPI(connections)
-	}
-	return c.JSON(http.StatusOK, history)
 }

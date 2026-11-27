@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { terminalOverviewApi, type ConnectionHistory, type MachineStatus } from "../../api/terminalOverview";
+import { terminalOverviewApi, type MachineStatus } from "../../api/terminalOverview";
 
 // The machine is read again this often while Home is shown. Its CPU use is the average since the
 // previous read, so this is also the span each value covers.
@@ -12,27 +12,15 @@ export type TerminalOverview = {
   machine: MachineStatus | null;
   // cpuHistory is the CPU use of the reads so far, oldest first.
   cpuHistory: readonly number[];
-  history: ConnectionHistory | null;
 };
 
-// useTerminalOverview reads the machine and the connection history of the engine new shells open on, and keeps
-// the machine up to date while the page is shown. Home's effects are stopped while another section is over it
+// useTerminalOverview reads the machine of the engine new shells open on, and keeps it up to date while the page is
+// shown. Home's effects are stopped while another section is over it
 // (KeptSections), so nothing is read then.
 export function useTerminalOverview(runTarget: string | null): TerminalOverview {
   const overviewApi = useMemo(() => terminalOverviewApi(runTarget), [runTarget]);
   const [machine, setMachine] = useState<MachineStatus | null>(null);
   const [cpuHistory, setCPUHistory] = useState<readonly number[]>([]);
-  const [history, setHistory] = useState<ConnectionHistory | null>(null);
-
-  useEffect(() => {
-    let current = true;
-    setHistory(null);
-    overviewApi.connectionHistory().then(
-      (read) => { if (current) setHistory(read); },
-      () => undefined,
-    );
-    return () => { current = false; };
-  }, [overviewApi]);
 
   // A new engine starts a new chart; the CPU uses of another engine are not this one's.
   useEffect(() => {
@@ -73,5 +61,5 @@ export function useTerminalOverview(runTarget: string | null): TerminalOverview 
     };
   }, [overviewApi]);
 
-  return { machine, cpuHistory, history };
+  return { machine, cpuHistory };
 }

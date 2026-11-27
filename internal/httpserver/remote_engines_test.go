@@ -163,7 +163,6 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodPost, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},
 		{http.MethodDelete, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},
 		{http.MethodGet, "/api/v1/engines/r100/terminal/machine", "r100 /api/v1/terminal/machine"},
-		{http.MethodGet, "/api/v1/engines/r100/terminal/connection-history", "r100 /api/v1/terminal/connection-history"},
 		{http.MethodGet, "/api/v1/engines/r100/config/overview", "r100 /api/v1/config/overview"},
 		{http.MethodGet, "/api/v1/engines/r100/connections/recent", "r100 /api/v1/connections/recent"},
 		{http.MethodPost, "/api/v1/engines/r100/actions", "r100 /api/v1/actions"},

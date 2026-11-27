@@ -14,10 +14,6 @@ var ErrMetadataAppearance = errors.New("appearance settings are out of range")
 // エラー（赤）と見分けがつく色だけにする。色の値は画面（web/src/index.css）が持つ。
 var appearanceAccents = []string{"lavender", "blue", "sky", "pink", "mono"}
 
-// emptyTerminalArts は、開いているセッションが無いときのターミナルに描く絵の名前である。絵は画面
-// （web/src/terminal/emptyState/）が描く。空は既定の network と同じ。none は絵を描かない。
-var emptyTerminalArts = []string{"none", "network", "contours", "globe", "aquarium"}
-
 // accentColorPattern は、利用者が決めた色の形（#rrggbb、小文字）である。画面は
 // <input type="color"> の値をそのまま送り、その値は常にこの形になる。
 var accentColorPattern = regexp.MustCompile(`^#[0-9a-f]{6}$`)
@@ -26,27 +22,19 @@ var accentColorPattern = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 // 知らない名前は既定のテーマとして描くので、ここでは形だけを確かめる。
 var themeNamePattern = regexp.MustCompile(`^[a-z0-9-]{1,32}$`)
 
-// AppearanceSettings は、アプリの見た目（テーマ、さし色、セッションが無いときの絵、動きを減らすか、
-// リモートセッションの枠の色）である。プリセットに入る。
+// AppearanceSettings は、アプリの見た目（テーマ、さし色、リモートセッションの枠の色）である。プリセットに入る。
 type AppearanceSettings struct {
 	// Theme は、system（OS に合わせる）かテーマの名前である。空は既定のテーマ（画面の既定は dark）。
 	Theme string `json:"theme,omitempty"`
 	// Accent は、選んでいる項目・ボタン・フォーカスの枠に使う色である。用意した色の名前か、
 	// 利用者が決めた色（#rrggbb、小文字）。空は既定の色（画面の既定は lavender）。
 	Accent string `json:"accent,omitempty"`
-	// EmptyTerminalArt は、開いているセッションが無いときのターミナルに描く絵である
-	// （emptyTerminalArts の名前）。空は既定の絵（画面の既定は network）。
-	EmptyTerminalArt string `json:"emptyTerminalArt,omitempty"`
-	// ReduceMotion は、画面のアニメーションを省くかである。nil は OS の設定（prefers-reduced-motion）に
-	// 従う。画面だけが読み、エンジンは使わない。
-	ReduceMotion *bool `json:"reduceMotion,omitempty"`
 	// RemoteSessionColor は、リモートセッションを選んでいる間の画面の枠と名札の色である（#rrggbb、小文字）。
 	// 接続先に色を付けていれば、そちらを使う。空はさし色（Accent）。画面だけが読む。
 	RemoteSessionColor string `json:"remoteSessionColor,omitempty"`
 }
 
-// validateAppearanceSettings は、形の合わないテーマの名前、知らないさし色や絵の名前、色として
-// 読めない値を断る。
+// validateAppearanceSettings は、形の合わないテーマの名前、知らないさし色の名前、色として読めない値を断る。
 func validateAppearanceSettings(settings *AppearanceSettings) error {
 	if settings == nil {
 		return nil
@@ -56,9 +44,6 @@ func validateAppearanceSettings(settings *AppearanceSettings) error {
 	}
 	if settings.Accent != "" && !slices.Contains(appearanceAccents, settings.Accent) && !accentColorPattern.MatchString(settings.Accent) {
 		return fmt.Errorf("%w: accent %q", ErrMetadataAppearance, settings.Accent)
-	}
-	if settings.EmptyTerminalArt != "" && !slices.Contains(emptyTerminalArts, settings.EmptyTerminalArt) {
-		return fmt.Errorf("%w: empty terminal art %q", ErrMetadataAppearance, settings.EmptyTerminalArt)
 	}
 	if settings.RemoteSessionColor != "" && !accentColorPattern.MatchString(settings.RemoteSessionColor) {
 		return fmt.Errorf("%w: remote session color %q", ErrMetadataAppearance, settings.RemoteSessionColor)

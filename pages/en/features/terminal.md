@@ -13,14 +13,7 @@ Open SSH and local shells in the same interface, with search, Quick Commands, an
 
 While no session is open, Home is shown in place of the terminal: after the last session is closed, when Terminal is chosen in a phone's bottom bar, and when the [remote session](./remote-session) changes to an sshc engine with no session. While a remote session is being connected to, and when it refuses, the terminal says so.
 
-The foot of Home shows what the sshc engine new shells open on can tell about itself. With a remote session chosen, it is that sshc engine.
-
-- The machine: its name, operating system, CPU use, memory, and uptime. Values the operating system does not give are left out (macOS gives neither the CPU use nor the memory in use; FreeBSD and OpenBSD do not give the memory in use)
-- Activity: the terminal SSH connections per day. It is left out until a connection has been opened
-
-A moving picture is drawn behind Home. Choose it under **Home background** in **Settings → Appearance**: network (the default), contours, globe, aquarium, or none. It moves only while Home is shown, and stops while the tab or the app is in the background and while **Reduce motion** is on.
-
-The fish of the aquarium are the recent connections. The more a connection was opened over the last 30 days, the larger its fish, and on a PC each fish's connection name is written under it. Fish come to the mouse, and clicking an empty place (tapping, on a phone) drops food there that they come to eat. On a phone a fish's name shows only while it eats. The colours follow the terminal's colours.
+The foot of Home shows the machine of the sshc engine new shells open on in one line: its name, operating system, CPU use, memory, and uptime. With a remote session chosen, it is that sshc engine's. Values the operating system does not give are left out (macOS gives neither the CPU use nor the memory in use; FreeBSD and OpenBSD do not give the memory in use).
 
 ## How data travels
 

@@ -8,9 +8,6 @@ import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { PageBoard } from "../ui/PageBoard";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
-import { presetInUse, useSettings } from "../settings/settingsStore";
-import { emptyTerminalArtOf } from "./dashboard/emptyTerminalArt";
-import { HomeBackdrop } from "./dashboard/HomeBackdrop";
 import { HomeMachineSection } from "./dashboard/HomeMachineSection";
 import { useTerminalOverview } from "./dashboard/useTerminalOverview";
 import { useEngineApis } from "../shell/engineApis";
@@ -55,7 +52,6 @@ export function OverviewPanel({
   const { config, recentConnections } = useEngineApis();
   const loadOverview = useMemo(() => loadOverviewOverride ?? (() => config.overview()), [loadOverviewOverride, config]);
   const loadRecent = useMemo(() => loadRecentOverride ?? (() => recentConnections.recentConnections()), [loadRecentOverride, recentConnections]);
-  const art = emptyTerminalArtOf(presetInUse(useSettings().document));
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [sync, setSync] = useState<SyncStatus | null>(null);
@@ -116,8 +112,7 @@ export function OverviewPanel({
   const noConnections = overview !== null && connectionCount === 0;
 
   return (
-    <PageBoard wide stretch={noConnections} labelledBy="home-heading" className="relative isolate flex flex-col gap-[18px]">
-      {art === "none" ? null : <HomeBackdrop art={art} history={machineOverview.history} />}
+    <PageBoard wide stretch={noConnections} labelledBy="home-heading" className="flex flex-col gap-[18px]">
       <PageHeader
         title={t("home.heading")}
         headingId="home-heading"

@@ -839,19 +839,6 @@ type ConflictReport struct {
 	Path           string     `json:"path"`
 }
 
-// ConnectionHistory defines model for ConnectionHistory.
-type ConnectionHistory struct {
-	Hours  []ConnectionHour   `json:"hours"`
-	Recent []RecentConnection `json:"recent"`
-}
-
-// ConnectionHour defines model for ConnectionHour.
-type ConnectionHour struct {
-	Aliases     []string  `json:"aliases"`
-	Connections int       `json:"connections"`
-	Hour        time.Time `json:"hour"`
-}
-
 // ConnectionIdentityFileChange defines model for ConnectionIdentityFileChange.
 type ConnectionIdentityFileChange = json.RawMessage
 

@@ -127,36 +127,6 @@ describe("AppearanceSettingsSection", () => {
     expect(document.documentElement).toHaveAttribute("data-accent", "blue");
   });
 
-  it("reduces motion once the choice is saved in the preset", async () => {
-    const server = fakeSettingsServer();
-    renderSection();
-    const choices = screen.getByRole("group", { name: "Reduce motion" });
-    expect(within(choices).getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
-
-    await userEvent.click(within(choices).getByRole("button", { name: "On" }));
-    expect(document.documentElement).not.toHaveAttribute("data-motion", "reduce");
-
-    await saveSettings();
-    expect(document.documentElement).toHaveAttribute("data-motion", "reduce");
-    const saved = server.writesTo("/api/v1/settings/presets/default")
-      .map((body) => (body as { preset: { appearance?: { reduceMotion?: boolean } } }).preset.appearance?.reduceMotion);
-    expect(saved).toEqual([true]);
-  });
-
-  it("draws the network behind Home until another art is chosen, and saves the one chosen", async () => {
-    const server = fakeSettingsServer();
-    renderSection();
-    const arts = screen.getByRole("radiogroup", { name: "Home background" });
-    expect(within(arts).getByRole("radio", { name: "Network" })).toBeChecked();
-
-    await userEvent.click(within(arts).getByRole("radio", { name: "None" }));
-    await saveSettings();
-
-    const saved = server.writesTo("/api/v1/settings/presets/default")
-      .map((body) => (body as { preset: { appearance?: { emptyTerminalArt?: string } } }).preset.appearance?.emptyTerminalArt);
-    expect(saved).toEqual(["none"]);
-  });
-
   it("switches the theme once it is saved", async () => {
     fakeSettingsServer({ presets: [{ id: "default", appearance: { theme: "dark" } }] });
     renderSection();
