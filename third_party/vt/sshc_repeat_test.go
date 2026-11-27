@@ -57,17 +57,6 @@ func repeatCounts(r *rand.Rand, width, height int) []int {
 	}
 }
 
-// expandLeftLines は、続けて同じ行が流れたことを Repeats で表した行を、1行ずつに戻す。
-func expandLeftLines(lines []LeftLine) []string {
-	var texts []string
-	for _, line := range lines {
-		for range 1 + line.Repeats {
-			texts = append(texts, line.Text)
-		}
-	}
-	return texts
-}
-
 // REP（CSI Ps b）は、直前の字を Ps 回打つのと同じである。画面より長い回数を減らして打っても、画面、カーソル、
 // 折り返しを待つ状態、流れた行は、字を1つずつ打ったときと同じでなければならない。
 func TestRepeatingACharacterDrawsWhatTypingItDraws(t *testing.T) {
@@ -144,20 +133,5 @@ func TestARepeatLongerThanTheScreenLeavesTheSameLineOnceWithItsCount(t *testing.
 	want := append([]string{"top"}, slices.Repeat([]string{"aaaaa"}, 13108-2)...)
 	if got := expandLeftLines(left); !slices.Equal(got, want) {
 		t.Fatalf("left %d lines, want %d: %q", len(got), len(want), got[:min(len(got), 8)])
-	}
-}
-
-// 1回の読み取りで、そのバイト数より多くの行が流れても（SU で何度も画面を流す）、ログの行は落ちない。
-func TestALongReadKeepsEveryLineThatLeft(t *testing.T) {
-	const height, scrolls = 24, 3000
-	emulator := NewLeavingLinesEmulator(20, height)
-	var numbered []string
-	for row := 1; row <= height; row++ {
-		numbered = append(numbered, fmt.Sprint(row))
-	}
-	writeAll(t, emulator, strings.Join(numbered, "\r\n")+strings.Repeat("\x1b[99S", scrolls))
-	left := expandLeftLines(emulator.TakeLeftLines())
-	if len(left) != height*scrolls || !slices.Equal(left[:height], numbered) {
-		t.Fatalf("left %d lines starting %q, want %d starting with the numbered rows", len(left), left[:min(len(left), 3)], height*scrolls)
 	}
 }

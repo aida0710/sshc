@@ -1,7 +1,9 @@
 package vt
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -10,6 +12,17 @@ func writeAll(t *testing.T, e *SnapshotEmulator, text string) {
 	if _, err := e.Write([]byte(text)); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// expandLeftLines は、続けて同じ行が流れたことを Repeats で表した行を、1行ずつに戻す。
+func expandLeftLines(lines []LeftLine) []string {
+	var texts []string
+	for _, line := range lines {
+		for range 1 + line.Repeats {
+			texts = append(texts, line.Text)
+		}
+	}
+	return texts
 }
 
 func TestLinesScrolledOffTheTopLeaveTheScreenInOrder(t *testing.T) {
@@ -70,5 +83,20 @@ func TestTheSnapshotEmulatorKeepsNoLeavingLines(t *testing.T) {
 	writeAll(t, e, "one\r\ntwo\r\nthree\r\n")
 	if got := e.TakeLeftLines(); got != nil {
 		t.Fatalf("left = %v, want none from an emulator that is not keeping them", got)
+	}
+}
+
+// 1回の読み取りで、そのバイト数より多くの行が流れても（SU で何度も画面を流す）、ログの行は落ちない。
+func TestALongReadKeepsEveryLineThatLeft(t *testing.T) {
+	const height, scrolls = 24, 3000
+	emulator := NewLeavingLinesEmulator(20, height)
+	var numbered []string
+	for row := 1; row <= height; row++ {
+		numbered = append(numbered, fmt.Sprint(row))
+	}
+	writeAll(t, emulator, strings.Join(numbered, "\r\n")+strings.Repeat("\x1b[99S", scrolls))
+	left := expandLeftLines(emulator.TakeLeftLines())
+	if len(left) != height*scrolls || !slices.Equal(left[:height], numbered) {
+		t.Fatalf("left %d lines starting %q, want %d starting with the numbered rows", len(left), left[:min(len(left), 3)], height*scrolls)
 	}
 }
