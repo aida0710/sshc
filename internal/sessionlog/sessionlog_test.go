@@ -240,6 +240,16 @@ func TestASecretWithALineBreakIsHiddenOnTheLinesTheShellShowsItOn(t *testing.T) 
 	}
 }
 
+func TestASecretThatOnlyEndsWithALineBreakIsHiddenWhateverItsLength(t *testing.T) {
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"r100pw\n"})
+		log.Write([]byte("$ login r100pw\r\n"))
+	})
+	if lines := logLines(got); len(lines) != 1 || lines[0] != "$ login [secret]" {
+		t.Fatalf("lines = %q", lines)
+	}
+}
+
 func TestAShortLineOfASecretWithALineBreakIsLeftSoOrdinaryWordsStay(t *testing.T) {
 	// 改行を含む値の短い行まで伏せると、同じ語のふつうの出力も消える。
 	got := readLog(t, func(log *Log) {

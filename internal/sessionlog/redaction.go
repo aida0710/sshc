@@ -55,20 +55,31 @@ func (r *lineRedactor) addSecrets(values []string) {
 	}
 }
 
-// secretForms は、value がログに映りうる形を返す。値そのものと、値が改行を含むときはその行のうち
-// minimumSecretLineLength 以上のもの（前後の空白を除いて）である。考え方は VPN の docker logs で
-// 設定ファイルの鍵の行を伏せる openVPNInlineLines と同じ。
+// secretForms は、value がログに映りうる形を返す。改行を含まない値は、そのまま返す。画面の行は改行を
+// 含まないので、改行を含む値は行に分けて（前後の空白を除いて）返す。文字のある行が1つだけならその行を、
+// 2つ以上なら minimumSecretLineLength 以上の行を返す。考え方は VPN の docker logs で設定ファイルの鍵の
+// 行を伏せる openVPNInlineLines と同じ。
 func secretForms(value string) []string {
 	if value == "" {
 		return nil
 	}
-	forms := []string{value}
 	if !strings.ContainsAny(value, "\r\n") {
-		return forms
+		return []string{value}
 	}
+	var lines []string
 	for _, line := range strings.FieldsFunc(value, isLineBreak) {
-		if trimmed := strings.TrimSpace(line); utf8.RuneCountInString(trimmed) >= minimumSecretLineLength {
-			forms = append(forms, trimmed)
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			lines = append(lines, trimmed)
+		}
+	}
+	if len(lines) == 1 {
+		// 改行で終わるだけの値は、その1行が値そのものなので、短くても伏せる。
+		return lines
+	}
+	var forms []string
+	for _, line := range lines {
+		if utf8.RuneCountInString(line) >= minimumSecretLineLength {
+			forms = append(forms, line)
 		}
 	}
 	return forms
