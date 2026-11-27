@@ -26,8 +26,12 @@ generate:
 	@# Go の検証規則と適合コーパスを web 用に生成する。規則の定義は Go 側に置く。
 	go run ./internal/validate/cmd/rulegen .
 
+# make test のコメントの言語の検査と make check-commits が比べる先。どちらも、この先と分かれた所からの
+# 変更だけを見る。`make test COMMITS_BASE=<コミット>` のように変えられる。
+COMMITS_BASE ?= origin/main
+
 # push の前に走らせる検査。CI の Go native（Linux）のジョブ全体と、Web のジョブの
-# lint（Oxlint）・単体テスト・型検査と、Dead code のジョブに当たる。生成物の検査は
+# lint（Oxlint）・単体テスト・型検査・コメントの言語の検査と、Dead code のジョブに当たる。生成物の検査は
 # make verify-generated、主要画面の axe 検査は make e2e に含まれる。
 #
 # Go のテストのうち2つ（CSP の trusted-types と、バイナリが埋め込んだ画面を配るかの検査）は、
@@ -47,6 +51,10 @@ test:
 	GOOS=freebsd GOARCH=amd64 CGO_ENABLED=0 go build ./...
 	GOOS=openbsd GOARCH=amd64 CGO_ENABLED=0 go build ./...
 	$(MAKE) deadcode
+	@# 足したコメントが日本語かを検査する。CI は PR の差分を見るが、手元では COMMITS_BASE と分かれた所から
+	@# 作業ツリーまでを見る。
+	node --test scripts/ci/comment-language/*.test.mjs
+	node scripts/ci/check-comment-language.mjs "$(COMMITS_BASE)"
 	npm run lint --prefix web
 	npm test --prefix web
 	npm run typecheck --prefix web
@@ -59,7 +67,6 @@ deadcode:
 # ブランチのコミットメッセージに、帰属の行と社内の URL が無いか（コミットが1つなら件名の形も）を検査する。PR の CI
 # （.github/workflows/pull-request-text.yml）と同じスクリプトで、PR のタイトルと本文は CI が検査する。
 # 比べる先は `make check-commits COMMITS_BASE=<コミット>` で変えられる。
-COMMITS_BASE ?= origin/main
 check-commits:
 	scripts/ci/check-pr-text.sh "$(COMMITS_BASE)" HEAD
 
