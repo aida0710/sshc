@@ -1,4 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
+import { minimumPanePx } from "../src/terminal/splitView/geometry";
 import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 import { saveEverything } from "./support/saveBar";
 import { drawnRowsIn, hideTerminalScrollbars, terminalHostBottomOverflow, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
@@ -161,6 +162,103 @@ test("keeps the header's buttons inside a pane of a nested split, however narrow
   const bounds = (await middle.boundingBox())!;
   const close = (await middle.getByRole("button", { name: "Remove Middle from split view" }).boundingBox())!;
   expect(close.x + close.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+});
+
+// 長い名前は、見出しで縮まないと右のボタンに重なる。
+const longTitles = [
+  "pelican-production-kubernetes-node-pool-a",
+  "mirage-staging-database-migration-watch",
+  "dunlin-build-runner-for-the-nightly-images",
+  "r100-log-collector-for-the-whole-cluster",
+];
+
+// expectPaneKeepsItsHeader は、ペインが最小幅を保ち、見出しの名前が［Find］に重ならず、
+// ［… を分割表示から外す］がペインの中にあることを確かめる。
+async function expectPaneKeepsItsHeader(terminal: Locator, title: string) {
+  const bounds = (await terminal.boundingBox())!;
+  expect(bounds.width).toBeGreaterThanOrEqual(minimumPanePx.width);
+  const name = (await terminal.getByText(title, { exact: true }).boundingBox())!;
+  const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+  expect(name.x + name.width).toBeLessThanOrEqual(find.x);
+  const close = (await terminal.getByRole("button", { name: `Remove ${title} from split view`, exact: true }).boundingBox())!;
+  expect(close.x + close.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+}
+
+test("keeps each pane its minimum width, its name clear of its buttons and its close button inside, as panes are added on the right", async ({ page, installation }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const ids: string[] = [];
+  for (const title of longTitles) ids.push(await openNamedShell(page, title));
+  await page.getByRole("button", { name: longTitles[0]!, exact: true }).click();
+  // 足したセッションが表示中になるので、毎回その右に足す。
+  for (const title of longTitles.slice(1)) await splitWithMenu(page, title);
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(4);
+  await waitForTerminalLayout(page);
+  for (const [index, id] of ids.entries()) await expectPaneKeepsItsHeader(pane(page, id), longTitles[index]!);
+});
+
+test("keeps each pane its minimum width when the window is narrowed after a divider was dragged", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const [leftTitle, rightTitle] = longTitles as [string, string];
+  const left = await openNamedShell(page, leftTitle);
+  const right = await openNamedShell(page, rightTitle);
+  await page.getByRole("button", { name: leftTitle, exact: true }).click();
+  await splitWithMenu(page, rightTitle);
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
+
+  // 仕切りを右の端まで動かし、右のペインを最小幅にしてから、窓を狭める。
+  const separator = page.getByRole("separator", { name: "Resize split view" });
+  const box = (await separator.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(1270, box.y + box.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await page.setViewportSize({ width: 1000, height: 800 });
+
+  await waitForTerminalLayout(page);
+  await expectPaneKeepsItsHeader(pane(page, left), leftTitle);
+  await expectPaneKeepsItsHeader(pane(page, right), rightTitle);
+});
+
+test("keeps a long name in a pane's header clear of its buttons", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await openApplication(page, installation);
+  const [leftTitle, rightTitle] = longTitles as [string, string];
+  const left = await openNamedShell(page, leftTitle);
+  const right = await openNamedShell(page, rightTitle);
+  await page.getByRole("button", { name: leftTitle, exact: true }).click();
+  await splitWithMenu(page, rightTitle);
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
+  await waitForTerminalLayout(page);
+  await expectPaneKeepsItsHeader(pane(page, left), leftTitle);
+  await expectPaneKeepsItsHeader(pane(page, right), rightTitle);
+});
+
+test("adds a session beside a full row only on the side that has room", async ({ page, installation }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await openApplication(page, installation);
+  const ids: string[] = [];
+  for (const title of longTitles) ids.push(await openNamedShell(page, title));
+  await page.getByRole("button", { name: longTitles[0]!, exact: true }).click();
+  for (const title of longTitles.slice(1, 3)) await splitWithMenu(page, title);
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(3);
+
+  // 3つ並ぶとこの幅は埋まるので、4つ目は右には足せず、下には足せる。
+  const fourth = longTitles[3]!;
+  await page.getByRole("button", { name: `Actions for ${fourth}`, exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Show in split view on the right", exact: true })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "Show in split view below", exact: true })).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await dragSession(page, { title: fourth, target: pane(page, ids[2]!), edge: "right" });
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(3);
+
+  await splitWithMenu(page, fourth, "below");
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(4);
+  await waitForTerminalLayout(page);
+  for (const [index, id] of ids.entries()) await expectPaneKeepsItsHeader(pane(page, id), longTitles[index]!);
 });
 
 test("takes one session out of a split from the terminal's menu on a phone, and keeps the session", async ({ page, installation }) => {
