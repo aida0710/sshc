@@ -19,7 +19,7 @@ import (
 var forwardedFileRequestHeaders = []string{"Content-Type", "Range", "If-Range"}
 
 // forwardedFileResponseHeaders は、ファイルの中身を運ぶ答えのうち、ブラウザへそのまま渡すヘッダーである。
-// 長さと範囲、保存するときの名前（Content-Disposition）、版（ETag）を足す。接続先の cookie や
+// 長さと範囲、保存するときの名前（Content-Disposition）、ETag を足す。接続先の cookie や
 // セキュリティのヘッダーは渡さない。Content-Security-Policy と X-Content-Type-Options は、
 // このマシンのエンジンがどの答えにも付ける（httpserver の Security）。Content-Type は、このマシンが
 // 1つに決めて書く（copyAnswerHeaders）。
@@ -28,7 +28,7 @@ var forwardedFileResponseHeaders = []string{
 }
 
 // forwardedMediaResponseHeaders は、音声と動画の答えのうち、ブラウザへそのまま渡すヘッダーである。
-// 途中から再生するための長さと範囲、版だけを渡す。種類、Content-Disposition、Cache-Control は、
+// 途中から再生するための長さと範囲、ETag だけを渡す。種類、Content-Disposition、Cache-Control は、
 // このマシンのメディアの受け口（httpserver の StreamMedia）と同じものをこのマシンが書く（handOverMedia）。
 var forwardedMediaResponseHeaders = []string{"Content-Length", "Content-Range", "Accept-Ranges", "ETag"}
 

@@ -229,7 +229,7 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// writeUntypedPage は、種類を付けずにページを返す。偽の接続先の Go の server が本文から種類を推し量らないよう、
+// writeUntypedPage は、種類を付けずにページを返す。偽の接続先の Go の server が本文から種類を判定しないよう、
 // Content-Type を nil にする。
 func writeUntypedPage(w http.ResponseWriter, status int) {
 	w.Header()["Content-Type"] = nil
@@ -496,7 +496,7 @@ type servedAnswer struct {
 }
 
 // serveLikeThisMachine は、forward を Go の HTTP の server に載せて GET し、ブラウザが受け取る答えを返す。
-// ResponseRecorder と違い、server は種類の無い答えに本文から種類を推し量って付ける（このマシンのエンジンと同じ）。
+// ResponseRecorder と違い、server は種類の無い答えに、本文から判定した種類を付ける（このマシンのエンジンと同じ）。
 func serveLikeThisMachine(t *testing.T, forward func(http.ResponseWriter, *http.Request) error) servedAnswer {
 	t.Helper()
 	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -556,7 +556,7 @@ func TestTheForwardedMediaRouteHandsOverOnlyAudioAndVideo(t *testing.T) {
 }
 
 // 取り次ぐ答えの種類は、このマシンが1つだけ書く。種類が無いと、このマシンの Go の server が本文から
-// text/html を推し量る。2つあると、ブラウザは後ろの種類で読む。どちらも、中身の分からない答えにする。
+// text/html と判定する。2つあると、ブラウザは後ろの種類で読む。どちらも、中身の分からない答えにする。
 func TestAForwardedAnswerReachesTheBrowserWithExactlyOneContentType(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
 	manager := newEngineManager(t, remote, "v9")

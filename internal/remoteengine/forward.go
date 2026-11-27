@@ -45,8 +45,8 @@ var ErrRequestTooLarge = errors.New("the request body is too large to forward")
 var forwardedResponseHeaders = []string{"Cache-Control"}
 
 // unknownContentType は、接続先の答えの種類が1つに決まらないとき（無い、2つ以上ある、読めない）に書く種類である。
-// 種類の無い答えには、このマシンの Go の server が本文から text/html などを推し量って付ける
-// （X-Content-Type-Options: nosniff はブラウザへの指示で、server の推し量りは止めない）。種類が2つあると、
+// 種類の無い答えには、このマシンの Go の server が本文から判定した text/html などを付ける
+// （X-Content-Type-Options: nosniff はブラウザへの指示で、server の判定は止めない）。種類が2つあると、
 // ブラウザは後ろの種類で読む。どちらも、中身の分からない答えとして渡す。
 const unknownContentType = "application/octet-stream"
 
