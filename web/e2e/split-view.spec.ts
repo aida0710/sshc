@@ -249,7 +249,9 @@ test("adds a session beside a full row only on the side that has room", async ({
   // 3つ並ぶとこの幅は埋まるので、4つ目は右には足せず、下には足せる。
   const fourth = longTitles[3]!;
   await page.getByRole("button", { name: `Actions for ${fourth}`, exact: true }).click();
-  await expect(page.getByRole("menuitem", { name: "Show in split view on the right", exact: true })).toBeDisabled();
+  const right = page.getByRole("menuitem", { name: "Show in split view on the right", exact: true });
+  await expect(right).toBeDisabled();
+  await expect(right).toHaveAttribute("title", "Not wide enough to split side by side");
   await expect(page.getByRole("menuitem", { name: "Show in split view below", exact: true })).toBeEnabled();
   await page.keyboard.press("Escape");
   await dragSession(page, { title: fourth, target: pane(page, ids[2]!), edge: "right" });
