@@ -83,23 +83,27 @@ const (
 	// MaxRequestBodyCeiling は、あらゆる /api/ リクエストの body を読む際の
 	// 絶対的な上限である。各ハンドラは自前のより小さな制限を課すが、これが存在するのは、
 	// 後で追加されたルートが忘れて無制限の body を読めないようにするためだ。
-	MaxRequestBodyCeiling         = 2 << 20
+	MaxRequestBodyCeiling         = handoff.MaxRequestBodyCeiling
 	MaxSFTPUploadRangeBodyCeiling = int64(4 << 30)
 	// JSON can encode one text byte as six bytes (\uXXXX); the envelope
 	// must not reduce the editor's decoded 2 MiB limit.
 	MaxSFTPTextJSONBodyCeiling = 6*sshcSFTP.MaxEditableFileBytes + (16 << 10)
 )
 
+// requestBodyCeiling は、要求の本文の上限を返す。リモートセッションの操作（/api/v1/engines/<接続名>/…）は、
+// このマシンの同じ操作と同じ上限にする。取り次ぎは、大きい本文を溜めずに接続先へ流し、接続先のエンジンが
+// 自分の操作の上限で確かめる。
 func requestBodyCeiling(request *http.Request) int64 {
-	textRoute := strings.TrimPrefix(request.URL.Path, "/api/v1/sftp/")
-	if request.Method == http.MethodPut && textRoute != request.URL.Path && strings.Count(textRoute, "/") == 1 && strings.HasSuffix(textRoute, "/text") {
+	path := thisMachinesPath(request.URL.Path)
+	textRoute := strings.TrimPrefix(path, "/api/v1/sftp/")
+	if request.Method == http.MethodPut && textRoute != path && strings.Count(textRoute, "/") == 1 && strings.HasSuffix(textRoute, "/text") {
 		return MaxSFTPTextJSONBodyCeiling
 	}
-	if request.Method == http.MethodPatch && strings.HasPrefix(request.URL.Path, "/api/v1/sftp/") &&
-		strings.Contains(request.URL.Path, "/uploads/") && request.URL.Query().Get("range") == "true" {
+	if request.Method == http.MethodPatch && strings.HasPrefix(path, "/api/v1/sftp/") &&
+		strings.Contains(path, "/uploads/") && request.URL.Query().Get("range") == "true" {
 		return MaxSFTPUploadRangeBodyCeiling
 	}
-	if request.Method == http.MethodPost && request.URL.Path == backgroundsRoute {
+	if request.Method == http.MethodPost && path == backgroundsRoute {
 		return MaxBackgroundUploadBodyCeiling
 	}
 	return MaxRequestBodyCeiling

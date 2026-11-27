@@ -507,6 +507,35 @@ func TestAForwardedRequestCarriesTheConfirmationTokenToTheRemoteEngine(t *testin
 	}
 }
 
+// 本文を溜めて取り次ぐ要求も、このマシンの入口が受ける大きさ（共通の上限）までは運ぶ。小さいと、このマシンでは
+// 保存できる大きい SSH の設定などが、リモートセッションでだけ断られる。
+func TestAForwardedRequestCarriesABodyAsLargeAsThisMachinesEntranceAccepts(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Repeat("a", handoff.MaxRequestBodyCeiling)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/engines/r100/terminal/sessions", strings.NewReader(body))
+	recorder := httptest.NewRecorder()
+	if err := manager.ForwardAPI(recorder, request, "r100", "/api/v1/terminal/sessions"); err != nil {
+		t.Fatal(err)
+	}
+	var received struct {
+		Body string `json:"body"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &received); err != nil || len(received.Body) != len(body) {
+		t.Fatalf("the remote engine received %d of %d bytes (%v)", len(received.Body), len(body), err)
+	}
+
+	// このマシンの入口は、長さを言わない本文を上限で切る。切られた本文は、大きすぎる本文として断る。
+	cut := httptest.NewRequest(http.MethodPost, "/api/v1/engines/r100/terminal/sessions", nil)
+	cut.Body = http.MaxBytesReader(httptest.NewRecorder(), io.NopCloser(strings.NewReader(body+"a")), handoff.MaxRequestBodyCeiling)
+	if err := manager.ForwardAPI(httptest.NewRecorder(), cut, "r100", "/api/v1/terminal/sessions"); !errors.Is(err, ErrRequestTooLarge) {
+		t.Fatalf("a body the entrance cut off = %v, want ErrRequestTooLarge", err)
+	}
+}
+
 func TestOnlyAnAddedEngineIsForwardedToAndRemovingItKeepsTheRemoteRunning(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
 	manager := newEngineManager(t, remote, "v9")

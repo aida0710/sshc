@@ -21,6 +21,11 @@ const (
 	ActionHeader = "X-SSHC-Action"
 )
 
+// MaxRequestBodyCeiling は、エンジンの /api/ が要求の本文を読む共通の上限である（これより大きい本文を受ける
+// 操作は、internal/httpserver の requestBodyCeiling が決める）。このマシンのエンジンが実行先のエンジンへ本文を
+// 溜めて取り次ぐときも、この大きさまで運ぶ（internal/remoteengine）。
+const MaxRequestBodyCeiling = 2 << 20
+
 // ErrInvalidCLIAnswer is an answer to a /cli/ step that lacks what the engine always sends.
 var ErrInvalidCLIAnswer = errors.New("the engine's answer is incomplete or inconsistent")
 
