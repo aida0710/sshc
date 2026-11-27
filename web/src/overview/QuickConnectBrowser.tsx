@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isGroupOrDescendant } from "../rules/groupPath";
 import type { Overview } from "../api/config";
 import type { RecentConnection } from "../api/recentConnections";
@@ -24,8 +24,11 @@ import { formatDateTime } from "../ui/format";
 import { resultCountText } from "../connections/resultCount";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { literalTextEntry } from "../ui/softKeyboard";
+import { stuckToTopClass, useStuckToTop } from "../ui/useStuckToTop";
 
 type QuickConnectBrowserProps = {
+  // heading は、ページの見出し（と、その下の知らせ）。検索と同じ、一覧をスクロールしても上に残る所に置く。
+  heading?: ReactNode;
   overview: Overview;
   recent?: RecentConnection[];
   launching: string;
@@ -47,6 +50,20 @@ const homeView: StoredValue<QuickConnectView> = {
 const phoneGroupRow = "-mx-3 flex gap-2 overflow-x-auto px-3 [scrollbar-width:none]";
 const phoneGroupChip = "max-w-[70%] shrink-0";
 
+// 見出しから件数の行までは、一覧をスクロールしても上に残る。左右と上はページの板（PageBoard）の余白の外まで広げ、
+// 張り付いたときに、下を流れるカードが余白に覗かないようにする。値は PageBoard の板の余白と同じ。
+const pinnedTopEdges = {
+  phone: "-mx-3 -mt-3.5 px-3 pt-3.5",
+  wide: "-mx-8 -mt-[26px] px-8 pt-[26px]",
+} as const;
+// 張り付いている間だけ付ける下地と影。下を流れるカードが、透けてぼけて見えるようにする。地の色は、スマホでは
+// ページの地（canvas）、PC では板の地（sidebar）に合わせる。
+const pinnedTopGround = {
+  phone: "bg-[color-mix(in_srgb,var(--ui-canvas)_84%,transparent)]",
+  wide: "bg-[color-mix(in_srgb,var(--ui-sidebar)_84%,transparent)]",
+} as const;
+const pinnedTopGlass = "backdrop-blur-[10px] shadow-[0_4px_12px_rgb(0_0_0/0.08)]";
+
 function connectionDestination(server: BrowserServer): string {
   return connectionAddress({ hostName: server.host.hostName ?? server.identity.alias, user: server.host.user ?? "", port: server.host.port ?? "" });
 }
@@ -63,6 +80,7 @@ function belongsToGroup(server: BrowserServer, group: string): boolean {
 }
 
 export function QuickConnectBrowser({
+  heading,
   overview,
   recent = [],
   launching,
@@ -76,6 +94,9 @@ export function QuickConnectBrowser({
   const [view, changeView] = useStoredValue(homeView);
   const [selectedAlias, setSelectedAlias] = useState("");
   const pointerType = useRef("keyboard");
+  const pinnedTopRef = useRef<HTMLDivElement>(null);
+  const pinnedTopStuck = useStuckToTop(pinnedTopRef);
+  const layout = mobile ? "phone" : "wide";
   const index = useMemo(() => buildConnectionBrowserIndex(overview), [overview]);
   const recentByAlias = useMemo(
     () => new Map(recent.map((connection, position) => [connection.alias, { connection, position }])),
@@ -225,7 +246,8 @@ export function QuickConnectBrowser({
     />
   );
 
-  return (
+  // filters は、検索、表示の切り替え、グループ、件数の行。見出しと一緒に上に残る。
+  const filters = (
     <div className="flex flex-col gap-3">
       <div className={mobile ? "flex" : "grid grid-cols-[minmax(0,1fr)_auto] gap-2"}>
         <label className="relative min-w-0 flex-1">
@@ -299,6 +321,18 @@ export function QuickConnectBrowser({
       <div className="flex items-center gap-2">
         <h3 className="min-w-0 flex-1 text-xs font-normal text-ink-faint">{resultCountText(t, servers.length, index.servers.length)}</h3>
         {mobile ? viewSwitch : null}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col">
+      <div
+        ref={pinnedTopRef}
+        className={`${stuckToTopClass} z-[2] flex flex-col gap-[18px] pb-3 transition-[background-color,box-shadow] ${pinnedTopEdges[layout]} ${pinnedTopStuck ? `${pinnedTopGround[layout]} ${pinnedTopGlass}` : ""}`}
+      >
+        {heading}
+        {filters}
       </div>
 
       {servers.length === 0 ? (

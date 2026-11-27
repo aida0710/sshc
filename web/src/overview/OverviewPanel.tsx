@@ -110,9 +110,11 @@ export function OverviewPanel({
   const connectionCount = overview === null ? 0 : overview.hosts.filter((host) => host.identity.alias !== "").length;
   // With no connection yet there is nothing to search, count or manage, and the tiles lead to Sync.
   const noConnections = overview !== null && connectionCount === 0;
+  // 接続先を並べている間は、見出しが検索と一緒に、一覧をスクロールしても上に残る。そのため見出しは一覧の側が描く。
+  const listing = !loading && overview !== null && !noConnections;
 
-  return (
-    <PageBoard wide stretch={noConnections} labelledBy="home-heading" className="flex flex-col gap-[18px]">
+  const heading = (
+    <>
       <PageHeader
         title={t("home.heading")}
         headingId="home-heading"
@@ -122,10 +124,15 @@ export function OverviewPanel({
           </Button>
         )}
       />
-
       {loading || overview === null || !listsFailed ? null : (
         <Notice actions={retryButton}>{t("home.listsLoadFailed")}</Notice>
       )}
+    </>
+  );
+
+  return (
+    <PageBoard wide stretch={noConnections} labelledBy="home-heading" className="flex flex-col gap-[18px]">
+      {listing ? null : heading}
 
       <section aria-label={t("home.quickConnect")} className={noConnections ? "flex flex-1 flex-col" : undefined}>
         {loading ? (
@@ -141,6 +148,7 @@ export function OverviewPanel({
           />
         ) : (
           <QuickConnectBrowser
+            heading={heading}
             overview={overview}
             recent={recent}
             launching={launching}
