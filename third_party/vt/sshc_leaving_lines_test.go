@@ -100,3 +100,27 @@ func TestALongReadKeepsEveryLineThatLeft(t *testing.T) {
 		t.Fatalf("left %d lines starting %q, want %d starting with the numbered rows", len(left), left[:min(len(left), 3)], height*scrolls)
 	}
 }
+
+// 流れた行を残すエミュレーターは出力を区切って読むが、区切りで字を割らない。結合文字や ZWJ でつないだ字が
+// 区切りをまたいでも、1回で読んだときと同じ画面と、同じ流れた行になる。
+func TestReadingInPiecesKeepsCharactersThatSpanThePieces(t *testing.T) {
+	const width, height = 20, 6
+	var output strings.Builder
+	for line := range 600 {
+		output.WriteString("e\u0301\u0302\u0303日本\U0001F468\u200d\U0001F469\u200d\U0001F467")
+		if line%3 == 2 {
+			output.WriteString("\r\n")
+		}
+	}
+	pieces, whole := NewLeavingLinesEmulator(width, height), NewLeavingLinesEmulator(width, height)
+	writeAll(t, pieces, output.String())
+	if _, err := whole.Emulator.Write([]byte(output.String())); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := pieces.Snapshot(), whole.Snapshot(); got != want {
+		t.Fatalf("read in pieces, the screen is\n%q\nwant\n%q", got, want)
+	}
+	if got, want := expandLeftLines(pieces.TakeLeftLines()), expandLeftLines(whole.TakeLeftLines()); !slices.Equal(got, want) {
+		t.Fatalf("read in pieces, %d lines left, want %d", len(got), len(want))
+	}
+}

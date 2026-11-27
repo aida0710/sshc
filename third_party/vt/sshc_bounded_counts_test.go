@@ -12,12 +12,12 @@ import (
 const largestCount = "2147483646"
 
 // 回数が画面よりずっと大きくても、エミュレーターはすぐに読み終える。回数のとおりに繰り返すと、この出力を
-// 読むのに何分もかかる。
+// 読むのに何分もかかる。CSI のどの終わりの字も試すので、上流と揃えて回数のとおりに繰り返す処理が増えたら落ちる。
 func TestACountFarPastTheScreenIsReadAtOnce(t *testing.T) {
 	const sequences = 100
-	for _, sequence := range []string{
-		"\x1b[" + largestCount + "I", "\x1b[" + largestCount + "Z", "\x1b[" + largestCount + "X", "a\x1b[" + largestCount + "b",
-	} {
+	for final := byte('@'); final <= '~'; final++ {
+		// REP が繰り返す字を、毎回その前に置く。
+		sequence := "a\x1b[" + largestCount + string(final)
 		for name, newEmulator := range map[string]func(int, int) *SnapshotEmulator{
 			"snapshot": NewSnapshotEmulator, "leaving lines": NewLeavingLinesEmulator,
 		} {

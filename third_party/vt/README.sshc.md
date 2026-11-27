@@ -30,3 +30,5 @@ Keep the other files equal to upstream v0.1.0 when updating them, and check
 these files against the new internals. Check too that no upstream handler newly
 loops over a count taken from the output (as REP does) without a bound from the
 screen's size: the engine reads output while holding the session's lock.
+`TestACountFarPastTheScreenIsReadAtOnce` tries every CSI final with the largest
+count the parser passes.
