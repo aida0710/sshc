@@ -35,7 +35,8 @@ type RemoteEngineDirectory interface {
 	ForwardMediaAPI(w http.ResponseWriter, r *http.Request, alias, remotePath string) error
 	// DialRunTargetLoopback は、実行先の 127.0.0.1:port へ、取り次ぎの SSH の接続の上で TCP を開く。
 	DialRunTargetLoopback(ctx context.Context, alias string, port int) (net.Conn, error)
-	// CallAPI は、このマシンのエンジン自身が、実行先のエンジンのターミナルの API へ送る。
+	// CallAPI は、実行先のエンジンのターミナルの API へ要求を送り、答えを溜めて返す。転送を開く要求と、
+	// 転送を中継している実行先へのブラウザの要求の取り次ぎに使う。
 	CallAPI(ctx context.Context, alias string, call remoteengine.APICall) (remoteengine.APIAnswer, error)
 	ForwardTerminalStream(w http.ResponseWriter, r *http.Request, alias string) error
 }
