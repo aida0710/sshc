@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TerminalSession } from "../api/terminalSessions";
 import { translatorFor } from "../testing/translator";
-import { exitedAbnormally, sessionMarkerClass, sessionStateText, sessionStatusText, sessionStatusTone } from "./sessionStatus";
+import { exitedAbnormally, rowProblemText, sessionMarkerClass, sessionStateText, sessionStatusText, sessionStatusTone } from "./sessionStatus";
 
 
 const base: TerminalSession = {
@@ -70,5 +70,17 @@ describe("sessionStateText", () => {
 
   it("does not give the engine's unknown exit status as a status", () => {
     expect(sessionStateText(t, { ...base, state: "exited", exited: { code: -1, signal: "", at: "" } })).toBe("exited");
+  });
+});
+
+describe("a session whose host key could not be saved to a known_hosts outside ~/.ssh", () => {
+  const t = translatorFor("en");
+  const refused: TerminalSession = { ...base, problem: "known_hosts_outside_workspace", exited: { code: -1, signal: "", at: "" } };
+
+  it("gives the same short reason as a symlinked known_hosts, and says in full where to save the key", () => {
+    expect(rowProblemText(t, refused.problem)).toBe(rowProblemText(t, "known_hosts_symlink"));
+    for (const said of ["UserKnownHostsFile", "inside ~/.ssh", "connect once with ssh"]) {
+      expect(sessionStatusText(t, refused)).toContain(said);
+    }
   });
 });

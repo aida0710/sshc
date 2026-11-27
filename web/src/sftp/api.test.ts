@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient, whenLocked, whenRequestFailed } from "../api/client";
+import { hostKeyProblemCodes } from "../shell/hostKeyProblems";
 import { sftpApi } from "./api";
 
 describe("sftpApi resumable download", () => {
@@ -67,7 +68,7 @@ describe("sftpApi resumable download", () => {
   it("leaves a host key refusal to the screen that asked, which says it in the terminal's words", async () => {
     const diagnostic = vi.fn();
     whenRequestFailed(diagnostic);
-    for (const code of ["host_key_declined", "host_key_unknown", "host_key_changed", "host_key_revoked", "known_hosts_symlink"]) {
+    for (const code of hostKeyProblemCodes) {
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(
         JSON.stringify({ code, message: "request rejected" }),
         { status: 502, headers: { "Content-Type": "application/problem+json" } },

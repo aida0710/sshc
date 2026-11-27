@@ -1109,6 +1109,8 @@ export const en = {
     "The host key is marked as revoked and cannot be used.",
   "terminal.knownHostsSymlink":
     "The host key could not be saved because known_hosts is a symbolic link. Connect once with ssh to add the key, then connect again.",
+  "terminal.knownHostsOutsideWorkspace":
+    "The host key could not be saved because UserKnownHostsFile points outside ~/.ssh. Set UserKnownHostsFile to a file inside ~/.ssh, or connect once with ssh to add the key, then connect again.",
   "terminal.identityUnavailable":
     "No usable identity or SSH agent key is available.",
   "terminal.authenticationUnavailable":

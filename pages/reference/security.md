@@ -96,7 +96,7 @@ sshcで変更を保存すると、変更前のファイルをバックアップ�
 | `StrictHostKeyChecking`が`no`または`accept-new` | OpenSSHと同じく確認なしで保存する |
 | `StrictHostKeyChecking`が`yes`（`true`） | 保存せず、接続しない |
 
-保存先は`UserKnownHostsFile`の最初のファイルです。sshcが保存するのは`~/.ssh`の中のファイルだけで、`/dev/null`などそれ以外を指している場合は保存されません。
+保存先は`UserKnownHostsFile`の最初のファイルです。sshcが保存するのは`~/.ssh`の中のファイルだけで、`/dev/null`と`none`の場合は保存しません。`~/.ssh`の外のファイルを指している場合、`StrictHostKeyChecking`が`no`または`accept-new`の接続先は、新しいホストに接続できません。登録済みのホストには接続できます。`UserKnownHostsFile`に`~/.ssh`の中のファイルを指定するか、`ssh`で一度接続して鍵を登録してください。確認が表示される接続では、保存せずに接続し、次の接続でも確認が表示されます。
 
 `KnownHostsCommand`は実行しないため、これを設定した接続先では、`StrictHostKeyChecking`が`no`や`accept-new`でも確認が表示されます。
 
