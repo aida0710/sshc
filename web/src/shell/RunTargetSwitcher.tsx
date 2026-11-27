@@ -5,7 +5,6 @@ import { runTargetRefusalCause, runTargetRefusalState } from "../terminal/runTar
 import type { RunTargetLink } from "../terminal/useRunTargetLink";
 import type { RunTargetsState } from "../terminal/useRunTargets";
 import { Icon } from "../ui/icons";
-import { menuItemClass } from "../ui/menuStyle";
 import { Spinner } from "../ui/Spinner";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { EngineInfoDialog } from "./EngineInfoDialog";
@@ -14,7 +13,7 @@ import { RemoteVaultUnlockDialog } from "./RemoteVaultUnlockDialog";
 import { HostPickerDialog } from "./HostPickerDialog";
 import { chooseRunTarget, runTargetChoices } from "./runTargetChoice";
 import { recentConnectionsApi } from "../api/recentConnections";
-import { IconButton } from "../ui/IconButton";
+import { ActionMenu, hideOnHoverAtPcSize, revealOnHoverAtPcSize, type ActionMenuItem } from "../ui/ActionMenu";
 
 // リモートセッションに足す sshc エンジンは、このマシンの接続先から選ぶ。最近使ったものも、このマシンのものを出す。
 const loadThisMachineRecent = () => recentConnectionsApi.recentConnections();
@@ -43,13 +42,21 @@ export function RunTargetSwitcher({
   const t = useTranslate();
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState(false);
-  // actionsFor is the engine whose actions are unfolded under its row. They
-  // unfold in place: a menu of its own would sit outside this popover and
-  // close it.
-  const [actionsFor, setActionsFor] = useState<string | null>(null);
+  // menuFor は、［…］のメニューを開いているエンジン。右クリックでも開くので、ここで持つ。
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  useDismissibleLayer({ open, containerRefs: [rootRef], onDismiss: () => setOpen(false), returnFocusRef: triggerRef });
+  useDismissibleLayer({
+    open,
+    containerRefs: [rootRef],
+    // 行の［…］のメニューは、この一覧の上に重なる層として開く。新しい層は下の層を閉じさせる（superseded）が、
+    // 自分の行のメニューのときは一覧を開いたままにして、メニューを閉じたら一覧に戻る。
+    onDismiss: (reason) => {
+      if (reason === "superseded" && menuFor !== null) return;
+      setOpen(false);
+    },
+    returnFocusRef: triggerRef,
+  });
 
   const current = targets.selected ?? t("runTarget.thisMachine");
   const chosenState = linkStateWords();
@@ -67,6 +74,21 @@ export function RunTargetSwitcher({
       case "refused": return runTargetRefusalState(t, link.refusal);
     }
   }
+  // engineActions は、一覧の行の［…］のメニューの項目。メニューは上に重なる層なので、選んでもこの一覧は閉じず、
+  // 別の画面やダイアログへ移る項目だけが一覧を閉じる。
+  function engineActions(alias: string, connection: HostEntry | undefined): ActionMenuItem[] {
+    return [
+      { label: t("engineInfo.open"), onSelect: () => { setOpen(false); targets.engineInfo.ask(alias); } },
+      ...(connection === undefined ? [] : [{
+        // リモートセッションを選んでいる間、Connections はリモートの接続先を出すので、localhost に戻って開く。
+        label: t(targets.selected === null ? "runTarget.openConnectionSettings" : "runTarget.openConnectionSettingsLeaving"),
+        onSelect: () => { setOpen(false); onOpenConnectionSettings(connection.identity); },
+      }]),
+      { label: t("runTarget.openInNewTab"), onSelect: () => void targets.openInNewTab(alias) },
+      { label: t("runTarget.remove"), tone: "danger", onSelect: () => void targets.remove(alias) },
+    ];
+  }
+
   const row = (alias: string | null) => {
     const name = alias ?? t("runTarget.thisMachine");
     const chosen = targets.selected === alias;
@@ -78,7 +100,14 @@ export function RunTargetSwitcher({
     // connection は、このマシンの SSH の設定にあるその接続先。消したものには、設定を開く項目を出さない。
     const connection = alias === null ? undefined : hosts.find((host) => host.identity.alias === alias);
     return (
-      <li key={alias ?? ""} className={`flex flex-wrap items-center gap-1 rounded-md ${chosen ? "bg-select-fill" : "hover:bg-hover"}`}>
+      <li key={alias ?? ""}
+        // 右クリックか長押しでも［…］のメニューを開く。PC の大きさの画面では［…］が乗せたときだけ出るため。
+        onContextMenu={alias === null ? undefined : (event) => {
+          if (menuFor === alias) return;
+          event.preventDefault();
+          setMenuFor(alias);
+        }}
+        className={`group/row relative flex flex-wrap items-center gap-1 rounded-md ${chosen ? "bg-select-fill" : "hover:bg-hover"}`}>
         <button
           type="button"
           aria-current={chosen ? "true" : undefined}
@@ -88,36 +117,31 @@ export function RunTargetSwitcher({
           <LinkMark mark={chosen ? chosenMark(link) : alias === null || connected ? "live" : "idle"} />
           <span title={name} className={`min-w-0 grow truncate font-mono ${chosen ? "font-semibold text-accent" : "text-ink"}`}>{name}</span>
           {alias !== null && targets.unread.has(alias) ? <UnreadMark label={t("runTarget.unread")} /> : null}
-          <span className={`shrink-0 text-2xs ${chosen && link.phase === "refused" ? "text-danger" : "text-ink-faint"}`}>{note}</span>
+          {/* PC の大きさの画面で［…］を出している間は、状態の字を隠して場所を譲る。重ねると字が切れたように見える。 */}
+          <span className={`shrink-0 text-2xs ${chosen && link.phase === "refused" ? "text-danger" : "text-ink-faint"} ${
+            alias === null ? "" : menuFor === alias ? "desktop-layout:invisible" : hideOnHoverAtPcSize
+          }`}>{note}</span>
         </button>
+        {/* サイドバーのセッションの行と同じく、PC の大きさの画面では乗せた行（とキーボードで触れた行）にだけ［…］を出し、
+            行の右の状態の字の上に重ねる。スマホの組み方では行の中に常に出す。 */}
         {alias === null ? null : (
-          <IconButton label={t("runTarget.actions", { alias })} size="compact"
-            aria-expanded={actionsFor === alias}
-            onClick={() => setActionsFor((currentAlias) => currentAlias === alias ? null : alias)}>
-            <Icon name="moreHorizontal" className="size-3.5" />
-          </IconButton>
+          <div className={`flex shrink-0 items-center desktop-layout:absolute desktop-layout:right-1 desktop-layout:top-1 desktop-layout:rounded-md ${
+            chosen ? "desktop-layout:bg-select-fill" : "desktop-layout:bg-hover"
+          } ${menuFor === alias ? "" : revealOnHoverAtPcSize}`}>
+            <ActionMenu
+              label={t("runTarget.actions", { alias })}
+              items={engineActions(alias, connection)}
+              triggerSize="row"
+              triggerTouchDense
+              triggerClassName="focus:bg-select-fill"
+              iconClassName="size-3.5"
+              open={menuFor === alias}
+              onOpenChange={(next) => setMenuFor(next ? alias : null)}
+            />
+          </div>
         )}
         {refusalReason === "" ? null : (
           <p className="basis-full break-words px-2 pb-1 text-2xs leading-4 text-danger">{refusalReason}</p>
-        )}
-        {alias === null || actionsFor !== alias ? null : (
-          <div className="basis-full pb-1 pl-5">
-            <button type="button" onClick={() => { setActionsFor(null); setOpen(false); targets.engineInfo.ask(alias); }} className={menuItemClass()}>
-              {t("engineInfo.open")}
-            </button>
-            {connection === undefined ? null : (
-              <button type="button" onClick={() => { setActionsFor(null); setOpen(false); onOpenConnectionSettings(connection.identity); }} className={menuItemClass()}>
-                {/* リモートセッションを選んでいる間、Connections はリモートの接続先を出すので、localhost に戻って開く。 */}
-                {t(targets.selected === null ? "runTarget.openConnectionSettings" : "runTarget.openConnectionSettingsLeaving")}
-              </button>
-            )}
-            <button type="button" onClick={() => void targets.openInNewTab(alias)} className={menuItemClass()}>
-              {t("runTarget.openInNewTab")}
-            </button>
-            <button type="button" onClick={() => { setActionsFor(null); void targets.remove(alias); }} className={menuItemClass("danger")}>
-              {t("runTarget.remove")}
-            </button>
-          </div>
         )}
       </li>
     );
@@ -155,7 +179,8 @@ export function RunTargetSwitcher({
         type="button"
         aria-expanded={open}
         aria-label={chosenState === null ? t("runTarget.choose", { name: current }) : t("runTarget.chooseWhile", { name: current, state: chosenState })}
-        onClick={() => setOpen((value) => !value)}
+        // 一覧は開くたびに［…］のメニューを閉じた形で出す。前に開いたまま一覧ごと閉じたメニューを、また開かない。
+        onClick={() => { setMenuFor(null); setOpen((value) => !value); }}
         className={`flex h-10 w-full items-center gap-2 rounded-lg bg-well px-2.5 ${open ? "ring-1 ring-accent" : ""}`}
       >
         <LinkMark mark={chosenMark(link)} />
