@@ -2,9 +2,11 @@ package buildcontract
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -238,22 +240,39 @@ func TestPullRequestTextWorkflowChecksAgainWhenTheTextIsEdited(t *testing.T) {
 	// その間のコミットを読むには、分かれた所まで履歴が要る。
 	const checkCommand = "scripts/ci/check-pr-text.sh HEAD^1 HEAD^2"
 	found := false
-	for _, job := range document.Jobs {
-		for _, step := range job.Steps {
+	for id, job := range document.Jobs {
+		reportPullRequestTextInEnv(t, "jobs."+id, job.Env)
+		for stepIndex, step := range job.Steps {
+			reportPullRequestTextInEnv(t, fmt.Sprintf("jobs.%s step %d", id, stepIndex), step.Env)
 			if strings.HasPrefix(step.Uses, "actions/checkout@") && step.With["fetch-depth"] != 0 {
 				t.Errorf("the checkout fetches %v commits; the commits since the fork point need the whole history", step.With["fetch-depth"])
 			}
-			if strings.TrimSpace(step.Run) != checkCommand {
+			if !strings.Contains(step.Run, checkCommand) {
 				continue
 			}
 			found = true
-			if step.Env["PR_TITLE"] != "${{ github.event.pull_request.title }}" || step.Env["PR_BODY"] != "${{ github.event.pull_request.body }}" {
-				t.Errorf("the check must receive the title and the body as PR_TITLE and PR_BODY, got %v", step.Env)
+			for _, field := range []string{".pull_request.title", ".pull_request.body"} {
+				if !strings.Contains(step.Run, field) || !strings.Contains(step.Run, `"$GITHUB_EVENT_PATH"`) {
+					t.Errorf("the check must read %s from the event file $GITHUB_EVENT_PATH:\n%s", field, step.Run)
+				}
 			}
 		}
 	}
 	if !found {
 		t.Errorf("pull-request-text.yml must run %q", checkCommand)
+	}
+}
+
+// runner は env の値を step のログの先頭に書き出す。PR のタイトルと本文を env に書くと、消したい
+// URL が誰でも読める Actions のログに残るので、イベントのファイル（GITHUB_EVENT_PATH）から読む。
+var pullRequestTextExpression = regexp.MustCompile(`github\.event\.pull_request\.(title|body)\b`)
+
+func reportPullRequestTextInEnv(t *testing.T, place string, env map[string]string) {
+	t.Helper()
+	for name, value := range env {
+		if pullRequestTextExpression.MatchString(value) {
+			t.Errorf("%s puts the pull request title or body in env %s, which the runner prints to the log", place, name)
+		}
 	}
 }
 

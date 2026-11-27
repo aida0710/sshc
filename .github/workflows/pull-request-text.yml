@@ -31,9 +31,13 @@ jobs:
           filter: blob:none
           sparse-checkout: scripts/ci
           persist-credentials: false
+      # タイトルと本文は、イベントのファイルから読んで環境変数で渡す。run に ${{ }} で埋め込むと、
+      # PR を作った人がシェルのコマンドを書ける。step の env に書くと、runner が値をログの先頭に
+      # 書き出すので、消したい URL が誰でも読めるログに残る。
+      # 取り出したのは PR のマージコミットなので、1つ目の親が base、2つ目の親が PR の先頭になる。
       - name: Check the title, the body, and the commit messages
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-        # 取り出したのは PR のマージコミットなので、1つ目の親が base、2つ目の親が PR の先頭になる。
-        run: scripts/ci/check-pr-text.sh HEAD^1 HEAD^2
+        run: |
+          PR_TITLE="$(jq --raw-output '.pull_request.title' "$GITHUB_EVENT_PATH")"
+          PR_BODY="$(jq --raw-output '.pull_request.body // ""' "$GITHUB_EVENT_PATH")"
+          export PR_TITLE PR_BODY
+          scripts/ci/check-pr-text.sh HEAD^1 HEAD^2
