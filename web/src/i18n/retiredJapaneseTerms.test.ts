@@ -83,17 +83,17 @@ describe("versionの意味の「版」", () => {
 
 // 用語表の「シークレット」。「秘密」は「秘密鍵」（private key）では使うので、語だけでは誤りと言えない。
 // 「秘密値」「秘密情報」でない形（「秘密のファイル」など）も拾えるよう、鍵が続かない「秘密」を探す。
-const secretOtherThanPrivateKey = /秘密(?!鍵)/;
+const himitsuOtherThanPrivateKey = /秘密(?!鍵)/;
 
-function secretsWrittenAsHimitsuIn(wordings: Wording[]): string[] {
+function himitsuOtherThanPrivateKeyIn(wordings: Wording[]): string[] {
   return wordings
-    .filter((wording) => secretOtherThanPrivateKey.test(wording.text))
+    .filter((wording) => himitsuOtherThanPrivateKey.test(wording.text))
     .map((wording) => `${wording.location}: 「秘密」→「シークレット」`);
 }
 
 describe("secretの意味の「秘密」", () => {
   it("画面、Androidの文言、pagesでは「シークレット」と書く", () => {
-    expect(secretsWrittenAsHimitsuIn(userFacingJapanese())).toEqual([]);
+    expect(himitsuOtherThanPrivateKeyIn(userFacingJapanese())).toEqual([]);
   });
 });
 
