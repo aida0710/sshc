@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"sync"
 
@@ -57,6 +58,37 @@ func (failure *KnownHostsSymlinkError) Error() string {
 
 func (failure *KnownHostsSymlinkError) Unwrap() error { return failure.Err }
 
+func (failure *KnownHostsSymlinkError) sentence() string {
+	return "known_hostsがシンボリックリンクのため、ホスト鍵を保存できませんでした。sshで一度接続して鍵を登録してから、接続し直してください。"
+}
+
+// KnownHostsOutsideWorkspaceError は、受け入れたホスト鍵を保存する known_hosts のパスが
+// ~/.ssh の外にあり、保存できなかったことを報告する。
+//
+// sshc は ~/.ssh の中のファイルにだけ書く。外のファイルは照合には読むが、StrictHostKeyChecking が
+// accept-new か no のときに保存しないまま接続を続けると、鍵はいつまでも未知のままで、次の接続で
+// 別の鍵が来ても確認なしに受け入れることになるので、接続は失敗にする。ask は接続のたびに
+// フィンガープリントを見せて尋ねるので、保存せずに続ける（HostKeys.accept）。OpenSSH はその
+// ファイルへ書くので、ssh で一度接続すれば、sshc は次からその鍵と照合する。
+type KnownHostsOutsideWorkspaceError struct {
+	// Path は、保存しようとした UserKnownHostsFile の最初のファイルである。
+	Path string
+	Err  error
+}
+
+func (failure *KnownHostsOutsideWorkspaceError) Error() string {
+	return "cannot save the host key to " + failure.Path +
+		": sshc writes known_hosts files only inside ~/.ssh; set UserKnownHostsFile to a file inside ~/.ssh, " +
+		"or connect once with ssh to save the key, then connect with sshc again"
+}
+
+func (failure *KnownHostsOutsideWorkspaceError) Unwrap() error { return failure.Err }
+
+func (failure *KnownHostsOutsideWorkspaceError) sentence() string {
+	return "UserKnownHostsFileの" + failure.Path + "は~/.sshの外にあるため、ホスト鍵を保存できませんでした。" +
+		"UserKnownHostsFileに~/.sshの中のファイルを指定するか、sshで一度接続して鍵を登録してから、接続し直してください。"
+}
+
 // HostKeys は、known_hosts との突き合わせである。
 //
 // 読み書きを関数として受け取り、UI と接続処理が同じ known_hosts を使用できるようにする。
@@ -66,9 +98,9 @@ type HostKeys struct {
 	// nil なら、既知のホストは一つも無い。
 	Read func(path string) ([]byte, error)
 	// Add は受け入れた鍵を path の known_hosts へ書く。nil なら覚えない。接続は
-	// できるが、次も尋ねる。knownhosts.ErrNotWritable は、書かない場所を指していた
-	// ことを表し、接続は止めない。knownhosts.ErrSymlinkPath は接続を失敗にする
-	// （KnownHostsSymlinkError）。
+	// できるが、次も尋ねる。knownhosts.ErrNotWritable は、書かない場所（~/.ssh の外）を
+	// 指していたことを表し、accept-new と no の接続を失敗にする（KnownHostsOutsideWorkspaceError）。
+	// knownhosts.ErrSymlinkPath は接続を失敗にする（KnownHostsSymlinkError）。
 	Add func(path string, candidate knownhosts.Candidate) error
 }
 
@@ -405,15 +437,26 @@ func (h HostKeys) accept(target Target, key ssh.PublicKey, offered string, promp
 		return 0, "", ErrHostKeyDeclined
 	}
 	rememberedIn, err := h.remember(target, key, offered)
+	var outside *KnownHostsOutsideWorkspaceError
+	if errors.As(err, &outside) {
+		// 利用者がフィンガープリントを見て受け入れた。保存できなくても次の接続でまた尋ねるので、
+		// 別の鍵を確認なしに受け入れることにはならない。
+		return hostKeyConfirmed, "", nil
+	}
 	return hostKeyConfirmed, rememberedIn, err
 }
 
 // remember は、受け入れた鍵を UserKnownHostsFile の最初のファイルへ書き、書いた
-// ファイルを返す。UserKnownHostsFile が none のときと、sshc が書かない場所
-// （~/.ssh の外、/dev/null）のときは書かずに空を返す。~/.ssh の中でもリンクを
-// 経由するファイルには書けず、KnownHostsSymlinkError で接続を失敗にする。
+// ファイルを返す。UserKnownHostsFile が none か /dev/null のときは書かずに空を返す。
+// ~/.ssh の外のファイルには書けず KnownHostsOutsideWorkspaceError を、~/.ssh の中でも
+// リンクを経由するファイルには KnownHostsSymlinkError を返す。
 func (h HostKeys) remember(target Target, key ssh.PublicKey, offered string) (string, error) {
 	if h.Add == nil || len(target.KnownHosts.User) == 0 {
+		return "", nil
+	}
+	path := target.KnownHosts.User[0]
+	// /dev/null は、鍵を覚えないという利用者の指定である。OpenSSH も書いた鍵を捨てる。
+	if path == os.DevNull {
 		return "", nil
 	}
 	fingerprint, err := knownhosts.Fingerprint(offered)
@@ -425,13 +468,12 @@ func (h HostKeys) remember(target Target, key ssh.PublicKey, offered string) (st
 		// OpenSSH は HostKeyAlias をポートなしの名前として書く。
 		host, port = target.HostKeyAlias, knownhosts.DefaultPort
 	}
-	path := target.KnownHosts.User[0]
 	err = h.Add(path, knownhosts.Candidate{
 		Host: host, Port: port, KeyType: key.Type(), Key: offered, Fingerprint: fingerprint,
 	})
 	switch {
 	case errors.Is(err, knownhosts.ErrNotWritable):
-		return "", nil
+		return "", &KnownHostsOutsideWorkspaceError{Path: path, Err: err}
 	case errors.Is(err, knownhosts.ErrSymlinkPath):
 		return "", &KnownHostsSymlinkError{Path: path, Err: err}
 	case err != nil:

@@ -61,6 +61,7 @@ const rowProblemKeys: Readonly<Record<string, MessageKey>> = {
   host_key_declined: "terminal.rowProblem.hostKey",
   host_key_revoked: "terminal.rowProblem.hostKey",
   known_hosts_symlink: "terminal.rowProblem.hostKey",
+  known_hosts_outside_workspace: "terminal.rowProblem.hostKey",
   authentication_rejected: "terminal.rowProblem.authentication",
   authentication_unavailable: "terminal.rowProblem.authentication",
   authentication_cancelled: "terminal.rowProblem.authentication",

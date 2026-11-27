@@ -18,7 +18,7 @@ var (
 	ErrUnsupportedKeyType  = errors.New("unsupported host key type")
 	// ErrNotWritable は、sshc が書かない場所の known_hosts へ鍵を書こうとしたことを
 	// 報告する。書き込みはワークスペース（~/.ssh）の中だけで、journal と世代
-	// バックアップを残す。/dev/null を指す UserKnownHostsFile もここに当たる。
+	// バックアップを残す。
 	ErrNotWritable = errors.New("sshc writes known_hosts files only inside ~/.ssh")
 )
 

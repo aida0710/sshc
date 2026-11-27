@@ -258,6 +258,7 @@ func TestAnSFTPListingRefusedForItsHostKeyUsesTheTerminalsWords(t *testing.T) {
 		{err: fmt.Errorf("ssh: handshake failed: %w", sshclient.ErrHostKeyChanged), code: "host_key_changed"},
 		{err: fmt.Errorf("ssh: handshake failed: %w", sshclient.ErrHostKeyRevoked), code: "host_key_revoked"},
 		{err: fmt.Errorf("ssh: handshake failed: %w", &sshclient.KnownHostsSymlinkError{Path: "/home/ops/.ssh/known_hosts", Err: errors.New("link")}), code: "known_hosts_symlink"},
+		{err: fmt.Errorf("ssh: handshake failed: %w", &sshclient.KnownHostsOutsideWorkspaceError{Path: "/home/ops/.config/ssh/known_hosts", Err: errors.New("outside")}), code: "known_hosts_outside_workspace"},
 	}
 	for _, test := range tests {
 		response := serveSFTPProblem(test.err)

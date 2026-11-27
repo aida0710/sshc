@@ -8,6 +8,7 @@ export const hostKeyProblemMessages: CodeMessages = {
   host_key_changed: "terminal.hostKeyChanged",
   host_key_revoked: "terminal.hostKeyRevoked",
   known_hosts_symlink: "terminal.knownHostsSymlink",
+  known_hosts_outside_workspace: "terminal.knownHostsOutsideWorkspace",
 };
 
 // hostKeyProblemCodes は、その code の一覧である。SFTP の画面は、これらを共通の失敗の通知に出さず、自分で伝える。

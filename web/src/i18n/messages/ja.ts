@@ -1112,6 +1112,8 @@ export const ja = {
     "ホスト鍵は失効済みとして登録されているため接続できません。",
   "terminal.knownHostsSymlink":
     "known_hostsがシンボリックリンクのため、ホスト鍵を保存できませんでした。sshで一度接続して鍵を登録してから、接続し直してください。",
+  "terminal.knownHostsOutsideWorkspace":
+    "UserKnownHostsFileが~/.sshの外を指しているため、ホスト鍵を保存できませんでした。UserKnownHostsFileに~/.sshの中のファイルを指定するか、sshで一度接続して鍵を登録してから、接続し直してください。",
   "terminal.identityUnavailable":
     "利用できる秘密鍵またはssh-agentの鍵がありません。",
   "terminal.authenticationUnavailable":

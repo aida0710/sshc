@@ -239,7 +239,7 @@ func TestTheKnownHostsScreenReportsAFileItCannotRead(t *testing.T) {
 }
 
 // 接続が受け入れた鍵は、UserKnownHostsFile の最初のファイルへ書く。~/.ssh の外には
-// 書かない。/dev/null を指す設定もここに当たる。
+// 書かない。
 func TestRememberWritesOnlyInsideTheWorkspace(t *testing.T) {
 	service := newTestService(t, "", &recordingCollector{})
 	candidate := knownhosts.Candidate{Host: "db.example", Port: 2222, KeyType: fixtureKeyType, Key: fixtureKey}
@@ -262,6 +262,22 @@ func TestRememberWritesOnlyInsideTheWorkspace(t *testing.T) {
 	}
 	if _, err := os.Stat(outside); !os.IsNotExist(err) {
 		t.Fatal("a file outside the workspace was written")
+	}
+}
+
+// 既定の UserKnownHostsFile は、設定の解決がホームの表記（~/.ssh/known_hosts）で渡す。これを
+// ~/.ssh の外と取り違えると、accept-new の接続がすべて失敗になる。一時のフォルダがリンクを
+// 経由する macOS でも、ここへ書ける。
+func TestRememberWritesTheDefaultUserKnownHostsFileNamedFromTheHome(t *testing.T) {
+	service := newTestService(t, "", &recordingCollector{})
+	candidate := knownhosts.Candidate{Host: "mirage", Port: 22, KeyType: fixtureKeyType, Key: fixtureKey}
+
+	if err := service.Remember(filepath.Join(service.Workspace.Home(), ".ssh", "known_hosts"), candidate); err != nil {
+		t.Fatalf("Remember = %v", err)
+	}
+	contents, err := os.ReadFile(service.Path())
+	if want := "mirage " + fixtureKeyType + " " + fixtureKey + "\n"; err != nil || string(contents) != want {
+		t.Fatalf("known_hosts = %q, %v; want %q", contents, err, want)
 	}
 }
 

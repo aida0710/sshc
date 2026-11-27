@@ -24,13 +24,20 @@ func reconnectStopNotice(problem string) string {
 	return ""
 }
 
+// problemKnownHostsOutsideWorkspace は、UserKnownHostsFile が ~/.ssh の外を指すため、
+// accept-new か no の接続で受け入れた鍵を保存できず、接続を失敗にしたことを表す語である。
+const problemKnownHostsOutsideWorkspace = "known_hosts_outside_workspace"
+
 // hostKeyProblem は、ホスト鍵を受け入れなかった理由と、受け入れた鍵を保存できなかった理由を
 // 通信形式に変える。ターミナルと SFTP が同じ語を返し、画面は同じ文で伝える。
 func hostKeyProblem(err error) (string, bool) {
 	var symlinkedKnownHosts *sshclient.KnownHostsSymlinkError
+	var knownHostsOutsideWorkspace *sshclient.KnownHostsOutsideWorkspaceError
 	switch {
 	case errors.As(err, &symlinkedKnownHosts):
 		return problemKnownHostsSymlink, true
+	case errors.As(err, &knownHostsOutsideWorkspace):
+		return problemKnownHostsOutsideWorkspace, true
 	case errors.Is(err, sshclient.ErrHostKeyDeclined):
 		return "host_key_declined", true
 	case errors.Is(err, sshclient.ErrHostKeyUnknown):

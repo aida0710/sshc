@@ -11,6 +11,7 @@ import (
 	"io"
 	"maps"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -480,21 +481,20 @@ func TestHostKeyAliasNamesTheHostInKnownHosts(t *testing.T) {
 	}
 }
 
-// 受け入れた鍵は UserKnownHostsFile の最初のファイルへ書く。none なら書かない。
-// sshc が書かない場所（~/.ssh の外、/dev/null）なら、書かずに接続は続ける。
+// 受け入れた鍵は UserKnownHostsFile の最初のファイルへ書く。none と /dev/null なら、
+// 書かずに接続は続ける。~/.ssh の外のファイルの扱いは hostkey_outside_workspace_test.go が確かめる。
 func TestAnAcceptedKeyGoesToTheFirstUserKnownHostsFile(t *testing.T) {
 	host := newHostKey(t)
 	for _, test := range []struct {
-		name   string
-		user   []string
-		refuse error
-		want   string
+		name string
+		user []string
+		want string
 	}{
 		{name: "first file", user: []string{"/home/me/.ssh/work_hosts", "/home/me/.ssh/known_hosts"}, want: "/home/me/.ssh/work_hosts"},
 		{name: "none", user: nil},
-		{name: "outside the workspace", user: []string{"/dev/null"}, refuse: knownhosts.ErrNotWritable},
+		{name: "the null device", user: []string{os.DevNull}},
 	} {
-		files := &fakeKnownHostsFiles{refuse: test.refuse}
+		files := &fakeKnownHostsFiles{}
 		target := sshclient.Target{
 			HostName: "new.example", Port: "22", Strict: "no",
 			KnownHosts: sshclient.KnownHostsFiles{User: test.user},

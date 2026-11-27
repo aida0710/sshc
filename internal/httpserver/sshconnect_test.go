@@ -36,6 +36,7 @@ func TestConnectProblemNamesFailuresThatNeedUserAction(t *testing.T) {
 		{keys.ErrWrongPassphrase, "key_passphrase_required"},
 		{&sshclient.ExplainedError{Sentence: "切断されています。", Err: vpn.ErrRouteDisconnected}, "vpn_route_disconnected"},
 		{&sshclient.KnownHostsSymlinkError{Path: "/home/me/.ssh/known_hosts", Err: knownhosts.ErrSymlinkPath}, "known_hosts_symlink"},
+		{&sshclient.KnownHostsOutsideWorkspaceError{Path: "/home/me/.config/ssh/known_hosts", Err: knownhosts.ErrNotWritable}, "known_hosts_outside_workspace"},
 	} {
 		t.Run(test.code, func(t *testing.T) {
 			code, named := connectProblem(fmt.Errorf("wrapped: %w", test.err))
