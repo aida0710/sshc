@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { expect, openApplication, openSection, test } from "./support/environment";
 import { metadataSchemaVersion } from "./support/settings";
 import { terminalRoot } from "./support/terminal";
@@ -148,6 +149,42 @@ test("opens the action menu without connecting, then keeps settings and connect 
   await expect.poll(() => opened).toEqual([{ kind: "ssh", alias: "bastion" }]);
 });
 
+// manyConnections は、Home の一覧が画面に収まらないだけの接続先。
+const manyConnections = Array.from({ length: 40 }, (_, index) => `Host web-${String(index + 1).padStart(2, "0")}\n\tHostName 198.51.100.${String(index + 10)}\n`).join("\n");
+
+// scrollHomeToEnd は、Home をスクロールする枠を一番下まで送る。
+async function scrollHomeToEnd(page: Page) {
+  await page.getByRole("list", { name: "Available connections" }).evaluate((list) => {
+    let scroller: HTMLElement | null = list.parentElement;
+    while (scroller !== null && getComputedStyle(scroller).overflowY !== "auto") scroller = scroller.parentElement;
+    scroller?.scrollTo({ top: scroller.scrollHeight });
+  });
+}
+
+// pinnedTopShowsOverTheList は、張り付いた見出しの部分が、下を流れるカードより上に描かれているか。検索欄の真ん中を
+// 指したときに、カードではなく検索欄が答えれば、見出しは隠れていない。
+async function pinnedTopShowsOverTheList(page: Page): Promise<boolean> {
+  return page.getByRole("searchbox", { name: "Search connections" }).evaluate((search) => {
+    const box = search.getBoundingClientRect();
+    return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === search;
+  });
+}
+
+test("keeps the heading, the search and the view switch at the top while the connections scroll", async ({ page, installation }) => {
+  await installation.write("conf.d/20-web.conf", manyConnections);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openApplication(page, installation);
+  await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem")).not.toHaveCount(0);
+
+  await scrollHomeToEnd(page);
+  await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem").last()).toBeInViewport();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeInViewport();
+  await expect(page.getByRole("button", { name: "Manage connections" })).toBeInViewport();
+  await expect(page.getByRole("searchbox", { name: "Search connections" })).toBeInViewport();
+  await expect(page.getByRole("group", { name: "Connection layout" })).toBeInViewport();
+  expect(await pinnedTopShowsOverTheList(page)).toBe(true);
+});
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 411, height: 914 }, hasTouch: true, isMobile: true });
 
@@ -174,6 +211,19 @@ test.describe("on a phone", () => {
     expect(await row.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem").first()).toBeInViewport();
+  });
+
+  // スマホでは、見出しと［Connectionsを管理］は上のバーにあるので、検索から件数の行までが張り付く。
+  test("keeps the search and the view switch under the top bar while the connections scroll", async ({ page, installation }) => {
+    await installation.write("conf.d/20-web.conf", manyConnections);
+    await openApplication(page, installation);
+    await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem")).not.toHaveCount(0);
+
+    await scrollHomeToEnd(page);
+    await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem").last()).toBeInViewport();
+    await expect(page.getByRole("searchbox", { name: "Search connections" })).toBeInViewport();
+    await expect(page.getByRole("group", { name: "Connection layout" })).toBeInViewport();
+    expect(await pinnedTopShowsOverTheList(page)).toBe(true);
   });
 });
 
