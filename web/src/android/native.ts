@@ -21,6 +21,7 @@ export type AndroidBridge = {
   performHapticFeedback(feedback: HapticFeedback): void;
   firstScreenShown(): void;
   setBackTakenByPage(taken: boolean): void;
+  screenCorners(): string;
 };
 
 type AndroidWindow = Window & { sshcAndroid?: AndroidBridge };

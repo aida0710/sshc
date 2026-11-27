@@ -34,6 +34,8 @@ final class NativeBridge {
         void firstScreenShown();
         /** taken が false のとき、戻るは Android が受ける（PageBackCallback）。 */
         void setBackTakenByPage(boolean taken);
+        /** 画面の角の丸みの WebView への入り込み（ScreenCorners の JSON）。 */
+        String screenCorners();
     }
 
     /** 振動の種類が無いときの hapticFeedbackConstant の値。 */
@@ -195,6 +197,15 @@ final class NativeBridge {
     @JavascriptInterface
     public void setBackTakenByPage(boolean taken) {
         host.setBackTakenByPage(taken);
+    }
+
+    /**
+     * 画面の角の丸みが WebView の四隅にどれだけ入り込んでいるか（ScreenCorners の JSON）。Web 画面は
+     * 起動したときと、sshc-android-screen-corners イベントを受けたとき（回転、キーボードの開閉）に読む。
+     */
+    @JavascriptInterface
+    public String screenCorners() {
+        return host.screenCorners();
     }
 
     /** 最初の画面を中身まで描いたことを知らせる。Web 画面はページを読み込むたびに 1 回呼ぶ。 */

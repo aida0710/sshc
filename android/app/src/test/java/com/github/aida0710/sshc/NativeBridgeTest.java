@@ -110,6 +110,11 @@ public final class NativeBridgeTest {
         public void setBackTakenByPage(boolean taken) {
             backTakenByPage = taken;
         }
+
+        @Override
+        public String screenCorners() {
+            return ScreenCorners.NONE;
+        }
     }
 
     @Test

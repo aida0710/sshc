@@ -160,7 +160,14 @@ public final class MainActivity extends ComponentActivity {
         public void setBackTakenByPage(boolean taken) {
             runOnUiThread(() -> backCallback.setEnabled(taken));
         }
+
+        @Override
+        public String screenCorners() {
+            return screenCorners;
+        }
     });
+    // WebView に入り込んでいる画面の角の丸み。UI スレッドで書き、bridge が UI スレッドの外から読む。
+    private volatile String screenCorners = ScreenCorners.NONE;
     // 選んだフォルダの一覧と、それを受け取る request ID。bridge は UI スレッドの外から呼ぶので folderLock の中で読み書きする。
     private final Object folderLock = new Object();
     private String folderRequest;
@@ -430,6 +437,9 @@ public final class MainActivity extends ComponentActivity {
             }
         });
 
+        // 回転やキーボードの開閉で WebView の位置と大きさが変わると、角の丸みの入り込みも変わる。
+        webView.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                reportScreenCorners(view));
         webView.loadUrl(entrance);
         setContentView(frame(webView));
         // ページがテーマを知らせる（NativeBridge.setAppearance）までは、システムのライト・ダークではなく
@@ -737,6 +747,15 @@ public final class MainActivity extends ComponentActivity {
         setContentView(frame(content.view()));
         showNativeScreenColours();
         firstScreenWait.show();
+    }
+
+    /** 角の丸みの入り込みが変わったら、Web 画面へ読み直すよう知らせる。入れ替えたあとの古い WebView は数えない。 */
+    private void reportScreenCorners(View view) {
+        if (view != webView) return;
+        String corners = ScreenCorners.of(view);
+        if (corners.equals(screenCorners)) return;
+        screenCorners = corners;
+        webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('sshc-android-screen-corners'));", null);
     }
 
     /** WindowInsets の padding とページ背景色を適用するコンテナを作る。 */
