@@ -47,6 +47,8 @@ type SnapshotEmulator struct {
 	blankRow uv.Line
 	// leavingLines keeps the lines leaving the main screen (NewLeavingLinesEmulator).
 	leavingLines bool
+	// left は、主画面から流れた行のうち、scrollback から移したものである（moveLeftLines）。
+	left []LeftLine
 }
 
 // asciiContents are the cell contents of the printable ASCII characters, made once: the emulator's own print makes
@@ -87,6 +89,7 @@ func NewSnapshotEmulator(w, h int) *SnapshotEmulator {
 		e.registerCcHandler(code, e.scrollingLinefeed)
 	}
 	e.keepScrollRegionOnScreen()
+	e.RegisterCsiHandler('b', e.repeatPreviousCharacterOnScreen)
 	e.parser.SetHandler(ansi.Handler{
 		Print:     e.print,
 		Execute:   e.handleControl,
@@ -117,6 +120,13 @@ func (e *SnapshotEmulator) print(r rune) {
 
 // putASCII is the emulator's handleGrapheme for one printable ASCII character with no character set to map it.
 func (e *SnapshotEmulator) putASCII(c byte) {
+	e.lastChar = rune(c)
+	e.putNarrowCell(asciiContents[c])
+}
+
+// putNarrowCell は、幅1の字 content を、handleGrapheme と同じに書く。行の端で折り返し、カーソルを進める。
+// 文字の集合で写すのは呼ぶ側である。
+func (e *SnapshotEmulator) putNarrowCell(content string) {
 	screen := e.scr
 	x, y := screen.cur.X, screen.cur.Y
 	if e.atPhantom && e.autowrap {
@@ -125,8 +135,7 @@ func (e *SnapshotEmulator) putASCII(c byte) {
 		}
 		y, x = screen.cur.Y, 0
 	}
-	e.lastChar = rune(c)
-	cell := uv.Cell{Content: asciiContents[c], Width: 1, Style: screen.cur.Pen, Link: screen.cur.Link}
+	cell := uv.Cell{Content: content, Width: 1, Style: screen.cur.Pen, Link: screen.cur.Link}
 	// Over a one-column cell there is no wide character to clear first, which is all the buffer's SetCell adds
 	// besides marking the row for redrawing, which nothing here does.
 	if row := screen.buf.Lines[y]; x < len(row) && row[x].Width == 1 {

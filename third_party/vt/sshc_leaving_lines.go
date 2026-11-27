@@ -1,13 +1,24 @@
 package vt
 
 import (
+	"unicode/utf8"
+
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
-// leavingLinesCapacity bounds the lines kept between two TakeLeftLines calls. The caller takes them after each write
-// of at most one read of output, which cannot scroll more lines than it has bytes.
+// leavingLinesCapacity は、主画面の scrollback が持つ行の数である。溢れると上流の Scrollback は古い行を黙って
+// 捨て、捨てるたびに残りを詰め直す。そこで Write は、出力を、この半分の行数より多くは流せない長さに区切って
+// 読み、区切るたびに行を移す（moveLeftLines）。残りの半分は、区切りを字の切れ目まで延ばした分に充てる
+// （pieceEnd。延ばすのは ASCII でないバイトだけで、それは2バイトで多くて1行しか流さない）。
 const leavingLinesCapacity = 1 << 16
+
+// leavingLinesPerByte は、出力の1バイトで主画面から流れうる行の数の上限である。1バイトで終わる操作のうち、
+// 多く流すのは画面を消す ED、流す SU・DL、画面より長い REP で、どれも画面の行と、REP が埋めきるのに書く数行
+// （repeatSettlingRows と、最後の半端な行と、持っておいた1字の行）より多くは流さない。
+func leavingLinesPerByte(height int) int {
+	return height + repeatSettlingRows + 2
+}
 
 // NewLeavingLinesEmulator returns an emulator that keeps the lines leaving its main screen, for a log of what a
 // terminal showed (the session log, internal/sessionlog). A line leaves when output scrolls it off the top of the
@@ -63,19 +74,68 @@ func (e *SnapshotEmulator) keepLeavingLine(top uv.Line, regionTop int) {
 	}
 }
 
-// TakeLeftLines returns the text of the lines that left the main screen since the last call, oldest first, without
-// trailing spaces.
-func (e *SnapshotEmulator) TakeLeftLines() []string {
+// LeftLine は、主画面から流れた1行である（TakeLeftLines）。
+type LeftLine struct {
+	// Text は、行の字である。行末の空白は除く。
+	Text string
+	// Repeats は、この行のすぐあとに、同じ行がさらに何行流れたかである。画面より長い REP は同じ行を何度も
+	// 流すので、エミュレーターはそれを1行ずつ持たずに数える（sshc_repeat.go）。
+	Repeats int
+}
+
+// TakeLeftLines returns the lines that left the main screen since the last call, oldest first.
+func (e *SnapshotEmulator) TakeLeftLines() []LeftLine {
+	e.moveLeftLines()
+	left := e.left
+	e.left = nil
+	return left
+}
+
+// moveLeftLines は、主画面の scrollback に入った行を、字にして left へ移す。
+func (e *SnapshotEmulator) moveLeftLines() {
 	kept := e.scrs[0].scrollback
 	if kept == nil || len(kept.lines) == 0 {
-		return nil
+		return
 	}
-	texts := make([]string, len(kept.lines))
-	for index, line := range kept.lines {
-		texts[index] = line.String()
+	for _, line := range kept.lines {
+		e.left = append(e.left, LeftLine{Text: line.String()})
 	}
 	kept.Clear()
-	return texts
+}
+
+// Write は、エミュレーターの Write である。流れた行を残すエミュレーターは、出力を区切って読み、区切るたびに
+// 流れた行を移す。1回の読み取りでも、画面を何度も流す出力（SU を並べる）は、そのバイト数より多くの行を流す。
+func (e *SnapshotEmulator) Write(output []byte) (int, error) {
+	if !e.leavingLines {
+		return e.Emulator.Write(output)
+	}
+	pieceBytes := max(1, leavingLinesCapacity/2/leavingLinesPerByte(e.Height()))
+	for start := 0; start < len(output); {
+		end := pieceEnd(output, start+pieceBytes)
+		if _, err := e.Emulator.Write(output[start:end]); err != nil {
+			return start, err
+		}
+		e.moveLeftLines()
+		start = end
+	}
+	return len(output), nil
+}
+
+// WriteString は Write と同じである。Emulator の WriteString は、区切らない Emulator の Write を呼ぶ。
+func (e *SnapshotEmulator) WriteString(output string) (int, error) {
+	return e.Write([]byte(output))
+}
+
+// pieceEnd は、output を from より後ろで区切る位置を返す。Emulator の Write は、読み終えるときに組み立て中の字を
+// 書き出すので、字に続きうるバイト（UTF-8 の2バイト目より後ろや、結合文字）の前では区切らない。ASCII の
+// バイトはどれも、前の字に続かない。
+func pieceEnd(output []byte, from int) int {
+	for end := from; end < len(output); end++ {
+		if output[end] < utf8.RuneSelf {
+			return end
+		}
+	}
+	return len(output)
 }
 
 // MainScreenRowsWithText is how many rows from the top of the main screen hold text: the lines that must leave it
