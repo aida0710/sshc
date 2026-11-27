@@ -98,7 +98,8 @@ export function TerminalScreen({
     document.title = session === null ? "sshc" : `${session.presentation?.displayTitle ?? session.title} · sshc`;
     return () => { document.title = "sshc"; };
   }, [session]);
-  // Why the terminal's 「…」 cannot split on the edge side of a session, for its disabled items; undefined when it can.
+  // splitRefusalText は、ターミナルの［…］で、セッションの edge の側に分割できない理由（押せない項目に出す）。
+  // 分割できるときは undefined。
   function splitRefusalText(view: SplitViewController, sessionId: string, edge: PaneEdge): string | undefined {
     switch (view.splitRefusal(sessionId, edge)) {
       case "ended": return t("splitView.refusedEnded");

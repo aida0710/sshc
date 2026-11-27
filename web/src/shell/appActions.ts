@@ -15,8 +15,7 @@ export type AppActionContext = {
   activeSessionId: string | null;
   // panes are the sessions of the split shown on the terminal screen, in order; one or none outside a split.
   panes: readonly string[];
-  // splitBesideActive asks what goes beside the session shown, on each side something can go on. A side nothing can go
-  // on is left out.
+  // splitBesideActive は、表示中のセッションの横に何を置くかを聞く操作を、置ける側ごとに持つ。置けない側は持たない。
   splitBesideActive: Partial<Record<PaneEdge, () => void>>;
   navigate: (section: Section) => void;
   showSession: (id: string) => void;

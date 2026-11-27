@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptySplitView, paneSessionIds, reduceSplitView, type PaneEdge } from "./layout";
+import { emptySplitView, paneSessionIds, reduceSplitView, type PaneEdge, type SplitViewNode } from "./layout";
 import { fitSplitRatio } from "../../ui/SplitResizeHandle";
 import { minimumExtentPx, minimumPanePx, nearestPaneEdge, paneDropZone, splitViewGeometry, type SplitArea } from "./geometry";
 
@@ -103,7 +103,7 @@ describe("how small a split pane can be dragged", () => {
 });
 
 // panePx は、area の広さに描いた各ペインの幅と高さ（px）である。
-function panePx(root: Parameters<typeof splitViewGeometry>[0], area: SplitArea) {
+function panePx(root: SplitViewNode | null, area: SplitArea) {
   return splitViewGeometry(root, area).panes.map(({ sessionId, style }) => ({
     sessionId,
     width: parseFloat(String(style.width)) / 100 * area.width,
@@ -111,12 +111,10 @@ function panePx(root: Parameters<typeof splitViewGeometry>[0], area: SplitArea) 
   }));
 }
 
-function splitInRow(count: number, edge: PaneEdge = "right") {
-  let state = single;
-  for (const [index, sessionId] of ["two", "three", "four"].slice(0, count - 1).entries()) {
-    state = reduceSplitView(state, { type: "split", sourceSessionId: sessionId, targetSessionId: index === 0 ? "one" : ["two", "three"][index - 1]!, edge });
-  }
-  return state;
+// splitInRow は、one の右に two、two の右に three と、count 個のペインを1つずつ右へ足した分割である。
+function splitInRow(count: number) {
+  const ids = ["one", "two", "three", "four"].slice(0, count);
+  return ids.slice(1).reduce((state, sessionId, index) => reduceSplitView(state, { type: "split", sourceSessionId: sessionId, targetSessionId: ids[index]!, edge: "right" }), single);
 }
 
 describe("how a pane added to a split is sized", () => {
@@ -126,7 +124,7 @@ describe("how a pane added to a split is sized", () => {
   });
 
   it("leaves a split across the row as it was", () => {
-    // one | (two / three / four): the column on the right is divided in three, the row keeps the 70% it was given.
+    // one | (two / three / four)。右の列は3つに均等に分け、横の並びは渡した 70% のままにする。
     const column = reduceSplitView(reduceSplitView(pair, { type: "resize", path: [], ratio: 70 }), { type: "split", sourceSessionId: "three", targetSessionId: "two", edge: "bottom" });
     const added = reduceSplitView(column, { type: "split", sourceSessionId: "four", targetSessionId: "three", edge: "bottom" });
     expect(added.root).toMatchObject({ ratio: 70 });

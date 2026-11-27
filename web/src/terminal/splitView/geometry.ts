@@ -9,6 +9,7 @@ import type { PaneEdge, SplitPath, SplitViewBranch, SplitViewNode } from "./layo
 // padding. Down: the 40px header, the terminal's 17px of padding and one
 // 15px row. A smaller pane pushes its close button out of sight, or leaves
 // xterm no row to draw while the shell writes on at the last size.
+// ペインを足すとき（layout.ts の split）と、窓を狭めたとき（splitViewGeometry）にも守る。
 export const minimumPanePx = { width: 248, height: 80 };
 
 // minimumExtentPx is the least a part of the split takes along direction: its
