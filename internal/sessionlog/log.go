@@ -21,9 +21,6 @@ const MaxFileBytes = 100 << 20
 // a program prints faster than the disk takes it; what does not fit is left out, and the log says so.
 const maxPendingBytes = 8 << 20
 
-// redaction stands in the log for a secret the shell echoed back, as the snippets' redacted text does.
-const redaction = "[secret]"
-
 const (
 	stoppedAtLimitNote = "ログが上限（100 MiB）に達したので、ここから先は書きません。"
 	droppedOutputNote  = "出力が速すぎたため、ログに書けなかった出力があります。"
@@ -129,6 +126,10 @@ func (l *Log) Note(text string) {
 // Hide keeps secrets out of the lines written from now on, for the values sshc types into the shell (snippet secrets)
 // that the shell may echo back.
 func (l *Log) Hide(secrets []string) {
+	// 値の無い entry は [sshc] の行として書かれるので、伏せる値が無ければ何も預けない。
+	if len(secrets) == 0 {
+		return
+	}
 	l.add(entry{secrets: append([]string(nil), secrets...)})
 }
 
@@ -184,19 +185,20 @@ func (l *Log) write(file *os.File, size terminal.Size) {
 			switch {
 			case item.output != nil:
 				_, _ = screen.Write(item.output)
-				lines.writeLeftLines(screen.TakeLeftLines())
+				lines.writeLeftLines(screen.TakeLeftLines(), screen.Width())
 			case item.size != nil:
 				screen.Resize(int(item.size.Cols), int(item.size.Rows))
-				lines.writeLeftLines(screen.TakeLeftLines())
+				lines.writeLeftLines(screen.TakeLeftLines(), screen.Width())
 			case item.secrets != nil:
-				lines.secrets = append(lines.secrets, item.secrets...)
+				lines.redactor.addSecrets(item.secrets)
 			default:
 				lines.addNote(item.note, screen.MainScreenRowsWithText())
 			}
 		}
 		lines.flush()
 		if closing {
-			lines.writeLines(screen.MainScreenLines())
+			lines.writeLines(screen.MainScreenLines(), screen.Width())
+			lines.writeHeldLines()
 			lines.writeWaitingNotes()
 			lines.close()
 			return
@@ -209,7 +211,7 @@ type lineWriter struct {
 	file     *os.File
 	buffered *bufio.Writer
 	now      func() time.Time
-	secrets  []string
+	redactor lineRedactor
 	written  int
 	full     bool
 	// notes wait, in order, for the lines that were on the screen when they were made: a line is written when it
@@ -223,27 +225,30 @@ type waitingNote struct {
 	before int
 }
 
-func (w *lineWriter) writeLines(texts []string) {
+// writeLines は、width 桁の画面にあった行 texts を、シークレットを伏せて書く。値が折り返しをまたぐことがあるので、
+// 行は続きの行が来るまで lineRedactor に留まることがある。
+func (w *lineWriter) writeLines(texts []string, width int) {
 	for _, text := range texts {
-		w.writeShownLine(text)
+		w.writeShownLine(text, width)
 	}
 }
 
-// writeLeftLines は、画面から流れた行を書く。同じ行がさらに続いたら（画面より長い REP）、その行は1行だけ書き、
-// 続いた行の数を書く。
-func (w *lineWriter) writeLeftLines(left []vt.LeftLine) {
+// writeLeftLines は、width 桁の画面から流れた行を書く。同じ行がさらに続いたら（画面より長い REP）、その行は1行
+// だけ書き、続いた行の数を書く。続いた行は最初の行と同じなので、lineRedactor には最初の行だけを渡しても、
+// 最後の続いた行から次の行へまたぐ値は見つかる。
+func (w *lineWriter) writeLeftLines(left []vt.LeftLine, width int) {
 	for _, line := range left {
-		w.writeShownLine(line.Text)
+		w.writeShownLine(line.Text, width)
 		if line.Repeats > 0 {
-			w.writeLine(w.noteLine(fmt.Sprintf(repeatedLineNote, line.Repeats)))
+			w.writeReleased(w.redactor.addNote(w.noteLine(fmt.Sprintf(repeatedLineNote, line.Repeats))))
 			w.linesLeft(line.Repeats)
 		}
 	}
 }
 
-// writeShownLine は、画面に出た1行を書く。
-func (w *lineWriter) writeShownLine(text string) {
-	w.writeLine(w.hideSecrets(text))
+// writeShownLine は、width 桁の画面に出た1行を、シークレットを伏せて書く。
+func (w *lineWriter) writeShownLine(text string, width int) {
+	w.writeReleased(w.redactor.add(text, width))
 	w.linesLeft(1)
 }
 
@@ -253,8 +258,20 @@ func (w *lineWriter) linesLeft(count int) {
 		w.notes[index].before -= count
 	}
 	for len(w.notes) > 0 && w.notes[0].before <= 0 {
-		w.writeLine(w.notes[0].line)
+		w.writeReleased(w.redactor.addNote(w.notes[0].line))
 		w.notes = w.notes[1:]
+	}
+}
+
+// writeHeldLines は、lineRedactor に留まっている行を書く。ログを閉じるときに、あとから来る行はもう無い。
+func (w *lineWriter) writeHeldLines() {
+	w.writeReleased(w.redactor.releaseAll())
+}
+
+// writeReleased は、lineRedactor が伏せ終えて返した行と、そのあいだの [sshc] の行を書く。
+func (w *lineWriter) writeReleased(lines []string) {
+	for _, line := range lines {
+		w.writeLine(line)
 	}
 }
 
@@ -262,7 +279,7 @@ func (w *lineWriter) linesLeft(count int) {
 func (w *lineWriter) addNote(text string, onScreen int) {
 	line := w.noteLine(text)
 	if onScreen <= 0 && len(w.notes) == 0 {
-		w.writeLine(line)
+		w.writeReleased(w.redactor.addNote(line))
 		return
 	}
 	w.notes = append(w.notes, waitingNote{line: line, before: onScreen})
@@ -292,15 +309,6 @@ func (w *lineWriter) writeLine(text string) {
 	}
 	n, _ := w.buffered.WriteString(text + "\n")
 	w.written += n
-}
-
-func (w *lineWriter) hideSecrets(text string) string {
-	for _, secret := range w.secrets {
-		if secret != "" {
-			text = strings.ReplaceAll(text, secret, redaction)
-		}
-	}
-	return text
 }
 
 func (w *lineWriter) flush() { _ = w.buffered.Flush() }

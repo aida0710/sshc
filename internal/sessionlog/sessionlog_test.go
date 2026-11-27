@@ -130,6 +130,128 @@ func TestASecretTheShellEchoesIsHiddenInTheLog(t *testing.T) {
 	}
 }
 
+// logLines は、ログの [sshc] の行を除いた行である。
+func logLines(log string) []string {
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSuffix(log, "\n"), "\n") {
+		if !strings.HasPrefix(line, "[sshc] ") {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+func TestASecretWrappedAtTheRightEdgeIsHiddenOnBothRows(t *testing.T) {
+	// readLog のターミナルは 40 桁。"--token=" までが 28 字なので、値は 12 字目のあとで折り返す。
+	const secret = "Zq7-hunter2-Kx9"
+	command := "$ deploy --env r100 --token=" + secret
+	for name, test := range map[string]struct {
+		writes []string
+		want   []string
+	}{
+		"both rows still on the screen when the log closes": {
+			writes: []string{command + "\r\n"},
+			want:   []string{"$ deploy --env r100 --token=[secret]", "[secret]"},
+		},
+		"the rows scroll off one at a time": {
+			writes: []string{command + "\r\n", "one\r\n", "two\r\n", "three\r\n", "four\r\n"},
+			want:   []string{"$ deploy --env r100 --token=[secret]", "[secret]", "one", "two", "three", "four"},
+		},
+		"output goes on after the value on the second row": {
+			writes: []string{command + " && echo ok\r\n", "ok\r\n", "$ \r\n", "$ \r\n"},
+			want:   []string{"$ deploy --env r100 --token=[secret]", "[secret] && echo ok", "ok", "$", "$"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := readLog(t, func(log *Log) {
+				log.Hide([]string{secret})
+				for _, output := range test.writes {
+					log.Write([]byte(output))
+				}
+			})
+			if lines := logLines(got); strings.Join(lines, "|") != strings.Join(test.want, "|") {
+				t.Fatalf("lines = %q, want %q", lines, test.want)
+			}
+		})
+	}
+}
+
+func TestASecretWrappedBeforeTheTerminalGrewWiderIsStillHidden(t *testing.T) {
+	// 画面は広がっても折り返し直さないので、右端だった桁のあとに空いた桁が続く。
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"Zq7-hunter2-Kx9"})
+		log.Write([]byte("$ deploy --env r100 --token=Zq7-hunter2-Kx9\r\n"))
+		log.Resize(terminal.Size{Cols: 80, Rows: 3})
+		log.Write([]byte("one\r\ntwo\r\n"))
+	})
+	want := []string{"$ deploy --env r100 --token=[secret]", "[secret]", "one", "two"}
+	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Fatalf("lines = %q, want %q", lines, want)
+	}
+}
+
+func TestASecretLongerThanARowIsHiddenOnEveryRowItCovers(t *testing.T) {
+	secret := strings.Repeat("Tail9", 18)
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{secret})
+		log.Write([]byte("$ login " + secret + "\r\n"))
+		log.Write([]byte("done\r\n$ \r\n$ \r\n$ \r\n"))
+	})
+	want := []string{"$ login [secret]", "[secret]", "[secret]", "done", "$", "$", "$"}
+	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Fatalf("lines = %q, want %q", lines, want)
+	}
+}
+
+func TestASpaceOfASecretOnTheLastColumnDoesNotLeaveItShown(t *testing.T) {
+	const prefix, secret = "$ unlock --vault r100 --phrase=", "pelican9 dunlin"
+	if len(prefix)+strings.IndexByte(secret, ' ') != 39 {
+		t.Fatal("the example must put the space of the secret on the last of the 40 columns")
+	}
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{secret})
+		log.Write([]byte(prefix + secret + "\r\n"))
+	})
+	want := []string{"$ unlock --vault r100 --phrase=[secret]", "[secret]"}
+	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Fatalf("lines = %q, want %q", lines, want)
+	}
+}
+
+func TestSecretsThatStartAlikeAreHiddenWhole(t *testing.T) {
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"pelican-", "pelican-Tail9secret"})
+		log.Write([]byte("$ login pelican-Tail9secret\r\n"))
+	})
+	if lines := logLines(got); len(lines) != 1 || lines[0] != "$ login [secret]" {
+		t.Fatalf("lines = %q", lines)
+	}
+}
+
+func TestASecretWithALineBreakIsHiddenOnTheLinesTheShellShowsItOn(t *testing.T) {
+	// 引用しない改行はコマンドを区切るので、シェルは値の2行目を次のコマンドとして映す。
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"mirage-first-9f\npelican-second-7c"})
+		log.Write([]byte("$ unlock mirage-first-9f\r\n$ pelican-second-7c\r\nbash: pelican-second-7c: not found\r\n"))
+	})
+	want := []string{"$ unlock [secret]", "$ [secret]", "bash: [secret]: not found"}
+	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Fatalf("lines = %q, want %q", lines, want)
+	}
+}
+
+func TestAShortLineOfASecretWithALineBreakIsLeftSoOrdinaryWordsStay(t *testing.T) {
+	// 改行を含む値の短い行まで伏せると、同じ語のふつうの出力も消える。
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"r100\npelican-second-7c"})
+		log.Write([]byte("$ ssh r100\r\n$ pelican-second-7c\r\n"))
+	})
+	want := []string{"$ ssh r100", "$ [secret]"}
+	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Fatalf("lines = %q, want %q", lines, want)
+	}
+}
+
 func TestTheLogAndItsFolderAreTheOwnersOnly(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows keeps them private with an ACL (internal/privatefile)")
@@ -150,22 +272,28 @@ func TestTheLogAndItsFolderAreTheOwnersOnly(t *testing.T) {
 }
 
 func TestANoteComesAfterTheLinesShownBeforeIt(t *testing.T) {
-	got := readLog(t, func(log *Log) {
-		log.Write([]byte("one\r\ntwo\r\n$ "))
-		log.Note("接続が切れました。")
-		log.Write([]byte("\r\nthree\r\nfour\r\n"))
-		log.Note("セッションが終わりました。")
-	})
-	var order []string
-	for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
-		if strings.HasPrefix(line, "[sshc] ") {
-			line = line[strings.LastIndex(line, " ")+1:]
-		}
-		order = append(order, line)
-	}
-	want := []string{"one", "two", "$", "接続が切れました。", "three", "four", "セッションが終わりました。"}
-	if strings.Join(order, "|") != strings.Join(want, "|") {
-		t.Fatalf("log = %q, want the lines in %q's order", got, want)
+	// 伏せる値があると、行は続きの行が来るまで手元に留まる。留まっているあいだも順は変わらない。
+	for name, secrets := range map[string][]string{"no secret": nil, "a secret to hide": {"Zq7-hunter2-Kx9"}} {
+		t.Run(name, func(t *testing.T) {
+			got := readLog(t, func(log *Log) {
+				log.Hide(secrets)
+				log.Write([]byte("one\r\ntwo\r\n$ "))
+				log.Note("接続が切れました。")
+				log.Write([]byte("\r\nthree\r\nfour\r\n"))
+				log.Note("セッションが終わりました。")
+			})
+			var order []string
+			for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+				if strings.HasPrefix(line, "[sshc] ") {
+					line = line[strings.LastIndex(line, " ")+1:]
+				}
+				order = append(order, line)
+			}
+			want := []string{"one", "two", "$", "接続が切れました。", "three", "four", "セッションが終わりました。"}
+			if strings.Join(order, "|") != strings.Join(want, "|") {
+				t.Fatalf("log = %q, want the lines in %q's order", got, want)
+			}
+		})
 	}
 }
 
