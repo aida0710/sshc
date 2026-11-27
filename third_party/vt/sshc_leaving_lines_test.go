@@ -86,18 +86,41 @@ func TestTheSnapshotEmulatorKeepsNoLeavingLines(t *testing.T) {
 	}
 }
 
-// 1回の読み取りで、そのバイト数より多くの行が流れても（SU で何度も画面を流す）、ログの行は落ちない。
-func TestALongReadKeepsEveryLineThatLeft(t *testing.T) {
-	const height, scrolls = 24, 3000
-	emulator := NewLeavingLinesEmulator(20, height)
+// numberedRows は、1 から height までの番号を書いた行である。流れた行の先頭が落ちていないかを、番号で見る。
+func numberedRows(height int) []string {
 	var numbered []string
 	for row := 1; row <= height; row++ {
 		numbered = append(numbered, fmt.Sprint(row))
 	}
+	return numbered
+}
+
+// 1回の読み取りで、そのバイト数より多くの行が流れても（SU で何度も画面を流す）、ログの行は落ちない。
+func TestALongReadKeepsEveryLineThatLeft(t *testing.T) {
+	const height, scrolls = 24, 3000
+	emulator := NewLeavingLinesEmulator(20, height)
+	numbered := numberedRows(height)
 	writeAll(t, emulator, strings.Join(numbered, "\r\n")+strings.Repeat("\x1b[99S", scrolls))
 	left := expandLeftLines(emulator.TakeLeftLines())
 	if len(left) != height*scrolls || !slices.Equal(left[:height], numbered) {
 		t.Fatalf("left %d lines starting %q, want %d starting with the numbered rows", len(left), left[:min(len(left), 3)], height*scrolls)
+	}
+}
+
+// ASCII のバイトが無いまま長く続く出力を1回で読んでも、ログの行は落ちない。区切りは ASCII のバイトの前まで延ばすが、
+// ASCII でないバイトにも、1バイトで1行を流すもの（C1 の IND、0x84）がある。
+func TestALongReadWithNoASCIIKeepsEveryLineThatLeft(t *testing.T) {
+	// IND は上流の index で流れ、画面のマスを1つずつ動かすので、画面を小さくする。
+	const width, height = 4, 4
+	emulator := NewLeavingLinesEmulator(width, height)
+	numbered := numberedRows(height)
+	writeAll(t, emulator, strings.Join(numbered, "\r\n"))
+	// 主画面の scrollback が持てるより多くの行を流す。
+	indexes := leavingLinesCapacity + height
+	writeAll(t, emulator, strings.Repeat("\x84", indexes))
+	left := expandLeftLines(emulator.TakeLeftLines())
+	if len(left) != indexes || !slices.Equal(left[:height], numbered) {
+		t.Fatalf("left %d lines starting %q, want %d starting with the numbered rows", len(left), left[:min(len(left), 3)], indexes)
 	}
 }
 
@@ -122,5 +145,27 @@ func TestReadingInPiecesKeepsCharactersThatSpanThePieces(t *testing.T) {
 	}
 	if got, want := expandLeftLines(pieces.TakeLeftLines()), expandLeftLines(whole.TakeLeftLines()); !slices.Equal(got, want) {
 		t.Fatalf("read in pieces, %d lines left, want %d", len(got), len(want))
+	}
+}
+
+// ASCII のバイトが無いまま、区切りを延ばしきれないほど出力が続くと、字の途中で区切る。それでも、1つの字は割れず、
+// 1回で読んだときと同じ画面と、同じ流れた行になる。前に置く字で区切りの位置をずらし、3バイトの字のどの位置でも
+// 区切る。
+func TestCuttingInsideACharacterKeepsTheCharacter(t *testing.T) {
+	const width, height = 20, 6
+	run := strings.Repeat("日", 2*pieceExtensionLimit/len("日"))
+	for _, before := range []string{"", "é", "éé"} {
+		output := before + run
+		pieces, whole := NewLeavingLinesEmulator(width, height), NewLeavingLinesEmulator(width, height)
+		writeAll(t, pieces, output)
+		if _, err := whole.Emulator.Write([]byte(output)); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := pieces.Snapshot(), whole.Snapshot(); got != want {
+			t.Fatalf("after %q, read in pieces, the screen is\n%q\nwant\n%q", before, got, want)
+		}
+		if got, want := expandLeftLines(pieces.TakeLeftLines()), expandLeftLines(whole.TakeLeftLines()); !slices.Equal(got, want) {
+			t.Fatalf("after %q, read in pieces, %d lines left, want %d", before, len(got), len(want))
+		}
 	}
 }

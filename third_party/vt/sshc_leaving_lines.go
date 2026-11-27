@@ -10,8 +10,12 @@ import (
 // leavingLinesCapacity は、主画面の scrollback が持つ行の数である。溢れると上流の Scrollback は古い行を黙って
 // 捨て、捨てるたびに残りを詰め直す。そこで Write は、出力を、この半分の行数より多くは流せない長さに区切って
 // 読み、区切るたびに行を移す（moveLeftLines）。残りの半分は、区切りを字の切れ目まで延ばした分に充てる
-// （pieceEnd。延ばすのは ASCII でないバイトだけで、それは2バイトで多くて1行しか流さない）。
+// （pieceEnd）。延ばす分は ASCII でないバイトで、1バイトで多くて1行を流す（C1 の IND は1バイトで1行を流す）。
+// そこで延ばすのも、この半分のバイト数までにする（pieceExtensionLimit）。
 const leavingLinesCapacity = 1 << 16
+
+// pieceExtensionLimit は、pieceEnd が区切りを延ばすバイト数の上限である（leavingLinesCapacity）。
+const pieceExtensionLimit = leavingLinesCapacity / 2
 
 // leavingLinesPerByte は、出力の1バイトで主画面から流れうる行の数の上限である。1バイトで終わる操作のうち、
 // 多く流すのは画面を消す ED、流す SU・DL、画面より長い REP で、どれも画面の行と、REP が埋めきるのに書く数行
@@ -128,14 +132,17 @@ func (e *SnapshotEmulator) WriteString(output string) (int, error) {
 
 // pieceEnd は、output を from より後ろで区切る位置を返す。Emulator の Write は、読み終えるときに組み立て中の字を
 // 書き出すので、字に続きうるバイト（UTF-8 の2バイト目より後ろや、結合文字）の前では区切らない。ASCII の
-// バイトはどれも、前の字に続かない。
+// バイトはどれも、前の字に続かない。pieceExtensionLimit バイトのうちに ASCII のバイトが無ければ、そこで区切る。
+// パーサーは字の途中の状態を次の Write へ持ち越すので、そのとき割れるのは、区切りをまたぐ字のまとまり（結合文字を
+// 付けた字など）だけである。
 func pieceEnd(output []byte, from int) int {
-	for end := from; end < len(output); end++ {
+	limit := min(len(output), from+pieceExtensionLimit)
+	for end := from; end < limit; end++ {
 		if output[end] < utf8.RuneSelf {
 			return end
 		}
 	}
-	return len(output)
+	return limit
 }
 
 // MainScreenRowsWithText is how many rows from the top of the main screen hold text: the lines that must leave it
