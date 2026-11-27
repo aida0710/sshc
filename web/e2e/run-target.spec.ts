@@ -455,7 +455,7 @@ test("opens the settings of a remote session's connection on this machine from i
 
   await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
   await page.getByRole("button", { name: "Actions for engine bastion", exact: true }).click();
-  await page.getByRole("button", { name: "Open connection settings (back to localhost)", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Open connection settings (back to localhost)", exact: true }).click();
   await expect(frame).toHaveCount(0);
   await expect(page).toHaveURL(/\/connections\/servers\?.*host=bastion&panel=sshc/);
   await page.getByLabel("Colour", { exact: true }).fill("#2f7fd8");
@@ -644,7 +644,7 @@ test("uses a compatible engine of another version without a panel", async ({ pag
   await expect(page.getByRole("region", { name: incompatibleHeading, exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /^Choose the remote session engine/ }).click();
   await page.getByRole("button", { name: "Actions for engine bastion", exact: true }).click();
-  await page.getByRole("button", { name: "Engine information…", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Engine information…", exact: true }).click();
   const information = page.getByRole("dialog", { name: "Engine on bastion", exact: true });
   await expect(information.getByRole("definition").filter({ hasText: remoteVersion })).toBeVisible();
   await expect(information.getByText(`this machine runs ${localVersion}`, { exact: true })).toBeVisible();

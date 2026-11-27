@@ -288,10 +288,29 @@ describe("RunTargetSwitcher", () => {
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     expect(screen.getAllByRole("button", { name: /^Actions for engine/ })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
-    await user.click(screen.getByRole("button", { name: "Open its full screen in a new tab" }));
+    await user.click(screen.getByRole("menuitem", { name: "Open its full screen in a new tab" }));
     expect(state.openInNewTab).toHaveBeenCalledWith("r100");
-    await user.click(screen.getByRole("button", { name: "Remove from the list" }));
+    await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove from the list" }));
     expect(state.remove).toHaveBeenCalledWith("r100");
+  });
+
+  it("opens an engine's actions as a menu over the list, and the list stays open behind it", async () => {
+    const user = userEvent.setup();
+    render(<RunTargetSwitcher targets={targets()} link={linkState()} aliases={["r100"]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
+    const list = screen.getByRole("list", { name: "Engines" });
+    await user.click(within(list).getByRole("button", { name: "Actions for engine r100" }));
+    expect(screen.getByRole("menu", { name: "Actions for engine r100" })).toBeInTheDocument();
+    expect(list).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("list", { name: "Engines" })).toBeInTheDocument();
+
+    // On a PC-sized screen the 「…」 shows only under the pointer; a right click on the row opens the same menu.
+    await user.pointer({ keys: "[MouseRight]", target: within(list).getByRole("button", { name: /^r100/ }) });
+    expect(screen.getByRole("menu", { name: "Actions for engine r100" })).toBeInTheDocument();
   });
 
   // 色などの設定は、このマシンの Connections の接続先にある。リモートセッションを選んでいる間は localhost に戻って開くと言う。
@@ -302,7 +321,7 @@ describe("RunTargetSwitcher", () => {
     render(<RunTargetSwitcher targets={targets({ selected: "r100" })} link={linkState()} aliases={["r100"]} hosts={[r100]} onShowTerminal={vi.fn()} onOpenConnectionSettings={onOpenConnectionSettings} />);
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
-    await user.click(screen.getByRole("button", { name: "Open connection settings (back to localhost)" }));
+    await user.click(screen.getByRole("menuitem", { name: "Open connection settings (back to localhost)" }));
     expect(onOpenConnectionSettings).toHaveBeenCalledWith({ path: "conf.d/20-lab.conf", alias: "r100" });
   });
 
@@ -311,7 +330,8 @@ describe("RunTargetSwitcher", () => {
     render(<RunTargetSwitcher targets={targets()} link={linkState()} aliases={[]} hosts={[]} onShowTerminal={vi.fn()} onOpenConnectionSettings={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
-    expect(screen.queryByRole("button", { name: /^Open connection settings/ })).toBeNull();
+    expect(screen.getByRole("menu", { name: "Actions for engine r100" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^Open connection settings/ })).toBeNull();
   });
 
   it("shows the engine's version, Vault and sessions, and restarts it after saying its sessions end", async () => {
@@ -325,7 +345,7 @@ describe("RunTargetSwitcher", () => {
     render(<SwitcherWithDialogs state={state} />);
     await user.click(screen.getByRole("button", { name: /^Choose the remote session engine/ }));
     await user.click(screen.getByRole("button", { name: "Actions for engine r100" }));
-    await user.click(screen.getByRole("button", { name: "Engine information…" }));
+    await user.click(screen.getByRole("menuitem", { name: "Engine information…" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Engine on r100" });
     await within(dialog).findByText("v0.51.0");
