@@ -221,6 +221,20 @@ describe("the synced language", () => {
     expect(window.localStorage.getItem(localStorageKeys.locale)).toBe("ja");
   });
 
+  // リモートセッションを替えると、画面はそのエンジンの設定で描く。替えた先が言語を選んでいなければ、ブラウザの言語にする。
+  it("follows the browser once the settings of another engine choose no language", () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
+    render(<LanguageProvider><Probe /></LanguageProvider>);
+    act(() => resetSettingsForTests(settingsDocument({ global: { language: "ja" } })));
+    expect(screen.getByText("locale:ja")).toBeInTheDocument();
+
+    act(() => resetSettingsForTests(null));
+    act(() => resetSettingsForTests(settingsDocument({ machineId: "ffffffffffffffffffffffffffffffff" })));
+
+    expect(screen.getByText("locale:en")).toBeInTheDocument();
+    expect(window.localStorage.getItem(localStorageKeys.locale)).toBeNull();
+  });
+
   it("switches to the language the synced settings choose, and copies it", () => {
     window.localStorage.setItem(localStorageKeys.locale, "en");
     render(<LanguageProvider><Probe /></LanguageProvider>);

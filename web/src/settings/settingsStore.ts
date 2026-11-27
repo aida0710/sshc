@@ -1,65 +1,102 @@
-import { useEffect, useSyncExternalStore } from "react";
-import { apiClient, failureCode } from "../api/client";
-import { putJSON, sendJSON } from "../api/guards";
-import type { components } from "../api/schema";
-import { validateOpenAPISchema } from "../api/validators.generated";
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { engineApiBase } from "../api/remoteEngines";
 import { usePolling } from "../ui/usePolling";
+import {
+  createSettingsDocumentStore,
+  standardPresetId,
+  type GlobalSettings,
+  type InterfaceStateKey,
+  type MachineSettings,
+  type SettingsDocument,
+  type SettingsDocumentStore,
+  type SettingsPreset,
+  type SettingsState,
+} from "./settingsDocumentStore";
 
-// The settings the engine keeps for every machine (GET /api/v1/settings): the global settings, the presets,
-// the machines that sync and this machine's state. Every screen reads them from here, and every change is
-// written through here, one at a time, so a change is never sent on top of a document the engine has not
-// seen yet.
+export {
+  standardPresetId,
+  type GlobalSettings,
+  type InterfaceSettings,
+  type InterfaceState,
+  type InterfaceStateKey,
+  type MachineSettings,
+  type SettingsDocument,
+  type SettingsPreset,
+} from "./settingsDocumentStore";
 
-export type SettingsDocument = components["schemas"]["SettingsDocument"];
-export type GlobalSettings = components["schemas"]["GlobalSettings"];
-export type SettingsPreset = components["schemas"]["SettingsPreset"];
-export type MachineSettings = components["schemas"]["MachineSettings"];
-export type InterfaceSettings = components["schemas"]["InterfaceSettings"];
-export type InterfaceState = components["schemas"]["InterfaceState"];
-export type InterfaceStateKey = keyof InterfaceState;
-
-// standardPresetId is the preset every machine uses until it chooses another (application.DefaultPresetID).
-export const standardPresetId = "default";
+// 画面が描く設定と、このマシンの画面の状態。
+//
+// 画面は、選んでいるリモートセッションのエンジンの設定で描く（テーマ、言語、フォント、ターミナル、プリセット）。
+// 設定の画面で変えたものも、そのエンジンへ書く。どれを選んでいるか（runTarget）と、このブラウザの画面の並び
+// （interface: SFTP のタブ、たたんだワークスペースなど）は、どれを選んでいても、このマシンのエンジンに残す。
 
 // A setting changed on another synced machine arrives with the next sync; a few seconds keeps this browser in
 // step without a request per keystroke.
 const settingsPollIntervalMs = 5_000;
 
-// settingsChangedCode is the engine's answer when what a change was based on moved underneath it.
-const settingsChangedCode = "settings_changed";
+// thisMachineSettings は、このマシンのエンジンの設定。リモートセッションを選んでいないときは、画面もこれで描く。
+const thisMachineSettings = createSettingsDocumentStore(engineApiBase(null));
+// remoteSettings は、リモートセッションのエンジンの設定。一度読んだものは残し、切り替えて戻ったときにすぐ描く。
+const remoteSettings = new Map<string, SettingsDocumentStore>();
+// shownRunTarget は、画面が描く設定のエンジン。null はこのマシン。
+let shownRunTarget: string | null = null;
+const shownListeners = new Set<() => void>();
 
-type State = {
-  document: SettingsDocument | null;
-  // loadFailed is set when the first read failed; the screens then run on the defaults.
-  loadFailed: boolean;
-};
-
-let state: State = { document: null, loadFailed: false };
-const listeners = new Set<() => void>();
-// writes chains every change, so each one reads its base after the one before it has landed.
-let writes: Promise<unknown> = Promise.resolve();
-// revision counts the changes made here; a read that started before one of them is dropped, so it never
-// takes back what this browser just chose.
-let revision = 0;
-let refreshing = false;
-
-function publish(next: State) {
-  state = next;
-  listeners.forEach((listener) => listener());
+function settingsOf(runTarget: string | null): SettingsDocumentStore {
+  if (runTarget === null) return thisMachineSettings;
+  let store = remoteSettings.get(runTarget);
+  if (store === undefined) {
+    store = createSettingsDocumentStore(engineApiBase(runTarget));
+    remoteSettings.set(runTarget, store);
+  }
+  return store;
 }
 
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
+function shownSettings(): SettingsDocumentStore {
+  return settingsOf(shownRunTarget);
 }
 
-export function useSettings(): State {
-  return useSyncExternalStore(subscribe, () => state);
+// subscribeShown は、画面が描く設定の変わり目と、その設定の中身の変わり目の両方を知らせる。
+function subscribeShown(listener: () => void) {
+  let unsubscribe = shownSettings().subscribe(listener);
+  const switched = () => {
+    unsubscribe();
+    unsubscribe = shownSettings().subscribe(listener);
+    listener();
+  };
+  shownListeners.add(switched);
+  return () => {
+    shownListeners.delete(switched);
+    unsubscribe();
+  };
 }
 
-// currentSettings is the document as this browser knows it, for code outside React.
+// showSettingsOf は、画面が描く設定を、runTarget のエンジンのもの（null はこのマシン）にする。読むのは
+// useSettingsSync が行う。書きかけの変更は、始めたときのエンジンへ送る。
+export function showSettingsOf(runTarget: string | null): void {
+  if (runTarget === shownRunTarget) return;
+  shownRunTarget = runTarget;
+  shownListeners.forEach((listener) => listener());
+}
+
+// useSettings は、画面が描く設定（選んでいるリモートセッションのエンジンのもの）。
+export function useSettings(): SettingsState {
+  return useSyncExternalStore(subscribeShown, () => shownSettings().snapshot());
+}
+
+// useThisMachineSettings は、このマシンのエンジンの設定。このマシンの画面の状態（interfaceState）を読むのに使う。
+export function useThisMachineSettings(): SettingsState {
+  return useSyncExternalStore(thisMachineSettings.subscribe, thisMachineSettings.snapshot);
+}
+
+// currentSettings is the document the screens are drawn with, for code outside React.
 export function currentSettings(): SettingsDocument | null {
-  return state.document;
+  return shownSettings().snapshot().document;
+}
+
+// currentThisMachineSettings は、このマシンのエンジンの設定。React の外で、このマシンの画面の状態を読むのに使う。
+export function currentThisMachineSettings(): SettingsDocument | null {
+  return thisMachineSettings.snapshot().document;
 }
 
 // presetInUse is the preset this machine uses: the one the engine resolved, or the standard preset.
@@ -70,29 +107,21 @@ export function presetInUse(document: SettingsDocument | null): SettingsPreset {
     ?? { id: standardPresetId };
 }
 
-async function readDocument(): Promise<SettingsDocument> {
-  return validateOpenAPISchema<SettingsDocument>("SettingsDocument", await apiClient.read("/api/v1/settings"));
-}
-
+// refreshSettings は、このマシンの設定と、画面が描く設定（リモートセッションのもの）を読み直す。
 export async function refreshSettings(): Promise<void> {
-  if (refreshing) return;
-  refreshing = true;
-  const startedRevision = revision;
-  try {
-    const document = await readDocument();
-    // An unchanged document is not published again, so the screens keep the objects they hold and draw nothing
-    // anew every few seconds.
-    if (startedRevision === revision && !sameJSON(document, state.document)) publish({ ...state, document, loadFailed: false });
-  } catch {
-    if (state.document === null) publish({ ...state, document: null, loadFailed: true });
-  } finally {
-    refreshing = false;
-  }
+  await Promise.all([thisMachineSettings.refresh(), shownRunTarget === null ? undefined : shownSettings().refresh()]);
 }
 
-// useSettingsSync reads the settings once the engine is ready and keeps them current. It returns whether the
-// first read has finished (or failed), so the app shell can wait for it instead of drawing the defaults first.
-export function useSettingsSync(enabled: boolean): boolean {
+function isRead(state: SettingsState): boolean {
+  return state.document !== null || state.loadFailed;
+}
+
+// useSettingsSync は、エンジンが使えるようになったら設定を読み、そのあとも読み直し続ける。runTarget は、画面が描く
+// 設定のエンジン（選んでいるリモートセッション）で、描く前に切り替える。返すのは、起動してから、このマシンの設定と
+// runTarget の設定を一度読み終えた（または読めなかった）か。アプリの枠は、最初の画面を既定の値で先に描かずにこれを
+// 待つ。一度読み終えたら、リモートセッションを切り替えても待たない（画面を作り直さない）。
+export function useSettingsSync(enabled: boolean, runTarget: string | null = null): boolean {
+  useLayoutEffect(() => showSettingsOf(runTarget), [runTarget]);
   useEffect(() => {
     if (!enabled) return;
     void refreshSettings();
@@ -100,106 +129,61 @@ export function useSettingsSync(enabled: boolean): boolean {
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, [enabled]);
+  // 替えた先のリモートセッションの設定を読む。このマシンの設定は読み直さない。選んだことを書いている途中で読むと、
+  // 選ぶ前の設定が返るため。
+  useEffect(() => {
+    if (enabled && runTarget !== null) void settingsOf(runTarget).refresh();
+  }, [enabled, runTarget]);
   usePolling(refreshSettings, { intervalMs: settingsPollIntervalMs, enabled, whileHidden: true });
-  const current = useSettings();
-  return current.document !== null || current.loadFailed;
-}
-
-function enqueue<T>(write: () => Promise<T>): Promise<T> {
-  const next = writes.then(write, write);
-  writes = next.catch(() => undefined);
-  return next;
-}
-
-// writeWithRetry shows the change at once, sends it, and when the engine says the base moved (another machine
-// or tab changed the same settings), reads the settings again and redoes the change once on top of them.
-async function writeWithRetry(change: (document: SettingsDocument) => { next: SettingsDocument; send: () => Promise<unknown> } | null) {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (state.document === null) await refreshSettings();
-    const document = state.document;
-    if (document === null) throw new Error("settings_unavailable");
-    const planned = change(document);
-    if (planned === null) return;
-    revision += 1;
-    publish({ ...state, document: planned.next });
-    try {
-      await planned.send();
-      return;
-    } catch (error) {
-      revision += 1;
-      const document = await readDocument().catch(() => null);
-      publish({ ...state, document: document ?? state.document });
-      if (failureCode(error) !== settingsChangedCode || attempt > 0) throw error;
-    }
-  }
-}
-
-function sameJSON(first: unknown, second: unknown): boolean {
-  return JSON.stringify(first) === JSON.stringify(second);
-}
-
-// SettingsPart is one part of the document a change is written to: the global settings, the presets, one preset
-// or one machine's settings.
-type SettingsPart<T> = {
-  // read is the part as this browser knows it, or undefined when it is gone and nothing is to be sent.
-  read: (document: SettingsDocument) => T | undefined;
-  // place is the document with next in place of the part.
-  place: (document: SettingsDocument, next: T) => SettingsDocument;
-  // send writes next with the base it was made from; the engine refuses with settingsChangedCode when the base
-  // moved underneath it.
-  send: (base: T, next: T) => Promise<unknown>;
-};
-
-// changePart makes the next value of a part from a copy of it and writes it after the changes before it. A
-// change that leaves the part as it was sends nothing.
-function changePart<T>(part: SettingsPart<T>, change: (current: T) => T): Promise<void> {
-  return enqueue(() => writeWithRetry((document) => {
-    const base = part.read(document);
-    if (base === undefined) return null;
-    const next = change(structuredClone(base));
-    if (sameJSON(base, next)) return null;
-    return { next: part.place(document, next), send: () => part.send(base, next) };
-  }));
+  const thisMachine = useThisMachineSettings();
+  const target = settingsOf(runTarget);
+  const shown = useSyncExternalStore(target.subscribe, target.snapshot);
+  const readOnce = useRef(false);
+  if (isRead(thisMachine) && isRead(shown)) readOnce.current = true;
+  return readOnce.current;
 }
 
 // updatePreset changes one preset's settings. The preset's id and name are changed with updatePresets.
 export function updatePreset(id: string, change: (preset: SettingsPreset) => SettingsPreset): Promise<void> {
-  return changePart({
+  return shownSettings().changePart({
     read: (document) => document.presets.find((preset) => preset.id === id),
     place: (document, preset) => ({ ...document, presets: document.presets.map((candidate) => candidate.id === id ? preset : candidate) }),
-    send: (base, preset) => putJSON(`/api/v1/settings/presets/${encodeURIComponent(id)}`, { base, preset }, [settingsChangedCode]),
+    path: `/settings/presets/${encodeURIComponent(id)}`,
+    body: (base, preset) => ({ base, preset }),
   }, change);
 }
 
 // updatePresetInUse changes the settings of the preset this machine uses.
 export function updatePresetInUse(change: (preset: SettingsPreset) => SettingsPreset): Promise<void> {
-  return updatePreset(presetInUse(state.document).id, change);
+  return updatePreset(presetInUse(currentSettings()).id, change);
 }
 
 // updatePresets replaces the list of presets: adding, renaming, removing or reordering them.
 export function updatePresets(change: (presets: SettingsPreset[]) => SettingsPreset[]): Promise<void> {
-  return changePart({
+  return shownSettings().changePart({
     read: (document) => document.presets,
     place: (document, presets) => ({
       ...document,
       presets,
       presetInUse: presets.some((preset) => preset.id === document.presetInUse) ? document.presetInUse : standardPresetId,
     }),
-    send: (base, presets) => putJSON("/api/v1/settings/presets", { base, presets }, [settingsChangedCode]),
+    path: "/settings/presets",
+    body: (base, presets) => ({ base, presets }),
   }, change);
 }
 
 export function updateGlobalSettings(change: (settings: GlobalSettings) => GlobalSettings): Promise<void> {
-  return changePart({
+  return shownSettings().changePart({
     read: (document) => document.global,
     place: (document, settings) => ({ ...document, global: settings }),
-    send: (base, settings) => putJSON("/api/v1/settings/global", { base, settings }, [settingsChangedCode]),
+    path: "/settings/global",
+    body: (base, settings) => ({ base, settings }),
   }, change);
 }
 
 // updateMachine changes a machine's settings: its name, the preset it uses and its port.
 export function updateMachine(id: string, change: (settings: MachineSettings) => MachineSettings): Promise<void> {
-  return changePart({
+  return shownSettings().changePart({
     read: (document) => document.machines.find((candidate) => candidate.id === id)?.settings,
     place: (document, settings) => ({
       ...document,
@@ -208,54 +192,39 @@ export function updateMachine(id: string, change: (settings: MachineSettings) =>
         : document.presetInUse,
       machines: document.machines.map((candidate) => candidate.id === id ? { ...candidate, settings } : candidate),
     }),
-    send: (base, settings) => putJSON(`/api/v1/settings/machines/${encodeURIComponent(id)}`, { base, settings }, [settingsChangedCode]),
+    path: `/settings/machines/${encodeURIComponent(id)}`,
+    body: (base, settings) => ({ base, settings }),
   }, change);
 }
 
 // removeMachine takes a machine that is no longer used off the list.
 export function removeMachine(id: string): Promise<void> {
-  return enqueue(async () => {
-    await apiClient.mutate<unknown>(`/api/v1/settings/machines/${encodeURIComponent(id)}`, { method: "DELETE" });
-    revision += 1;
-    if (state.document !== null) {
-      publish({ ...state, document: { ...state.document, machines: state.document.machines.filter((machine) => machine.id !== id) } });
-    }
-  });
+  return shownSettings().removeMachine(id);
 }
 
-// setInterfaceState keeps one piece of this machine's screen layout (an empty value removes it). It shows at
-// once; the engine writes it a little later together with the others, so a click never waits for it.
+// setInterfaceState は、このマシンの画面の状態を1つ残す（空の値は消す）。どのリモートセッションを選んでいても、
+// このマシンのエンジンに書く。
 export function setInterfaceState(key: InterfaceStateKey, value: string): Promise<void> {
-  const document = state.document;
-  if (document === null || (document.state.interface?.[key] ?? "") === value) return Promise.resolve();
-  const next = { ...document.state.interface };
-  if (value === "") delete next[key];
-  else next[key] = value;
-  revision += 1;
-  publish({ ...state, document: { ...document, state: { ...document.state, interface: next } } });
-  return enqueue(() => sendJSON("/api/v1/settings/state", { method: "PUT", body: { interface: { [key]: value } } }));
+  return thisMachineSettings.setInterfaceState(key, value);
 }
 
-// setTransfersStopped says whether this machine's transfer queue starts the transfers waiting in it. The engine
-// writes it at once and applies it to the queue, which reports it in its next listing.
+// setTransfersStopped は、画面が相手にするエンジンの転送の待ち行列が、待っている転送を始めるかを決める。転送は、
+// 選んでいるリモートセッションのエンジンが行う。
 export function setTransfersStopped(stopped: boolean): Promise<void> {
-  return enqueue(async () => {
-    await sendJSON("/api/v1/settings/state", { method: "PUT", body: { transfersStopped: stopped } });
-    const document = state.document;
-    if (document === null) return;
-    revision += 1;
-    publish({ ...state, document: { ...document, state: { ...document.state, transfersStopped: stopped } } });
-  });
+  return shownSettings().setTransfersStopped(stopped);
 }
 
-// interfaceState reads one piece of this machine's screen layout, or "" when nothing is kept.
+// interfaceState は、このマシンの画面の状態を1つ読む。何も残していなければ ""。document は、このマシンの設定
+// （useThisMachineSettings、currentThisMachineSettings）を渡す。
 export function interfaceState(document: SettingsDocument | null, key: InterfaceStateKey): string {
   return document?.state.interface?.[key] ?? "";
 }
 
-// resetSettingsForTests forgets the document, for tests that start each case from nothing.
+// resetSettingsForTests forgets the documents, for tests that start each case from nothing. The screens are drawn
+// with this machine's settings again.
 export function resetSettingsForTests(document: SettingsDocument | null = null): void {
-  writes = Promise.resolve();
-  revision += 1;
-  publish({ document, loadFailed: false });
+  remoteSettings.clear();
+  shownRunTarget = null;
+  thisMachineSettings.reset(document);
+  shownListeners.forEach((listener) => listener());
 }

@@ -1,11 +1,10 @@
 import { apiClient } from "./client";
-import { postEmpty, postJSON } from "./guards";
+import { postJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
 export type RemoteEngineList = components["schemas"]["RemoteEngineList"];
 export type RemoteEngineStatus = components["schemas"]["RemoteEngineStatus"];
-export type RemoteEngineEntrance = components["schemas"]["RemoteEngineEntrance"];
 export type RemoteEngineAction = components["schemas"]["RemoteEngineAction"];
 export type RemoteEngineActionStarted = components["schemas"]["RemoteEngineActionStarted"];
 export type RemoteEngineActionLog = components["schemas"]["RemoteEngineActionLog"];
@@ -15,7 +14,6 @@ export type RemoteEnginesApi = {
   add(alias: string): Promise<void>;
   remove(alias: string): Promise<RemoteEngineList>;
   status(alias: string): Promise<RemoteEngineStatus>;
-  open(alias: string): Promise<RemoteEngineEntrance>;
   // control starts the action on the host; actionLog reads its progress and
   // what the host's sshc wrote from cursor on.
   control(alias: string, action: RemoteEngineAction): Promise<RemoteEngineActionStarted>;
@@ -43,9 +41,6 @@ export const remoteEnginesApi: RemoteEnginesApi = {
   },
   async status(alias) {
     return validateOpenAPISchema<RemoteEngineStatus>("RemoteEngineStatus", await apiClient.read(`${enginePath(alias)}/status`));
-  },
-  async open(alias) {
-    return validateOpenAPISchema<RemoteEngineEntrance>("RemoteEngineEntrance", await postEmpty<unknown>(`${enginePath(alias)}/open`));
   },
   async control(alias, action) {
     return validateOpenAPISchema<RemoteEngineActionStarted>("RemoteEngineActionStarted", await postJSON<unknown>(`${enginePath(alias)}/control`, { action }));

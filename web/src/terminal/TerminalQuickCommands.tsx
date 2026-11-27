@@ -3,7 +3,8 @@ import { Icon } from "../ui/icons";
 import type { TerminalSession } from "../api/terminalSessions";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
-import { snippetsApi, type Snippet } from "../snippets/api";
+import type { Snippet } from "../snippets/api";
+import { useEngineApis } from "../shell/engineApis";
 import { commandSnippets } from "../snippets/snippetKind";
 import { clipboard } from "../ui/clipboard";
 import { terminalCommandApi, type TerminalCommandApi, type TerminalCommandPreview, type TerminalCommandRequest } from "./commands/commandApi";
@@ -40,6 +41,8 @@ export function TerminalQuickCommands({
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
+  // スニペットは、ターミナルを動かしているエンジン（選んでいるリモートセッション）のもの。
+  const { snippets: snippetsApi } = useEngineApis();
   const panel = useRef<HTMLDivElement>(null);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -74,7 +77,7 @@ export function TerminalQuickCommands({
     return () => {
       active = false;
     };
-  }, [t]);
+  }, [snippetsApi, t]);
 
   // キーボードで「…」から開いた人がパネルへ入れるように、開いたらパネルへフォーカスを
   // 移し、Tab をパネルの中で回す。外へ出すと xterm が Tab をシェルへ送ってしまい、

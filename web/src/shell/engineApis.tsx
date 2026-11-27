@@ -10,10 +10,17 @@ import { createSftpApis, thisMachineSftpApis, type SftpApis } from "../sftp/sftp
 import { createReadScope, type ReadScope } from "../api/readScope";
 import { createRecentConnectionsApi, recentConnectionsApi, type RecentConnectionsApi } from "../api/recentConnections";
 import { engineApiBase } from "../api/remoteEngines";
+import { aboutApi, createAboutApi, type AboutApi } from "../api/about";
+import { createSettingsApi, settingsApi, type SettingsApi } from "../api/settings";
+import { createSyncApi, syncApi, type SyncApi } from "../api/sync";
+import { runTargetTerminalSessionsApi } from "../api/terminalSessions";
+import { createUpdateApi, updateApi, type UpdateApi } from "../api/update";
+import { createSnippetsApi, snippetsApi, type SnippetsApi } from "../snippets/api";
 
 // EngineApis は、画面が相手にする sshc エンジンの API である。リモートセッションを選んでいる間は、その実行先の
-// ものを、このマシンのエンジンの取り次ぎで呼ぶ。設定・同期・更新・スニペットはどのエンジンを選んでいても
-// このマシンのものなので、ここには入れない（それぞれの API をそのまま使う）。
+// ものを、このマシンのエンジンの取り次ぎで呼ぶ。画面はまるごとそのエンジンのものになる（設定・同期・更新・
+// スニペットも）。設定とキー設定のプリセットは、モジュールに1つの店（settingsStore、presetLibrary）が持ち、
+// App が選んでいるエンジンへ切り替える。
 export type EngineApis = {
   // runTarget は相手のエンジン。null はこのマシン。
   runTarget: string | null;
@@ -28,6 +35,12 @@ export type EngineApis = {
   secrets: VaultApi & CredentialsApi;
   // hostDetail は、接続先の詳細が使う、診断と Vault の API である。
   hostDetail: DiagnosticsApi & VaultApi & CredentialsApi;
+  snippets: SnippetsApi;
+  sync: SyncApi;
+  update: UpdateApi;
+  about: AboutApi;
+  // settings は、設定の画面が使う、背景の画像とシェルの一覧の API である。
+  settings: SettingsApi;
 };
 
 function engineApisAt(runTarget: string | null, parts: Omit<EngineApis, "runTarget" | "secrets" | "hostDetail"> & { vault: VaultApi; credentials: CredentialsApi }): EngineApis {
@@ -39,6 +52,7 @@ function engineApisAt(runTarget: string | null, parts: Omit<EngineApis, "runTarg
 const thisMachine = engineApisAt(null, {
   config: configApi, recentConnections: recentConnectionsApi, keys: keysApi, remoteKeys: remoteKeysApi, vpn: vpnApi,
   diagnostics: diagnosticsApi, vault: vaultApi, credentials: credentialsApi, sftp: thisMachineSftpApis,
+  snippets: snippetsApi, sync: syncApi, update: updateApi, about: aboutApi, settings: settingsApi,
 });
 
 const EngineApisContext = createContext<EngineApis>(thisMachine);
@@ -58,7 +72,8 @@ export function useEngineApisOf(runTarget: string | null, vaultRevision = 0): En
       config: createConfigApi(base, reads), recentConnections: createRecentConnectionsApi(base, reads),
       keys: createKeysApi(base), remoteKeys: createRemoteKeysApi(base), vpn: createVPNApi(base),
       diagnostics: createDiagnosticsApi(base), vault: createVaultApi(base), credentials: createCredentialsApi(base),
-      sftp: createSftpApis(base),
+      sftp: createSftpApis(base), snippets: createSnippetsApi(base), sync: createSyncApi(base), update: createUpdateApi(base),
+      about: createAboutApi(base), settings: createSettingsApi(base, () => runTargetTerminalSessionsApi(runTarget).shellProfiles()),
     });
     return { apis, reads };
     // vaultRevision は、作り直すきっかけとしてだけ使う。

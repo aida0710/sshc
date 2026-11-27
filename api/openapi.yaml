@@ -653,38 +653,6 @@ paths:
           $ref: '#/components/responses/Problem'
         '502':
           $ref: '#/components/responses/Problem'
-  /api/v1/engines/{alias}/open:
-    post:
-      operationId: openRemoteEngine
-      parameters:
-      - name: alias
-        in: path
-        required: true
-        schema:
-          type: string
-          minLength: 1
-          maxLength: 64
-      responses:
-        '200':
-          description: A one-time URL that opens the remote engine through a relay on this machine
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RemoteEngineEntrance'
-        '400':
-          $ref: '#/components/responses/Problem'
-        '401':
-          $ref: '#/components/responses/Problem'
-        '403':
-          $ref: '#/components/responses/Problem'
-        '404':
-          $ref: '#/components/responses/Problem'
-        '409':
-          $ref: '#/components/responses/Problem'
-        '500':
-          $ref: '#/components/responses/Problem'
-        '502':
-          $ref: '#/components/responses/Problem'
   /api/v1/engines/{alias}/control:
     post:
       operationId: controlRemoteEngine
@@ -5790,12 +5758,6 @@ components:
         # output は、接続先の sshc が書いた標準出力と標準エラーを、届いた順に、端末の
         # 制御文字を除いて並べたものである。
         output: { type: string, maxLength: 65536 }
-    RemoteEngineEntrance:
-      type: object
-      additionalProperties: false
-      required: [url]
-      properties:
-        url: { type: string }
     # ターミナルのセッションをまとめるワークスペース。default と agents は消せず、
     # name が空なら画面がその言語の既定の名前を出す。
     TerminalWorkspace:

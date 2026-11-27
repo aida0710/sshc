@@ -13,7 +13,7 @@ export const builtInKeyBarPresets: readonly KeyBarPreset[] = [
 ];
 
 export const keyBarPresetLibrary = createPresetLibrary<KeyBarPreset>({
-  endpoint: "/api/v1/metadata/keybar",
+  endpoint: "/metadata/keybar",
   read: (metadata) => metadata.keyBarPresets,
   choice: "keyBarPreset",
   builtIn: builtInKeyBarPresets,

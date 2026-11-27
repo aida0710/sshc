@@ -67,6 +67,7 @@ export function AppNavigation({
   hosts = [],
   engineChoices,
   onOpenConnectionSettings,
+  onOpenVault,
   onConnect,
   directDestination,
   onOpenCommandPalette,
@@ -108,6 +109,8 @@ export function AppNavigation({
   engineChoices: { aliases: string[]; hosts: HostEntry[] };
   // onOpenConnectionSettings は、リモートセッションの接続先（このマシンの Connections）の設定を開く。
   onOpenConnectionSettings: (identity: HostIdentity) => void;
+  // onOpenVault は、選んでいる sshc エンジンの Vault の画面を開く（Vault が無いときに作る）。
+  onOpenVault: () => void;
   onConnect?: (alias: string, workspaceId: string) => void;
   directDestination?: DirectDestinationActions | undefined;
   onOpenCommandPalette: () => void;
@@ -237,7 +240,7 @@ export function AppNavigation({
       </div>
 
       <div className="shrink-0">
-        <RunTargetSwitcher targets={runTargets} link={runTargetLink} aliases={engineChoices.aliases} hosts={engineChoices.hosts} onShowTerminal={onShowTerminal} onOpenConnectionSettings={onOpenConnectionSettings} />
+        <RunTargetSwitcher targets={runTargets} link={runTargetLink} aliases={engineChoices.aliases} hosts={engineChoices.hosts} onShowTerminal={onShowTerminal} onOpenConnectionSettings={onOpenConnectionSettings} onOpenVault={onOpenVault} />
       </div>
 
       <NavigationResizeHandle width={desktopWidth} onWidthChange={onDesktopWidthChange} />

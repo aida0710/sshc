@@ -1,7 +1,8 @@
 import { sectionPath } from "../routing/sectionRoute";
 import { opensInThisPage } from "../ui/linkClick";
 import { useId, useState, type MouseEvent, type ReactNode } from "react";
-import { updateApi, type UpdateApi } from "../api/update";
+import type { UpdateApi } from "../api/update";
+import { useEngineApis } from "./engineApis";
 import { useTranslate } from "../i18n/context";
 import { updateGlobalSettings, useSettings } from "../settings/settingsStore";
 import { availableRelease, isUpdateActive, useUpdateStatus } from "./useUpdateStatus";
@@ -28,8 +29,11 @@ type UpdateBadgeProps = {
 // that one is available, or why this installation cannot update from the Web. That
 // part has its own disclosure button beside the version link. An update is confirmed
 // and followed on About, so the notice links there; its result opens in a dialog.
-export function UpdateBadge({ api = updateApi, current = "", leading, indicator, enabled = true, showsProgressDialog = true, onNavigate }: UpdateBadgeProps) {
+export function UpdateBadge({ api: givenApi, current = "", leading, indicator, enabled = true, showsProgressDialog = true, onNavigate }: UpdateBadgeProps) {
   const t = useTranslate();
+  // バージョンと更新は、選んでいる sshc エンジン（リモートセッション）のもの。
+  const engineUpdates = useEngineApis().update;
+  const api = givenApi ?? engineUpdates;
   const { status } = useUpdateStatus(api, enabled);
   const [shownResultId] = useState(readShownUpdateResult);
   const [closedDialogKey, setClosedDialogKey] = useState<string | null>(null);

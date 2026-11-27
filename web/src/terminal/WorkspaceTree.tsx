@@ -10,7 +10,7 @@ import type { DirectDestinationActions } from "../shell/useDirectDestinationActi
 import type { SessionShortcutRequest } from "../shell/useAppShortcuts";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { keepMachineState, keepMachineStateJSON, parseMachineStateJSON } from "../settings/machineState";
-import { interfaceState, useSettings } from "../settings/settingsStore";
+import { interfaceState, useThisMachineSettings } from "../settings/settingsStore";
 import { Icon } from "../ui/icons";
 import { Notice } from "../ui/surface";
 import { localShellChoice } from "./localShellChoice";
@@ -101,7 +101,8 @@ export function WorkspaceTree({
 }: WorkspaceTreeProps) {
   const t = useTranslate();
   // Both follow this machine's state, which a change here updates at once.
-  const settings = useSettings();
+  // たたんだワークスペースと隠したものを出すかは、このマシンの画面の状態に残す。
+  const settings = useThisMachineSettings();
   const showHidden = interfaceState(settings.document, "showHiddenTerminalWorkspaces") === "true";
   const collapsedState = interfaceState(settings.document, "collapsedTerminalWorkspaces");
   const collapsed = useMemo(() => collapsedOf(parseMachineStateJSON(collapsedState, [])), [collapsedState]);

@@ -41,6 +41,19 @@ export function LanguageProvider({ children, initial }: { children: ReactNode; i
     copyLocale(synced);
   }, [initial, synced]);
 
+  // readFor は、言語を写した設定のエンジン（machineId）。リモートセッションを替えた先の設定が言語を選んでいなければ、
+  // 前のエンジンの言語を残さず、ブラウザの言語にする。
+  const machineId = settings?.machineId ?? null;
+  const readFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (initial !== undefined || machineId === null) return;
+    const anotherEngine = readFor.current !== null && readFor.current !== machineId;
+    readFor.current = machineId;
+    if (!anotherEngine || synced !== null) return;
+    setLocaleState(browserLocale());
+    forgetLocale();
+  }, [initial, machineId, synced]);
+
   // A language the settings chose and then dropped (the settings page, here or on another machine) means following
   // the browser from then on.
   const chosenBefore = useRef(synced);

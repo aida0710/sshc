@@ -462,7 +462,7 @@ func New(options Options) (*Server, error) {
 		})
 		if options.RemoteEngines != nil {
 			registerRemoteEngineRoutes(e, RemoteEngineHandlers{
-				Engines: options.RemoteEngines, ExpectedOrigin: "http://" + host, Snippets: options.Snippets, Actions: actions,
+				Engines: options.RemoteEngines, ExpectedOrigin: "http://" + host,
 			})
 		}
 	}

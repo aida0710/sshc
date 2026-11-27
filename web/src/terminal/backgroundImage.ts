@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
+import { engineApiBase } from "../api/remoteEngines";
+import { useEngineApis } from "../shell/engineApis";
 
-
-async function backgroundImageURL(name: string): Promise<string> {
-  const response = await apiClient.send(`/api/v1/terminal/backgrounds/${encodeURIComponent(name)}`, {
+async function backgroundImageURL(base: string, name: string): Promise<string> {
+  const response = await apiClient.send(`${base}/terminal/backgrounds/${encodeURIComponent(name)}`, {
     method: "GET",
   });
   if (!response.ok) throw new Error("background_unreadable");
@@ -16,15 +17,19 @@ async function backgroundImageURL(name: string): Promise<string> {
     reader.readAsDataURL(bytes);
   });
 }
+
+// useBackgroundImage は、背景の画像 name を描ける URL にする。画像は、それを選んだ設定のエンジン（選んでいる
+// リモートセッション）のライブラリから読む。
 export function useBackgroundImage(name: string): string {
   const [url, setURL] = useState("");
+  const base = engineApiBase(useEngineApis().runTarget);
   useEffect(() => {
     if (name === "") {
       setURL("");
       return;
     }
     let live = true;
-    void backgroundImageURL(name)
+    void backgroundImageURL(base, name)
       .then((next) => {
         if (live) setURL(next);
       })
@@ -32,6 +37,6 @@ export function useBackgroundImage(name: string): string {
     return () => {
       live = false;
     };
-  }, [name]);
+  }, [base, name]);
   return url;
 }

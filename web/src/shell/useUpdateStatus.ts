@@ -25,6 +25,8 @@ export function useUpdateStatus(api: UpdateApi, enabled = true) {
   }, [api]);
 
   useEffect(() => {
+    // 別のエンジン（リモートセッション）の API になったら、前のエンジンの状態を出さない。
+    receiveStatus(null);
     const listeners = statusListeners.get(api) ?? new Set();
     listeners.add(receiveStatus);
     statusListeners.set(api, listeners);

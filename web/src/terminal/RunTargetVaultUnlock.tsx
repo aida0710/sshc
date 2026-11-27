@@ -13,13 +13,14 @@ export function RunTargetVaultUnlock({
   alias,
   api,
   onUnlocked,
-  onOpenInNewTab,
+  onOpenVault,
   children,
 }: {
   alias: string;
   api: RemoteEnginesApi;
   onUnlocked: () => void;
-  onOpenInNewTab: () => void;
+  // onOpenVault は、選んでいるエンジンの Vault の画面を開く。Vault が無いときは、そこで作る。
+  onOpenVault: () => void;
   // children are the panel's other actions, shown under the form.
   children: ReactNode;
 }) {
@@ -31,7 +32,7 @@ export function RunTargetVaultUnlock({
       <div className="flex flex-col gap-3">
         <p className="break-words text-sm text-ink-muted">{t("runTarget.vaultMissingBody", { alias })}</p>
         <div className="flex flex-wrap gap-2">
-          <Button kind="primary" onClick={onOpenInNewTab}>{t("runTarget.openInNewTab")}</Button>
+          <Button kind="primary" onClick={onOpenVault}>{t("runTarget.openVault")}</Button>
           {children}
         </div>
       </div>

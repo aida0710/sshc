@@ -29,8 +29,9 @@ type forwardedRoute struct {
 const forwardedMediaRoute = enginesPrefix + "/:alias/sftp/media/:ticket"
 
 // forwardedRoutes は、リモートセッションを選んでいる間、画面が実行先のものとして出す操作である。
-// ここに無い操作は取り次がない。同期、更新、設定、このマシンのセッション、スニペットは、実行先を
-// 選んでいてもこのマシンのものなので、足さない（TestWhatStaysThisMachinesIsNeverForwarded）。
+// 画面はまるごと実行先のものになる（設定、キー設定、スニペット、同期、更新も）。ここに無い操作は取り次がない。
+// 画面のログイン（session）と、リモートセッションの一覧（engines）は、どれを選んでいてもこのマシンのものなので、
+// 足さない（TestWhatStaysThisMachinesIsNeverForwarded）。
 //
 // 短い JSON を送って JSON で答える操作は、そのまま足す（remoteengine.ForwardAPI の本文の上限に収まるもの）。
 // すぐには答えない操作には slow を、ファイルの中身を運ぶ操作には file を付ける。
@@ -71,12 +72,14 @@ var forwardedRoutes = []forwardedRoute{
 	{method: http.MethodDelete, path: "/trash/:entryId"},
 	{method: http.MethodPost, path: "/remote-keys/plan", slow: true},
 	{method: http.MethodPost, path: "/remote-keys/register", slow: true},
-	// Vault。作ること、開け閉め、入れた値の操作まで。マスターパスワードの変更と、壊れた Vault の
-	// 復旧・作り直しは取り次がない（実行先の画面でする）。
+	// Vault。作ること、開け閉め、マスターパスワードの変更、壊れた Vault の復旧・作り直し、入れた値の操作。
 	{method: http.MethodGet, path: "/passwords"},
 	{method: http.MethodPost, path: "/passwords/initialise"},
 	{method: http.MethodPost, path: "/passwords/unlock"},
 	{method: http.MethodPost, path: "/passwords/lock"},
+	{method: http.MethodPost, path: "/passwords/change"},
+	{method: http.MethodPost, path: "/passwords/recover-compatible-backup"},
+	{method: http.MethodPost, path: "/passwords/reset-unsupported"},
 	{method: http.MethodGet, path: "/passwords/:alias/eligibility"},
 	{method: http.MethodGet, path: "/credentials"},
 	{method: http.MethodPut, path: "/credentials/:kind/assign"},
@@ -155,6 +158,61 @@ var forwardedRoutes = []forwardedRoute{
 	{method: http.MethodPost, path: "/known-hosts/delete"},
 	{method: http.MethodPost, path: "/known-hosts/scan", slow: true},
 	{method: http.MethodPost, path: "/known-hosts/add"},
+	// 設定。画面のテーマ・言語・フォント・ターミナルの見た目も、実行先の設定で描く。
+	{method: http.MethodGet, path: "/settings"},
+	{method: http.MethodPut, path: "/settings/global"},
+	{method: http.MethodPut, path: "/settings/presets"},
+	{method: http.MethodPut, path: "/settings/presets/:id"},
+	{method: http.MethodPut, path: "/settings/machines/:id"},
+	{method: http.MethodDelete, path: "/settings/machines/:id"},
+	{method: http.MethodPut, path: "/settings/state"},
+	// キー設定（ショートカットとキーバーのプリセット）。
+	{method: http.MethodGet, path: "/metadata"},
+	{method: http.MethodPut, path: "/metadata/shortcuts"},
+	{method: http.MethodPut, path: "/metadata/keybar"},
+	// ターミナルの背景の画像。画像そのものを運ぶ操作は file にする。
+	{method: http.MethodGet, path: "/terminal/backgrounds"},
+	{method: http.MethodPost, path: "/terminal/backgrounds", file: true},
+	{method: http.MethodPut, path: "/terminal/backgrounds/capacity"},
+	{method: http.MethodGet, path: "/terminal/backgrounds/:name", file: true},
+	{method: http.MethodPatch, path: "/terminal/backgrounds/:name"},
+	{method: http.MethodDelete, path: "/terminal/backgrounds/:name"},
+	// スニペット。実行は実行先のエンジンが、実行先の接続先へ行う。
+	{method: http.MethodGet, path: "/snippets"},
+	{method: http.MethodPost, path: "/snippets"},
+	{method: http.MethodPut, path: "/snippets/:id"},
+	{method: http.MethodDelete, path: "/snippets/:id"},
+	{method: http.MethodPut, path: "/snippets/startup/:alias"},
+	{method: http.MethodPost, path: "/snippets/preview"},
+	{method: http.MethodPost, path: "/snippets/jobs", slow: true},
+	{method: http.MethodGet, path: "/snippets/jobs/:id"},
+	{method: http.MethodDelete, path: "/snippets/jobs/:id"},
+	// 同期。保存先（S3 など）の答えを待つ操作は slow にする。
+	{method: http.MethodGet, path: "/sync"},
+	{method: http.MethodPost, path: "/sync/setup/check", slow: true},
+	{method: http.MethodPut, path: "/sync/setup", slow: true},
+	{method: http.MethodPost, path: "/sync/setup/export"},
+	{method: http.MethodPost, path: "/sync/setup/import", slow: true},
+	{method: http.MethodGet, path: "/sync/exclusions"},
+	{method: http.MethodPut, path: "/sync/exclusions"},
+	{method: http.MethodGet, path: "/sync/push", slow: true},
+	{method: http.MethodPost, path: "/sync/push", slow: true},
+	{method: http.MethodPost, path: "/sync/force-push", slow: true},
+	{method: http.MethodGet, path: "/sync/bucket", slow: true},
+	{method: http.MethodGet, path: "/sync/history", slow: true},
+	{method: http.MethodPost, path: "/sync/history/diff", slow: true},
+	{method: http.MethodPut, path: "/sync/key"},
+	{method: http.MethodPut, path: "/sync/auto"},
+	{method: http.MethodPost, path: "/sync/now", slow: true},
+	{method: http.MethodPost, path: "/sync/pull", slow: true},
+	// sshc のバージョンと更新。公開されたリリースを確かめる操作は slow にする。更新の終わりに実行先の
+	// エンジンは起動し直すので、経過（/update/log）は届かない間も読み直す（画面の側）。
+	{method: http.MethodGet, path: "/about"},
+	{method: http.MethodGet, path: "/update"},
+	{method: http.MethodPost, path: "/update/check", slow: true},
+	{method: http.MethodPost, path: "/update/preview", slow: true},
+	{method: http.MethodPost, path: "/update", slow: true},
+	{method: http.MethodGet, path: "/update/log"},
 }
 
 // registerForwardedRoutes は、forwardedRoutes を /api/v1/engines/:alias の下に登録する。

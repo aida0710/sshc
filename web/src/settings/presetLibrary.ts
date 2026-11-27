@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { apiClient } from "../api/client";
+import { engineApiBase } from "../api/remoteEngines";
 import { putJSON } from "../api/guards";
 import type { Metadata } from "../api/config";
 import { validateOpenAPISchema } from "../api/validators.generated";
@@ -62,6 +63,10 @@ let generation = 0;
 let syncing = false;
 // refreshing is the read under way, or null.
 let refreshing: Promise<void> | null = null;
+// libraryBase は、プリセットを読み書きするエンジン（画面が描く設定と同じ、選んでいるリモートセッションのもの）の API。
+let libraryBase = engineApiBase(null);
+// refreshingBase は、読み取りの途中（refreshing）のエンジンの API。
+let refreshingBase = libraryBase;
 
 // A library whose screen is loaded later (the key bar's) registers after the first read, and cannot take the answer of
 // one already under way. It is read at once, not at the next poll, so that the person's own preset shows with its screen.
@@ -71,6 +76,7 @@ function register(registration: Registration) {
 }
 
 export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, read, choice, builtIn = [] }: {
+  // endpoint は、一覧を書く先。エンジンの API の下の道筋（/metadata/shortcuts）。
   endpoint: string;
   read: (metadata: Metadata) => Preset[] | undefined;
   choice: PresetChoice;
@@ -113,7 +119,7 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
     ++revision;
     publish({ busy: true });
     try {
-      await putJSON(endpoint, { base: state.presets, presets: next });
+      await putJSON(`${libraryBase}${endpoint}`, { base: state.presets, presets: next });
       publish({ presets: next });
     } catch (error) {
       publish({ error: true });
@@ -146,25 +152,35 @@ export function createPresetLibrary<Preset extends LibraryPreset>({ endpoint, re
   };
 }
 
-// refreshPresetLibraries reads the metadata once and gives every library its list.
+// refreshPresetLibraries reads the metadata once and gives every library its list. 別のエンジンの読み取りの途中で
+// エンジンを替えたときは、その読み取りの答え（捨てられる）を待ってから、替えた先を読む。
 export async function refreshPresetLibraries() {
-  if (refreshing !== null) return;
-  refreshing = readPresetLibraries().finally(() => { refreshing = null; });
-  await refreshing;
+  const base = libraryBase;
+  if (refreshing !== null && refreshingBase === base) return;
+  const read = (refreshing ?? Promise.resolve()).then(() => readPresetLibraries(base));
+  refreshing = read;
+  refreshingBase = base;
+  try {
+    await read;
+  } finally {
+    if (refreshing === read) refreshing = null;
+  }
 }
 
-async function readPresetLibraries() {
+async function readPresetLibraries(base: string) {
   const finishers = [...registrations].map((registration) => registration.begin(generation)).filter((finish) => finish !== null);
   try {
-    const metadata = validateOpenAPISchema<Metadata>("Metadata", await apiClient.read("/api/v1/metadata"));
+    const metadata = validateOpenAPISchema<Metadata>("Metadata", await apiClient.read(`${base}/metadata`));
     finishers.forEach((finish) => finish(metadata));
   } catch { finishers.forEach((finish) => finish(null)); }
 }
 
-// usePresetLibrarySync keeps every library in step with the metadata while the vault is open (ready).
-export function usePresetLibrarySync(ready: boolean) {
+// usePresetLibrarySync keeps every library in step with the metadata while the vault is open (ready). runTarget は
+// 画面が相手にするエンジン（選んでいるリモートセッション）で、替えたらそのエンジンのプリセットを読み直す。
+export function usePresetLibrarySync(ready: boolean, runTarget: string | null = null) {
   useEffect(() => {
     if (!ready) return;
+    libraryBase = engineApiBase(runTarget);
     ++generation;
     syncing = true;
     registrations.forEach((registration) => registration.setLoading());
@@ -172,6 +188,6 @@ export function usePresetLibrarySync(ready: boolean) {
     const refresh = () => { void refreshPresetLibraries(); };
     window.addEventListener("focus", refresh);
     return () => { ++generation; syncing = false; window.removeEventListener("focus", refresh); };
-  }, [ready]);
+  }, [ready, runTarget]);
   usePolling(refreshPresetLibraries, { intervalMs: presetPollIntervalMs, enabled: ready, whileHidden: true });
 }

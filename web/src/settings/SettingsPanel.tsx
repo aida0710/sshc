@@ -1,8 +1,9 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { KeyConfig } from "../keyconfig/KeyConfig";
 import { KeyBarConfig } from "../keybar/KeyBarConfig";
-import { settingsApi, type SettingsApi } from "../api/settings";
-import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
+import type { SettingsApi } from "../api/settings";
+import type { PasswordVaultStatus, VaultApi } from "../api/vault";
+import { useEngineApis } from "../shell/engineApis";
 import { useTranslate } from "../i18n/context";
 import { SettingsNavigation } from "./SettingsNavigation";
 import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
@@ -30,7 +31,6 @@ import { isImeComposing } from "../ui/imeComposition";
 
 // Settings also change the master password, which belongs to the vault.
 export type SettingsPanelApi = SettingsApi & Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
-const settingsPanelApi: SettingsPanelApi = { ...settingsApi, ...vaultApi };
 
 const mobileTouchTargets =
   "[&_button]:min-h-10 [&_a]:inline-flex [&_a]:min-h-10 [&_a]:items-center " +
@@ -38,8 +38,10 @@ const mobileTouchTargets =
 
 type SettingsPanelProps = {
   onVaultChanged?: ((status: PasswordVaultStatus) => void) | undefined;
-  // Whether the vault has no master password; the engine never locks one.
-  passwordless?: boolean;
+  // Whether the vault has no master password; the engine never locks one. 渡さなければ（リモートセッションの Vault）、
+  // その Vault に尋ねる。
+  passwordless?: boolean | undefined;
+  // api は、渡さなければ、選んでいる sshc エンジン（リモートセッション）の背景の画像と Vault の API。
   api?: SettingsPanelApi;
   page?: SettingsPage | "All";
   terminalSessions?: SessionSettingsState;
@@ -71,6 +73,19 @@ export function SettingsPanel({ onNavigationBlockerChange, onNavigateLocation, .
   );
 }
 
+// useVaultPasswordless は、Vault にマスターパスワードが無いか。このマシンのものは App が知っている（given）。
+// リモートセッションのものは、その Vault に尋ねる。答えるまでは、マスターパスワードがあるものとして扱う。
+function useVaultPasswordless(api: Pick<VaultApi, "passwordVault">, given: boolean | undefined): boolean {
+  const [asked, setAsked] = useState(false);
+  useEffect(() => {
+    if (given !== undefined) return;
+    let current = true;
+    api.passwordVault().then((vault) => { if (current) setAsked(vault.passwordless ?? false); }, () => undefined);
+    return () => { current = false; };
+  }, [api, given]);
+  return given ?? asked;
+}
+
 // savesOnEnter says whether Enter in this field saves the page: the one-line fields. In a box of lines Enter starts a
 // line, and on a button or a list it is that control's own.
 function savesOnEnter(field: EventTarget): boolean {
@@ -78,14 +93,17 @@ function savesOnEnter(field: EventTarget): boolean {
 }
 
 function SettingsPages({
-  api = settingsPanelApi,
+  api: givenApi,
   page = "All",
   terminalSessions,
   onVaultChanged,
-  passwordless = false,
+  passwordless: givenPasswordless,
   onNavigatePage,
 }: Omit<SettingsPanelProps, "onNavigationBlockerChange" | "onNavigateLocation">) {
   const t = useTranslate();
+  const engine = useEngineApis();
+  const api = useMemo<SettingsPanelApi>(() => givenApi ?? { ...engine.settings, ...engine.secrets }, [givenApi, engine]);
+  const passwordless = useVaultPasswordless(api, givenPasswordless);
   const draft = useSettingsDraft();
   const compact = useMediaQuery(mobileViewportQuery);
   const settingsDocument = useSettings().document;

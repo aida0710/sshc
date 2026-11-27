@@ -1,6 +1,6 @@
 ---
 title: Remote sessions
-description: Run terminals, manage connections and use SFTP on the sshc engine that stays up on an SSH host, while settings stay on this machine.
+description: Make the whole screen, from terminals, connections and SFTP to settings, the sshc engine that stays up on an SSH host.
 ---
 
 # Remote sessions
@@ -13,22 +13,23 @@ Keep an sshc engine running on an SSH host (an always-on server, for example), a
 
 A regular SSH session differs in which engine holds the connection. This machine's engine holds it, so the session ends when this machine's engine stops. A remote session runs on the host's engine, so it stays connected when this machine's engine stops.
 
-While a remote session is chosen, these screens are the remote engine's machine's:
+While a remote session is chosen, the whole screen is the remote engine's machine's:
 
 - The terminals (sessions and [workspaces](./workspace))
 - Home, Connections, SSH Config and History
 - SSH Keys, Known Hosts and Remote Keys
-- The vault (passwords, key passphrases and OTP)
+- The vault (passwords, key passphrases, OTP and changing the master password)
 - VPN and Diagnostics
 - SFTP. "Local" is the files of the remote engine's machine. Uploads and downloads from the browser pass through this machine's engine to the remote engine.
+- Snippets
+- Settings (presets, appearance, shortcuts, the key bar and background images), the language and the theme. The screen is drawn with the remote engine's settings too.
+- Sync, About and updating sshc
 
 These stay this machine's whatever engine is chosen:
 
-- Snippets
-- Settings (presets, appearance and shortcuts), the language and the theme
-- Sync and updating sshc
-
-Changing the remote vault's master password and recovering a damaged vault are not done from here. Open the remote engine's own screen with **Open its full screen in a new tab** in the host's **…**.
+- Signing in to the screen
+- The list in **Remote session** and which one is chosen
+- The screen's layout (the SFTP tabs, folded workspaces and so on)
 
 ## Usage
 
@@ -53,7 +54,7 @@ Switching engines opens the session you last had open on that engine. If it has 
 
 Which engine is chosen is saved as this machine's state, so it stays after a reload. Only the session you last had open is remembered by this browser tab alone: after a reload, the top of the sidebar opens first.
 
-Each host's **…** offers **Engine information…**, **Open its full screen in a new tab** (the host engine's own screen, like `sshc open <alias>`) and **Remove from the list**. Removing it stops neither the host's engine nor its terminals.
+Each host's **…** offers **Engine information…**, **Open connection settings** and **Remove from the list**. Removing it stops neither the host's engine nor its terminals.
 
 If the chosen host's vault is locked, the terminal area shows a field for that vault's password. Pressing the chosen row in **Remote session** again opens the unlock dialog too. This machine's engine passes the password to the host's engine inside the SSH connection and does not save it here. Once the vault is unlocked, the session the lock kept from opening opens.
 
@@ -100,7 +101,7 @@ While the session list cannot be read from the chosen host's engine, the middle 
 It also shows when the list was last tried. The list is read again every few seconds, so this goes away by itself once the host can be reached.
 
 - When the host cannot be reached: **Reconnect now** reads the list again at once. When the reason is known, the terminal area shows one of the sentences in the table below.
-- When the host's vault is locked: enter the vault password there and choose **Unlock**. If the host has no vault yet, create one with **Open its full screen in a new tab**.
+- When the host's vault is locked: enter the vault password there and choose **Unlock**. If the host has no vault yet, choose **Open Vault** and create it on the host's Vault page.
 - When sshc on the host does not work with this machine’s: both versions are shown side by side, and the update button there runs `sshc update --yes` on the host. While it runs, the seconds elapsed and what the host's `sshc` writes are shown as it is written; when it ends, the list is read again. Updating ends every session running on the host. Leaving the page does not stop the update on the host. If this machine's sshc is the older one, update it here instead.
 
 In every case, **Switch back to localhost** returns to this machine's terminals. **Details** shows the error code and detail the engine returned, and **Engine information…** is also offered. From any other page, pressing the chosen row in **Remote session** again takes you to the terminal area.
@@ -134,9 +135,9 @@ While an action runs, the dialog shows what the host's `sshc` writes as it is wr
 - sshc on the host can be a different version from this machine’s as long as both versions handle remote sessions the same way. When they differ, the version line in the engine information dialog also shows this machine’s version.
 - When a release changes how remote sessions work between machines, update sshc on the host to that release or later too. The release notes of such a release say that hosts need updating. If sshc on the host does not work with this machine’s, update the host right from the terminal area.
 - The host's SSH server must allow TCP forwarding to its `127.0.0.1` (`AllowTcpForwarding yes` or `local`).
-- If the host has no vault yet, create it through **Open its full screen in a new tab**.
+- If the host has no vault yet, create it on the Vault page while the remote session is chosen.
 - SSH sessions opened in a remote session can use port forwarding. For Local and Dynamic forwards, this machine listens on its `127.0.0.1` and carries each connection to the remote sshc engine. A Remote forward's destination is resolved from the remote sshc engine. These forwards are temporary and cannot be saved to the connection's settings.
-- Quick Commands and sending a command to several sessions also work in remote sessions. The snippets are this machine's, and variables and secrets are filled in on this machine. The confirmation shows the command with secrets hidden, and only the remote sshc engine receives the filled-in command. A command is sent only to sessions on the engine being shown (never across engines).
+- Quick Commands and sending a command to several sessions also work in remote sessions. The snippets are the remote engine's, and the remote engine fills in their variables and secrets. A command is sent only to sessions on the engine being shown (never across engines).
 - Path preview and **Open current directory in SFTP** for a session opened in a remote session use the files and connections of the sshc engine that runs the session.
 - When a terminal on an engine that is not chosen sends a notification, the **Remote session** button and that engine's row get a mark. Only engines that this machine's engine is connected to get marks (sshc does not connect or ask for a password to show one). sshc checks every 15 seconds, so a mark can appear a little late. Choosing that engine clears the mark, and the rows of the sessions that sent notifications get their own unread marks.
 - The host must run macOS or Linux.
@@ -147,8 +148,8 @@ This machine's engine opens a single SSH connection to the host and forwards, th
 
 ```mermaid
 flowchart TD
-  browser["This machine's browser"] <--> local["This machine's engine<br/>Settings, Snippets, Sync"]
-  local <-- "One SSH connection" --> remote["The host's engine<br/>Connections, SFTP, Vault and more"]
+  browser["This machine's browser"] <--> local["This machine's engine<br/>Signing in, the remote session list"]
+  local <-- "One SSH connection" --> remote["The host's engine<br/>Connections, SFTP, Vault, Settings, Snippets, Sync and more"]
   remote <--> shell["Terminals"]
 ```
 

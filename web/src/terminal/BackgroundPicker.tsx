@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import { settingsApi, type SettingsApi, type TerminalBackground } from "../api/settings";
+import type { SettingsApi, TerminalBackground } from "../api/settings";
+import { useEngineApis } from "../shell/engineApis";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -46,8 +47,11 @@ function addFailureMessage(code: string): MessageKey {
 // 回転の印を出す。
 type LibraryOperation = "add" | "capacity" | "rename" | "delete";
 
-export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen, api = settingsApi }: BackgroundPickerProps) {
+export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen, api: givenApi }: BackgroundPickerProps) {
   const t = useTranslate();
+  // 背景の画像は、選んでいる sshc エンジン（リモートセッション）のもの。
+  const engineSettings = useEngineApis().settings;
+  const api = givenApi ?? engineSettings;
   const [stored, setStored] = useState<TerminalBackground[]>([]);
   const [used, setUsed] = useState(0);
   const [capacity, setCapacity] = useState(16 * MiB);

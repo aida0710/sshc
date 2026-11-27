@@ -50,6 +50,19 @@ describe("ThemeProvider", () => {
     expect(window.localStorage.getItem(localStorageKeys.theme)).toBe("light");
   });
 
+  // リモートセッションを替えると、画面はそのエンジンの設定で描く。替えた先がテーマを選んでいなければ、前のエンジンの
+  // テーマを残さない。
+  it("draws with the default theme once the settings of another engine choose none", () => {
+    render(<ThemeProvider><Probe /></ThemeProvider>);
+    act(() => resetSettingsForTests(settingsDocument({ presets: [{ id: "default", appearance: { theme: "light" } }] })));
+    expect(screen.getByText("choice light resolved light")).toBeInTheDocument();
+
+    act(() => resetSettingsForTests(settingsDocument({ machineId: "ffffffffffffffffffffffffffffffff" })));
+
+    expect(screen.getByText("choice dark resolved dark")).toBeInTheDocument();
+    expect(window.localStorage.getItem(localStorageKeys.theme)).toBe("dark");
+  });
+
   it("switches to the theme of the preset in use, and copies it", () => {
     window.localStorage.setItem(localStorageKeys.theme, "light");
     render(<ThemeProvider><Probe /></ThemeProvider>);

@@ -31,7 +31,7 @@ function sessionsApi(terminalSessions: TerminalSessionsApi["terminalSessions"]):
 
 function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi {
   return {
-    list: vi.fn(), add: vi.fn(), remove: vi.fn(), open: vi.fn(),
+    list: vi.fn(), add: vi.fn(), remove: vi.fn(),
     status: vi.fn(async () => ({ alias: "r100", version: "v0.54.0", vault: true, unlocked: false, passwordless: false, sessions: 0 })),
     control: vi.fn(async () => ({ generation: 1 })),
     actionLog: vi.fn(async () => engineActionLog()),
@@ -43,7 +43,7 @@ function enginesApi(overrides: Partial<RemoteEnginesApi> = {}): RemoteEnginesApi
 function runTargets(selected: string | null, api = enginesApi()): RunTargetsState {
   return {
     engines: ["r100"], selected, problem: null, dismissProblem: vi.fn(), retryProblem: vi.fn(async () => undefined), busy: false,
-    select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined), openInNewTab: vi.fn(async () => undefined),
+    select: vi.fn(), add: vi.fn(async () => true), remove: vi.fn(async () => undefined),
     api, localVersion: "v0.54.0",
     vaultUnlock: { unlockFor: null, revision: 0, ask: vi.fn(), close: vi.fn(), unlocked: vi.fn() },
     engineInfo: { openFor: null, ask: vi.fn(), close: vi.fn() },
@@ -70,6 +70,7 @@ function Screen({ api, targets, connectedEngines = new Set() }: { api: TerminalS
       runTargetLink={{ phase: "ready", refusal: null, connectedEngines }}
       onOpenRemotePath={vi.fn()}
       onOSC52Change={vi.fn(async () => undefined)}
+      onOpenVault={vi.fn()}
     />
   );
 }
@@ -247,6 +248,7 @@ function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: Ru
       runTargetLink={{ phase: "ready", refusal: null, connectedEngines }}
       onOpenRemotePath={vi.fn()}
       onOSC52Change={vi.fn(async () => undefined)}
+      onOpenVault={vi.fn()}
     />
   );
 }

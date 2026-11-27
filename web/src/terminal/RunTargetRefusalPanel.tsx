@@ -29,7 +29,7 @@ export function RunTargetRefusalPanel({
   onReconnect,
   onUseThisMachine,
   onUnlocked,
-  onOpenInNewTab,
+  onOpenVault,
   onOpenEngineInfo,
 }: {
   alias: string;
@@ -43,7 +43,8 @@ export function RunTargetRefusalPanel({
   onReconnect: () => Promise<void>;
   onUseThisMachine: () => void;
   onUnlocked: () => void;
-  onOpenInNewTab: () => void;
+  // onOpenVault は、その sshc エンジンの Vault の画面を開く。
+  onOpenVault: () => void;
   onOpenEngineInfo: () => void;
 }) {
   const { t, locale } = useLanguage();
@@ -66,7 +67,7 @@ export function RunTargetRefusalPanel({
   let actions;
   switch (refusal.code) {
     case "remote_engine_vault_locked":
-      actions = <RunTargetVaultUnlock alias={alias} api={api} onUnlocked={onUnlocked} onOpenInNewTab={onOpenInNewTab}>{useThisMachine}</RunTargetVaultUnlock>;
+      actions = <RunTargetVaultUnlock alias={alias} api={api} onUnlocked={onUnlocked} onOpenVault={onOpenVault}>{useThisMachine}</RunTargetVaultUnlock>;
       break;
     case "remote_engine_incompatible":
       actions = (

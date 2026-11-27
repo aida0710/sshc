@@ -29,8 +29,8 @@ import { SnippetList, type SnippetLibraryState } from "./SnippetList";
 import { SnippetEditor } from "./SnippetEditor";
 import { SnippetRunSection } from "./SnippetRunSection";
 import { SnippetStartupSection } from "./SnippetStartupSection";
+import { useEngineApis } from "../shell/engineApis";
 import {
-  snippetsApi,
   type Job,
   type Preview,
   type Snippet,
@@ -85,6 +85,8 @@ export function SnippetsPanel({
   onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 }) {
   const t = useTranslate();
+  // スニペットは、選んでいる sshc エンジン（リモートセッション）のもの。流すのもそのエンジンが行う。
+  const { snippets: snippetsApi } = useEngineApis();
   const showToast = useToast();
   const compact = useMediaQuery(mobileViewportQuery);
   const saveBar = useSaveBarSlot();
@@ -139,7 +141,7 @@ export function SnippetsPanel({
     setSnippets(library.snippets);
     setStartupAssignments(library.startup);
     setLibraryState("ready");
-  }, []);
+  }, [snippetsApi]);
 
   // 読めなかった一覧を「保存済みスニペットはありません」と見せないように、読み込みの
   // 状態を持つ。

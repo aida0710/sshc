@@ -4,7 +4,6 @@ import { terminalOverviewApi } from "../api/terminalOverview";
 
 // readEngineOS は、sshc エンジンが動く OS（"linux"、"windows" など。どちらも Go の GOOS）を読む。このマシン
 // （runTarget null）は About から、リモートセッションの sshc エンジンは、取り次ぐマシンの状態（/terminal/machine）から読む。
-// About は取り次がないため。
 function readEngineOS(runTarget: string | null, about: AboutApi): Promise<string> {
   if (runTarget === null) return about.about().then((answer) => answer.os);
   return terminalOverviewApi(runTarget).machineStatus().then((machine) => machine.os);

@@ -163,6 +163,9 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodPost, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},
 		{http.MethodDelete, "/api/v1/engines/r100/terminal/restore", "r100 /api/v1/terminal/restore"},
 		{http.MethodGet, "/api/v1/engines/r100/terminal/machine", "r100 /api/v1/terminal/machine"},
+		// クイックコマンドと一括送信は、実行先のエンジンがそのスニペットで展開する。
+		{http.MethodPost, "/api/v1/engines/r100/terminal/commands/preview", "r100 /api/v1/terminal/commands/preview"},
+		{http.MethodPost, "/api/v1/engines/r100/terminal/commands", "r100 /api/v1/terminal/commands"},
 		{http.MethodGet, "/api/v1/engines/r100/config/overview", "r100 /api/v1/config/overview"},
 		{http.MethodGet, "/api/v1/engines/r100/connections/recent", "r100 /api/v1/connections/recent"},
 		{http.MethodPost, "/api/v1/engines/r100/actions", "r100 /api/v1/actions"},
@@ -179,6 +182,21 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 		{http.MethodPost, "/api/v1/engines/r100/known-hosts/delete", "r100 /api/v1/known-hosts/delete"},
 		{http.MethodPost, "/api/v1/engines/r100/known-hosts/scan", "r100 /api/v1/known-hosts/scan"},
 		{http.MethodPost, "/api/v1/engines/r100/known-hosts/add", "r100 /api/v1/known-hosts/add"},
+		// 画面はまるごと実行先のものになる。設定、キー設定、スニペット、同期、更新、Vault のマスターパスワードも。
+		{http.MethodGet, "/api/v1/engines/r100/settings", "r100 /api/v1/settings"},
+		{http.MethodPut, "/api/v1/engines/r100/settings/presets/default", "r100 /api/v1/settings/presets/default"},
+		{http.MethodPut, "/api/v1/engines/r100/settings/state", "r100 /api/v1/settings/state"},
+		{http.MethodPut, "/api/v1/engines/r100/metadata/keybar", "r100 /api/v1/metadata/keybar"},
+		{http.MethodGet, "/api/v1/engines/r100/snippets", "r100 /api/v1/snippets"},
+		{http.MethodPost, "/api/v1/engines/r100/snippets/jobs", "r100 /api/v1/snippets/jobs"},
+		{http.MethodGet, "/api/v1/engines/r100/sync", "r100 /api/v1/sync"},
+		{http.MethodPost, "/api/v1/engines/r100/sync/push", "r100 /api/v1/sync/push"},
+		{http.MethodGet, "/api/v1/engines/r100/about", "r100 /api/v1/about"},
+		{http.MethodPost, "/api/v1/engines/r100/update", "r100 /api/v1/update"},
+		{http.MethodGet, "/api/v1/engines/r100/update/log", "r100 /api/v1/update/log"},
+		{http.MethodPatch, "/api/v1/engines/r100/terminal/backgrounds/sky.png", "r100 /api/v1/terminal/backgrounds/sky.png"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/change", "r100 /api/v1/passwords/change"},
+		{http.MethodPost, "/api/v1/engines/r100/passwords/reset-unsupported", "r100 /api/v1/passwords/reset-unsupported"},
 	} {
 		directory.forwarded = nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)
@@ -191,24 +209,17 @@ func TestATerminalOperationIsForwardedToTheSamePathOnTheRemoteEngine(t *testing.
 	}
 }
 
-// 同期、更新、設定、このマシンのセッション、スニペットは、リモートセッションを選んでいてもこのマシンのものである。
-// 取り次ぐ経路に入ると、画面の操作が実行先のマシンを変えてしまう。
+// 画面のログイン（session）と、リモートセッションの一覧（engines）は、リモートセッションを選んでいてもこのマシンの
+// ものである。取り次ぐ経路に入ると、画面の操作が実行先のマシンを変えてしまう。
 func TestWhatStaysThisMachinesIsNeverForwarded(t *testing.T) {
 	directory := &fakeEngineDirectory{}
 	engine := remoteEnginesEngine(directory)
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/api/v1/engines/r100/sync/status"},
-		{http.MethodPost, "/api/v1/engines/r100/sync/push"},
-		{http.MethodGet, "/api/v1/engines/r100/update"},
-		{http.MethodPost, "/api/v1/engines/r100/update"},
-		{http.MethodGet, "/api/v1/engines/r100/settings"},
-		{http.MethodPut, "/api/v1/engines/r100/settings"},
-		{http.MethodGet, "/api/v1/engines/r100/session"},
-		{http.MethodDelete, "/api/v1/engines/r100/session"},
-		{http.MethodGet, "/api/v1/engines/r100/snippets"},
-		{http.MethodPost, "/api/v1/engines/r100/passwords/change"},
-		{http.MethodPost, "/api/v1/engines/r100/passwords/reset-unsupported"},
-		{http.MethodPost, "/api/v1/engines/r100/passwords/recover-compatible-backup"},
+		{http.MethodPost, "/api/v1/engines/r100/session/bootstrap"},
+		{http.MethodPost, "/api/v1/engines/r100/session/renew"},
+		{http.MethodPost, "/api/v1/engines/r100/session/sign-out"},
+		{http.MethodGet, "/api/v1/engines/r100/engines"},
+		{http.MethodGet, "/api/v1/engines/r100/health"},
 	} {
 		directory.forwarded = nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)
@@ -234,6 +245,9 @@ func TestOperationsThatWaitForAnotherHostAreForwardedWithTheLongLimit(t *testing
 		{http.MethodGet, "/api/v1/engines/r100/config/overview", false},
 		{http.MethodPost, "/api/v1/engines/r100/config/save", false},
 		{http.MethodGet, "/api/v1/engines/r100/sftp/transfers", false},
+		{http.MethodPost, "/api/v1/engines/r100/sync/push", true},
+		{http.MethodPost, "/api/v1/engines/r100/update/check", true},
+		{http.MethodGet, "/api/v1/engines/r100/settings", false},
 	} {
 		directory.forwarded, directory.waitedLong = nil, nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)
@@ -258,6 +272,9 @@ func TestOperationsThatCarryAFileAreForwardedAsStreams(t *testing.T) {
 		{http.MethodGet, "/api/v1/engines/r100/sftp/local/download", true},
 		{http.MethodPost, "/api/v1/engines/r100/sftp/web/uploads/u1/complete", false},
 		{http.MethodGet, "/api/v1/engines/r100/sftp/local/entries", false},
+		{http.MethodPost, "/api/v1/engines/r100/terminal/backgrounds", true},
+		{http.MethodGet, "/api/v1/engines/r100/terminal/backgrounds/sky.png", true},
+		{http.MethodGet, "/api/v1/engines/r100/terminal/backgrounds", false},
 	} {
 		directory.forwarded, directory.streamedFiles = nil, nil
 		recorder := send(t, engine, tc.method, tc.path, "", nil)
