@@ -108,8 +108,8 @@ func TestFilesOfTheRemoteMachineAreStreamedThroughTheForward(t *testing.T) {
 	t.Parallel()
 	remote := newFixture(t)
 	manager := forwardingTo(t, remote)
-	// 取り次ぎが溜める上限（1 MiB）より大きいファイル。
-	contents := bytes.Repeat([]byte("0123456789abcdef"), (3<<20)/16)
+	// 取り次ぎが本文を溜める上限（handoff.MaxRequestBodyCeiling）より大きいファイル。
+	contents := bytes.Repeat([]byte("0123456789abcdef"), (handoff.MaxRequestBodyCeiling+(1<<20))/16)
 	path := filepath.Join(remote.home, "large.bin")
 	mustWrite(t, path, contents, 0o600)
 	query := "?path=" + url.QueryEscape(path)
