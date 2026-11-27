@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"sshc/internal/handoff"
@@ -347,15 +348,19 @@ func copyAnswerHeaders(destination, source http.Header, allowed []string) {
 
 // contentTypeOf は、接続先の答えの種類を、ブラウザへ書く1つの値にして返す。種類がちょうど1つ、読める形で
 // 書かれていなければ unknownContentType を返す。1つの値の中にカンマで2つ並べたもの（ブラウザは後ろを使う）も、
-// 読めない形として断る。
+// 読めない形として断る。Go の mime は Content-Disposition と同じ読み方で、/ の無い値（html）と * を含む値も
+// 通すが、ブラウザはどちらも種類として読まないので、これも断る。
 func contentTypeOf(header http.Header) string {
 	declared := header.Values("Content-Type")
 	if len(declared) != 1 {
 		return unknownContentType
 	}
 	mediaType, params, err := mime.ParseMediaType(declared[0])
+	if err != nil || !strings.Contains(mediaType, "/") || strings.Contains(mediaType, "*") {
+		return unknownContentType
+	}
 	formatted := mime.FormatMediaType(mediaType, params)
-	if err != nil || formatted == "" {
+	if formatted == "" {
 		return unknownContentType
 	}
 	return formatted

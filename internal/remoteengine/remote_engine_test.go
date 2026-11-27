@@ -194,6 +194,13 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 		w.Header().Add("Content-Type", "text/html")
 		fmt.Fprint(w, "<script>steal()</script>")
+	case "/api/v1/answers/half-a-type":
+		// Go の mime は、/ の無い値も Content-Disposition と同じ読み方で通す。
+		w.Header().Set("Content-Type", "html")
+		fmt.Fprint(w, "<script>steal()</script>")
+	case "/api/v1/answers/any-type":
+		w.Header().Set("Content-Type", "*/*")
+		fmt.Fprint(w, "<script>steal()</script>")
 	case "/api/v1/sftp/media/gone":
 		w.Header().Set("Content-Type", "application/problem+json")
 		w.WriteHeader(http.StatusNotFound)
@@ -572,25 +579,29 @@ func TestTheForwardedMediaRouteHandsOverOnlyAudioAndVideo(t *testing.T) {
 }
 
 // 取り次ぐ答えの種類は、このマシンが1つだけ書く。種類が無いと、このマシンの Go の server が本文から
-// text/html と判定する。2つあると、ブラウザは後ろの種類で読む。どちらも、中身の分からない答えにする。
+// text/html と判定する。2つあると、ブラウザは後ろの種類で読む。/ の無い値と */* は、ブラウザが種類として
+// 読まない。どれも、中身の分からない答えにする。
 func TestAForwardedAnswerReachesTheBrowserWithExactlyOneContentType(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
 	manager := newEngineManager(t, remote, "v9")
 	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
 		t.Fatal(err)
 	}
+	answers := []struct {
+		remotePath string
+		want       string
+	}{
+		{"/api/v1/terminal/commands", "application/json"},
+		{"/api/v1/answers/untyped", "application/octet-stream"},
+		{"/api/v1/answers/json-and-a-page", "application/octet-stream"},
+		{"/api/v1/answers/half-a-type", "application/octet-stream"},
+		{"/api/v1/answers/any-type", "application/octet-stream"},
+	}
 	forwards := map[string]func(http.ResponseWriter, *http.Request, string, string) error{
 		"ForwardAPI": manager.ForwardAPI, "ForwardFileAPI": manager.ForwardFileAPI,
 	}
 	for name, forwardTo := range forwards {
-		for _, tc := range []struct {
-			remotePath string
-			want       string
-		}{
-			{"/api/v1/terminal/commands", "application/json"},
-			{"/api/v1/answers/untyped", "application/octet-stream"},
-			{"/api/v1/answers/json-and-a-page", "application/octet-stream"},
-		} {
+		for _, tc := range answers {
 			answer := serveLikeThisMachine(t, func(w http.ResponseWriter, r *http.Request) error {
 				return forwardTo(w, r, "r100", tc.remotePath)
 			}, "")
@@ -600,10 +611,10 @@ func TestAForwardedAnswerReachesTheBrowserWithExactlyOneContentType(t *testing.T
 		}
 	}
 	// このマシンのエンジンが読んでから返す答え（中継のある実行先の取り次ぎ）も、同じ種類になる。
-	for remotePath, want := range map[string]string{"/api/v1/answers/untyped": "application/octet-stream", "/api/v1/answers/json-and-a-page": "application/octet-stream"} {
-		answer, err := manager.CallAPI(context.Background(), "r100", APICall{Method: http.MethodGet, Path: remotePath})
-		if err != nil || answer.ContentType != want {
-			t.Errorf("CallAPI %s: Content-Type = %q, %v, want %q", remotePath, answer.ContentType, err, want)
+	for _, tc := range answers {
+		answer, err := manager.CallAPI(context.Background(), "r100", APICall{Method: http.MethodGet, Path: tc.remotePath})
+		if err != nil || answer.ContentType != tc.want {
+			t.Errorf("CallAPI %s: Content-Type = %q, %v, want %q", tc.remotePath, answer.ContentType, err, tc.want)
 		}
 	}
 }
