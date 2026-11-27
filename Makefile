@@ -56,7 +56,7 @@ test:
 deadcode:
 	scripts/ci/deadcode.sh
 
-# ブランチのコミットメッセージに、帰属の行と社内の URL が無いかを検査する。PR の CI
+# ブランチのコミットメッセージに、帰属の行と社内の URL が無いか（コミットが1つなら件名の形も）を検査する。PR の CI
 # （.github/workflows/pull-request-text.yml）と同じスクリプトで、PR のタイトルと本文は CI が検査する。
 # 比べる先は `make check-commits COMMITS_BASE=<コミット>` で変えられる。
 COMMITS_BASE ?= origin/main

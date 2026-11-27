@@ -186,6 +186,30 @@ func TestCommitMessagesAreCheckedOnlyBetweenBaseAndHead(t *testing.T) {
 	}
 }
 
+// リポジトリの設定（squash_merge_commit_title が COMMIT_OR_PR_TITLE）で、コミットが1つの PR は、
+// PR のタイトルではなくそのコミットの件名が main のコミットの件名になる。
+func TestTheSubjectOfTheOnlyCommitOnABranchNeedsTheTitleShape(t *testing.T) {
+	repository := t.TempDir()
+	runGit(t, repository, "init", "--quiet", "--initial-branch=main")
+	base := commitWithMessage(t, repository, "chore: 最初のコミット")
+	plain := commitWithMessage(t, repository, "一覧の並び順を直す")
+
+	accepted, stderr := checkPullRequestText(t, pullRequestText{directory: repository, revisions: []string{base, plain}})
+	if accepted {
+		t.Fatal("the only commit of a branch was accepted without a type in its subject")
+	}
+	if !strings.Contains(stderr, shortCommit(t, repository, plain)+" の件名") {
+		t.Errorf("the report does not name the subject of the commit:\n%s", stderr)
+	}
+
+	// コミットが2つ以上なら、件名は PR のタイトルが決めるので問わない。
+	conventional := commitWithMessage(t, repository, "test(sftp): 並び順のテストを足す")
+	accepted, stderr = checkPullRequestText(t, pullRequestText{directory: repository, revisions: []string{base, conventional}})
+	if !accepted {
+		t.Errorf("a branch of two commits was rejected for the subject of one of them:\n%s", stderr)
+	}
+}
+
 func runGit(t *testing.T, repository string, args ...string) string {
 	t.Helper()
 	command := exec.Command("git", append([]string{

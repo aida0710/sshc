@@ -9,7 +9,9 @@
 #
 # 決まりは3つある。
 # - タイトルは `<type>(<scope>): <日本語の要約>`（scope は省略できる）。squash でマージすると、
-#   タイトルが main のコミットの件名になる。
+#   タイトルが main のコミットの件名になる。ただしリポジトリの設定（squash_merge_commit_title が
+#   COMMIT_OR_PR_TITLE）で、コミットが1つの PR はそのコミットの件名が main の件名になるので、
+#   コミットが1つのときはその件名も同じ形かを検査する。
 # - 本文とコミットメッセージに、AI ツールが追加する帰属の行を入れない。AI ツールはセッションのたびに
 #   追加するよう指示されるので、書く側の注意だけでは防げない。リポジトリの設定で、squash の本文は
 #   ブランチのコミットメッセージをつなげたものになるので、コミットメッセージもそのまま main に入る。
@@ -27,6 +29,7 @@ set -euo pipefail
 readonly title_types='feat fix docs test refactor perf build ci chore style revert'
 # 要約には、ひらがな・カタカナ・漢字を1字以上含める。
 readonly title_pattern='^(?:'"${title_types// /|}"')(?:\([^()\s]+\))?!?: (?=.*[\p{Hiragana}\p{Katakana}\p{Han}])\S'
+readonly title_rule="<type>(<scope>): <日本語の要約> の形にする（例: fix(sftp): 一覧の並び順を修正する）。type は ${title_types// /・} のどれか。scope は省略できる"
 # Claude Code の場合は、コミットメッセージの末尾の Claude-Session と Co-Authored-By の行、PR の本文の
 # 末尾の Generated with の行と、セッションへのリンク。英語の文中の小文字の「generated with」は
 # 対象にしない。
@@ -69,7 +72,7 @@ check_message() {
 if [ -n "${PR_TITLE+set}" ]; then
   checked="${checked} タイトル"
   if [ -z "$(lines_matching "$title_pattern" "$PR_TITLE")" ]; then
-    report "タイトル" "<type>(<scope>): <日本語の要約> の形ではない（例: fix(sftp): 一覧の並び順を修正する）。type は ${title_types// /・} のどれか。scope は省略できる"
+    report "タイトル" "$title_rule"
   fi
 fi
 
@@ -88,6 +91,12 @@ if [ $# -eq 2 ]; then
     message="$(git log -1 --format=%B "$commit")"
     check_message "コミット $(git rev-parse --short "$commit") のメッセージ" "$message"
   done
+  if [ "$count" -eq 1 ]; then
+    subject="$(git log -1 --format=%s "$commits")"
+    if [ -z "$(lines_matching "$title_pattern" "$subject")" ]; then
+      report "コミット $(git rev-parse --short "$commits") の件名" "コミットが1つの PR では、squash でこの件名が main のコミットの件名になる。$title_rule"
+    fi
+  fi
   checked="${checked} コミット${count}件（$1..$2）"
   if [ "$status" -ne "$status_before_commits" ]; then
     echo "コミットメッセージは git commit --amend か git rebase で書き直し、push し直す" >&2
