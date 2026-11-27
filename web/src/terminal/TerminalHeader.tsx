@@ -57,8 +57,9 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
           {/* スマホには言葉を置く幅が無いが、読み上げには残す。 */}
           <span role="status" className={!saysState || mobile ? "sr-only" : `shrink-0 text-xs ${sessionStatusTone(session)}`}>{connectionStatus}</span>
           {mobile ? null : <VPNProfileChip name={vpnProfile} />}
+          {/* 札は接続名を含み長さが決まらないので、名前と同じく縮める。縮まないと、狭いペインで右のボタンに重なる。 */}
           {mobile || runTarget === undefined ? null : (
-            <Tag tone="accent">{t("runTarget.runningOn", { alias: runTarget })}</Tag>
+            <Tag tone="accent" truncate>{t("runTarget.runningOn", { alias: runTarget })}</Tag>
           )}
         </div>
         {mobile ? (

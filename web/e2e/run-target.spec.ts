@@ -393,6 +393,28 @@ test("keeps this machine's split view while a remote session engine is shown", a
   expect(await panes.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-split-view-pane")))).toEqual(splitSessions);
 });
 
+test("keeps the remote session's name in the header of a narrow pane clear of its buttons", async ({ page, installation }) => {
+  const titles = ["web", "api", "db"];
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map((title) => terminalSession(title, title)) });
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: titles[0]!, exact: true }).click();
+  // 足したセッションが表示中になるので、毎回その右に足す。
+  for (const title of titles.slice(1)) {
+    await navigation.getByRole("button", { name: `Actions for ${title}`, exact: true }).click();
+    await page.getByRole("menuitem", { name: "Show in split view on the right", exact: true }).click();
+  }
+  const panes = page.locator("[data-split-view-pane]");
+  await expect(panes).toHaveCount(titles.length);
+  for (const terminal of await panes.all()) {
+    const name = (await terminal.getByText("on bastion", { exact: true }).boundingBox())!;
+    const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+    expect(name.x + name.width).toBeLessThanOrEqual(find.x);
+  }
+});
+
 test("frames the whole window and names the engine while a remote session is chosen, on every screen", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
   await openApplication(page, installation);
