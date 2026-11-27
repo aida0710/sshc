@@ -57,10 +57,10 @@ func TestNoWorkflowRunsOnPullRequestTarget(t *testing.T) {
 	}
 }
 
-// run の中の ${{ }} は、シェルが読む前に文字として埋め込まれる。PR の題・本文やブランチ名のように
-// PR を作った人が決められる値を埋め込むと、その人がシェルのコマンドを書ける。値は env で渡す。
+// run の中の ${{ }} は、シェルが読む前に文字として埋め込まれる。PR のタイトル・本文やブランチ名のように
+// PR を作った人が決められる値を埋め込むと、その人がシェルのコマンドを書ける。値は環境変数で渡す。
 func TestNoWorkflowEmbedsTextThePullRequestAuthorControlsInARunScript(t *testing.T) {
-	// 正のコントロール: 題を埋め込んだ例を、判定が見つけること。
+	// 正のコントロール: タイトルを埋め込んだ例を、判定が見つけること。
 	example := workflowDocument{Jobs: map[string]workflowJob{
 		"check": {Steps: []workflowStep{{Run: `echo "${{ github.event.pull_request.title }}"`}}},
 	}}
@@ -76,7 +76,7 @@ func TestNoWorkflowEmbedsTextThePullRequestAuthorControlsInARunScript(t *testing
 }
 
 // authorControlledExpression は、PR を作った人が決められる値を読む式である。github.event の
-// 中身（題・本文・コメント・コミットの本文）と、PR のブランチ名がそれに当たる。
+// 中身（タイトル・本文・コメント・コミットメッセージ）と、PR のブランチ名がそれに当たる。
 var authorControlledExpression = regexp.MustCompile(`\$\{\{[^}]*\b(github\.event\.|github\.head_ref\b)`)
 
 func validateRunExpressions(document workflowDocument) []string {
@@ -84,7 +84,7 @@ func validateRunExpressions(document workflowDocument) []string {
 	for _, id := range slices.Sorted(maps.Keys(document.Jobs)) {
 		for stepIndex, step := range document.Jobs[id].Steps {
 			if authorControlledExpression.MatchString(step.Run) {
-				problems = append(problems, fmt.Sprintf("jobs.%s step %d embeds github.event or github.head_ref in run; pass it through env", id, stepIndex))
+				problems = append(problems, fmt.Sprintf("jobs.%s step %d embeds github.event or github.head_ref in run; pass it through an environment variable", id, stepIndex))
 			}
 		}
 	}

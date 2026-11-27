@@ -30,9 +30,10 @@ func pullRequestTextScript(t *testing.T) string {
 	return script
 }
 
-// isolatedGitEnvironment は、手元の git の設定（署名、既定のブランチ、利用者の名前）を読まない環境である。
-// CI の runner には利用者の名前が無いので、手元でだけ通るテストにしないためである。
-func isolatedGitEnvironment() []string {
+// isolatedEnvironment は、手元の git の設定（署名、既定のブランチ、利用者の名前）と、テストを
+// 実行した環境の PR_TITLE・PR_BODY を読まない環境である。CI の runner には git の利用者の名前が
+// 無いので、手元でだけ通るテストにしないためである。
+func isolatedEnvironment() []string {
 	var environment []string
 	for _, variable := range os.Environ() {
 		name, _, _ := strings.Cut(variable, "=")
@@ -60,7 +61,7 @@ func checkPullRequestText(t *testing.T, input pullRequestText) (bool, string) {
 	t.Helper()
 	command := exec.Command("bash", append([]string{pullRequestTextScript(t)}, input.revisions...)...)
 	command.Dir = input.directory
-	command.Env = isolatedGitEnvironment()
+	command.Env = isolatedEnvironment()
 	for name, value := range input.env {
 		command.Env = append(command.Env, name+"="+value)
 	}
@@ -191,7 +192,7 @@ func runGit(t *testing.T, repository string, args ...string) string {
 		"-c", "user.name=pelican", "-c", "user.email=pelican@example.invalid", "-c", "commit.gpgsign=false",
 	}, args...)...)
 	command.Dir = repository
-	command.Env = isolatedGitEnvironment()
+	command.Env = isolatedEnvironment()
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, output)
