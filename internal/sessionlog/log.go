@@ -2,6 +2,7 @@ package sessionlog
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -26,6 +27,8 @@ const redaction = "[secret]"
 const (
 	stoppedAtLimitNote = "ログが上限（100 MiB）に達したので、ここから先は書きません。"
 	droppedOutputNote  = "出力が速すぎたため、ログに書けなかった出力があります。"
+	// repeatedLineNote は、画面より長い REP が同じ行を何度も流したとき、その行のあとに書く（vt.LeftLine）。
+	repeatedLineNote = "上と同じ行が、さらに %d 行続きました。"
 )
 
 // Log is the log of one session: the lines its terminal showed, as text, in a file of its own. Lines are written once
@@ -181,10 +184,10 @@ func (l *Log) write(file *os.File, size terminal.Size) {
 			switch {
 			case item.output != nil:
 				_, _ = screen.Write(item.output)
-				lines.writeLines(screen.TakeLeftLines())
+				lines.writeLeftLines(screen.TakeLeftLines())
 			case item.size != nil:
 				screen.Resize(int(item.size.Cols), int(item.size.Rows))
-				lines.writeLines(screen.TakeLeftLines())
+				lines.writeLeftLines(screen.TakeLeftLines())
 			case item.secrets != nil:
 				lines.secrets = append(lines.secrets, item.secrets...)
 			default:
@@ -222,25 +225,52 @@ type waitingNote struct {
 
 func (w *lineWriter) writeLines(texts []string) {
 	for _, text := range texts {
-		w.writeLine(w.hideSecrets(text))
-		for index := range w.notes {
-			w.notes[index].before--
+		w.writeShownLine(text)
+	}
+}
+
+// writeLeftLines は、画面から流れた行を書く。同じ行がさらに続いたら（画面より長い REP）、その行は1行だけ書き、
+// 続いた行の数を書く。
+func (w *lineWriter) writeLeftLines(left []vt.LeftLine) {
+	for _, line := range left {
+		w.writeShownLine(line.Text)
+		if line.Repeats > 0 {
+			w.writeLine(w.noteLine(fmt.Sprintf(repeatedLineNote, line.Repeats)))
+			w.linesLeft(line.Repeats)
 		}
-		for len(w.notes) > 0 && w.notes[0].before <= 0 {
-			w.writeLine(w.notes[0].line)
-			w.notes = w.notes[1:]
-		}
+	}
+}
+
+// writeShownLine は、画面に出た1行を書く。
+func (w *lineWriter) writeShownLine(text string) {
+	w.writeLine(w.hideSecrets(text))
+	w.linesLeft(1)
+}
+
+// linesLeft は、count 行が画面から流れたことを、待っている知らせに伝え、待ち終えた知らせを書く。
+func (w *lineWriter) linesLeft(count int) {
+	for index := range w.notes {
+		w.notes[index].before -= count
+	}
+	for len(w.notes) > 0 && w.notes[0].before <= 0 {
+		w.writeLine(w.notes[0].line)
+		w.notes = w.notes[1:]
 	}
 }
 
 // addNote writes an [sshc] line stamped now, once the onScreen rows of text shown before it have left the screen.
 func (w *lineWriter) addNote(text string, onScreen int) {
-	line := "[sshc] " + w.now().Format("2006-01-02 15:04:05") + " " + text
+	line := w.noteLine(text)
 	if onScreen <= 0 && len(w.notes) == 0 {
 		w.writeLine(line)
 		return
 	}
 	w.notes = append(w.notes, waitingNote{line: line, before: onScreen})
+}
+
+// noteLine は、知らせの文 text を、今の時刻を付けた [sshc] の行にする。
+func (w *lineWriter) noteLine(text string) string {
+	return "[sshc] " + w.now().Format("2006-01-02 15:04:05") + " " + text
 }
 
 // writeWaitingNotes writes the notes still waiting, as the log closes with nothing more to leave the screen.

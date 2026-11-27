@@ -7,8 +7,9 @@ scroll region, the modes, the character sets and the pen), and the upstream
 package does not expose most of it.
 
 The copy holds only what sshc reaches: `safe_emulator.go`, `damage.go` and
-`buffer.go` are left out. The other upstream files are unchanged. sshc adds two
-files. `sshc_snapshot.go` has `NewSnapshotEmulator` and `Snapshot`, and the
+`buffer.go` are left out. The other upstream files are unchanged. sshc adds the
+`sshc_*.go` files. `sshc_snapshot.go` has `NewSnapshotEmulator` and `Snapshot`,
+and the
 handlers the engine needs that upstream lacks (DECSTR, the kitty keyboard flags)
 or that upstream makes slow (a line feed that moves rows instead of cells, ASCII
 printed without a new string for each character), and it keeps the cursors and the
@@ -16,7 +17,18 @@ margins on the screen where upstream lets output move them off and panics.
 `sshc_snapshot_test.go` checks that the handlers that are only faster draw what
 upstream draws. `sshc_shown_screen.go` reads the screen shown as text.
 `sshc_leaving_lines.go` has `NewLeavingLinesEmulator`, which keeps the lines
-leaving the main screen (scrolled off its top, or erased) for the session log.
-Keep the
-other files equal to upstream v0.1.0 when updating them, and check these files
-against the new internals.
+leaving the main screen (scrolled off its top, or erased) for the session log,
+and reads output in pieces so that the scrollback, which drops its oldest line
+when full, never fills. `sshc_repeat.go` takes REP (CSI Ps b), which upstream
+prints as many times as asked, with no bound from the screen's size: it prints
+no more than fills the screen and leaves the same screen, cursor and session
+log. `sshc_bounded_counts.go` passes CHT, CBT and ECH (CSI Ps I, Z and X) to
+upstream with their count held to the screen's width: upstream loops over the
+count, and the parser bounds a count only to 31 bits.
+
+Keep the other files equal to upstream v0.1.0 when updating them, and check
+these files against the new internals. Check too that no upstream handler newly
+loops over a count taken from the output (as REP does) without a bound from the
+screen's size: the engine reads output while holding the session's lock.
+`TestACountFarPastTheScreenIsReadAtOnce` tries every CSI final with the largest
+count the parser passes.

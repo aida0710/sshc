@@ -7,8 +7,9 @@ import (
 	"testing"
 )
 
-// The snapshot emulator prints ASCII, feeds lines and scrolls its own way (sshc_snapshot.go). Given the same
-// output, it must leave the screen exactly as the upstream emulator does.
+// The snapshot emulator prints ASCII, feeds lines, scrolls, repeats and bounds counts its own way (sshc_snapshot.go,
+// sshc_repeat.go, sshc_bounded_counts.go). Given the same output, it must leave the screen exactly as the upstream
+// emulator does.
 func TestTheSnapshotEmulatorDrawsWhatTheUpstreamOneDraws(t *testing.T) {
 	pieces := []func(*rand.Rand) string{
 		func(r *rand.Rand) string { return strings.Repeat("word ", 1+r.IntN(12)) },
@@ -39,6 +40,12 @@ func TestTheSnapshotEmulatorDrawsWhatTheUpstreamOneDraws(t *testing.T) {
 		func(*rand.Rand) string { return "\x1b[?1049l" },
 		func(*rand.Rand) string { return "\x1b[20h" },
 		func(*rand.Rand) string { return "\x1b[20l" },
+		// 回数は、画面（30x12）の幅やマス目より少ないものも多いものも試す。
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%db", r.IntN(1000)) },
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%dI", r.IntN(100)) },
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%dZ", r.IntN(100)) },
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%dX", r.IntN(100)) },
+		func(*rand.Rand) string { return "\x1b[3g\x1bH" },
 	}
 	random := rand.New(rand.NewPCG(7, 11))
 	for round := range 300 {

@@ -288,7 +288,6 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 	lost := r.closing || creation.Err() != nil
 	if !lost {
 		r.sessions = append(r.sessions, session)
-		r.prune()
 	}
 	r.mutex.Unlock()
 	cancel()
@@ -297,6 +296,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		r.discard(process, spec.Cleanup)
 		return nil, ErrShuttingDown
 	}
+	r.prune()
 	session.openLog(r.OpenLog)
 	session.observeProcess(StateConnecting, "")
 	session.startPump(r.now)
@@ -367,32 +367,60 @@ func (r *Registry) mintID() (string, error) {
 	return randomid.UnusedID(r.random(), func(id string) (bool, error) { return taken[id], nil })
 }
 
+// listedSessions は、一覧のセッションを一覧の順に写す。セッションに聞くこと（View、Exit など）は、写したあとで
+// 一覧のロックの外で聞く。重い出力を読むセッションは、そのあいだ自分のロックを持つ。一覧のロックの中で
+// 待つと、ほかのセッションを引く操作（Lookup）まで止まる。
+func (r *Registry) listedSessions() []*Session {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return slices.Clone(r.sessions)
+}
+
 // prune は、利用者が捨てた終了済みセッションを一覧から除き、残す終了済みセッションを終わった時刻の
-// 新しい方から RetainedExited 本までにする。一覧の順は利用者が並べ替えるので、位置では新しさが
-// 分からない。終わった時刻が同じなら、一覧の後ろにある方を新しいとみなす。
+// 新しい方から RetainedExited 本までにする。
 func (r *Registry) prune() {
+	dropped := endedSessionsToDrop(r.listedSessions())
+	if len(dropped) == 0 {
+		return
+	}
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	// 読んだあとで手動の再接続が始まったセッションは残す。確かめるのは終わったセッションだけで、それは出力を
+	// 読まないので、自分のロックを長くは持たない。
+	r.sessions = slices.DeleteFunc(r.sessions, func(session *Session) bool {
+		return dropped[session] && !session.Live()
+	})
+}
+
+// endedSessionsToDrop は、一覧の順に並べた sessions のうち、一覧から除く終了済みセッションを返す。一覧の順は
+// 利用者が並べ替えるので、位置では新しさが分からない。終わった時刻が同じなら、一覧の後ろにある方を新しいと
+// みなす。
+func endedSessionsToDrop(sessions []*Session) map[*Session]bool {
 	type endedSession struct {
 		session *Session
 		at      time.Time
 	}
+	dropped := make(map[*Session]bool)
 	var ended []endedSession
-	for index := len(r.sessions) - 1; index >= 0; index-- {
-		session := r.sessions[index]
-		// 自動の再接続はこのロックの外で終了を取り消すので、終わった時刻はここで一度だけ読む。
-		if exit := session.Exit(); exit != nil && !session.Discarded() {
+	for index := len(sessions) - 1; index >= 0; index-- {
+		session := sessions[index]
+		// 自動の再接続は一覧のロックの外で終了を取り消すので、終わった時刻はここで一度だけ読む。
+		exit := session.Exit()
+		switch {
+		case exit == nil:
+		case session.Discarded():
+			dropped[session] = true
+		default:
 			ended = append(ended, endedSession{session: session, at: exit.At})
 		}
 	}
-	dropped := make(map[*Session]bool)
 	if len(ended) > RetainedExited {
 		slices.SortStableFunc(ended, func(left, right endedSession) int { return right.at.Compare(left.at) })
 		for _, old := range ended[RetainedExited:] {
 			dropped[old.session] = true
 		}
 	}
-	r.sessions = slices.DeleteFunc(r.sessions, func(session *Session) bool {
-		return !session.Live() && (session.Discarded() || dropped[session])
-	})
+	return dropped
 }
 
 func (r *Registry) MaxSessions() int { return r.limits().MaxSessions }
@@ -400,11 +428,10 @@ func (r *Registry) MaxSessions() int { return r.limits().MaxSessions }
 // Sessions は、生存と終了済みの両方を、一覧の順に返す。一覧は開いた順に足され、利用者が
 // MoveToWorkspace で並べ替える。
 func (r *Registry) Sessions() []View {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
 	r.prune()
-	views := make([]View, 0, len(r.sessions))
-	for _, session := range r.sessions {
+	sessions := r.listedSessions()
+	views := make([]View, 0, len(sessions))
+	for _, session := range sessions {
 		views = append(views, session.View())
 	}
 	return views
