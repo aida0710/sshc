@@ -1,6 +1,9 @@
 package redact
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestASecretThatStartsAnotherHidesTheWholeLongerSecretInEitherOrder(t *testing.T) {
 	text := "db=hunter2 admin=hunter2-admin-9f"
@@ -20,6 +23,16 @@ func TestOverlappingSecretsThatStartAtDifferentPlacesBecomeOneMark(t *testing.T)
 	// "abcd" と "cdef" は "abcdef" の中で重なる。長さの順に置き換えるだけでは端が残る。
 	if got := Values("x abcdef y", []string{"abcd", "cdef"}, "*"); got != "x * y" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestSpansAreTheMergedRangesOfTheSecretsInTheOriginalText(t *testing.T) {
+	got := Spans([]byte("x abcdef y abcd"), []Secret{{Value: []byte("abcd")}, {Value: []byte("cdef")}})
+	if want := []Span{{Start: 2, End: 8}, {Start: 11, End: 15}}; !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	if got := Spans([]byte("nothing here"), []Secret{{Value: []byte("absent")}}); got != nil {
+		t.Fatalf("text without secrets has spans %v", got)
 	}
 }
 

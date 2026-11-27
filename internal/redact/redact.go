@@ -28,18 +28,29 @@ type Secret struct {
 // Bytes は、text の中の secrets の値を mark に置き換えた写しを返す。text は変更しない。
 // バイト列のまま扱うので、不正な UTF-8 を混ぜても一致を避けられない。
 func Bytes(text []byte, secrets []Secret, mark string) []byte {
-	spans := matchedSpans(text, secrets)
+	spans := Spans(text, secrets)
 	if len(spans) == 0 {
 		return append([]byte(nil), text...)
 	}
 	redacted := make([]byte, 0, len(text))
 	previousEnd := 0
-	for _, span := range mergeSpans(spans) {
-		redacted = append(redacted, text[previousEnd:span.start]...)
+	for _, span := range spans {
+		redacted = append(redacted, text[previousEnd:span.Start]...)
 		redacted = append(redacted, mark...)
-		previousEnd = span.end
+		previousEnd = span.End
 	}
 	return append(redacted, text[previousEnd:]...)
+}
+
+// Spans は、text の中で伏せる範囲を、重なる範囲と隣り合う範囲をまとめて始まりの順に返す。
+// 伏せる範囲を元の文字列の上で知りたい呼び手のためのものである。セッションのログは、画面の行を
+// つないで値を探し、見つけた範囲を行ごとに伏せる。
+func Spans(text []byte, secrets []Secret) []Span {
+	spans := matchedSpans(text, secrets)
+	if len(spans) == 0 {
+		return nil
+	}
+	return mergeSpans(spans)
 }
 
 // Values は、text の中の values を mark に置き換える。探す範囲も切れた頭も考えない、
@@ -52,11 +63,11 @@ func Values(text string, values []string, mark string) string {
 	return string(Bytes([]byte(text), secrets, mark))
 }
 
-// span は、text の中で伏せる半開区間 [start, end) である。
-type span struct{ start, end int }
+// Span は、text の中で伏せる半開区間 [Start, End) である。
+type Span struct{ Start, End int }
 
-func matchedSpans(text []byte, secrets []Secret) []span {
-	var spans []span
+func matchedSpans(text []byte, secrets []Secret) []Span {
+	var spans []Span
 	for _, secret := range secrets {
 		if len(secret.Value) == 0 {
 			continue
@@ -70,7 +81,7 @@ func matchedSpans(text []byte, secrets []Secret) []span {
 				break
 			}
 			start := offset + found
-			spans = append(spans, span{start: start, end: start + len(secret.Value)})
+			spans = append(spans, Span{Start: start, End: start + len(secret.Value)})
 			offset = start + 1
 		}
 		if cut, ok := cutPrefixSpan(text, secret, from); ok {
@@ -81,7 +92,7 @@ func matchedSpans(text []byte, secrets []Secret) []span {
 }
 
 // cutPrefixSpan は、CutAt で終わる Value の頭のうち最も長いものの範囲を返す。
-func cutPrefixSpan(text []byte, secret Secret, from int) (span, bool) {
+func cutPrefixSpan(text []byte, secret Secret, from int) (Span, bool) {
 	cutAt := min(secret.CutAt, len(text))
 	for length := min(len(secret.Value)-1, cutAt-from); length > 0; length-- {
 		start := cutAt - length
@@ -89,21 +100,21 @@ func cutPrefixSpan(text []byte, secret Secret, from int) (span, bool) {
 			continue
 		}
 		if bytes.Equal(text[start:cutAt], secret.Value[:length]) {
-			return span{start: start, end: cutAt}, true
+			return Span{Start: start, End: cutAt}, true
 		}
 	}
-	return span{}, false
+	return Span{}, false
 }
 
 // mergeSpans は、重なる区間と隣り合う区間を 1 つにまとめ、始まりの順に返す。
 // 隣り合う区間もまとめるのは、ある値のすぐ後に別の値が続いたときに、どこで区切れるかを残さないためである。
-func mergeSpans(spans []span) []span {
-	sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
-	merged := []span{spans[0]}
+func mergeSpans(spans []Span) []Span {
+	sort.Slice(spans, func(i, j int) bool { return spans[i].Start < spans[j].Start })
+	merged := []Span{spans[0]}
 	for _, next := range spans[1:] {
 		last := &merged[len(merged)-1]
-		if next.start <= last.end {
-			last.end = max(last.end, next.end)
+		if next.Start <= last.End {
+			last.End = max(last.End, next.End)
 			continue
 		}
 		merged = append(merged, next)
