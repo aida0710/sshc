@@ -1,6 +1,6 @@
 import type { HostMetadata } from "../api/config";
 import { useTranslate } from "../i18n/context";
-import { Icon } from "./icons";
+import { Icon, type IconName } from "./icons";
 import ubuntu from "./os-icons/ubuntu.svg";
 import debian from "./os-icons/debian.svg";
 import redhat from "./os-icons/redhat.svg";
@@ -57,6 +57,16 @@ export function OperatingSystemIcon({ os, colour = "", look = "plain" }: {
         <span aria-hidden="true" className={`${marks[look]} bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]`} style={{ maskImage: `url("${source}")` }} />
       )}
       {colour === "" ? null : <span aria-hidden="true" className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border ${onTile ? "border-well" : "border-card"}`} style={{ backgroundColor: colour }} />}
+    </span>
+  );
+}
+
+// AccentTileIcon は、OS の印の代わりに Icon を、accentTile と同じさし色の升に載せる。OS を持たない接続先
+// （SFTP の、sshc エンジンのマシンのカード）を、Home のカードと同じ形で並べるときに使う。
+export function AccentTileIcon({ icon }: { icon: IconName }) {
+  return (
+    <span aria-hidden="true" className={`relative grid ${frames.accentTile} shrink-0 place-items-center`}>
+      <Icon name={icon} className={marks.accentTile} />
     </span>
   );
 }

@@ -3,6 +3,9 @@ import type { ConfigApi, FileNode, HostEntry, HostMetadata, Overview } from "../
 import type { TerminalAppearance } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
 
+// HostLook は、接続先のカードの印に使う、接続先の OS と色（Connections の「OS」と「色」。OS は見つけたものでもよい）。
+export type HostLook = { os: HostMetadata["os"]; colour: string };
+
 // What the SSH configuration declares, read once per section and when asked: the groups,
 // the hosts (with the appearance and VPN route each one asked for) and the config files. Sections take these instead of reading the
 // overview themselves. config is the API of the engine the screens work with: another engine's declarations replace
@@ -13,6 +16,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
   const [hostVPN, setHostVPN] = useState<Map<string, string>>(new Map());
   // hostColour は、接続先に付けた色（Connections の「色」）。リモートセッションの枠の色に使う。
   const [hostColour, setHostColour] = useState<Map<string, string>>(new Map());
+  const [hostLook, setHostLook] = useState<Map<string, HostLook>>(new Map());
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
   const [hosts, setHosts] = useState<HostEntry[]>([]);
   const [files, setFiles] = useState<FileNode[]>([]);
@@ -27,6 +31,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
     setHostAppearance(hostSettingByAlias(hostMetadata, (host) => host.appearance));
     setHostVPN(hostSettingByAlias(hostMetadata, (host) => host.vpn === "" ? undefined : host.vpn));
     setHostColour(hostSettingByAlias(hostMetadata, (host) => host.colour === "" ? undefined : host.colour));
+    setHostLook(hostSettingByAlias(hostMetadata, (host) => ({ os: host.os || host.detectedOS || "", colour: host.colour ?? "" })));
     setKnownAliases([
       ...new Set(
         overview.hosts
@@ -48,6 +53,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
     setHostAppearance(new Map());
     setHostVPN(new Map());
     setHostColour(new Map());
+    setHostLook(new Map());
     setKnownAliases([]);
     setHosts([]);
     setFiles([]);
@@ -69,7 +75,7 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null, con
   }, [enabled, section, readCount, adoptOverview, config]);
 
   return {
-    groups, hostAppearance, hostVPN, hostColour, knownAliases, hosts, files, read,
+    groups, hostAppearance, hostVPN, hostColour, hostLook, knownAliases, hosts, files, read,
     // adoptOverview takes an overview a section read after changing the connections, without leaving that section.
     adoptOverview,
     // readAgain is for a change made outside the sections.

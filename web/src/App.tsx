@@ -645,7 +645,7 @@ export function App({
                         onAddConnection: addConnection,
                         onOpenTerminal: openSFTPTerminal,
                       },
-                      declared: { groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN },
+                      declared: { groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN, hostLook: declared.hostLook },
                       sftpTarget: handoffs.sftpTarget,
                       onSftpTargetHandled: handoffs.consumeSftpTarget,
                     }}

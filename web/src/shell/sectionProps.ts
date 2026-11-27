@@ -7,6 +7,7 @@ import type { InspectorContent } from "../ui/Inspector";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type { PasswordVaultStatus } from "../api/vault";
 import type { HostEntry, Overview } from "../api/config";
+import type { HostLook } from "./useDeclaredConfig";
 
 
 export type Navigation = {
@@ -64,4 +65,5 @@ export type Declared = {
   hosts: HostEntry[];
   // hostVPN は、alias ごとに通るVPN経路の名前である。
   hostVPN: Map<string, string>;
+  hostLook: Map<string, HostLook>;
 };
