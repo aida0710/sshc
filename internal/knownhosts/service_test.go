@@ -265,6 +265,22 @@ func TestRememberWritesOnlyInsideTheWorkspace(t *testing.T) {
 	}
 }
 
+// 既定の UserKnownHostsFile は、設定の解決がホームの表記（~/.ssh/known_hosts）で渡す。これを
+// ~/.ssh の外と取り違えると、accept-new の接続がすべて失敗になる。一時のフォルダがリンクを
+// 経由する macOS でも、ここへ書ける。
+func TestRememberWritesTheDefaultUserKnownHostsFileNamedFromTheHome(t *testing.T) {
+	service := newTestService(t, "", &recordingCollector{})
+	candidate := knownhosts.Candidate{Host: "mirage", Port: 22, KeyType: fixtureKeyType, Key: fixtureKey}
+
+	if err := service.Remember(filepath.Join(service.Workspace.Home(), ".ssh", "known_hosts"), candidate); err != nil {
+		t.Fatalf("Remember = %v", err)
+	}
+	contents, err := os.ReadFile(service.Path())
+	if want := "mirage " + fixtureKeyType + " " + fixtureKey + "\n"; err != nil || string(contents) != want {
+		t.Fatalf("known_hosts = %q, %v; want %q", contents, err, want)
+	}
+}
+
 // dotfiles の stow などで ~/.ssh がシンボリックリンクでも、ホームの表記で渡された
 // 既定の UserKnownHostsFile は内側である。受け入れた鍵がリンク先の実体へ書かれ、
 // 同じ表記で読み戻せないと、接続のたびに未知のホストとして扱われる。

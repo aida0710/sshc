@@ -126,6 +126,14 @@ var typedFailureSentence = []struct {
 	{keys.ErrWrongPassphrase, "秘密鍵のパスフレーズが違います。"},
 }
 
+// unsavedHostKeyFailure は、受け入れたホスト鍵を known_hosts へ保存できないために失敗にした
+// 接続の理由である（KnownHostsSymlinkError、KnownHostsOutsideWorkspaceError）。どちらも、
+// 保存できない理由と登録の仕方を自分の文で言う。
+type unsavedHostKeyFailure interface {
+	error
+	sentence() string
+}
+
 // FailureSentence は、接続の失敗を、画面のターミナルに出す日本語の文にする。元の英語の文は
 // 接続ログの「詳しく」から出す（Dialer.failSession）。分からない失敗は、元の文を添えて返す。
 func FailureSentence(err error) string {
@@ -137,9 +145,9 @@ func FailureSentence(err error) string {
 	if errors.As(err, &explained) {
 		return explained.Sentence
 	}
-	var symlinked *KnownHostsSymlinkError
-	if errors.As(err, &symlinked) {
-		return "known_hostsがシンボリックリンクのため、ホスト鍵を保存できませんでした。sshで一度接続して鍵を登録してから、接続し直してください。"
+	var unsaved unsavedHostKeyFailure
+	if errors.As(err, &unsaved) {
+		return unsaved.sentence()
 	}
 	var rejected authenticationRejected
 	if errors.As(err, &rejected) {
