@@ -1,0 +1,43 @@
+# PR のタイトル・本文と、ブランチのコミットメッセージを検査する（scripts/ci/check-pr-text.sh）。
+# 本文だけを編集したとき（edited）も実行するため、ci.yml とは別の workflow にしてある。
+# ci.yml まで edited で実行すると、本文を編集するたびに全部の検査が実行し直される。
+name: Pull request text
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+# 続けて編集したときは、最後のタイトル・本文の結果だけを残す。
+concurrency:
+  group: pull-request-text-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Pull request text
+    # Dependabot のタイトルは英語の決まった形（build(deps): bump …）で、帰属の行も社内の URL も書かない。
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # base から分かれた所までのコミットを読むので、履歴は全部取得する。ファイルの中身は
+          # スクリプトの分だけ取得する。
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      # タイトルと本文は、イベントのファイルから読んで環境変数で渡す。run に ${{ }} で埋め込むと、
+      # PR を作った人がシェルのコマンドを書ける。step の env に書くと、runner が値をログの先頭に
+      # 書き出すので、消したい URL が誰でも読めるログに残る。
+      # 取り出したのは PR のマージコミットなので、1つ目の親が base、2つ目の親が PR の先頭になる。
+      - name: Check the title, the body, and the commit messages
+        run: |
+          PR_TITLE="$(jq --raw-output '.pull_request.title' "$GITHUB_EVENT_PATH")"
+          PR_BODY="$(jq --raw-output '.pull_request.body // ""' "$GITHUB_EVENT_PATH")"
+          export PR_TITLE PR_BODY
+          scripts/ci/check-pr-text.sh HEAD^1 HEAD^2

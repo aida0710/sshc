@@ -10,7 +10,7 @@ import (
 )
 
 // workflowDocument は、GitHub Actions の workflow のうち、契約テストが見る部分である。
-// ci.yml、release.yml、pages.yml の契約テストが同じ型で読む。
+// ci.yml、release.yml、pages.yml、pull-request-text.yml の契約テストが同じ型で読む。
 type workflowDocument struct {
 	On          workflowNames          `yaml:"on"`
 	Permissions map[string]string      `yaml:"permissions"`

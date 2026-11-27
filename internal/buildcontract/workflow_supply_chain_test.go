@@ -57,6 +57,67 @@ func TestNoWorkflowRunsOnPullRequestTarget(t *testing.T) {
 	}
 }
 
+// run の中の ${{ }} は、シェルが読む前に文字として埋め込まれる。PR のタイトル・本文やブランチ名のように
+// PR を作った人が決められる値を埋め込むと、その人がシェルのコマンドを書ける。値は環境変数で渡す。
+func TestNoWorkflowEmbedsTextThePullRequestAuthorControlsInARunScript(t *testing.T) {
+	// 判定の例: PR を作った人が決められる値は、関数に渡したり [] で引いたりしても見つける。
+	// イベントの名前のように決められない値と、環境変数で受け取った値は通す。
+	examples := []struct {
+		run      string
+		embedded bool
+	}{
+		{`echo "${{ github.event.pull_request.title }}"`, true},
+		{`echo '${{ toJSON(github.event) }}'`, true},
+		{`echo "${{ github.event['pull_request']['body'] }}"`, true},
+		{`echo "${{ format('{0}', github.head_ref) }}"`, true},
+		{`echo "${{ github.event_name }}"`, false},
+		{`echo "${{ github.sha }}" "$GITHUB_HEAD_REF"`, false},
+	}
+	for _, example := range examples {
+		document := workflowDocument{Jobs: map[string]workflowJob{"check": {Steps: []workflowStep{{Run: example.run}}}}}
+		if embedded := len(validateRunExpressions(document)) > 0; embedded != example.embedded {
+			t.Errorf("run %q: embedded = %v, want %v", example.run, embedded, example.embedded)
+		}
+	}
+	for _, path := range workflowFiles(t) {
+		document, _ := readWorkflowFile(t, path)
+		for _, problem := range validateRunExpressions(document) {
+			t.Errorf("%s: %s", filepath.Base(path), problem)
+		}
+	}
+}
+
+// runExpression は、run の中の ${{ }} の式である。式の中の文字列（'{0}' など）に } があっても、
+// 閉じる }} までを1つの式として読む。
+var runExpression = regexp.MustCompile(`(?s)\$\{\{(.*?)\}\}`)
+
+// authorControlledContext は、PR を作った人が決められる値の文脈である。github.event の中身
+// （タイトル・本文・コメント・コミットメッセージ）と、PR のブランチ名がそれに当たる。関数に渡したり
+// [] で引いたりしても見つけるように、後ろを . ではなく語の境目で区切る。github.event_name のように、
+// 同じ語で始まるだけの文脈は含めない。
+var authorControlledContext = regexp.MustCompile(`\bgithub\.(event|head_ref)\b`)
+
+func validateRunExpressions(document workflowDocument) []string {
+	var problems []string
+	for _, id := range slices.Sorted(maps.Keys(document.Jobs)) {
+		for stepIndex, step := range document.Jobs[id].Steps {
+			if embedsAuthorControlledContext(step.Run) {
+				problems = append(problems, fmt.Sprintf("jobs.%s step %d embeds github.event or github.head_ref in run; pass it through an environment variable", id, stepIndex))
+			}
+		}
+	}
+	return problems
+}
+
+func embedsAuthorControlledContext(run string) bool {
+	for _, expression := range runExpression.FindAllStringSubmatch(run, -1) {
+		if authorControlledContext.MatchString(expression[1]) {
+			return true
+		}
+	}
+	return false
+}
+
 func validateActionPins(document workflowDocument) []string {
 	pinned := regexp.MustCompile(`^[^@]+@[0-9a-f]{40}$`)
 	isThirdParty := func(uses string) bool {
