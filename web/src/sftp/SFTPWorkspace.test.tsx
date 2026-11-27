@@ -177,6 +177,20 @@ describe("SFTP tabs", () => {
     expect(remaining[0]).toHaveAccessibleName("edge:edge");
   });
 
+  it("closes the last tab that has a connection, back to the choice of a connection", async () => {
+    render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
+    await chooseHost("edge");
+    await waitFor(() => expect(screen.getByRole("tab", { name: "edge:edge" })).toBeVisible());
+
+    fireEvent.click(screen.getByRole("button", { name: "Close the edge:edge tab" }), { shiftKey: true });
+
+    const remaining = screen.getAllByRole("tab");
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]).toHaveAccessibleName("New tab");
+    expect(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Choose a connection" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Close the/ })).not.toBeInTheDocument();
+  });
+
   it("asks for the connection before adding a tab and adds none when the picker is dismissed", async () => {
     render(<SFTPWorkspace title="SFTP" aliases={["edge"]} />);
 

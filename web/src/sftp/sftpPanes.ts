@@ -84,6 +84,13 @@ export function addTab(panes: SFTPPane[], paneId: string, tab: SFTPTab): SFTPPan
   return replacePane(panes, { ...pane, tabs: [...pane.tabs, tab], activeId: tab.id });
 }
 
+// tabsClosable は、タブの列に［×］を出すか。最後の1つでも、接続先を開いているタブは閉じられる。閉じると接続先を
+// 選ぶ案内のタブに戻る（withoutEmptyPanes）。接続先をまだ選んでいない最後のタブは、閉じても同じ案内に戻るだけなので
+// 出さない。otherPanes は、ほかにも区画があるか（あれば最後のタブを閉じると区画ごと消える）。
+export function tabsClosable(tabs: readonly SFTPTab[], otherPanes: boolean): boolean {
+  return otherPanes || tabs.length > 1 || tabs.some((tab) => tab.alias !== "");
+}
+
 export function closeTab(panes: SFTPPane[], tabId: string): SFTPPane[] {
   const found = findTab(panes, tabId);
   if (found === null) return panes;

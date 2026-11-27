@@ -24,6 +24,7 @@ import { rememberTabsConnectedOnLeaving, wasConnectedOnLeaving } from "./tabsCon
 import { useStoredValue } from "../ui/useStoredValue";
 import {
   activeTab, addTab, allTabs, blankTab, canSplit, changeTabView, closeTab, findTab, maxTabsPerPane, moveTab, relocateTab, resortTab, selectTab, swapPanes,
+  tabsClosable,
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
 import { IconButton } from "../ui/IconButton";
@@ -384,7 +385,7 @@ export function SFTPWorkspace({
   function renderPane(pane: SFTPPane, index: number) {
     const concealed = compactViewport && pane.id !== focusedPane?.id;
     const other = index === 0 ? rightLocation : leftLocation;
-    const closable = pane.tabs.length > 1 || panes.length > 1;
+    const closable = tabsClosable(pane.tabs, panes.length > 1);
     const dropPlacement = draggedTabId === null || compactViewport ? null
       : panes.length > 1 ? (findTab(panes, draggedTabId)?.pane.id === pane.id ? null : "whole" as const)
         : canSplit(panes) ? "halves" as const : null;
@@ -479,7 +480,7 @@ export function SFTPWorkspace({
       <h2 className="sr-only">{title}</h2>
       <section className={`flex min-h-0 min-w-0 flex-1 flex-col ${compactViewport ? "" : visibleSplit ? "gap-2" : boardLook}`} aria-label={t("sftp.tabs")}>
         {compactViewport && compactTabs !== null ? <SFTPTabStrip
-          pane={compactTabs} compact label={t("sftp.mobileTabs")} closable={compactTabs.tabs.length > 1}
+          pane={compactTabs} compact label={t("sftp.mobileTabs")} closable={tabsClosable(compactTabs.tabs, false)}
           movable={() => false} addDisabled={panes.every((pane) => pane.tabs.length >= maxTabsPerPane)}
           trailing={compactComparisonButton} onChangeHost={requestHostChange}
           canChangeHost={(tab) => !dirtyTabs.has(tab.id)} onSelect={selectFileTab} onClose={requestCloseTab}
