@@ -239,7 +239,7 @@ func TestTheKnownHostsScreenReportsAFileItCannotRead(t *testing.T) {
 }
 
 // 接続が受け入れた鍵は、UserKnownHostsFile の最初のファイルへ書く。~/.ssh の外には
-// 書かない。/dev/null を指す設定もここに当たる。
+// 書かない。
 func TestRememberWritesOnlyInsideTheWorkspace(t *testing.T) {
 	service := newTestService(t, "", &recordingCollector{})
 	candidate := knownhosts.Candidate{Host: "db.example", Port: 2222, KeyType: fixtureKeyType, Key: fixtureKey}
