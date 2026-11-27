@@ -23,6 +23,7 @@ export function fakeAndroidBridge(overrides: Partial<AndroidBridge> = {}): Andro
     performHapticFeedback: vi.fn(),
     firstScreenShown: vi.fn(),
     setBackTakenByPage: vi.fn(),
+    screenCorners: vi.fn(() => '{"topLeft":[0,0],"topRight":[0,0],"bottomRight":[0,0],"bottomLeft":[0,0]}'),
     ...overrides,
   };
 }

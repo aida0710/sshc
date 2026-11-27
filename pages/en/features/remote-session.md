@@ -39,7 +39,7 @@ Changing the remote vault's master password and recovering a damaged vault are n
 
 The keyboard switches too. By default Alt+Shift+PageDown / Alt+Shift+PageUp go to the next and previous one, and Ctrl+1 to Ctrl+9 (Command+1 to Command+9 on a Mac) to the first to ninth in the list; the first is localhost. Typing "remote session" in the command search lists them by connection name as well. Change the keys in **Settings → Keyboard shortcuts**.
 
-While a remote session is chosen, every screen has a frame around the whole window and a tag with the connection name at the top edge. They go away when you switch back to localhost.
+While a remote session is chosen, every screen has a frame around the whole window and a tag with the connection name at the top edge. They go away when you switch back to localhost. In the Android app, the frame's corners follow the rounded corners of the screen, so the frame is not cut off there.
 
 The colour of the frame and its tag is the first of these:
 
