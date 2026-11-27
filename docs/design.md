@@ -498,7 +498,7 @@ VPNプロファイルを付けた接続は、プロファイルごとのDocker�
 
 ## 強化とリリースの境界
 
-- リクエスト本文には二段の上限があります。middleware の `MaxRequestBodyCeiling`（2 MiB）が全 `/api/` 要求の天井で（例外は SFTP の range upload `PATCH …/uploads/{id}?range=true` の 4 GiB と、背景画像の追加`POST /api/v1/terminal/backgrounds`の1 GiBだけ）、各ハンドラーはさらに小さい上限を持ちます。宣言された `Content-Length` が天井を超える要求はハンドラーへ届く前に 413 で拒否し、長さを宣言しない chunked 要求は読み取り自体を天井で打ち切ります。本文を読まないルート（`/api/v1/diagnostics/config` や `/api/v1/keys/{keyId}/trash`）にも同じ天井が掛かるのは前者のためです。
+- リクエスト本文には二段の上限があります。middleware の `MaxRequestBodyCeiling`（2 MiB）が全 `/api/` 要求の天井で（例外は SFTP の range upload `PATCH …/uploads/{id}?range=true` の 4 GiB、テキストの保存`PUT …/text`の約12 MiB、背景画像の追加`POST /api/v1/terminal/backgrounds`の1 GiBだけ）、各ハンドラーはさらに小さい上限を持ちます。宣言された `Content-Length` が天井を超える要求はハンドラーへ届く前に 413 で拒否し、長さを宣言しない chunked 要求は読み取り自体を天井で打ち切ります。本文を読まないルート（`/api/v1/diagnostics/config` や `/api/v1/keys/{keyId}/trash`）にも同じ天井が掛かるのは前者のためです。リモートセッションの操作（`/api/v1/engines/{alias}/…`）の天井は、このマシンの同じ操作と同じです（`requestBodyCeiling`）。取り次ぎは、本文を溜めて送る操作では2 MiBまで運び、それより大きい本文を受ける操作では溜めずに流します（`remoteengine.ForwardFileAPI`）。
 - 背景画像の追加は、本文をメモリに載せません。1枚の大きさは、背景の容量設定で押さえます。
   - 先頭の12バイトで画像の形式を判定します。
   - 本文全体を保存先と同じフォルダの一時ファイルへ書き、空き容量を超えたところで読み取りを打ち切ります。

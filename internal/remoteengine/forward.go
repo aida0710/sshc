@@ -14,10 +14,11 @@ import (
 	"sshc/internal/handoff"
 )
 
-// maxForwardedBody は、取り次ぐ API の要求の本文の上限である。取り次ぐのは
-// セッションの作成や名前の変更のような短い JSON だけで、接続先のエンジン自身の上限より
-// 小さい。本文は、資格を受け取り直して一度だけ送り直すために読み切って持つ。
-const maxForwardedBody = 1 << 20
+// maxForwardedBody は、本文を溜めて取り次ぐ要求の本文の上限である。このマシンの入口の共通の上限と同じにする。
+// 小さいと、このマシンでは受ける本文（大きい SSH の設定の保存など）が、リモートセッションでだけ断られる。
+// これより大きい本文を受ける操作は、溜めずに流す（ForwardFileAPI）。本文は、資格を受け取り直して一度だけ
+// 送り直すために読み切って持つ。
+const maxForwardedBody = handoff.MaxRequestBodyCeiling
 
 // RemoteStreamPath は、接続先のエンジンのターミナルの入出力の WebSocket である。
 const RemoteStreamPath = "/terminal/stream"
@@ -73,22 +74,13 @@ type forwardTo struct {
 }
 
 func (m *Manager) forward(w http.ResponseWriter, r *http.Request, to forwardTo) error {
-	alias, remotePath := to.alias, to.remotePath
-	engine, err := m.engine(alias)
+	engine, err := m.engine(to.alias)
 	if err != nil {
 		return err
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxForwardedBody+1))
+	call, err := ForwardedCall(r, to.remotePath)
 	if err != nil {
 		return err
-	}
-	if len(body) > maxForwardedBody {
-		return ErrRequestTooLarge
-	}
-	// 確認のトークンは、接続先のエンジンが出したものを画面が持っていて、接続先が確かめる。
-	call := APICall{
-		Method: r.Method, Path: remotePath, RawQuery: r.URL.RawQuery, ContentType: r.Header.Get("Content-Type"), Body: body,
-		ActionToken: r.Header.Get(handoff.ActionHeader),
 	}
 	err = m.exchange(r.Context(), engine, exchangeOf{call: call, answerLimit: to.answerLimit}, func(response *http.Response) { copyResponse(w, response) })
 	var refusal *RemoteRefusalError
@@ -99,8 +91,28 @@ func (m *Manager) forward(w http.ResponseWriter, r *http.Request, to forwardTo) 
 	return err
 }
 
-// APICall は、このマシンのエンジン自身が、接続先のエンジンの API へ送る要求1つ
-// である（ブラウザの要求の取り次ぎではない）。
+// ForwardedCall は、ブラウザの要求を、接続先のエンジンの remotePath（/api/v1/…）への要求にする。本文、
+// クエリ、本文の種類、確認のトークンを写す。確認のトークンは、接続先のエンジンが出したものを画面が持っていて、
+// 接続先が確かめる。ブラウザの cookie と CSRF のトークンはこのマシンのエンジンのもので、写さない。
+// 本文が maxForwardedBody を超えれば ErrRequestTooLarge を返す。
+func ForwardedCall(r *http.Request, remotePath string) (APICall, error) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxForwardedBody+1))
+	// このマシンの入口（httpserver の Security）は、長さを言わない本文を上限で切る。
+	var cut *http.MaxBytesError
+	if errors.As(err, &cut) || len(body) > maxForwardedBody {
+		return APICall{}, ErrRequestTooLarge
+	}
+	if err != nil {
+		return APICall{}, err
+	}
+	return APICall{
+		Method: r.Method, Path: remotePath, RawQuery: r.URL.RawQuery, ContentType: r.Header.Get("Content-Type"), Body: body,
+		ActionToken: r.Header.Get(handoff.ActionHeader),
+	}, nil
+}
+
+// APICall は、接続先のエンジンの API へ送る要求1つである。このマシンのエンジン自身が組むもの（転送を開く要求
+// など）と、ブラウザの要求を写したもの（ForwardedCall）がある。
 type APICall struct {
 	Method string
 	// Path は /api/v1/… である。

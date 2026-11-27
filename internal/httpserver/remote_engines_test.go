@@ -257,7 +257,7 @@ func TestOperationsThatWaitForAnotherHostAreForwardedWithTheLongLimit(t *testing
 	}
 }
 
-// ファイルの中身を運ぶ操作は、溜めると上限（1 MiB）で切れるので、流して取り次ぐ。
+// ファイルの中身を運ぶ操作は、溜めると共通の上限（2 MiB）で切れるので、流して取り次ぐ。
 func TestOperationsThatCarryAFileAreForwardedAsStreams(t *testing.T) {
 	directory := &fakeEngineDirectory{}
 	engine := remoteEnginesEngine(directory)

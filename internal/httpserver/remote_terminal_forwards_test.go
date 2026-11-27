@@ -32,9 +32,12 @@ type relayToEngine struct {
 	t           *testing.T
 	remote      *echo.Echo
 	credentials session.Credentials
+	// relayed は、実行先の役のエンジンへ送った要求である。
+	relayed []remoteengine.APICall
 }
 
 func (r *relayToEngine) CallAPI(_ context.Context, _ string, call remoteengine.APICall) (remoteengine.APIAnswer, error) {
+	r.relayed = append(r.relayed, call)
 	recorder := sendKeyRequest(r.t, r.remote, r.credentials, call.Method, call.Path, call.Body, call.ActionToken)
 	body, _ := io.ReadAll(recorder.Result().Body)
 	return remoteengine.APIAnswer{Status: recorder.Code, Body: body}, nil
@@ -128,7 +131,16 @@ func (r *relayWithLoopback) DialRunTargetLoopback(ctx context.Context, _ string,
 	return dialer.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 }
 
-func runTargetForwardFixture(t *testing.T) (*echo.Echo, session.Credentials, string, *echoForwardProcess) {
+// runTargetForward は、実行先のセッション1つと、それを取り次ぐこのマシンのエンジンである。
+type runTargetForward struct {
+	local       *echo.Echo
+	credentials session.Credentials
+	sessionID   string
+	process     *echoForwardProcess
+	directory   *relayWithLoopback
+}
+
+func runTargetForwardFixture(t *testing.T) runTargetForward {
 	t.Helper()
 	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x6b}, 8192)))
 	if err != nil {
@@ -176,7 +188,7 @@ func runTargetForwardFixture(t *testing.T) (*echo.Echo, session.Credentials, str
 	directory.engines = []string{"r100"}
 	local, credentials := localEngineForRunTarget(t, directory)
 	waitConnected(t, registry, opened.ID())
-	return local, credentials, opened.ID(), process
+	return runTargetForward{local: local, credentials: credentials, sessionID: opened.ID(), process: process, directory: directory}
 }
 
 func waitConnected(t *testing.T, registry *terminal.Registry, id string) {
@@ -219,7 +231,8 @@ func startRunTargetLocalForward(t *testing.T, local *echo.Echo, credentials sess
 }
 
 func TestARunTargetForwardListensHereAndReachesThePortTheRunTargetOpened(t *testing.T) {
-	local, credentials, sessionID, process := runTargetForwardFixture(t)
+	fixture := runTargetForwardFixture(t)
+	local, credentials, sessionID, process := fixture.local, fixture.credentials, fixture.sessionID, fixture.process
 	want := startRunTargetLocalForward(t, local, credentials, sessionID)
 	if got := process.asked; len(got) != 1 || got[0] != "local 0 10.0.0.5:5432" {
 		t.Fatalf("the run target was asked %q, want a forward on any free port to the same destination", got)
@@ -252,7 +265,8 @@ func TestARunTargetForwardListensHereAndReachesThePortTheRunTargetOpened(t *test
 }
 
 func TestARunTargetRemoteForwardOpensOnTheRunTargetAsAsked(t *testing.T) {
-	local, credentials, sessionID, process := runTargetForwardFixture(t)
+	fixture := runTargetForwardFixture(t)
+	local, credentials, sessionID, process := fixture.local, fixture.credentials, fixture.sessionID, fixture.process
 	free, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -284,7 +298,8 @@ func TestARunTargetRemoteForwardOpensOnTheRunTargetAsAsked(t *testing.T) {
 }
 
 func TestRemovingARunTargetClosesItsForwardListeners(t *testing.T) {
-	local, credentials, sessionID, _ := runTargetForwardFixture(t)
+	fixture := runTargetForwardFixture(t)
+	local, credentials, sessionID := fixture.local, fixture.credentials, fixture.sessionID
 	listen := startRunTargetLocalForward(t, local, credentials, sessionID)
 	removed := sendKeyRequest(t, local, credentials, http.MethodDelete, "/api/v1/engines/r100", nil, "")
 	if removed.Code != http.StatusOK {
@@ -296,7 +311,8 @@ func TestRemovingARunTargetClosesItsForwardListeners(t *testing.T) {
 }
 
 func TestTheRestoreOfferOfARunTargetWithAForwardPassesThroughAndKeepsTheListener(t *testing.T) {
-	local, credentials, sessionID, _ := runTargetForwardFixture(t)
+	fixture := runTargetForwardFixture(t)
+	local, credentials, sessionID := fixture.local, fixture.credentials, fixture.sessionID
 	listen := startRunTargetLocalForward(t, local, credentials, sessionID)
 	offer := sendKeyRequest(t, local, credentials, http.MethodGet, "/api/v1/engines/r100/terminal/restore", nil, "")
 	if offer.Code != http.StatusOK || !strings.Contains(offer.Body.String(), `"pinnedTitle":"build"`) {
@@ -307,4 +323,22 @@ func TestTheRestoreOfferOfARunTargetWithAForwardPassesThroughAndKeepsTheListener
 		t.Fatalf("reading the restore offer closed the forward's listener: %v", err)
 	}
 	_ = connection.Close()
+}
+
+// 転送を中継している間も、クイックコマンドと一括送信の確認のトークンは実行先へ届く。トークンは実行先の
+// エンジンが出して確かめるので、落とすと、転送を開いている間だけ実行先が action_token_required で断る。
+func TestARunTargetRelayingAForwardStillReceivesTheConfirmationToken(t *testing.T) {
+	fixture := runTargetForwardFixture(t)
+	startRunTargetLocalForward(t, fixture.local, fixture.credentials, fixture.sessionID)
+	fixture.directory.relayed = nil
+	command := []byte(`{"command":"uptime","targets":["` + fixture.sessionID + `"]}`)
+	sendKeyRequest(t, fixture.local, fixture.credentials, http.MethodPost, "/api/v1/engines/r100/terminal/commands", command, "token-the-run-target-issued")
+	relayed := fixture.directory.relayed
+	if len(relayed) != 1 {
+		t.Fatalf("relayed %+v, want the one command", relayed)
+	}
+	if got := relayed[0]; got.Path != "/api/v1/terminal/commands" || got.ActionToken != "token-the-run-target-issued" ||
+		got.ContentType != "application/json" || !bytes.Equal(got.Body, command) {
+		t.Fatalf("the run target received %s %s (%s) with the token %q: %s", got.Method, got.Path, got.ContentType, got.ActionToken, got.Body)
+	}
 }

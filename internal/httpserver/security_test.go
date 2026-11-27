@@ -478,3 +478,43 @@ func TestTextSaveBodyCeilingOnlyAppliesToTextPUTRoutes(t *testing.T) {
 		}
 	}
 }
+
+// リモートセッションの操作は、このマシンの同じ操作と同じ大きさの本文を受ける。入口の上限を経路の文字列で
+// 決めるので、取り次ぐ経路（/api/v1/engines/<接続名>/…）を見落とすと、背景の画像の追加、範囲の
+// アップロードの一片、大きいテキストの保存が、リモートセッションでだけ 413 で断られる。
+func TestAForwardedOperationAcceptsTheSameBodyAsThisMachinesOperation(t *testing.T) {
+	larger := 0
+	for _, route := range forwardedRoutes {
+		path := sampleRoutePath(route.path)
+		// range=true は、範囲のアップロードの一片だけが付ける。付けた形も確かめないと、その上限を見ない。
+		for _, query := range []string{"", "?range=true"} {
+			here := requestBodyCeiling(httptest.NewRequest(route.method, "/api/v1"+path+query, nil))
+			forwarded := requestBodyCeiling(httptest.NewRequest(route.method, enginesPrefix+"/r100"+path+query, nil))
+			if forwarded != here {
+				t.Errorf("%s %s%s: the forwarded ceiling is %d, this machine's is %d", route.method, route.path, query, forwarded, here)
+			}
+			if here <= MaxRequestBodyCeiling {
+				continue
+			}
+			larger++
+			// 本文を溜めて運ぶ取り次ぎ（remoteengine.ForwardAPI）は、共通の上限までしか運ばない。
+			if !route.file {
+				t.Errorf("%s %s%s takes up to %d bytes here but is forwarded by buffering its body", route.method, route.path, query, here)
+			}
+		}
+	}
+	if larger == 0 {
+		t.Fatal("no forwarded operation takes a body larger than the common ceiling; the sample paths miss the larger ceilings")
+	}
+}
+
+// sampleRoutePath は、経路の型（/sftp/:alias/text）の引数の部分を、例の値に置き換える。
+func sampleRoutePath(pattern string) string {
+	segments := strings.Split(pattern, "/")
+	for index, segment := range segments {
+		if strings.HasPrefix(segment, ":") {
+			segments[index] = "pelican"
+		}
+	}
+	return strings.Join(segments, "/")
+}

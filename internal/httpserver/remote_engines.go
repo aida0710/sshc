@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"strings"
 
 	"github.com/labstack/echo/v5"
 
@@ -272,8 +271,7 @@ func (h RemoteEngineHandlers) ForwardTerminal(c *echo.Context) error {
 	if !ok {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
-	local := c.Request().URL.Path
-	remotePath := "/api/v1/terminal" + strings.TrimPrefix(local, enginesPrefix+"/"+alias+"/terminal")
+	remotePath := thisMachinesPath(c.Request().URL.Path)
 	if h.forwards.has(alias) {
 		return h.forwardWithLocalListens(c, alias, remotePath)
 	}

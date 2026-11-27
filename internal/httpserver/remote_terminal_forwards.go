@@ -330,19 +330,12 @@ func (h RemoteEngineHandlers) withLocalListens(alias string, listed api.Terminal
 // forwardWithLocalListens は、このマシンが中継している転送のある実行先へ、ブラウザの要求を取り次ぐ。
 // 答えがセッションの一覧なら、転送の待ち受けのアドレスをこのマシンの待ち受けに替えて返す。
 func (h RemoteEngineHandlers) forwardWithLocalListens(c *echo.Context, alias, remotePath string) error {
-	request := c.Request()
-	body, err := io.ReadAll(io.LimitReader(request.Body, maxForwardedRequestBody+1))
+	// 中継の無い実行先への取り次ぎ（remoteengine.ForwardAPI）と同じ要求を送り、同じ断り方をする。
+	call, err := remoteengine.ForwardedCall(c.Request(), remotePath)
 	if err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
+		return remoteEngineProblem(c, err)
 	}
-	if len(body) > maxForwardedRequestBody {
-		// 取り次ぎ（remoteengine）が大きすぎる本文を断るときと同じ答えにする。
-		return remoteEngineProblem(c, remoteengine.ErrRequestTooLarge)
-	}
-	reply, err := h.Engines.CallAPI(request.Context(), alias, remoteengine.APICall{
-		Method: request.Method, Path: remotePath, RawQuery: request.URL.RawQuery,
-		ContentType: request.Header.Get(echo.HeaderContentType), Body: body,
-	})
+	reply, err := h.Engines.CallAPI(c.Request().Context(), alias, call)
 	if err != nil {
 		return remoteEngineProblem(c, err)
 	}
@@ -375,7 +368,3 @@ func sessionListAnswer(remotePath string, body []byte) (api.TerminalSessionList,
 	}
 	return listed, true
 }
-
-// maxForwardedRequestBody は、中継のある実行先へ取り次ぐ要求の本文の上限である。取り次ぎ
-// （remoteengine）と同じく、セッションの作成や名前の変更のような短い JSON だけを運ぶ。
-const maxForwardedRequestBody = 1 << 20

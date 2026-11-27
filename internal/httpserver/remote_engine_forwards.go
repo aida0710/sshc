@@ -239,10 +239,24 @@ func (h RemoteEngineHandlers) forwarding(forward func(http.ResponseWriter, *http
 		if !ok {
 			return problem(c, http.StatusBadRequest, "unsafe_alias")
 		}
-		remotePath := "/api/v1" + strings.TrimPrefix(c.Request().URL.Path, enginesPrefix+"/"+alias)
-		if err := forward(c.Response(), c.Request(), alias, remotePath); err != nil {
+		if err := forward(c.Response(), c.Request(), alias, thisMachinesPath(c.Request().URL.Path)); err != nil {
 			return remoteEngineProblem(c, err)
 		}
 		return nil
 	}
+}
+
+// thisMachinesPath は、リモートセッションの操作の経路（/api/v1/engines/<接続名>/…）を、このマシンの同じ操作の
+// 経路（/api/v1/…）にする。取り次ぐ先の経路と、入口で本文の上限を決める経路（requestBodyCeiling）を、ここで
+// 1つにそろえる。接続名のあとに経路が無ければ（実行先を外す操作など）、path をそのまま返す。
+func thisMachinesPath(path string) string {
+	afterPrefix, found := strings.CutPrefix(path, enginesPrefix+"/")
+	if !found {
+		return path
+	}
+	_, operation, found := strings.Cut(afterPrefix, "/")
+	if !found {
+		return path
+	}
+	return "/api/v1/" + operation
 }
