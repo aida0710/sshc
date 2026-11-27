@@ -73,6 +73,7 @@ func (h SFTPHandlers) StreamMedia(c *echo.Context) error {
 	header := c.Response().Header()
 	header.Set("Content-Type", media.ContentType)
 	header.Set("Content-Disposition", "inline")
+	sandboxAsDocument(header)
 	http.ServeContent(c.Response(), c.Request(), "", media.ModTime, media.Content)
 	return nil
 }

@@ -343,14 +343,10 @@ func (h RemoteEngineHandlers) forwardWithLocalListens(c *echo.Context, alias, re
 	if listed, ok := sessionListAnswer(remotePath, reply.Body); succeeded && ok {
 		return c.JSON(reply.Status, h.withLocalListens(alias, listed))
 	}
-	contentType := reply.ContentType
-	if contentType == "" {
-		contentType = echo.MIMEApplicationJSON
-	}
 	if len(reply.Body) == 0 {
 		return c.NoContent(reply.Status)
 	}
-	return c.Blob(reply.Status, contentType, reply.Body)
+	return c.Blob(reply.Status, reply.ContentType, reply.Body)
 }
 
 // sessionListAnswer は、remotePath の答えがセッションの一覧なら、それを返す。開き直しの申し出

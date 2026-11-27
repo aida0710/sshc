@@ -227,7 +227,20 @@ func registerForwardedRoutes(engine *echo.Echo, handlers RemoteEngineHandlers) {
 		case route.slow:
 			forward = handlers.Engines.ForwardSlowAPI
 		}
-		engine.Add(route.method, enginesPrefix+"/:alias"+route.path, handlers.forwarding(forward))
+		handler := handlers.forwarding(forward)
+		if route.media || route.file {
+			handler = sandboxingAnswers(handler)
+		}
+		engine.Add(route.method, enginesPrefix+"/:alias"+route.path, handler)
+	}
+}
+
+// sandboxingAnswers は、next の答えに sandboxPolicy を足す。実行先のファイルの中身は接続先が書いたもので、
+// このマシンの画面のオリジンの文書として開かせない。
+func sandboxingAnswers(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		sandboxAsDocument(c.Response().Header())
+		return next(c)
 	}
 }
 
