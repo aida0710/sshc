@@ -51,10 +51,7 @@ func (r *Registry) indexOf(id string) int {
 // MoveWorkspaceSessions は、from のワークスペースに入っているセッションを、終了した
 // ものも含めてすべて to へ移す。ワークスペースを消すときに使う。
 func (r *Registry) MoveWorkspaceSessions(from, to string) {
-	r.mutex.Lock()
-	sessions := append([]*Session(nil), r.sessions...)
-	r.mutex.Unlock()
-	for _, session := range sessions {
+	for _, session := range r.listedSessions() {
 		session.mutex.Lock()
 		if session.workspace == from {
 			session.workspace = to

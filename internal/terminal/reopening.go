@@ -37,9 +37,7 @@ func (s *Session) Reopening() Reopening {
 // 終わったセッションは含めない。接続を失った SSH のセッションは、再接続を待っていても、あきらめていても、
 // まだ使っているものとする。利用者が手で再接続するために残したものである。
 func (r *Registry) Reopenings() []Reopening {
-	r.mutex.Lock()
-	sessions := append([]*Session(nil), r.sessions...)
-	r.mutex.Unlock()
+	sessions := r.listedSessions()
 	reopenings := make([]Reopening, 0, len(sessions))
 	for _, session := range sessions {
 		if !session.inUse() {
