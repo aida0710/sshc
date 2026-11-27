@@ -858,24 +858,34 @@ func TestTheRemoteVaultIsUnlockedWithItsOwnCredentialsAndAWrongPasswordIsToldApa
 	}
 }
 
-func TestARefusedTerminalStreamDoesNotPassTheRemoteCookiesToTheBrowser(t *testing.T) {
+// newManagerBehindRefusingStream は、ターミナルの入出力だけを refuse で断る接続先へ取り次ぐ Manager を返す。
+// ほかの要求（handoff、資格）には、偽の接続先が答える。
+func newManagerBehindRefusingStream(t *testing.T, refuse func(http.ResponseWriter)) *Manager {
+	t.Helper()
 	remote := newFakeRemoteEngine(t)
 	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != RemoteStreamPath {
 			remote.serve(w, r)
 			return
 		}
-		w.Header().Add("Set-Cookie", handoff.SessionCookie+"=attacker-chosen; Path=/")
-		w.Header().Set("Clear-Site-Data", `"cookies"`)
-		w.WriteHeader(http.StatusBadRequest)
+		refuse(w)
 	}))
-	defer refusing.Close()
+	t.Cleanup(refusing.Close)
 	// handoff と Origin が、断る側のサーバーを指すようにする。
 	remote.server.URL = refusing.URL
 	manager := newEngineManager(t, remote, "v9")
 	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
 		t.Fatal(err)
 	}
+	return manager
+}
+
+func TestARefusedTerminalStreamDoesNotPassTheRemoteCookiesToTheBrowser(t *testing.T) {
+	manager := newManagerBehindRefusingStream(t, func(w http.ResponseWriter) {
+		w.Header().Add("Set-Cookie", handoff.SessionCookie+"=attacker-chosen; Path=/")
+		w.Header().Set("Clear-Site-Data", `"cookies"`)
+		w.WriteHeader(http.StatusBadRequest)
+	})
 	request := httptest.NewRequest(http.MethodGet, "/engines/r100/terminal/stream?ticket=x", nil)
 	recorder := httptest.NewRecorder()
 	if err := manager.ForwardTerminalStream(recorder, request, "r100"); err != nil {
@@ -886,6 +896,17 @@ func TestARefusedTerminalStreamDoesNotPassTheRemoteCookiesToTheBrowser(t *testin
 	}
 	if cookies := recorder.Header().Values("Set-Cookie"); len(cookies) != 0 || recorder.Header().Get("Clear-Site-Data") != "" {
 		t.Fatalf("the remote refusal headers reached the browser: Set-Cookie=%q Clear-Site-Data=%q", cookies, recorder.Header().Get("Clear-Site-Data"))
+	}
+}
+
+// ターミナルの入出力を接続先が断った答えも、ほかの取り次ぐ答えと同じく、種類はこのマシンが1つだけ書く。
+func TestARefusedTerminalStreamReachesTheBrowserWithExactlyOneContentType(t *testing.T) {
+	manager := newManagerBehindRefusingStream(t, func(w http.ResponseWriter) { writeUntypedPage(w, http.StatusBadRequest) })
+	refused := serveLikeThisMachine(t, func(w http.ResponseWriter, r *http.Request) error {
+		return manager.ForwardTerminalStream(w, r, "r100")
+	}, "")
+	if refused.status != http.StatusBadRequest || !slices.Equal(refused.header.Values("Content-Type"), []string{"application/octet-stream"}) {
+		t.Fatalf("a refused stream = %d, Content-Type %q, want the remote 400 with only application/octet-stream", refused.status, refused.header.Values("Content-Type"))
 	}
 }
 
