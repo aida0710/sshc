@@ -36,14 +36,22 @@ const tabLayout = {
   compact: "min-h-11 flex-col justify-center",
   regular: "min-h-[30px] items-center gap-1.5 mobile-layout:min-h-10",
 };
-// On a wide screen the selected tab takes the colour of the path bar under it, so the two read as one piece.
+// 広い画面では、タブの並びの下に線を引き、選んだタブの下だけ線を途切れさせる。選んだタブは線で囲み、下のパスの行と
+// 同じ色にして、2つをひと続きに見せる（フォルダのタブの形）。
+// 線は並びの一番下の1pxに描く（before:）。タブは、横にスクロールする箱の下の余白（pb-px）でその1px上に止まり、
+// 選んだタブだけ -mb-px でその1pxまで下りる。スクロールする箱ははみ出しを切るので、下ろす先を箱の余白に置く。
+// 選んだタブは線より後に描かれるので、線を隠す。選んでいないタブは、マウスを乗せても線を隠さない。
 const stripLook = {
   compact: "gap-1 border-b border-line/70 bg-toolbar px-1 py-0.5",
-  regular: "gap-1.5 px-3 pt-2.5",
+  regular: "relative gap-1.5 px-3 pt-2.5 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-line",
+};
+const scrollerLook = {
+  compact: "flex-1",
+  regular: "shrink pb-px",
 };
 const tabLook = {
   compact: { selected: "rounded-md bg-card shadow-card", other: "rounded-md hover:bg-card/50" },
-  regular: { selected: "rounded-t-md bg-well", other: "rounded-md hover:bg-hover" },
+  regular: { selected: "-mb-px rounded-t-md border border-b-0 border-line bg-well", other: "rounded-md hover:bg-hover" },
 };
 
 // Tabs share one width so changing hosts and directories does not reflow the
@@ -165,7 +173,7 @@ export function SFTPTabStrip({
         onDragOver={dragOver}
         onDragLeave={dragLeave}
         onDrop={drop}
-        className={`flex min-w-0 items-stretch gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${compact ? "flex-1" : "shrink"}`}
+        className={`flex min-w-0 items-stretch gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${scrollerLook[size]}`}
       >
         {/* A tablist may hold only tabs, and each tab here has its own buttons beside it, so the list owns the tabs by id. */}
         <div role="tablist" aria-label={label} aria-owns={pane.tabs.map((tab) => tabElementId(tab.id)).join(" ")} className="sr-only" />
