@@ -1,6 +1,7 @@
 import { useId, type MouseEvent, type ReactNode } from "react";
 import { runsInAndroidApp } from "../android/native";
-import { updateApi as defaultUpdateApi, type UpdateApi } from "../api/update";
+import type { UpdateApi } from "../api/update";
+import { useEngineApis } from "./engineApis";
 import { useLanguage } from "../i18n/context";
 import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
 import { useSignOutConfirmation } from "../session/useSignOutConfirmation";
@@ -20,16 +21,19 @@ export function MenuPanel({
   columns,
   onNavigate,
   onOpenSearch,
-  api = defaultUpdateApi,
+  api: givenApi,
 }: {
   columns: MenuGroup[][];
   onNavigate: (href: string) => void;
   // onOpenSearch opens the search. On a phone the Menu leads with it: the pages fill three screens, and the
   // search in the side navigation is behind the drawer.
   onOpenSearch?: () => void;
+  // api は、渡さなければ、選んでいる sshc エンジン（リモートセッション）の更新の API。
   api?: UpdateApi;
 }) {
   const { t } = useLanguage();
+  const engineUpdates = useEngineApis().update;
+  const api = givenApi ?? engineUpdates;
   const compact = useMediaQuery(mobileViewportQuery);
   const release = availableRelease(useUpdateStatus(api).status);
 

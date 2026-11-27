@@ -12,9 +12,8 @@ export type TerminalCommandApi = {
   dispatch(prepared: TerminalCommandPreview, request: TerminalCommandRequest, submit?: boolean): Promise<TerminalCommandDispatch>;
 };
 
-// createTerminalCommandApi sends quick commands and broadcasts through the terminal API at base. For a run
-// target, this machine's engine expands the snippet, shows its redacted form and keeps the run target's
-// confirmation (see internal/httpserver/remote_terminal_commands.go).
+// createTerminalCommandApi sends quick commands and broadcasts through the terminal API at base. リモートセッションの
+// セッションへは、このマシンのエンジンがそのまま取り次ぎ、スニペットの展開と確認のトークンは実行先のエンジンがする。
 function createTerminalCommandApi(base: string): TerminalCommandApi {
   return {
     async preview(request) {

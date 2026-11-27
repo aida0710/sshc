@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject, useContext } from "react";
 import { shownFilePath } from "../android/shownFilePath";
 import type { FileNode, HostEntry, HostIdentity } from "../api/config";
-import { snippetsApi, type Snippet } from "../snippets/api";
+import type { Snippet } from "../snippets/api";
+import { useEngineApis } from "./engineApis";
 import { snippetSummary } from "../snippets/snippetKind";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -118,6 +119,8 @@ export function CommandPalette({
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
+  // 検索するスニペットは、選んでいる sshc エンジン（リモートセッション）のもの。
+  const { snippets: snippetsApi } = useEngineApis();
   const sessionEngine = useContext(SessionEngineContext);
   const compact = useMediaQuery(mobileViewportQuery);
   const input = useRef<HTMLInputElement>(null);
@@ -148,7 +151,7 @@ export function CommandPalette({
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, [open]);
+  }, [open, snippetsApi]);
 
   const items = useMemo<PaletteItem[]>(() => [
     // Commands lead: typing "new" should reach the action before it reaches a

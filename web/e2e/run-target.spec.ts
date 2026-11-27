@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
+import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, openSettingsPage, test } from "./support/environment";
 import { drawnRowFont, markTerminal, terminalKeyboard } from "./support/terminal";
 
 const localVersion = "v0.53.0";
@@ -26,6 +26,8 @@ type Refusal = "version" | "unreachable" | "connectFailed" | "locked";
 async function stubRunTarget(page: Page, { added = true, refusal = "version", compatibleVersion, sessions = [], recentConnections = [] }: { added?: boolean; refusal?: Refusal; compatibleVersion?: string; sessions?: unknown[]; recentConnections?: unknown[] } = {}) {
   let fixed = compatibleVersion !== undefined;
   const actions: unknown[] = [];
+  // screenWrites は、画面が bastion の設定・キー設定へ書いた先（/api/v1/engines/bastion の下の道筋）。
+  const screenWrites: string[] = [];
   const commandPreviews: unknown[] = [];
   let finishUpdate = () => {};
   const updateFinished = new Promise<void>((resolve) => { finishUpdate = resolve; });
@@ -77,8 +79,28 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       await route.fulfill(refusalResponse(refusal));
       return;
     }
+    // 画面はまるごと bastion のものになる。設定・キー設定・スニペット・同期・About・背景の画像は、このマシンの
+    // エンジンの答えを、bastion の答えとして返す。設定とキー設定への書き込みは、書いた先を残して受け入れる。
+    const screenPath = path.slice(bastionBase.length);
+    if (route.request().method() === "GET" && bastionScreenReads.includes(screenPath)) {
+      // route.fetch はブラウザの Sec-Fetch-Site を付けないので、同じ画面からの読み取りとして付け直す。
+      const response = await route.fetch({
+        url: new URL(`/api/v1${screenPath}`, route.request().url()).href,
+        headers: { ...route.request().headers(), "sec-fetch-site": "same-origin" },
+      });
+      await route.fulfill({ response });
+      return;
+    }
+    if (route.request().method() !== "GET" && (screenPath.startsWith("/settings/") || screenPath.startsWith("/metadata/"))) {
+      screenWrites.push(screenPath);
+      await route.fulfill({ json: { transactionId: "bastion", written: [] } });
+      return;
+    }
     if (path.endsWith("/status")) {
       await route.fulfill({ json: { alias: "bastion", version: compatibleVersion ?? localVersion, vault: true, unlocked: true, passwordless: true, sessions: 0 } });
+    } else if (screenPath === "/update" || screenPath === "/update/check") {
+      // About は開くと更新を確かめる。bastion は GitHub へ尋ねず、新しいバージョンは無いと答える。
+      await route.fulfill({ json: { current: compatibleVersion ?? localVersion, available: false, canUpdate: false } });
     } else if (path.endsWith("/terminal/sessions")) {
       await route.fulfill({ json: { sessions, maxSessions: 50 } });
     } else if (path.endsWith("/terminal/machine")) {
@@ -149,8 +171,12 @@ async function stubRunTarget(page: Page, { added = true, refusal = "version", co
       throw new Error(`Unexpected remote engine request: ${path}`);
     }
   });
-  return { actions, commandPreviews, fix: () => { fixed = true; }, refuse: () => { fixed = false; }, finishUpdate };
+  return { actions, commandPreviews, screenWrites, fix: () => { fixed = true; }, refuse: () => { fixed = false; }, finishUpdate };
 }
+
+const bastionBase = "/api/v1/engines/bastion";
+// bastionScreenReads は、画面が bastion の画面として読む、このマシンにも同じものがある操作。
+const bastionScreenReads = ["/settings", "/metadata", "/sync", "/about", "/snippets", "/terminal/backgrounds"];
 
 // actionLog is the log of the update on bastion from the cursor at from.
 function actionLog({ done, from, output }: { done: boolean; from: number; output: string }) {
@@ -469,8 +495,8 @@ test("opens the settings of a remote session's connection on this machine from i
 });
 
 // 接続先に色が無ければ、さし色。設定（Appearance）で決めた色があれば、そちら。
-test("frames the window in the accent colour, or in the colour chosen in Settings, for a connection with no colour", async ({ page, installation }) => {
-  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+test("frames the window in the accent colour, or in the colour chosen in the chosen engine's Settings, for a connection with no colour", async ({ page, installation }) => {
+  const remote = await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
   await openApplication(page, installation);
   await chooseBastion(page);
   const frame = page.locator("[data-remote-session-frame]");
@@ -491,6 +517,8 @@ test("frames the window in the accent colour, or in the colour chosen in Setting
   await code.fill("#22aa55");
   await code.press("Enter");
   await expect(frame).toHaveCSS("border-top-color", "rgb(34, 170, 85)");
+  // Settings は bastion のもので、変えた色も bastion の設定へ書く。
+  expect(remote.screenWrites).toContain("/settings/presets/default");
 });
 
 test("keeps this machine's terminal as it was while a remote session engine is shown", async ({ page, installation }) => {
@@ -901,6 +929,30 @@ test("asks the chosen engine, not this machine, for the Vault, the SSH keys and 
     "/api/v1/engines/bastion/credentials", "/api/v1/engines/bastion/keys", "/api/v1/engines/bastion/vpn",
   ]));
   expect(asked.filter((path) => ["/api/v1/credentials", "/api/v1/keys", "/api/v1/vpn"].includes(path))).toEqual([]);
+});
+
+// 画面はまるごと選んでいる sshc エンジンのもの。Snippets、Sync、Settings、About も、このマシンではなく bastion へ尋ねる。
+test("asks the chosen engine, not this machine, for the snippets, the sync, the settings and the version", async ({ page, installation }) => {
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });
+  await openApplication(page, installation);
+  await chooseBastion(page);
+  await expect(page.locator("[data-remote-session-frame]")).toBeVisible();
+  const asked: string[] = [];
+  page.on("request", (request) => asked.push(new URL(request.url()).pathname));
+
+  // 開くたびに、その画面が bastion へ尋ねるのを待ってから次へ行く。
+  for (const [section, path] of [
+    ["Snippets", "/api/v1/engines/bastion/snippets"],
+    ["Sync", "/api/v1/engines/bastion/sync"],
+    ["About sshc", "/api/v1/engines/bastion/about"],
+  ] as const) {
+    await openSection(page, section);
+    await expect.poll(() => asked).toContain(path);
+  }
+  // ターミナルの設定の背景の画像も、bastion のライブラリのもの。
+  await openSettingsPage(page, "Terminal");
+  await expect.poll(() => asked).toContain("/api/v1/engines/bastion/terminal/backgrounds");
+  expect(asked.filter((path) => ["/api/v1/snippets", "/api/v1/sync", "/api/v1/terminal/backgrounds", "/api/v1/about"].includes(path))).toEqual([]);
 });
 
 test("asks about an unsaved connection before the engine changes under it, and keeps it when told to", async ({ page, installation }) => {

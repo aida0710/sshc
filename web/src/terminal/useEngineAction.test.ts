@@ -12,7 +12,7 @@ const pollInterval = 1000;
 
 function enginesApi(actionLog: RemoteEnginesApi["actionLog"], control: RemoteEnginesApi["control"] = vi.fn(async () => ({ generation: 1 }))): RemoteEnginesApi {
   return {
-    list: vi.fn(), add: vi.fn(), remove: vi.fn(), open: vi.fn(), status: vi.fn(), unlockVault: vi.fn(),
+    list: vi.fn(), add: vi.fn(), remove: vi.fn(), status: vi.fn(), unlockVault: vi.fn(),
     control, actionLog,
   };
 }

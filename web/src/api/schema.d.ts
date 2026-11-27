@@ -406,22 +406,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/engines/{alias}/open": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["openRemoteEngine"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/engines/{alias}/control": {
         parameters: {
             query?: never;
@@ -3841,9 +3825,6 @@ export interface components {
             cursor: components["schemas"]["TerminalControlCursor"];
             output: string;
         };
-        RemoteEngineEntrance: {
-            url: string;
-        };
         TerminalWorkspace: {
             id: string;
             name: string;
@@ -6464,35 +6445,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RemoteEngineStatus"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            500: components["responses"]["Problem"];
-            502: components["responses"]["Problem"];
-        };
-    };
-    openRemoteEngine: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                alias: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description A one-time URL that opens the remote engine through a relay on this machine */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RemoteEngineEntrance"];
                 };
             };
             400: components["responses"]["Problem"];

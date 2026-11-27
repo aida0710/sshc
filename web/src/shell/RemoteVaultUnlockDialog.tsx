@@ -15,14 +15,15 @@ export function RemoteVaultUnlockDialog({
   alias,
   api,
   onUnlocked,
-  onOpenInNewTab,
+  onOpenVault,
   onClose,
   returnFocusRef,
 }: {
   alias: string;
   api: RemoteEnginesApi;
   onUnlocked: () => void;
-  onOpenInNewTab: () => void;
+  // onOpenVault は、その sshc エンジンの Vault の画面を開く（Vault が無いときに作る）。
+  onOpenVault: () => void;
   onClose: () => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
@@ -45,7 +46,7 @@ export function RemoteVaultUnlockDialog({
           <p className="text-sm text-ink-muted">{t("runTarget.vaultMissingBody", { alias })}</p>
           <ActionArea placement="inline">
             <Button onClick={onClose}>{t("runTarget.unlockCancel")}</Button>
-            <Button kind="primary" onClick={onOpenInNewTab}>{t("runTarget.openInNewTab")}</Button>
+            <Button kind="primary" onClick={onOpenVault}>{t("runTarget.openVault")}</Button>
           </ActionArea>
         </div>
       ) : (

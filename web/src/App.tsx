@@ -124,27 +124,27 @@ export function App({
     requestFailure,
     vaultMigration,
   } = session;
-  usePresetLibrarySync(state === "ready");
-  // The settings come with the engine being ready; the shell waits for them (settingsLoaded) so the screens
-  // open with the widths and views this machine chose rather than the defaults first.
-  const settingsLoaded = useSettingsSync(state === "ready");
   const keptSections = useKeptSections({ shown: section, setNavigationBlocker });
   usePreloadedSectionPages(state === "ready");
-  useFirstScreenReport(state !== "starting" && (state !== "ready" || settingsLoaded));
   const handoffs = useSectionHandoffs(navigate);
   // Choosing another engine makes its screens anew. A screen with an unsaved draft is asked first, as when leaving it
   // for the terminal.
   const mayChangeEngine = useCallback(() => mayLeaveFor("Terminal"), [mayLeaveFor]);
   const runTargets = useRunTargets({ translate: t, enabled: state === "ready", localVersion: version, mayChange: mayChangeEngine });
+  // 設定はエンジンが使えるようになってから読む。画面は、選んでいるリモートセッションのエンジンの設定（キー設定の
+  // プリセットも）で描く。アプリの枠は設定を待つ（settingsLoaded）ので、既定の幅や表示で先に開かない。
+  usePresetLibrarySync(state === "ready", runTargets.selected);
+  const settingsLoaded = useSettingsSync(state === "ready", runTargets.selected);
+  useFirstScreenReport(state !== "starting" && (state !== "ready" || settingsLoaded));
   // The screens work with the engine chosen for the remote session: what the SSH configuration declares, too.
   const engineApis = useEngineApisOf(runTargets.selected, runTargets.vaultUnlock.revision);
   const declared = useDeclaredConfig(state === "ready", section, engineApis.config);
-  // リモートセッションを選んでいてもこのマシンのものを出す Snippets と、リモートセッションに足す sshc エンジンを選ぶ
-  // 一覧は、このマシンの接続先を並べる。このマシンを選んでいる間は、それは一度読んだ `declared` である。
+  // リモートセッションに足す sshc エンジンを選ぶ一覧と、リモートセッションの枠の色は、このマシンの接続先を使う。
+  // このマシンを選んでいる間は、それは一度読んだ `declared` である。
   const declaredHere = useDeclaredConfig(state === "ready" && runTargets.selected !== null, section, configApi);
   const thisMachineDeclared = runTargets.selected === null ? declared : declaredHere;
-  // リモートセッションの枠と名札の色。その接続先（このマシンの Connections）の色、設定（Appearance）の色の順で、
-  // どちらも無ければさし色。
+  // リモートセッションの枠と名札の色。その接続先（このマシンの Connections）の色、設定（Appearance。画面が描く
+  // リモートセッションのエンジンの設定）の色の順で、どちらも無ければさし色。
   const settingsDocument = useSettings().document;
   const remoteFrameColor = runTargets.selected === null
     ? null
@@ -323,6 +323,11 @@ export function App({
   const showTerminalArea = useCallback(() => {
     closeNavigation();
     navigate("Terminal");
+  }, [closeNavigation, navigate]);
+  // 選んでいる sshc エンジンの Vault の画面を開く。リモートセッションの Vault が無いときは、そこで作る。
+  const openVault = useCallback(() => {
+    closeNavigation();
+    navigate("Passwords");
   }, [closeNavigation, navigate]);
   const runTargetList = useMemo(() => runTargetChoices(runTargets.engines), [runTargets.engines]);
   // リモートセッションの一覧から、その接続先（このマシンの Connections）の色などの設定を開く。リモートセッションを
@@ -560,6 +565,7 @@ export function App({
             hosts={declared.hosts}
             engineChoices={{ aliases: thisMachineDeclared.knownAliases, hosts: thisMachineDeclared.hosts }}
             onOpenConnectionSettings={openThisMachineConnectionSettings}
+            onOpenVault={openVault}
             onConnect={(alias, workspaceId) => void openSSHSession(alias, undefined, workspaceId)}
             directDestination={directDestination}
             onOpenCommandPalette={openPaletteFromNavigation}
@@ -593,6 +599,7 @@ export function App({
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                       onOpenNavigation={navigationPinned ? undefined : () => setNavigationOpen(true)}
+                      onOpenVault={openVault}
                     />
                   </div>
                 ) : null}
@@ -639,7 +646,6 @@ export function App({
                         onOpenTerminal: openSFTPTerminal,
                       },
                       declared: { groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN },
-                      thisMachineDeclared: { groups: thisMachineDeclared.groups, knownAliases: thisMachineDeclared.knownAliases, hosts: thisMachineDeclared.hosts, hostVPN: thisMachineDeclared.hostVPN },
                       sftpTarget: handoffs.sftpTarget,
                       onSftpTargetHandled: handoffs.consumeSftpTarget,
                     }}

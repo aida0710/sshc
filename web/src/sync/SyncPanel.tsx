@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from "react";
-import { vaultApi, type VaultApi } from "../api/vault";
-import { syncApi, type SyncApi, type PushResponse, type SyncHistoryDiff, type SyncSetupExport } from "../api/sync";
+import { useCallback, useMemo, useRef, useState } from "react";
+import type { VaultApi } from "../api/vault";
+import type { SyncApi, PushResponse, SyncHistoryDiff, SyncSetupExport } from "../api/sync";
+import { useEngineApis } from "../shell/engineApis";
 import { useLanguage, useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button, Notice } from "../ui/surface";
@@ -31,7 +32,6 @@ import { syncPathRefusals, syncRefusals } from "./syncRefusals";
 
 // Setting the shared key needs the vault open; everything else is sync.
 export type SyncPanelApi = SyncApi & Pick<VaultApi, "unlockVault">;
-const syncPanelApi: SyncPanelApi = { ...syncApi, ...vaultApi };
 
 type SyncPanelProps = {
   api?: SyncPanelApi;
@@ -64,7 +64,10 @@ function SyncFlowSteps() {
   );
 }
 
-export function SyncPanel({ api = syncPanelApi, onNavigationBlockerChange, onNavigateLocation }: SyncPanelProps) {
+export function SyncPanel({ api: givenApi, onNavigationBlockerChange, onNavigateLocation }: SyncPanelProps) {
+  // 同期は、選んでいる sshc エンジン（リモートセッション）のもの。
+  const engine = useEngineApis();
+  const api = useMemo<SyncPanelApi>(() => givenApi ?? { ...engine.sync, ...engine.secrets }, [givenApi, engine]);
   const { locale, t } = useLanguage();
   const [exclusionsDirty, setExclusionsDirty] = useState(false);
   const discardExclusions = useRef<(() => void) | null>(null);

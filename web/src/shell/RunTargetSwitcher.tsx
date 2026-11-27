@@ -19,8 +19,8 @@ import { ActionMenu, hideOnHoverAtPcSize, revealOnHoverAtPcSize, type ActionMenu
 const loadThisMachineRecent = () => recentConnectionsApi.recentConnections();
 
 // RunTargetSwitcher はサイドバーの一番下にあり、画面が使う sshc エンジンを選ぶ。このマシンか、このマシンの
-// エンジンが取り次ぐ SSH の接続先のエンジンである。Snippets・設定・同期・更新は、どれを選んでもこのマシンのもの。
-// どの画面でも見えているので、選んだものへの接続の経過もここに出す。
+// エンジンが取り次ぐ SSH の接続先のエンジンである。選ぶと、画面はまるごとそのエンジンのものになる（設定・Snippets・
+// 同期・更新も）。どの画面でも見えているので、選んだものへの接続の経過もここに出す。
 export function RunTargetSwitcher({
   targets,
   link,
@@ -28,6 +28,7 @@ export function RunTargetSwitcher({
   hosts,
   onShowTerminal,
   onOpenConnectionSettings,
+  onOpenVault,
 }: {
   targets: RunTargetsState;
   link: RunTargetLink;
@@ -38,6 +39,8 @@ export function RunTargetSwitcher({
   onShowTerminal: () => void;
   // onOpenConnectionSettings は、その sshc エンジンの接続先（このマシンの Connections）の設定を開く。色はそこで変える。
   onOpenConnectionSettings: (identity: HostIdentity) => void;
+  // onOpenVault は、選んでいる sshc エンジンの Vault の画面を開く（Vault が無いときに作る）。
+  onOpenVault: () => void;
 }) {
   const t = useTranslate();
   const [open, setOpen] = useState(false);
@@ -84,7 +87,6 @@ export function RunTargetSwitcher({
         label: t(targets.selected === null ? "runTarget.openConnectionSettings" : "runTarget.openConnectionSettingsLeaving"),
         onSelect: () => { setOpen(false); onOpenConnectionSettings(connection.identity); },
       }]),
-      { label: t("runTarget.openInNewTab"), onSelect: () => void targets.openInNewTab(alias) },
       { label: t("runTarget.remove"), tone: "danger", onSelect: () => void targets.remove(alias) },
     ];
   }
@@ -218,10 +220,9 @@ export function RunTargetSwitcher({
           alias={targets.vaultUnlock.unlockFor}
           api={targets.api}
           onUnlocked={targets.vaultUnlock.unlocked}
-          onOpenInNewTab={() => {
-            const alias = targets.vaultUnlock.unlockFor;
+          onOpenVault={() => {
             targets.vaultUnlock.close();
-            if (alias !== null) void targets.openInNewTab(alias);
+            onOpenVault();
           }}
           onClose={targets.vaultUnlock.close}
         />

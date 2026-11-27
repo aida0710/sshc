@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { aboutApi, type AboutApi } from "../api/about";
-import { terminalSessionsApi, type TerminalSessionsApi } from "../api/terminalSessions";
-import { updateApi, type UpdateApi } from "../api/update";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AboutApi } from "../api/about";
+import { runTargetTerminalSessionsApi, terminalSessionsApi, type TerminalSessionsApi } from "../api/terminalSessions";
+import type { UpdateApi } from "../api/update";
+import { useEngineApis } from "../shell/engineApis";
 import { useLanguage } from "../i18n/context";
 import { UpdateControls } from "../shell/UpdateControls";
 import { explainedUpdateReason, updateMessage } from "../shell/updateMessage";
@@ -23,8 +24,14 @@ import { PanelState } from "../ui/PanelState";
 
 type AboutPageProps = { api?: AboutApi; updates?: UpdateApi; sessions?: Pick<TerminalSessionsApi, "terminalSessions"> };
 
-export function AboutPage({ api = aboutApi, updates = updateApi, sessions = terminalSessionsApi }: AboutPageProps) {
+export function AboutPage({ api: givenApi, updates: givenUpdates, sessions: givenSessions }: AboutPageProps) {
   const { t, locale } = useLanguage();
+  // バージョンと更新は、選んでいる sshc エンジン（リモートセッション）のもの。更新で終わるセッションも、そのエンジンのもの。
+  const engine = useEngineApis();
+  const api = givenApi ?? engine.about;
+  const updates = givenUpdates ?? engine.update;
+  const engineSessions = useMemo(() => engine.runTarget === null ? terminalSessionsApi : runTargetTerminalSessionsApi(engine.runTarget), [engine.runTarget]);
+  const sessions = givenSessions ?? engineSessions;
   const aboutLoad = useLoad(useCallback(() => api.about(), [api]));
   const about = aboutLoad.state === "loaded" ? aboutLoad.value : null;
   const [checking, setChecking] = useState(false);

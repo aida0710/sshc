@@ -106,9 +106,6 @@ export type SectionViewProps = {
   shell: Shell;
   // declared is what the SSH configuration of the engine the screens work with declares.
   declared: Declared;
-  // thisMachineDeclared は、このマシンの SSH の設定が宣言するもの。リモートセッションを選んでいても
-  // このマシンのものを出す画面（Snippets）が使う。
-  thisMachineDeclared: Declared;
   sftpTarget: SFTPTarget | null;
   onSftpTargetHandled: (request: number) => void;
 };
@@ -200,7 +197,6 @@ function SectionPage({
   handoff,
   shell,
   declared,
-  thisMachineDeclared,
   sftpTarget,
   onSftpTargetHandled,
 }: SectionViewProps) {
@@ -215,7 +211,8 @@ function SectionPage({
     terminalSessions,
     onOpenTerminal,
   } = shell;
-  if (section === "About") return <AboutPage />;
+  // 画面はまるごと選んでいる sshc エンジンのもの。エンジンを替えたら、その画面を作り直す（key）。
+  if (section === "About") return <AboutPage key={shell.runTarget ?? ""} />;
   if (section === "License") return <LicensePage />;
   if (section === "Config") {
     return (
@@ -247,7 +244,8 @@ function SectionPage({
   if (section === "Snippets") {
     return (
       <SnippetsPanel
-        aliases={thisMachineDeclared.knownAliases}
+        key={shell.runTarget ?? ""}
+        aliases={declared.knownAliases}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
         onNavigateLocation={onNavigateLocation}
         selectedSnippetId={new URLSearchParams(navigation.location.search).get(
@@ -276,10 +274,11 @@ function SectionPage({
   if (section === "Settings") {
     return (
       <SettingsPanel
+        key={shell.runTarget ?? ""}
         page={parseSettingsPage(navigation.location.pathname) ?? "General"}
         terminalSessions={terminalSessions}
-        onVaultChanged={onVaultChanged}
-        passwordless={passwordless}
+        // このマシンの Vault の状態は App が持つ。リモートセッションの Vault は、設定の画面がその Vault に尋ねる。
+        {...(shell.runTarget === null ? { onVaultChanged, passwordless } : {})}
         onNavigatePage={(path) => navigation.onNavigateLocation(path)}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
         onNavigateLocation={onNavigateLocation}
@@ -287,7 +286,7 @@ function SectionPage({
     );
   }
   if (section === "Sync") {
-    return <SyncPanel onNavigationBlockerChange={navigation.onNavigationBlockerChange} onNavigateLocation={onNavigateLocation} />;
+    return <SyncPanel key={shell.runTarget ?? ""} onNavigationBlockerChange={navigation.onNavigationBlockerChange} onNavigateLocation={onNavigateLocation} />;
   }
   if (section === "VPN") {
     return (

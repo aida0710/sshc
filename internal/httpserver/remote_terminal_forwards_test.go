@@ -17,11 +17,47 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
+	"sshc/internal/remoteengine"
 	"sshc/internal/session"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/terminalrestore"
 )
+
+// relayToEngine は、実行先の役のエンジンへ、このマシンのエンジンが受け取った資格で要求を送る
+// 偽物の RemoteEngineDirectory である。remoteengine.Manager が SSH の上で行うことを、同じ
+// プロセスの中で行う。
+type relayToEngine struct {
+	fakeEngineDirectory
+	t           *testing.T
+	remote      *echo.Echo
+	credentials session.Credentials
+}
+
+func (r *relayToEngine) CallAPI(_ context.Context, _ string, call remoteengine.APICall) (remoteengine.APIAnswer, error) {
+	recorder := sendKeyRequest(r.t, r.remote, r.credentials, call.Method, call.Path, call.Body, call.ActionToken)
+	body, _ := io.ReadAll(recorder.Result().Body)
+	return remoteengine.APIAnswer{Status: recorder.Code, Body: body}, nil
+}
+
+// localEngineForRunTarget は、このマシンのエンジン（実行先の受け口）を立てる。
+func localEngineForRunTarget(t *testing.T, directory RemoteEngineDirectory) (*echo.Echo, session.Credentials) {
+	t.Helper()
+	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x5a}, 8192)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	engine.Use((Security{
+		ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked,
+	}).Middleware)
+	registerRemoteEngineRoutes(engine, RemoteEngineHandlers{Engines: directory, ExpectedOrigin: "http://" + keyTestHost})
+	return engine, credentials
+}
 
 // echoForwardProcess は、実行先のセッションの役である。転送を求められると、実行先の 127.0.0.1 の
 // 空いたポートで、受け取った行をそのまま返す待ち受けを開く（宛先へつなぐ代わり）。
@@ -138,7 +174,7 @@ func runTargetForwardFixture(t *testing.T) (*echo.Echo, session.Credentials, str
 	registerTerminalRoutes(remote, TerminalHandlers{Registry: registry, RestoreOffers: restore, Tickets: &terminal.Tickets{}, ExpectedOrigin: "http://" + keyTestHost})
 	directory := &relayWithLoopback{relayToEngine: relayToEngine{t: t, remote: remote, credentials: remoteCredentials}}
 	directory.engines = []string{"r100"}
-	local, credentials, _ := localEngineForRunTarget(t, directory)
+	local, credentials := localEngineForRunTarget(t, directory)
 	waitConnected(t, registry, opened.ID())
 	return local, credentials, opened.ID(), process
 }

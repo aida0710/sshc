@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { presetInUse, updatePresetInUse, useSettings } from "../settings/settingsStore";
-import { applyTheme, copyTheme, detectTheme, isTheme, resolveTheme, schemeOf, type ColorScheme, type ColorTheme, type Theme } from "./theme";
+import { applyTheme, copyTheme, defaultTheme, detectTheme, isTheme, resolveTheme, schemeOf, type ColorScheme, type ColorTheme, type Theme } from "./theme";
 
 type ThemeState = {
   theme: Theme;
@@ -26,14 +26,23 @@ function systemPrefersDark(): boolean {
 export function ThemeProvider({ children, initial }: { children: ReactNode; initial?: Theme }) {
   const [theme, setThemeState] = useState<Theme>(() => initial ?? detectTheme());
   const [prefersDark, setPrefersDark] = useState<boolean>(() => systemPrefersDark());
-  const chosen = presetInUse(useSettings().document).appearance?.theme;
+  const settingsDocument = useSettings().document;
+  const chosen = presetInUse(settingsDocument).appearance?.theme;
   const synced = isTheme(chosen) ? chosen : null;
 
+  // drawnFor は、テーマを写した設定のエンジン（machineId）。リモートセッションを替えた先の設定がテーマを選んで
+  // いなければ、前のエンジンのテーマを残さず、既定のテーマで描く。
+  const machineId = settingsDocument?.machineId ?? null;
+  const drawnFor = useRef<string | null>(null);
   useEffect(() => {
-    if (initial !== undefined || synced === null) return;
-    setThemeState(synced);
-    copyTheme(synced);
-  }, [initial, synced]);
+    if (initial !== undefined || machineId === null) return;
+    const anotherEngine = drawnFor.current !== null && drawnFor.current !== machineId;
+    drawnFor.current = machineId;
+    const next = synced ?? (anotherEngine ? defaultTheme : null);
+    if (next === null) return;
+    setThemeState(next);
+    copyTheme(next);
+  }, [initial, machineId, synced]);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;

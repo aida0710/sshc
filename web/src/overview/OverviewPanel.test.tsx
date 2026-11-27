@@ -118,6 +118,20 @@ describe("OverviewPanel", () => {
     expect(screen.queryByText("Sync status is unavailable.")).not.toBeInTheDocument();
   });
 
+  // リモートセッションを替えると、Home は前のエンジンで読んだ同期の状態を持ったまま、替えた先を読み直す。
+  it("does not keep saying the sync status of the engine before when the chosen one's cannot be read", async () => {
+    const props = {
+      onConnect: vi.fn(), onAddConnection: vi.fn(), onOpenLocalShell: vi.fn(), onNavigate: vi.fn(), onNavigateLocation: vi.fn(),
+      loadOverview: vi.fn().mockResolvedValue(overview), loadRecent: vi.fn().mockResolvedValue({ connections: [] }),
+    };
+    const { rerender } = render(<OverviewPanel {...props} runTarget={null} loadSync={vi.fn().mockResolvedValue({ ...sync, configured: false })} />);
+    await screen.findByText("Remote sync is not configured.");
+
+    rerender(<OverviewPanel {...props} runTarget="r100" loadSync={vi.fn().mockRejectedValue(new Error("remote_engine_unreachable"))} />);
+    await screen.findByText("Sync status is unavailable.");
+    expect(screen.queryByText("Remote sync is not configured.")).not.toBeInTheDocument();
+  });
+
   it("puts the connection browser first and preserves attention and sync actions", async () => {
     render(
       <OverviewPanel runTarget={null} onAddConnection={vi.fn()} onOpenLocalShell={vi.fn()}

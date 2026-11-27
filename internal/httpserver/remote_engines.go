@@ -11,12 +11,12 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/remoteengine"
-	"sshc/internal/snippets"
 	"sshc/internal/validate"
 )
 
 // RemoteEngineDirectory は、実行先に足した接続先のエンジンを持ち、そのターミナルを取り次ぐ。
 type RemoteEngineDirectory interface {
+	// RemoteEngineOpener は、CLI の sshc open <接続名> が使う。
 	RemoteEngineOpener
 	Engines() ([]string, error)
 	// Connected は、alias の実行先へ今繋がっているかを、繋ぎに行かずに答える。
@@ -47,12 +47,6 @@ type RemoteEngineHandlers struct {
 	Engines RemoteEngineDirectory
 	// ExpectedOrigin は、取り次ぐ WebSocket で完全一致を求めるこのマシンの Origin である。
 	ExpectedOrigin string
-	// Snippets は、実行先のセッションへ送るクイックコマンドを、このマシンで展開する。
-	Snippets *snippets.Service
-	// Actions は、実行先へのコマンドを送る前の、ブラウザへの確認のトークンを出す。
-	Actions ActionHandlers
-	// commands は、実行先のエンジンが出した確認のトークンを、送るまで持つ。
-	commands *remoteCommandConfirmations
 	// forwards は、実行先のセッションの転送を、このマシンの待ち受けからつなぐ中継である。
 	forwards *runTargetForwardRelays
 }
@@ -67,9 +61,6 @@ const enginesPrefix = "/api/v1/engines"
 // （画面が出さない）。ここの経路は契約の検査がソースから読むので、一本ずつ書く。
 func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers) {
 	// 登録する受け口はどれも handlers の写しを持つので、共有する状態は登録の前に作る。
-	if handlers.commands == nil {
-		handlers.commands = newRemoteCommandConfirmations()
-	}
 	if handlers.forwards == nil {
 		handlers.forwards = newRunTargetForwardRelays()
 	}
@@ -77,7 +68,6 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.POST("/api/v1/engines", handlers.Add)
 	engine.DELETE("/api/v1/engines/:alias", handlers.Remove)
 	engine.GET("/api/v1/engines/:alias/status", handlers.Status)
-	engine.POST("/api/v1/engines/:alias/open", handlers.Open)
 	engine.POST("/api/v1/engines/:alias/control", handlers.Control)
 	engine.GET("/api/v1/engines/:alias/control/log", handlers.ActionLog)
 	engine.POST("/api/v1/engines/:alias/vault/unlock", handlers.UnlockVault)
@@ -86,10 +76,10 @@ func registerRemoteEngineRoutes(engine *echo.Echo, handlers RemoteEngineHandlers
 	engine.GET("/api/v1/engines/:alias/terminal/shell-profiles", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/machine", handlers.ForwardTerminal)
 	engine.GET("/api/v1/engines/:alias/terminal/destinations/:connectionAlias", handlers.ForwardTerminal)
-	// クイックコマンドと一括送信は取り次がない。このマシンでスニペットを展開し、確認のトークンを
-	// 2段にして送る（remote_terminal_commands.go）。
-	engine.POST("/api/v1/engines/:alias/terminal/commands/preview", handlers.PreviewRemoteCommand)
-	engine.POST("/api/v1/engines/:alias/terminal/commands", handlers.DispatchRemoteCommand)
+	// クイックコマンドと一括送信。スニペットは実行先のもので、展開（変数・シークレット）と確認のトークンも
+	// 実行先のエンジンがする。
+	engine.POST("/api/v1/engines/:alias/terminal/commands/preview", handlers.ForwardTerminal)
+	engine.POST("/api/v1/engines/:alias/terminal/commands", handlers.ForwardTerminal)
 	// 転送は取り次がない。このマシンで待ち受け、実行先のポートへ SSH の接続の上でつなぐ
 	// （remote_terminal_forwards.go）。
 	engine.POST("/api/v1/engines/:alias/terminal/sessions/:id/forwards", handlers.StartRunTargetForward)
@@ -192,19 +182,6 @@ func (h RemoteEngineHandlers) Status(c *echo.Context) error {
 		Alias: alias, Version: status.Version, Vault: status.Vault, Unlocked: status.Unlocked,
 		Passwordless: status.Passwordless, Sessions: status.Sessions,
 	})
-}
-
-// Open は、接続先のエンジンの画面を別のタブで開く URL を返す（sshc open <alias> と同じ）。
-func (h RemoteEngineHandlers) Open(c *echo.Context) error {
-	alias, ok := aliasParam(c)
-	if !ok {
-		return problem(c, http.StatusBadRequest, "unsafe_alias")
-	}
-	opened, err := h.Engines.Open(c.Request().Context(), alias)
-	if err != nil {
-		return remoteEngineProblem(c, err)
-	}
-	return c.JSON(http.StatusOK, api.RemoteEngineEntrance{Url: opened})
 }
 
 // Control は、実行先のエンジンを止める・起動し直す・更新する操作を始める。どれも接続先の

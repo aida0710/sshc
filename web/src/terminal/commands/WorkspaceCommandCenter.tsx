@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../../ui/icons";
 import { useTranslate } from "../../i18n/context";
-import { snippetsApi, type Snippet } from "../../snippets/api";
+import type { Snippet } from "../../snippets/api";
+import { useEngineApis } from "../../shell/engineApis";
 import { commandSnippets } from "../../snippets/snippetKind";
 import { describeTerminalCommandFailure, terminalCommandProblemText } from "./terminalCommandProblem";
 import { Button, Notice, Segmented } from "../../ui/surface";
@@ -44,6 +45,8 @@ export function WorkspaceCommandCenter({
   api?: TerminalCommandApi;
 }) {
   const t = useTranslate();
+  // スニペットは、ターミナルを動かしているエンジン（選んでいるリモートセッション）のもの。
+  const { snippets: snippetsApi } = useEngineApis();
   const [source, setSource] = useState<"command" | "snippet">("command");
   const [command, setCommand] = useState("");
   const [snippets, setSnippets] = useState<Snippet[]>([]);
@@ -88,7 +91,7 @@ export function WorkspaceCommandCenter({
         setSnippetId((current) => current || commands[0]?.id || "");
       })
       .catch(() => setProblem(t("snippets.loadFailed")));
-  }, [t]);
+  }, [snippetsApi, t]);
 
   useEffect(() => {
     operationSequence.current += 1;

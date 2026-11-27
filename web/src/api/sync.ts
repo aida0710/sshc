@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { localApiBase } from "./remoteEngines";
 import { issueAction, postEmpty, postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
@@ -128,107 +129,114 @@ function validatePullResponse(value: unknown): PullResponse {
 
 // Remote synchronization of the workspace through an object store: setup,
 // status, push and pull, the history, and the shared key.
-export const syncApi: SyncApi = {
-  async syncStatus() {
-    return validateSyncStatus(await apiClient.read("/api/v1/sync"));
-  },
-  async checkSyncSetup(settings) {
-    return validateSyncSetupCheck(
-      await postJSON<unknown>("/api/v1/sync/setup/check", settings, undefined, locallyExplainedSyncFailures),
-    );
-  },
-  async completeSyncSetup(settings) {
-    return validateSyncSetup(
-      await putJSON<unknown>("/api/v1/sync/setup", settings, locallyExplainedSyncFailures),
-    );
-  },
-  async exportSyncSetup() {
-    return validateSyncSetupExport(
-      await postJSON<unknown>("/api/v1/sync/setup/export", undefined, undefined, locallyExplainedSyncFailures),
-    );
-  },
-  async importSyncSetup(request) {
-    return validateSyncSetup(
-      await postJSON<unknown>("/api/v1/sync/setup/import", request, undefined, locallyExplainedSyncFailures),
-    );
-  },
-  async syncExclusions() {
-    return validateSyncExclusions(
-      await apiClient.read("/api/v1/sync/exclusions"),
-    );
-  },
-  async saveSyncExclusions(document) {
-    return validateSyncExclusions(
-      await putJSON<unknown>("/api/v1/sync/exclusions", { document }, ["sync_ignore_invalid"]),
-    );
-  },
-  async syncPushDraft() {
-    return validateSyncPushDraft(await apiClient.read("/api/v1/sync/push"));
-  },
-  async pushSnapshot(message) {
-    return validatePushResponse(
-      await postJSON<unknown>("/api/v1/sync/push", { message }),
-    );
-  },
-  async forcePushSnapshot(message) {
-    const token = await issueAction(
-      SYNC_FORCE_PUSH_ACTION_KIND,
-      SYNC_FORCE_PUSH_TARGET,
-    );
-    return validatePushResponse(
-      await postJSON<unknown>("/api/v1/sync/force-push", { message }, token),
-    );
-  },
-  async syncBucketStatus() {
-    return validateSyncBucketStatus(
-      await apiClient.read("/api/v1/sync/bucket"),
-    );
-  },
-  async syncHistory() {
-    return validateSyncHistory(await apiClient.read("/api/v1/sync/history"));
-  },
-  async diffSyncHistory(key) {
-    return validateSyncHistoryDiff(
-      await postJSON<unknown>("/api/v1/sync/history/diff", { key }),
-    );
-  },
-  async pullSnapshot(apply, resolve, historyKey, expected, acceptRemoteHead) {
-    if (apply && expected === undefined) throw new Error("invalid_request");
-    const request = {
-      apply,
-      ...(resolve === undefined ? {} : { resolve }),
-      ...(historyKey === undefined ? {} : { historyKey }),
-      ...(acceptRemoteHead === undefined ? {} : { acceptRemoteHead }),
-      ...(expected === undefined
-        ? {}
-        : {
-            expectedETag: expected.remoteETag,
-            expectedRevision: expected.remoteRevision,
-          }),
-    };
-    return validatePullResponse(
-      await postJSON<unknown>("/api/v1/sync/pull", request, undefined, [
-        ...locallyExplainedSyncFailures,
-        "sync_local_changed",
-        "sync_workspace_busy",
-        "sync_pending_transaction",
-      ]),
-    );
-  },
-  async setSyncKey(key, confirmHistoryLoss) {
-    return validateSyncKey(
-      await putJSON<unknown>("/api/v1/sync/key", {
-        ...(key === undefined ? {} : { key }),
-        ...(confirmHistoryLoss === undefined ? {} : { confirmHistoryLoss }),
-      }),
-    );
-  },
-  async setAutoSync(enabled) {
-    return validateSyncStatus(
-      await putJSON<unknown>("/api/v1/sync/auto", { enabled }),
-    );
-  },
-  async syncNow() {
-    return validateSyncStatus(await postEmpty<unknown>("/api/v1/sync/now"));
-  },
-};
+// createSyncApi は、base（engineApiBase）のエンジンの同期の API である。リモートセッションを選んでいる間は、
+// その実行先の同期を、このマシンのエンジンの取り次ぎで操作する。
+export function createSyncApi(base: string): SyncApi {
+  return {
+    async syncStatus() {
+      return validateSyncStatus(await apiClient.read(`${base}/sync`));
+    },
+    async checkSyncSetup(settings) {
+      return validateSyncSetupCheck(
+        await postJSON<unknown>(`${base}/sync/setup/check`, settings, undefined, locallyExplainedSyncFailures),
+      );
+    },
+    async completeSyncSetup(settings) {
+      return validateSyncSetup(
+        await putJSON<unknown>(`${base}/sync/setup`, settings, locallyExplainedSyncFailures),
+      );
+    },
+    async exportSyncSetup() {
+      return validateSyncSetupExport(
+        await postJSON<unknown>(`${base}/sync/setup/export`, undefined, undefined, locallyExplainedSyncFailures),
+      );
+    },
+    async importSyncSetup(request) {
+      return validateSyncSetup(
+        await postJSON<unknown>(`${base}/sync/setup/import`, request, undefined, locallyExplainedSyncFailures),
+      );
+    },
+    async syncExclusions() {
+      return validateSyncExclusions(
+        await apiClient.read(`${base}/sync/exclusions`),
+      );
+    },
+    async saveSyncExclusions(document) {
+      return validateSyncExclusions(
+        await putJSON<unknown>(`${base}/sync/exclusions`, { document }, ["sync_ignore_invalid"]),
+      );
+    },
+    async syncPushDraft() {
+      return validateSyncPushDraft(await apiClient.read(`${base}/sync/push`));
+    },
+    async pushSnapshot(message) {
+      return validatePushResponse(
+        await postJSON<unknown>(`${base}/sync/push`, { message }),
+      );
+    },
+    async forcePushSnapshot(message) {
+      const token = await issueAction(
+        SYNC_FORCE_PUSH_ACTION_KIND,
+        SYNC_FORCE_PUSH_TARGET,
+        base,
+      );
+      return validatePushResponse(
+        await postJSON<unknown>(`${base}/sync/force-push`, { message }, token),
+      );
+    },
+    async syncBucketStatus() {
+      return validateSyncBucketStatus(
+        await apiClient.read(`${base}/sync/bucket`),
+      );
+    },
+    async syncHistory() {
+      return validateSyncHistory(await apiClient.read(`${base}/sync/history`));
+    },
+    async diffSyncHistory(key) {
+      return validateSyncHistoryDiff(
+        await postJSON<unknown>(`${base}/sync/history/diff`, { key }),
+      );
+    },
+    async pullSnapshot(apply, resolve, historyKey, expected, acceptRemoteHead) {
+      if (apply && expected === undefined) throw new Error("invalid_request");
+      const request = {
+        apply,
+        ...(resolve === undefined ? {} : { resolve }),
+        ...(historyKey === undefined ? {} : { historyKey }),
+        ...(acceptRemoteHead === undefined ? {} : { acceptRemoteHead }),
+        ...(expected === undefined
+          ? {}
+          : {
+              expectedETag: expected.remoteETag,
+              expectedRevision: expected.remoteRevision,
+            }),
+      };
+      return validatePullResponse(
+        await postJSON<unknown>(`${base}/sync/pull`, request, undefined, [
+          ...locallyExplainedSyncFailures,
+          "sync_local_changed",
+          "sync_workspace_busy",
+          "sync_pending_transaction",
+        ]),
+      );
+    },
+    async setSyncKey(key, confirmHistoryLoss) {
+      return validateSyncKey(
+        await putJSON<unknown>(`${base}/sync/key`, {
+          ...(key === undefined ? {} : { key }),
+          ...(confirmHistoryLoss === undefined ? {} : { confirmHistoryLoss }),
+        }),
+      );
+    },
+    async setAutoSync(enabled) {
+      return validateSyncStatus(
+        await putJSON<unknown>(`${base}/sync/auto`, { enabled }),
+      );
+    },
+    async syncNow() {
+      return validateSyncStatus(await postEmpty<unknown>(`${base}/sync/now`));
+    },
+  };
+}
+
+export const syncApi = createSyncApi(localApiBase);

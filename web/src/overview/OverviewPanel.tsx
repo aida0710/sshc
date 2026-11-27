@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Overview } from "../api/config";
 import type { RecentConnectionList } from "../api/recentConnections";
-import { syncApi, type SyncStatus } from "../api/sync";
+import type { SyncStatus } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
@@ -34,12 +34,10 @@ type OverviewPanelProps = {
   onOpenLocalShell: () => void;
 };
 
-const loadDefaultSync = () => syncApi.syncStatus();
-
 export function OverviewPanel({
   runTarget,
   loadOverview: loadOverviewOverride,
-  loadSync = loadDefaultSync,
+  loadSync: loadSyncOverride,
   loadRecent: loadRecentOverride,
   onConnect,
   onNavigate,
@@ -49,9 +47,10 @@ export function OverviewPanel({
 }: OverviewPanelProps) {
   const { t, locale } = useLanguage();
   const machineOverview = useTerminalOverview(runTarget);
-  const { config, recentConnections } = useEngineApis();
+  const { config, recentConnections, sync: syncApi } = useEngineApis();
   const loadOverview = useMemo(() => loadOverviewOverride ?? (() => config.overview()), [loadOverviewOverride, config]);
   const loadRecent = useMemo(() => loadRecentOverride ?? (() => recentConnections.recentConnections()), [loadRecentOverride, recentConnections]);
+  const loadSync = useMemo(() => loadSyncOverride ?? (() => syncApi.syncStatus()), [loadSyncOverride, syncApi]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [sync, setSync] = useState<SyncStatus | null>(null);
@@ -70,7 +69,8 @@ export function OverviewPanel({
     void Promise.allSettled([loadOverview(), loadSync(), loadRecent()]).then(([workspace, remote, history]) => {
       if (!active) return;
       setOverview(workspace.status === "fulfilled" ? workspace.value : null);
-      if (remote.status === "fulfilled") setSync(remote.value);
+      // 読めなかったときは、前に読んだもの（リモートセッションを替える前のエンジンのものかもしれない）を出さない。
+      setSync(remote.status === "fulfilled" ? remote.value : null);
       if (history.status === "fulfilled") setRecent(history.value.connections);
       setListsFailed(history.status === "rejected");
       setLoading(false);

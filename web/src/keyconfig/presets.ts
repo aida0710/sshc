@@ -7,7 +7,7 @@ import { defaultBindings, type Bindings } from "./bindings";
 export type Preset = components["schemas"]["ShortcutPreset"];
 
 export const shortcutPresetLibrary = createPresetLibrary<Preset>({
-  endpoint: "/api/v1/metadata/shortcuts",
+  endpoint: "/metadata/shortcuts",
   read: (metadata) => metadata.shortcutPresets,
   choice: "shortcutPreset",
 });

@@ -50,7 +50,10 @@ export function TerminalScreen({
   onOpenRemotePath,
   onOSC52Change,
   onOpenNavigation,
+  onOpenVault,
 }: {
+  // onOpenVault は、選んでいる sshc エンジンの Vault の画面を開く（Vault が無いときに作る）。
+  onOpenVault: () => void;
   // onOpenNavigation opens the sidebar from a phone's terminal top bar; undefined while the sidebar stays open.
   onOpenNavigation?: (() => void) | undefined;
   visible: boolean;
@@ -228,7 +231,7 @@ export function TerminalScreen({
       onReconnect={terminalSessions.refresh}
       onUseThisMachine={() => runTargets.select(null)}
       onUnlocked={runTargets.vaultUnlock.unlocked}
-      onOpenInNewTab={() => void runTargets.openInNewTab(runTarget)}
+      onOpenVault={onOpenVault}
       onOpenEngineInfo={() => runTargets.engineInfo.ask(runTarget)} />}
   </div>;
 }

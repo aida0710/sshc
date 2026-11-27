@@ -1532,11 +1532,6 @@ type RemoteEngineActionStarted struct {
 	Generation uint64 `json:"generation"`
 }
 
-// RemoteEngineEntrance defines model for RemoteEngineEntrance.
-type RemoteEngineEntrance struct {
-	Url string `json:"url"`
-}
-
 // RemoteEngineList defines model for RemoteEngineList.
 type RemoteEngineList struct {
 	Engines []RemoteEngine `json:"engines"`
