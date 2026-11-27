@@ -163,7 +163,8 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Set-Cookie", "leaked=1")
 		// 保存の名前は接続先が決めたもので、このマシンのメディアの受け口（inline）とは違う。
 		w.Header().Set("Content-Disposition", `attachment; filename="clip.html"`)
-		fmt.Fprint(w, "the bytes of a video")
+		// 本物の受け口（httpserver の StreamMedia）と同じく、プレーヤーが求める範囲だけを返す。
+		http.ServeContent(w, r, "", time.Time{}, strings.NewReader("the bytes of a video"))
 	case "/api/v1/sftp/media/a-page":
 		// 乗っ取られた接続先が、メディアの代わりにページを返す。
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -497,7 +498,8 @@ type servedAnswer struct {
 
 // serveLikeThisMachine は、forward を Go の HTTP の server に載せて GET し、ブラウザが受け取る答えを返す。
 // ResponseRecorder と違い、server は種類の無い答えに、本文から判定した種類を付ける（このマシンのエンジンと同じ）。
-func serveLikeThisMachine(t *testing.T, forward func(http.ResponseWriter, *http.Request) error) servedAnswer {
+// byteRange が空でなければ、プレーヤーと同じく Range を付けて求める。
+func serveLikeThisMachine(t *testing.T, forward func(http.ResponseWriter, *http.Request) error, byteRange string) servedAnswer {
 	t.Helper()
 	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := forward(w, r); err != nil {
@@ -505,7 +507,14 @@ func serveLikeThisMachine(t *testing.T, forward func(http.ResponseWriter, *http.
 		}
 	}))
 	defer local.Close()
-	response, err := local.Client().Get(local.URL)
+	request, err := http.NewRequest(http.MethodGet, local.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byteRange != "" {
+		request.Header.Set("Range", byteRange)
+	}
+	response, err := local.Client().Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,11 +535,12 @@ func TestTheForwardedMediaRouteHandsOverOnlyAudioAndVideo(t *testing.T) {
 	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
 		t.Fatal(err)
 	}
-	media := func(ticket string) servedAnswer {
+	mediaRange := func(ticket, byteRange string) servedAnswer {
 		return serveLikeThisMachine(t, func(w http.ResponseWriter, r *http.Request) error {
 			return manager.ForwardMediaAPI(w, r, "r100", "/api/v1/sftp/media/"+ticket)
-		})
+		}, byteRange)
 	}
+	media := func(ticket string) servedAnswer { return mediaRange(ticket, "") }
 	video := media("a-video")
 	if video.status != http.StatusOK || video.body != "the bytes of a video" || !slices.Equal(video.header.Values("Content-Type"), []string{"video/mp4"}) || video.header.Get("Set-Cookie") != "" {
 		t.Fatalf("a video = %d %q, headers %v", video.status, video.body, video.header)
@@ -538,6 +548,12 @@ func TestTheForwardedMediaRouteHandsOverOnlyAudioAndVideo(t *testing.T) {
 	// 接続先が決めた保存の名前は渡さず、このマシンのメディアの受け口と同じく、その場で再生させる。
 	if disposition := video.header.Values("Content-Disposition"); !slices.Equal(disposition, []string{"inline"}) {
 		t.Errorf("a video's Content-Disposition = %q, want only inline", disposition)
+	}
+	// 途中から再生するための範囲は、そのまま届く。
+	seek := mediaRange("a-video", "bytes=4-8")
+	if seek.status != http.StatusPartialContent || seek.body != "bytes" || seek.header.Get("Content-Range") != "bytes 4-8/20" ||
+		!slices.Equal(seek.header.Values("Content-Type"), []string{"video/mp4"}) {
+		t.Errorf("a seek = %d %q, headers %v", seek.status, seek.body, seek.header)
 	}
 	for _, ticket := range []string{
 		"a-page", "a-script", "a-video-and-a-page", "a-video-and-a-page-in-one-line",
@@ -577,7 +593,7 @@ func TestAForwardedAnswerReachesTheBrowserWithExactlyOneContentType(t *testing.T
 		} {
 			answer := serveLikeThisMachine(t, func(w http.ResponseWriter, r *http.Request) error {
 				return forwardTo(w, r, "r100", tc.remotePath)
-			})
+			}, "")
 			if got := answer.header.Values("Content-Type"); !slices.Equal(got, []string{tc.want}) {
 				t.Errorf("%s %s: Content-Type = %q, want only %q", name, tc.remotePath, got, tc.want)
 			}
