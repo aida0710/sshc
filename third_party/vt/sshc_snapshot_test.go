@@ -7,8 +7,9 @@ import (
 	"testing"
 )
 
-// The snapshot emulator prints ASCII, feeds lines, scrolls and repeats its own way (sshc_snapshot.go,
-// sshc_repeat.go). Given the same output, it must leave the screen exactly as the upstream emulator does.
+// The snapshot emulator prints ASCII, feeds lines, scrolls, repeats and bounds counts its own way (sshc_snapshot.go,
+// sshc_repeat.go, sshc_bounded_counts.go). Given the same output, it must leave the screen exactly as the upstream
+// emulator does.
 func TestTheSnapshotEmulatorDrawsWhatTheUpstreamOneDraws(t *testing.T) {
 	pieces := []func(*rand.Rand) string{
 		func(r *rand.Rand) string { return strings.Repeat("word ", 1+r.IntN(12)) },
