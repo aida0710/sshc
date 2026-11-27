@@ -161,6 +161,8 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 	case "/api/v1/sftp/media/a-video":
 		w.Header().Set("Content-Type", "video/mp4")
 		w.Header().Set("Set-Cookie", "leaked=1")
+		// 保存の名前は接続先が決めたもので、このマシンのメディアの受け口（inline）とは違う。
+		w.Header().Set("Content-Disposition", `attachment; filename="clip.html"`)
 		fmt.Fprint(w, "the bytes of a video")
 	case "/api/v1/sftp/media/a-page":
 		// 乗っ取られた接続先が、メディアの代わりにページを返す。
@@ -169,6 +171,28 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 	case "/api/v1/sftp/media/a-script":
 		w.Header().Set("Content-Type", "text/javascript")
 		fmt.Fprint(w, "steal()")
+	case "/api/v1/sftp/media/a-video-and-a-page":
+		w.Header().Add("Content-Type", "video/mp4")
+		w.Header().Add("Content-Type", "text/html")
+		fmt.Fprint(w, "<script>steal()</script>")
+	case "/api/v1/sftp/media/a-video-and-a-page-in-one-line":
+		w.Header().Set("Content-Type", "video/mp4, text/html")
+		fmt.Fprint(w, "<script>steal()</script>")
+	case "/api/v1/sftp/media/an-untyped-page-not-found":
+		writeUntypedPage(w, http.StatusNotFound)
+	case "/api/v1/sftp/media/a-problem-and-a-page":
+		w.Header().Add("Content-Type", "application/problem+json")
+		w.Header().Add("Content-Type", "text/html")
+		w.WriteHeader(http.StatusNonAuthoritativeInfo)
+		fmt.Fprint(w, "<script>steal()</script>")
+	case "/api/v1/sftp/media/an-untyped-page":
+		writeUntypedPage(w, http.StatusNonAuthoritativeInfo)
+	case "/api/v1/answers/untyped":
+		writeUntypedPage(w, http.StatusOK)
+	case "/api/v1/answers/json-and-a-page":
+		w.Header().Add("Content-Type", "application/json")
+		w.Header().Add("Content-Type", "text/html")
+		fmt.Fprint(w, "<script>steal()</script>")
 	case "/api/v1/sftp/media/gone":
 		w.Header().Set("Content-Type", "application/problem+json")
 		w.WriteHeader(http.StatusNotFound)
@@ -203,6 +227,14 @@ func (f *fakeRemoteEngine) serve(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// writeUntypedPage は、種類を付けずにページを返す。偽の接続先の Go の server が本文から種類を推し量らないよう、
+// Content-Type を nil にする。
+func writeUntypedPage(w http.ResponseWriter, status int) {
+	w.Header()["Content-Type"] = nil
+	w.WriteHeader(status)
+	fmt.Fprint(w, "<!doctype html><script>steal()</script>")
 }
 
 // authorized は、接続先のエンジンの API の規則（Origin、cookie、CSRF）を確かめる。
@@ -456,35 +488,107 @@ func TestARefusalOfTheOperationItselfReachesTheScreenAndARefusalAtTheEntranceDoe
 	}
 }
 
+// servedAnswer は、このマシンの Go の HTTP の server がブラウザへ返した答えである。
+type servedAnswer struct {
+	status int
+	header http.Header
+	body   string
+}
+
+// serveLikeThisMachine は、forward を Go の HTTP の server に載せて GET し、ブラウザが受け取る答えを返す。
+// ResponseRecorder と違い、server は種類の無い答えに本文から種類を推し量って付ける（このマシンのエンジンと同じ）。
+func serveLikeThisMachine(t *testing.T, forward func(http.ResponseWriter, *http.Request) error) servedAnswer {
+	t.Helper()
+	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := forward(w, r); err != nil {
+			t.Errorf("forward = %v", err)
+		}
+	}))
+	defer local.Close()
+	response, err := local.Client().Get(local.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return servedAnswer{status: response.StatusCode, header: response.Header, body: string(body)}
+}
+
 // メディアの経路は、ブラウザが CSRF のトークン無しで開ける。接続先がページやスクリプトを返しても、
-// このマシンの画面のオリジンで開かないよう、音声か動画の答えだけを渡す。
+// このマシンの画面のオリジンで開かないよう、音声か動画の答えだけを渡す。種類と Content-Disposition は
+// このマシンが1つだけ書く。
 func TestTheForwardedMediaRouteHandsOverOnlyAudioAndVideo(t *testing.T) {
 	remote := newFakeRemoteEngine(t)
 	manager := newEngineManager(t, remote, "v9")
 	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
 		t.Fatal(err)
 	}
-	media := func(ticket string) *httptest.ResponseRecorder {
-		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodGet, "/api/v1/engines/r100/sftp/media/"+ticket, nil)
-		if err := manager.ForwardMediaAPI(recorder, request, "r100", "/api/v1/sftp/media/"+ticket); err != nil {
-			t.Fatal(err)
-		}
-		return recorder
+	media := func(ticket string) servedAnswer {
+		return serveLikeThisMachine(t, func(w http.ResponseWriter, r *http.Request) error {
+			return manager.ForwardMediaAPI(w, r, "r100", "/api/v1/sftp/media/"+ticket)
+		})
 	}
 	video := media("a-video")
-	if video.Code != http.StatusOK || video.Body.String() != "the bytes of a video" || video.Header().Get("Content-Type") != "video/mp4" || video.Header().Get("Set-Cookie") != "" {
-		t.Fatalf("a video = %d %q, headers %v", video.Code, video.Body.String(), video.Header())
+	if video.status != http.StatusOK || video.body != "the bytes of a video" || !slices.Equal(video.header.Values("Content-Type"), []string{"video/mp4"}) || video.header.Get("Set-Cookie") != "" {
+		t.Fatalf("a video = %d %q, headers %v", video.status, video.body, video.header)
 	}
-	for _, ticket := range []string{"a-page", "a-script"} {
+	// 接続先が決めた保存の名前は渡さず、このマシンのメディアの受け口と同じく、その場で再生させる。
+	if disposition := video.header.Values("Content-Disposition"); !slices.Equal(disposition, []string{"inline"}) {
+		t.Errorf("a video's Content-Disposition = %q, want only inline", disposition)
+	}
+	for _, ticket := range []string{
+		"a-page", "a-script", "a-video-and-a-page", "a-video-and-a-page-in-one-line",
+		"an-untyped-page-not-found", "a-problem-and-a-page", "an-untyped-page",
+	} {
 		refused := media(ticket)
-		if refused.Code != http.StatusBadGateway || strings.Contains(refused.Body.String(), "steal") || !strings.Contains(refused.Body.String(), "remote_engine_refused") {
-			t.Errorf("%s = %d %q (%s)", ticket, refused.Code, refused.Body.String(), refused.Header().Get("Content-Type"))
+		if refused.status != http.StatusBadGateway || strings.Contains(refused.body, "steal") || !strings.Contains(refused.body, "remote_engine_refused") ||
+			!slices.Equal(refused.header.Values("Content-Type"), []string{"application/problem+json"}) {
+			t.Errorf("%s = %d %q (%q)", ticket, refused.status, refused.body, refused.header.Values("Content-Type"))
 		}
 	}
 	// 接続先の断りは、理由ごと届く。
-	if gone := media("gone"); gone.Code != http.StatusNotFound || !strings.Contains(gone.Body.String(), "sftp_not_found") {
-		t.Errorf("a ticket the remote does not know = %d %q", gone.Code, gone.Body.String())
+	if gone := media("gone"); gone.status != http.StatusNotFound || !strings.Contains(gone.body, "sftp_not_found") {
+		t.Errorf("a ticket the remote does not know = %d %q", gone.status, gone.body)
+	}
+}
+
+// 取り次ぐ答えの種類は、このマシンが1つだけ書く。種類が無いと、このマシンの Go の server が本文から
+// text/html を推し量る。2つあると、ブラウザは後ろの種類で読む。どちらも、中身の分からない答えにする。
+func TestAForwardedAnswerReachesTheBrowserWithExactlyOneContentType(t *testing.T) {
+	remote := newFakeRemoteEngine(t)
+	manager := newEngineManager(t, remote, "v9")
+	if err := manager.AddEngine(context.Background(), "r100"); err != nil {
+		t.Fatal(err)
+	}
+	forwards := map[string]func(http.ResponseWriter, *http.Request, string, string) error{
+		"ForwardAPI": manager.ForwardAPI, "ForwardFileAPI": manager.ForwardFileAPI,
+	}
+	for name, forwardTo := range forwards {
+		for _, tc := range []struct {
+			remotePath string
+			want       string
+		}{
+			{"/api/v1/terminal/commands", "application/json"},
+			{"/api/v1/answers/untyped", "application/octet-stream"},
+			{"/api/v1/answers/json-and-a-page", "application/octet-stream"},
+		} {
+			answer := serveLikeThisMachine(t, func(w http.ResponseWriter, r *http.Request) error {
+				return forwardTo(w, r, "r100", tc.remotePath)
+			})
+			if got := answer.header.Values("Content-Type"); !slices.Equal(got, []string{tc.want}) {
+				t.Errorf("%s %s: Content-Type = %q, want only %q", name, tc.remotePath, got, tc.want)
+			}
+		}
+	}
+	// このマシンのエンジンが読んでから返す答え（中継のある実行先の取り次ぎ）も、同じ種類になる。
+	for remotePath, want := range map[string]string{"/api/v1/answers/untyped": "application/octet-stream", "/api/v1/answers/json-and-a-page": "application/octet-stream"} {
+		answer, err := manager.CallAPI(context.Background(), "r100", APICall{Method: http.MethodGet, Path: remotePath})
+		if err != nil || answer.ContentType != want {
+			t.Errorf("CallAPI %s: Content-Type = %q, %v, want %q", remotePath, answer.ContentType, err, want)
+		}
 	}
 }
 

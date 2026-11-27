@@ -40,7 +40,7 @@ func (r *relayToEngine) CallAPI(_ context.Context, _ string, call remoteengine.A
 	r.relayed = append(r.relayed, call)
 	recorder := sendKeyRequest(r.t, r.remote, r.credentials, call.Method, call.Path, call.Body, call.ActionToken)
 	body, _ := io.ReadAll(recorder.Result().Body)
-	return remoteengine.APIAnswer{Status: recorder.Code, Body: body}, nil
+	return remoteengine.APIAnswer{Status: recorder.Code, ContentType: recorder.Header().Get(echo.HeaderContentType), Body: body}, nil
 }
 
 // localEngineForRunTarget は、このマシンのエンジン（実行先の受け口）を立てる。

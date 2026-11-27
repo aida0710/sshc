@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -37,11 +38,17 @@ const slowForwardedAnswerLimit = 3 * time.Minute
 // ErrRequestTooLarge は、取り次ぐ要求の本文が maxForwardedBody を超えたことを表す。
 var ErrRequestTooLarge = errors.New("the request body is too large to forward")
 
-// forwardedResponseHeaders は、接続先の答えのうち、ブラウザへ渡すヘッダーである。cookie
+// forwardedResponseHeaders は、接続先の答えのうち、ブラウザへそのまま渡すヘッダーである。cookie
 // （接続先の資格）やセキュリティのヘッダー（このマシンのエンジンが付ける）は渡さない。
 // Set-Cookie や Clear-Site-Data を渡すと、接続先がこのマシンの画面のセッションを上書き
-// したり消したりできる。
-var forwardedResponseHeaders = []string{"Content-Type", "Cache-Control"}
+// したり消したりできる。Content-Type は、このマシンが1つに決めて書く（copyAnswerHeaders）。
+var forwardedResponseHeaders = []string{"Cache-Control"}
+
+// unknownContentType は、接続先の答えの種類が1つに決まらないとき（無い、2つ以上ある、読めない）に書く種類である。
+// 種類の無い答えには、このマシンの Go の server が本文から text/html などを推し量って付ける
+// （X-Content-Type-Options: nosniff はブラウザへの指示で、server の推し量りは止めない）。種類が2つあると、
+// ブラウザは後ろの種類で読む。どちらも、中身の分からない答えとして渡す。
+const unknownContentType = "application/octet-stream"
 
 // forwardedUpgradeHeaders は、ターミナルの入出力の WebSocket のハンドシェイクの答えの
 // うち、ブラウザへ渡すヘッダーである。ハンドシェイクを終えるのに要るものだけを渡す。
@@ -126,7 +133,8 @@ type APICall struct {
 
 // APIAnswer は、接続先のエンジンの答えである。
 type APIAnswer struct {
-	Status      int
+	Status int
+	// ContentType は、答えの種類をこのマシンが1つに決めたものである（contentTypeOf）。
 	ContentType string
 	Body        []byte
 }
@@ -152,7 +160,7 @@ func (m *Manager) CallAPI(ctx context.Context, alias string, call APICall) (APIA
 	err = m.exchange(ctx, engine, exchangeOf{call: call, answerLimit: m.answerLimit}, func(response *http.Response) {
 		defer func() { _ = response.Body.Close() }()
 		answer.Status = response.StatusCode
-		answer.ContentType = response.Header.Get("Content-Type")
+		answer.ContentType = contentTypeOf(response.Header)
 		answer.Body, readErr = io.ReadAll(io.LimitReader(response.Body, maxCalledAnswer+1))
 		if readErr == nil && len(answer.Body) > maxCalledAnswer {
 			readErr = ErrAnswerTooLarge
@@ -164,8 +172,8 @@ func (m *Manager) CallAPI(ctx context.Context, alias string, call APICall) (APIA
 	return answer, readErr
 }
 
-// RemoteRefusalError は、接続先へ届かなかったこと、または接続先のエンジンが資格や Vault を
-// 断ったことを、このマシンの画面へ返す状態コードと語にしたものである。
+// RemoteRefusalError は、接続先へ届かなかったこと、接続先のエンジンが資格や Vault を断ったこと、
+// または接続先の答えをこのマシンが渡さないことを、このマシンの画面へ返す状態コードと語にしたものである。
 type RemoteRefusalError struct {
 	Status int
 	Code   string
@@ -263,20 +271,26 @@ func remoteRefusal(response *http.Response) string {
 	}
 	body, _ := io.ReadAll(io.LimitReader(response.Body, maxRefusalBody))
 	_ = response.Body.Close()
-	var refusal struct {
-		Code string `json:"code"`
-	}
-	if json.Unmarshal(body, &refusal) != nil {
-		refusal.Code = ""
-	}
-	if replaced, found := remoteRefusalCodes[refusal.Code]; found {
+	code := problemCode(body)
+	if replaced, found := remoteRefusalCodes[code]; found {
 		return replaced
 	}
-	if response.StatusCode == http.StatusForbidden && refusal.Code == "" {
+	if response.StatusCode == http.StatusForbidden && code == "" {
 		return "remote_engine_refused"
 	}
 	response.Body = io.NopCloser(bytes.NewReader(body))
 	return ""
+}
+
+// problemCode は、接続先の断りの本文（problem の JSON）の code を返す。読めなければ空を返す。
+func problemCode(body []byte) string {
+	var refusal struct {
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(body, &refusal) != nil {
+		return ""
+	}
+	return refusal.Code
 }
 
 // remoteRefusalCodes は、このマシンの画面が自分のセッションや Vault の状態として読む
@@ -319,9 +333,32 @@ func authorizeRemoteRequest(request *http.Request, session *remoteSession) {
 
 func copyResponse(w http.ResponseWriter, response *http.Response) {
 	defer func() { _ = response.Body.Close() }()
-	copyAllowedHeaders(w.Header(), response.Header, forwardedResponseHeaders)
+	copyAnswerHeaders(w.Header(), response.Header, forwardedResponseHeaders)
 	w.WriteHeader(response.StatusCode)
 	_, _ = io.Copy(w, response.Body)
+}
+
+// copyAnswerHeaders は、接続先の答えのヘッダーのうち allowed に挙げたものを destination へ写し、
+// 種類は contentTypeOf で1つに決めて書く。
+func copyAnswerHeaders(destination, source http.Header, allowed []string) {
+	copyAllowedHeaders(destination, source, allowed)
+	destination.Set("Content-Type", contentTypeOf(source))
+}
+
+// contentTypeOf は、接続先の答えの種類を、ブラウザへ書く1つの値にして返す。種類がちょうど1つ、読める形で
+// 書かれていなければ unknownContentType を返す。1つの値の中にカンマで2つ並べたもの（ブラウザは後ろを使う）も、
+// 読めない形として断る。
+func contentTypeOf(header http.Header) string {
+	declared := header.Values("Content-Type")
+	if len(declared) != 1 {
+		return unknownContentType
+	}
+	mediaType, params, err := mime.ParseMediaType(declared[0])
+	formatted := mime.FormatMediaType(mediaType, params)
+	if err != nil || formatted == "" {
+		return unknownContentType
+	}
+	return formatted
 }
 
 // copyAllowedHeaders は、source のヘッダーのうち allowed に挙げたものだけを destination へ
@@ -342,12 +379,12 @@ func copyAllowedHeaders(destination, source http.Header, allowed []string) {
 // keepStreamHeaders は、接続先の WebSocket の答えのヘッダーを、ブラウザへ渡してよいもの
 // だけにする。API の取り次ぎと同じく、接続先の cookie などはこのマシンの画面へ渡さない。
 func keepStreamHeaders(response *http.Response) error {
-	allowed := forwardedResponseHeaders
-	if response.StatusCode == http.StatusSwitchingProtocols {
-		allowed = forwardedUpgradeHeaders
-	}
 	kept := http.Header{}
-	copyAllowedHeaders(kept, response.Header, allowed)
+	if response.StatusCode == http.StatusSwitchingProtocols {
+		copyAllowedHeaders(kept, response.Header, forwardedUpgradeHeaders)
+	} else {
+		copyAnswerHeaders(kept, response.Header, forwardedResponseHeaders)
+	}
 	response.Header = kept
 	return nil
 }
