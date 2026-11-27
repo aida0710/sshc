@@ -20,9 +20,11 @@ upstream draws. `sshc_shown_screen.go` reads the screen shown as text.
 leaving the main screen (scrolled off its top, or erased) for the session log,
 and reads output in pieces so that the scrollback, which drops its oldest line
 when full, never fills. `sshc_repeat.go` takes REP (CSI Ps b), which upstream
-prints as many times as asked (65535 characters for eight bytes of output): it
-prints no more than fills the screen and leaves the same screen, cursor and
-session log.
+prints as many times as asked, with no bound from the screen's size: it prints
+no more than fills the screen and leaves the same screen, cursor and session
+log. `sshc_bounded_counts.go` passes CHT, CBT and ECH (CSI Ps I, Z and X) to
+upstream with their count held to the screen's width: upstream loops over the
+count, and the parser bounds a count only to 31 bits.
 
 Keep the other files equal to upstream v0.1.0 when updating them, and check
 these files against the new internals. Check too that no upstream handler newly

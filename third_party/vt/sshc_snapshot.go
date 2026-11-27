@@ -89,6 +89,7 @@ func NewSnapshotEmulator(w, h int) *SnapshotEmulator {
 		e.registerCcHandler(code, e.scrollingLinefeed)
 	}
 	e.keepScrollRegionOnScreen()
+	e.boundCountsByTheScreen()
 	e.RegisterCsiHandler('b', e.repeatPreviousCharacterOnScreen)
 	e.parser.SetHandler(ansi.Handler{
 		Print:     e.print,
