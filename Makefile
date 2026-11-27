@@ -1,4 +1,4 @@
-.PHONY: generate test deadcode build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test deadcode check-commits build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの実行時間。長時間試す場合は、たとえば
 # `make fuzz FUZZTIME=10m` のように上書きする。
@@ -55,6 +55,13 @@ test:
 # 製品の関数を検出する。実装は scripts/ci/deadcode.sh を参照。
 deadcode:
 	scripts/ci/deadcode.sh
+
+# ブランチのコミットメッセージに、帰属の行と社内の URL が無いかを検査する。PR の CI
+# （.github/workflows/pull-request-text.yml）と同じスクリプトで、PR のタイトルと本文は CI が検査する。
+# 比べる先は `make check-commits COMMITS_BASE=<コミット>` で変えられる。
+COMMITS_BASE ?= origin/main
+check-commits:
+	scripts/ci/check-pr-text.sh "$(COMMITS_BASE)" HEAD
 
 fuzz:
 	@set -e; for target in $(FUZZ_TARGETS); do \

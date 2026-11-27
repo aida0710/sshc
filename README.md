@@ -100,6 +100,7 @@ Go 1.26とNode.js 26が必要です。
 make build
 make test
 make verify-generated
+make check-commits
 make e2e
 make integration-up
 make integration
@@ -107,6 +108,8 @@ make integration-down
 ```
 
 `make test`は、gofmt、go vet、Goのテスト（raceを含む）、Android向けのビルド、使われていない関数の検査、Oxlint、Webの単体テストと型検査を実行します。`make verify-generated`は、生成物がコミット済みの内容と一致するかを確かめます。CIはこの2つの検査に加えて、Android APK、VPNのコンテナイメージ、統合テスト、利用者向けサイトのビルド、依存の脆弱性、主要画面のアクセシビリティを確かめます。E2Eの全体はCIでは実行しないため、画面を変えたときは`make e2e`も実行してください。
+
+`make check-commits`は、ブランチのコミットメッセージに、AIツールが追加する帰属の行（`Co-Authored-By`など）や社内のURLが無いかを検査します。PRのタイトル（`<type>(<scope>): <日本語の要約>`）と本文は、PRのCIの「Pull request text」が同じスクリプトで検査します。本文を編集したときは、この検査だけを実行し直します。
 
 組み立てたWeb UI（`internal/ui/dist/app`）はリポジトリに入れていません。`make build`が組み立ててからバイナリに埋め込みます（画面だけなら`npm run build --prefix web`）。画面を組み立てずに作ったバイナリ（`go install`など）は、画面の代わりにそのことを知らせるだけなので、利用者にはリリースの成果物かHomebrewを案内してください。利用者向けサイトは`pages/`にあり、`npm run build`で検証できます。
 
