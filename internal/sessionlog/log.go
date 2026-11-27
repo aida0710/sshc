@@ -225,8 +225,7 @@ type waitingNote struct {
 
 func (w *lineWriter) writeLines(texts []string) {
 	for _, text := range texts {
-		w.writeLine(w.hideSecrets(text))
-		w.linesLeft(1)
+		w.writeShownLine(text)
 	}
 }
 
@@ -234,12 +233,18 @@ func (w *lineWriter) writeLines(texts []string) {
 // 続いた行の数を書く。
 func (w *lineWriter) writeLeftLines(left []vt.LeftLine) {
 	for _, line := range left {
-		w.writeLines([]string{line.Text})
+		w.writeShownLine(line.Text)
 		if line.Repeats > 0 {
 			w.writeLine(w.noteLine(fmt.Sprintf(repeatedLineNote, line.Repeats)))
 			w.linesLeft(line.Repeats)
 		}
 	}
+}
+
+// writeShownLine は、画面に出た1行を書く。
+func (w *lineWriter) writeShownLine(text string) {
+	w.writeLine(w.hideSecrets(text))
+	w.linesLeft(1)
 }
 
 // linesLeft は、count 行が画面から流れたことを、待っている知らせに伝え、待ち終えた知らせを書く。

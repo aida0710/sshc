@@ -9,8 +9,8 @@ import "github.com/charmbracelet/x/ansi"
 const repeatSettlingRows = 3
 
 // repeatPreviousCharacterOnScreen は、REP を、直前の字を Ps 回打つのと同じに描く。上流は回数のとおりに1字ずつ
-// 打つので、65535 回を頼む8バイトで 65535 字を書く。エンジンはセッションのロックを持ったまま出力を読むので、
-// 画面の見た目が変わらない分は打たない（repeatedCellsOnScreen）。打つ字は、文字の集合で写したものを
+// 打つので、短い出力でも、画面の大きさに関わらず多くの字を書く。エンジンはセッションのロックを持ったまま出力を
+// 読むので、画面が変わらない分は打たない（repeatedCellsOnScreen）。打つ字は、文字の集合で写したものを
 // putNarrowCell で書く。上流の handleGrapheme は、折り返しで流すたびに余白の中のマスを1つずつ動かす。
 func (e *SnapshotEmulator) repeatPreviousCharacterOnScreen(params ansi.Params) bool {
 	count, _, _ := params.Param(0, 1)
@@ -66,7 +66,7 @@ func (e *SnapshotEmulator) putNarrowCells(content string, count int) {
 // width 字の倍数だけ減らしてよい。
 func repeatedCellsOnScreen(cells, width, height int) (written, skippedRows int) {
 	settled := width * (height + repeatSettlingRows)
-	if cells <= settled {
+	if width <= 0 || cells <= settled {
 		return cells, 0
 	}
 	skippedRows = (cells - settled) / width
