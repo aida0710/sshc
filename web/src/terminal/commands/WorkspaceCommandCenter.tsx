@@ -263,13 +263,8 @@ export function WorkspaceCommandCenter({
                   <SnippetVariableInputs
                     variables={selectedSnippet.variables}
                     inputs={inputs}
-                    onChange={(variable, value) => {
-                      // 真偽値の「既定値を使用」は、値を送らないことで既定値を使わせる。
-                      setInputs((current) =>
-                        variable.type === "boolean" && value === ""
-                          ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== variable.name))
-                          : { ...current, [variable.name]: value },
-                      );
+                    onChange={(next) => {
+                      setInputs(next);
                       invalidate();
                     }}
                   />

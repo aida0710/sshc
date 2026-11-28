@@ -265,8 +265,8 @@ export function SnippetsPanel({
     setPreview(null);
   }
 
-  function updateInput(name: string, value: string) {
-    setInputs({ ...inputs, [name]: value });
+  function updateInputs(next: Record<string, string>) {
+    setInputs(next);
     setPreview(null);
   }
 
@@ -356,7 +356,7 @@ export function SnippetsPanel({
                   busy={busy}
                   onDraftChange={changeDraft}
                   onVariableChange={updateVariable}
-                  onInputChange={updateInput}
+                  onInputsChange={updateInputs}
                   onDiscard={discardDraft}
                   onSave={() => void save()}
                   onDelete={() => setConfirmingDelete(true)}

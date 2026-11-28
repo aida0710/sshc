@@ -1,10 +1,12 @@
 import type { SnippetVariable } from "./api";
 import { SnippetVariableValue } from "./SnippetVariableValue";
+import { withSnippetInput } from "./snippetInputs";
 import { control } from "../ui/form";
 
 const variableInputClass = `mt-1 block ${control}`;
 
-// SnippetVariableInputs は、スニペットの変数ごとに、名前と説明の下へ値の欄を並べる。
+// SnippetVariableInputs は、スニペットの変数ごとに、名前と説明の下へ値の欄を並べる。欄を変えると、
+// エンジンへ送る次の inputs を onChange に渡す。
 export function SnippetVariableInputs({
   variables,
   inputs,
@@ -12,7 +14,7 @@ export function SnippetVariableInputs({
 }: {
   variables: SnippetVariable[];
   inputs: Record<string, string>;
-  onChange: (variable: SnippetVariable, value: string) => void;
+  onChange: (inputs: Record<string, string>) => void;
 }) {
   return (
     <>
@@ -27,7 +29,7 @@ export function SnippetVariableInputs({
             value={inputs[variable.name] ?? ""}
             label={variable.name}
             className={variableInputClass}
-            onChange={(value) => onChange(variable, value)}
+            onChange={(value) => onChange(withSnippetInput(inputs, variable.name, value))}
           />
         </div>
       ))}

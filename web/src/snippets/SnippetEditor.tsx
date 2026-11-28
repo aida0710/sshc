@@ -9,6 +9,7 @@ import { editsSteps, newStep, stepsCanBeSaved } from "./snippetKind";
 import { snippetVariableTypeLabelKey } from "./snippetLabels";
 import { SnippetStepsEditor } from "./SnippetStepsEditor";
 import { SnippetVariableValue } from "./SnippetVariableValue";
+import { withSnippetInput } from "./snippetInputs";
 import { CodeField } from "../editor/CodeField";
 
 const variableTypes = ["string", "integer", "boolean", "secret"] as const;
@@ -56,7 +57,7 @@ export function SnippetEditor({
   busy,
   onDraftChange,
   onVariableChange,
-  onInputChange,
+  onInputsChange,
   onDiscard,
   onSave,
   onDelete,
@@ -77,7 +78,7 @@ export function SnippetEditor({
   busy: boolean;
   onDraftChange: (next: SnippetDraft) => void;
   onVariableChange: (name: string, update: Partial<SnippetVariable>) => void;
-  onInputChange: (name: string, value: string) => void;
+  onInputsChange: (inputs: Record<string, string>) => void;
   onDiscard: () => void;
   onSave: () => void;
   onDelete: () => void;
@@ -169,7 +170,7 @@ export function SnippetEditor({
                   value={inputs[variable.name] ?? ""}
                   label={`${variable.name} · ${t("snippets.value")}`}
                   className={control}
-                  onChange={(value) => onInputChange(variable.name, value)}
+                  onChange={(value) => onInputsChange(withSnippetInput(inputs, variable.name, value))}
                 />
               </div>
             </div>

@@ -96,6 +96,22 @@ describe("TerminalQuickCommands", () => {
     );
   });
 
+  it("sends no value for a boolean put back to its default, so the engine uses the default", async () => {
+    mocks.library.mockResolvedValue({
+      startup: [],
+      snippets: [{ id: "one", name: "Logs", description: "", command: "journalctl --follow={{follow}}", variables: [{ name: "follow", type: "boolean", required: false, default: "false" }] }],
+    });
+    const user = userEvent.setup();
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} onCopied={() => undefined} /></LanguageProvider>);
+    const follow = await screen.findByRole("combobox", { name: "follow" });
+
+    await user.selectOptions(follow, "true");
+    await user.selectOptions(follow, "Use default (false)");
+    await user.click(screen.getByRole("button", { name: "Preview execution" }));
+
+    expect(mocks.preview).toHaveBeenCalledWith(expect.objectContaining({ snippetId: "one", inputs: {} }));
+  });
+
   it("inserts a snippet without variables at once, showing its text and sending it unsubmitted", async () => {
     mocks.library.mockResolvedValue({
       startup: [],
