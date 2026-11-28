@@ -55,8 +55,9 @@ describe("利用者が読む日本語", () => {
   });
 });
 
-// docs/の説明はpagesへ写されることがあるので、pagesと同じ語で書いておく。
-describe("READMEとdocs/の日本語", () => {
+// docs/の説明はpagesへ写されることがあり、AGENTS.mdの語はAIエージェントが画面やコメントへ写すので、
+// pagesと同じ語で書いておく。
+describe("README、AGENTS.md、docs/の日本語", () => {
   it("使わないと決めた語を含まない", () => {
     expect(retiredTermsIn(linesOf(japaneseRepositoryDocuments()))).toEqual([]);
   });
@@ -73,7 +74,7 @@ function versionMeaningEditionsIn(wordings: Wording[]): string[] {
 }
 
 describe("versionの意味の「版」", () => {
-  it("画面、pages、README、docs/では「バージョン」と書く", () => {
+  it("画面、pages、README、AGENTS.md、docs/では「バージョン」と書く", () => {
     const wordings = [...userFacingJapanese(), ...linesOf(japaneseRepositoryDocuments())];
     expect(versionMeaningEditionsIn(wordings)).toEqual([]);
   });
