@@ -21,6 +21,8 @@ describe("isReleasePageURL", () => {
     ["a path that only starts with releases", "https://github.com/aida0710/sshc/releases-dunlin/tag/v1.2.0"],
     ["the repository outside its releases", "https://github.com/aida0710/sshc/issues/1"],
     ["dot segments that leave the releases", "https://github.com/aida0710/sshc/releases/../../../pelican/sshc/releases/tag/v1.2.0"],
+    ["one slash after the scheme", "https:/github.com/aida0710/sshc/releases/tag/v1.2.0"],
+    ["no slash after the scheme", "https:github.com/aida0710/sshc/releases/tag/v1.2.0"],
     ["http", "http://github.com/aida0710/sshc/releases/tag/v1.2.0"],
     ["the sshc engine on this machine", "http://127.0.0.1:54447/api/v1/update"],
     ["text that is not a URL", "aida0710/sshc/releases/tag/v1.2.0"],
