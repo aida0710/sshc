@@ -131,7 +131,7 @@ func executeTerminal(ctx context.Context, engine *engineAPI, called terminalInvo
 
 // terminalTitleRequest は、PUT /title の本文を作る。--auto のときは title を null で
 // 送る。engine は null を受けると表示名の固定を外し、プログラムが付けたタイトル、
-// 無ければ接続エイリアスかシェル名を表示名に戻す。
+// 無ければ接続名かシェル名を表示名に戻す。
 func terminalTitleRequest(called terminalInvocation) api.SetTerminalSessionTitleRequest {
 	if called.UnpinTitle {
 		return api.SetTerminalSessionTitleRequest{Title: nil}
