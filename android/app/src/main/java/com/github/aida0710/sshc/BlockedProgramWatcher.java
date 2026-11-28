@@ -23,7 +23,8 @@ final class BlockedProgramWatcher {
 
     /**
      * いまの待ちを知らせたセッションの tag。裏にいる間はこのスレッドが、裏に回る瞬間は Web 画面が知らせる
-     * （見えている間に始まった待ちは、Web 画面しか「見たか」を知らない）。同じ待ちで二度鳴らさない。
+     * （見えている間に始まった待ちは、Web 画面しか「見たか」を知らない）。このスレッドはこのマシンのエンジンの
+     * セッションしか知らないので、リモートセッションの待ちは待ち始めたときも Web 画面が知らせる。同じ待ちで二度鳴らさない。
      */
     private static final Set<String> announcedTags = ConcurrentHashMap.newKeySet();
 

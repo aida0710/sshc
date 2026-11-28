@@ -28,7 +28,7 @@ export function announceSessionNotification(announcement: SessionAnnouncement): 
   showBrowserNotification(sessionBrowserNotification(announcement));
 }
 
-// プログラムが利用者を待ち始めたことを知らせる。Android では、このマシンのエンジンが自分のセッションに出すのと同じ
+// プログラムが利用者を待っていることを知らせる。Android では、このマシンのエンジンが自分のセッションに出すのと同じ
 // 許可待ちのチャンネルに出す。音はそのチャンネルの設定で鳴るので、この画面が鳴らすのはブラウザだけ。Android は
 // 同じ待ちを1回しか出さない（BlockedProgramWatcher.markAnnounced）。
 export function announceBlockedProgram(announcement: SessionAnnouncement): void {
@@ -41,8 +41,8 @@ export function announceBlockedProgram(announcement: SessionAnnouncement): void 
   showBrowserNotification(shown);
 }
 
-// セッションの通知を取り下げる。知らせたことを見たか、待つのをやめたか、セッションが無くなったとき。Android では、
-// 取り下げた待ちをもう一度知らせられるようになる（BlockedProgramWatcher.forgetAnnounced）。
+// セッションの通知を取り下げる。Android では「知らせた」の記録からも外す。外さないと、そのセッションの次の待ちを
+// 知らせない（BlockedProgramWatcher.markAnnounced）。
 export function closeSessionNotification(sessionId: string): void {
   closeBrowserNotification(terminalNotificationTag(sessionId));
 }

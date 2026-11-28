@@ -46,6 +46,12 @@ describe("useBlockedProgramNotifications", () => {
 
   // Android のアプリでこの hook が動くのは、リモートセッションを選んでいるときだけ（App.tsx）。
   describe("in the Android app on a remote session", () => {
+    // 許可待ちとターミナルのどちらのチャンネルにも出していない。
+    function expectNoNotification() {
+      expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
+      expect(bridge.showNotification).not.toHaveBeenCalled();
+    }
+
     it("notifies a person who is away on the channel for waiting programs, as the session's row says it", () => {
       const { rerender } = renderWith(working);
 
@@ -83,7 +89,7 @@ describe("useBlockedProgramNotifications", () => {
 
     it("takes a program already waiting at first sight as history", () => {
       renderWith(waiting);
-      expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
+      expectNoNotification();
     });
 
     it("leaves a person looking at sshc to the session's row", () => {
@@ -92,7 +98,7 @@ describe("useBlockedProgramNotifications", () => {
 
       rerender({ session: waiting, on: true });
 
-      expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
+      expectNoNotification();
     });
 
     it("does nothing when another part of the app notifies", () => {
@@ -100,7 +106,7 @@ describe("useBlockedProgramNotifications", () => {
 
       rerender({ session: waiting, on: false });
 
-      expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
+      expectNoNotification();
     });
   });
 
