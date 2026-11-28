@@ -9,9 +9,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-# staticcheck を組み立てる Go と、解析する package を組み立てる Go を、go.mod の版にそろえる。
-# 新しい版の Go が書いた型の情報（export data）を staticcheck は読めず、どのファイルも
-# 解析できないまま内部エラーを報告する。
+# staticcheck を組み立てる Go と、解析する package の型の情報（export data）を書き出す Go を、
+# go.mod の版にそろえる。新しい版の Go（手元の Go 1.27 など）が書いた型の情報を、この版の
+# staticcheck は読めず、どのファイルも解析できないまま内部エラーを報告する。
 GOTOOLCHAIN="go$(sed -n 's/^go //p' go.mod)"
 export GOTOOLCHAIN
 
