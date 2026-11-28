@@ -69,7 +69,7 @@
 
 ### sshcエンジンの呼び方
 
-画面、pages、README、AGENTS.mdの本文では「sshcエンジン」と書きます（2026-09-30に決定）。本文に`engine`、`Engine`、「エンジン」だけの形を混ぜません。画面とpages、READMEで呼び方を分けません。見出しと、`sshc engine`のようなコマンド名はそのまま書きます。
+画面、pages、READMEの本文では「sshcエンジン」と書きます（2026-09-30に決定）。本文に`engine`、`Engine`、「エンジン」だけの形を混ぜません。画面とpages、READMEで呼び方を分けません。見出しと、`sshc engine`のようなコマンド名はそのまま書きます。AGENTS.mdの本文も同じ呼び方にします。
 
 画面、Androidの文言、日本語のpages、README、AGENTS.mdの本文に「sshcエンジン」でない「エンジン」があると、`web/src/i18n/retiredJapaneseTerms.test.ts`が失敗します。Markdownの見出しとページの`title`は検査しません。
 

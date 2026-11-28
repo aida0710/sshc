@@ -6,7 +6,7 @@ sshcのコードを書く人とAIエージェントに向けた決まりです�
 
 - [docs/design.md](docs/design.md): 設計の判断と、その判断を適用する範囲
 - [docs/writing-style.md](docs/writing-style.md): 文体と用語。画面、pages、README、docs/、コードのコメントに適用します
-- [api/openapi.yaml](api/openapi.yaml): sshcエンジンのAPIの取り決め。GoとTypeScriptの型はここから生成します
+- [api/openapi.yaml](api/openapi.yaml): sshcエンジンのAPIの定義。GoとTypeScriptの型はここから生成します
 - [README.md](README.md#開発)の「開発」: 必要なGoとNode.jsのバージョンと、各コマンドが実行する内容
 
 ## 検査
@@ -59,7 +59,7 @@ pushの前に次を実行します。
 - テストの名前は振る舞いにします（「〜すると〜になる」）。実装の詳細を名前にしません
 - 一覧や値をテストに写して二重管理にしません。判定には具体的な例を使います
 - 不具合を直すときは、先に失敗するテストを書き、失敗を確認してから直します
-- 例の接続名とホスト名には`r100`、`mirage`、`pelican`、`dunlin`を使います
+- テストに書く接続名とホスト名には、`r100`、`mirage`、`pelican`、`dunlin`のような架空の名前を使います
 - Goのテストを`go test`で直接実行するときは、`Makefile`の`test`と同じ引数（race detectorとテスト用のビルドタグ）を付けます
 
 ## 依頼なしに作らない機能
@@ -70,7 +70,7 @@ pushの前に次を実行します。
 - ローカルシェルのプロファイル（[#475](https://github.com/aida0710/sshc/issues/475)）
 - ブラック（漆黒）のテーマ
 - OSC 52でクリップボードを読み取る要求の確認（[#361](https://github.com/aida0710/sshc/issues/361)）
-- SFTPの動画のサムネイル
+- SFTPの動画のサムネイル（[#529](https://github.com/aida0710/sshc/issues/529)）
 - ピンチで変えた文字の大きさの保存
 - スマホの横向きでソフトウェアキーボードを出したときのターミナルの表示の改善
 - sshcエンジンの起動中にCLIが`engine.lock`を短時間持つと、起動が止まる問題への対策
