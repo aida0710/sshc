@@ -47,12 +47,17 @@ function git(root, args, input) {
   return run;
 }
 
-function gitText(root, args) {
-  const run = git(root, args);
+// gitOutput は、git の標準出力をバイトのまま返す。git が失敗したら、検査できなかったとする。
+function gitOutput(root, args, input) {
+  const run = git(root, args, input);
   if (run.status !== 0) {
     throw new UncheckableError(`git ${args.join(" ")} が失敗した: ${run.stderr.toString().trim()}`);
   }
-  return run.stdout.toString();
+  return run.stdout;
+}
+
+function gitText(root, args) {
+  return gitOutput(root, args).toString();
 }
 
 function resolveCommit(root, revision) {
@@ -66,11 +71,11 @@ function readBlobs(root, names) {
   if (names.length === 0) {
     return [];
   }
-  const output = git(root, ["cat-file", "--batch"], `${names.join("\n")}\n`).stdout;
+  const output = gitOutput(root, ["cat-file", "--batch"], `${names.join("\n")}\n`);
   const contents = [];
   let offset = 0;
   for (let index = 0; index < names.length; index += 1) {
-    const headerEnd = output.indexOf(10, offset);
+    const headerEnd = output.indexOf("\n", offset);
     const header = output.subarray(offset, headerEnd).toString();
     offset = headerEnd + 1;
     if (header.endsWith(" missing")) {
