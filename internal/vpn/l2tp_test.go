@@ -24,7 +24,7 @@ func l2tpSecrets() Secrets {
 	return Secrets{L2TP: &L2TPSecrets{Password: `p"a\ss`, PreSharedKey: "shared-secret"}}
 }
 
-// 相手のアドレスは設定に書かず、コンテナの中で引いた値で置き換える。
+// サーバーのアドレスは設定に書かず、コンテナの中で名前解決した値で置き換える。
 func TestTheServerAddressIsLeftForTheContainerToResolve(t *testing.T) {
 	documents := l2tpDocuments(*l2tpProfile().L2TP, *l2tpSecrets().L2TP)
 

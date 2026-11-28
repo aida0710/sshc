@@ -18,7 +18,7 @@ const (
 	FailureTimeout FailureReason = "timeout"
 	// FailureServerUnresolved は、VPNサーバーのホスト名を名前解決できなかったことを表す。
 	FailureServerUnresolved FailureReason = "server_unresolved"
-	// FailureIPsecNegotiation は、IPsec が成立しなかったことを表す（事前共有鍵、暗号方式）。
+	// FailureIPsecNegotiation は、IPsec のネゴシエーションに失敗したことを表す（事前共有鍵、暗号スイート）。
 	FailureIPsecNegotiation FailureReason = "ipsec_negotiation"
 	// FailurePPPAuthentication は、PPP の認証が通らなかったことを表す（ユーザー名、パスワード）。
 	FailurePPPAuthentication FailureReason = "ppp_authentication"
@@ -33,7 +33,7 @@ const (
 	FailureTargetNeedsDNS FailureReason = "target_needs_dns"
 	// FailureTargetIsServer は、接続先が VPN サーバーそのものであることを表す。
 	FailureTargetIsServer FailureReason = "target_is_server"
-	// FailureTargetUnreachable は、VPN の中で接続先へ繋げなかったことを表す
+	// FailureTargetUnreachable は、VPN の中で接続先へ接続できなかったことを表す
 	// （接続の拒否、応答なし、経路なし）。
 	FailureTargetUnreachable FailureReason = "target_unreachable"
 	// FailureTargetNotAllowed は、接続先が WireGuard のどの Peer の AllowedIPs にも含まれない
