@@ -96,7 +96,8 @@ export function UpdateBadge({ api: givenApi, current = "", leading, indicator, e
       <div id={detailsId} hidden={hasDetails && !isOpen} className="px-1 pb-1">
         {reason === undefined ? null : <p className={detailIndent}>{t(updateMessage(reason))}</p>}
         {release === undefined ? null : (
-          <p className={detailIndent}>
+          // バージョンはエンジンが返す切れ目の無い文字列なので、サイドバーの幅で折り返す。
+          <p className={`${detailIndent} [overflow-wrap:anywhere]`}>
             {releasePage === undefined ? t("update.availableWithoutPage", { version: release }) : (
               <a href={releasePage} target="_blank" rel="noreferrer noopener" className="text-ink underline underline-offset-2">
                 {t(status !== null && installsFromReleasePage(status) ? "update.availableOnReleasePage" : "update.available", { version: release })}
