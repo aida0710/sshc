@@ -34,7 +34,7 @@ const retiredTerms = new Map<string, string>([
   ["接続エイリアス", "接続名"],
   ["接続先名", "接続名"],
   ["この機械", "このマシン"],
-  ["二段目", "二要素認証"],
+  ["二段目", "二要素認証（順番の意味なら「2段目」）"],
 ]);
 
 type Wording = { text: string; location: string };
