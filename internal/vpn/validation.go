@@ -75,8 +75,8 @@ func fieldError(kind error, field string, reason Reason) *FieldError {
 }
 
 const (
-	// maxResolvers は、1つの経路が使うDNSサーバーの数の上限である。VPNの中の名前
-	// ひとつを引くためのもので、並べるほど引ける名前が増えるわけではない。
+	// maxResolvers は、1つの経路が使うDNSサーバーの数の上限である。VPNの中の
+	// ホスト名を名前解決するためのもので、並べるほど名前解決できるホスト名が増えるわけではない。
 	maxResolvers = 3
 	// maxHostNameLength と maxHostLabelLength は、DNS の名前の上限である（RFC 1035）。
 	maxHostNameLength  = 253
