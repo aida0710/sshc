@@ -50,7 +50,7 @@ func captureLocalTextMetadata(file *os.File) (localTextMetadata, error) {
 func readDarwinTextSecurity(file *os.File) ([]byte, error) {
 	attributes := unix.Attrlist{Bitmapcount: darwinAttributeBitmapCount, Commonattr: unix.ATTR_CMN_EXTENDED_SECURITY}
 	buffer := make([]byte, darwinAttributeLengthBytes+darwinAttributeReferenceBytes)
-	if err := darwinTextAttributes(file, darwinTextAttributeRequest{operation: unix.SYS_FGETATTRLIST, attributes: &attributes, buffer: buffer, options: unix.FSOPT_REPORT_FULLSIZE}); err != nil {
+	if err := darwinTextAttributes(file, darwinTextAttributeRequest{operation: darwinFgetattrlistSyscall, attributes: &attributes, buffer: buffer, options: unix.FSOPT_REPORT_FULLSIZE}); err != nil {
 		return nil, err
 	}
 	required := int(binary.LittleEndian.Uint32(buffer))
@@ -58,7 +58,7 @@ func readDarwinTextSecurity(file *os.File) ([]byte, error) {
 		return nil, ErrUnsupportedEntry
 	}
 	buffer = make([]byte, required)
-	if err := darwinTextAttributes(file, darwinTextAttributeRequest{operation: unix.SYS_FGETATTRLIST, attributes: &attributes, buffer: buffer, options: unix.FSOPT_REPORT_FULLSIZE}); err != nil {
+	if err := darwinTextAttributes(file, darwinTextAttributeRequest{operation: darwinFgetattrlistSyscall, attributes: &attributes, buffer: buffer, options: unix.FSOPT_REPORT_FULLSIZE}); err != nil {
 		return nil, err
 	}
 	if int(binary.LittleEndian.Uint32(buffer)) != len(buffer) {
@@ -111,11 +111,19 @@ func setDarwinTextSecurity(staged *os.File, security []byte) error {
 	binary.LittleEndian.PutUint32(buffer[darwinAttributeLengthBytes:], uint32(len(security)))
 	copy(buffer[darwinAttributeReferenceBytes:], security)
 	attributes := unix.Attrlist{Bitmapcount: darwinAttributeBitmapCount, Commonattr: unix.ATTR_CMN_EXTENDED_SECURITY}
-	return darwinTextAttributes(staged, darwinTextAttributeRequest{operation: unix.SYS_FSETATTRLIST, attributes: &attributes, buffer: buffer})
+	return darwinTextAttributes(staged, darwinTextAttributeRequest{operation: darwinFsetattrlistSyscall, attributes: &attributes, buffer: buffer})
 }
 
-// x/sys does not expose the descriptor forms of getattrlist/setattrlist. Use
-// their Darwin syscalls so ACL access remains bound to the already-open file.
+// x/sys には、開いたファイルの記述子を取る fgetattrlist・fsetattrlist の包みが無い（パスを取る Setattrlist だけ）。
+// パスで引き直すと、確かめたファイルとは別のものの ACL を読み書きしうるので、Darwin のシステムコールを番号で呼ぶ。
+// x/sys はこの番号を、Apple が保証しないとして非推奨にしているが、代わりの包みが無いので使い続ける。
+const (
+	//lint:ignore SA1019 記述子を取る包みが x/sys に無い（上の注記）
+	darwinFgetattrlistSyscall = unix.SYS_FGETATTRLIST
+	//lint:ignore SA1019 記述子を取る包みが x/sys に無い（上の注記）
+	darwinFsetattrlistSyscall = unix.SYS_FSETATTRLIST
+)
+
 type darwinTextAttributeRequest struct {
 	operation  uintptr
 	attributes *unix.Attrlist
