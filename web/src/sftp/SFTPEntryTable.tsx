@@ -19,6 +19,14 @@ const bodyCell = "px-2 py-[7px]";
 const thumbnailCell = "px-2 py-[5px]";
 // In the wide table only the name grows: every other column is as wide as what it holds, with room after it.
 const fittedColumn = "w-px whitespace-nowrap pr-7";
+// 狭いペインの表の列の幅（px）。名前の列は残りを取る。種別は「圧縮ファイル」が切れずに入る幅にし、
+// それより長い「シンボリックリンク」は切って title で全体を見せる。
+const compactColumnPx = { checkbox: 36, modified: 144, size: 80, type: 96 } as const;
+// 狭いペインで名前の列に残す幅。英数字で15字ほど（report-001.csv）が切れずに読める。
+// 左のナビが既定の幅なら、1280px の窓で既定の比率に並べたペインに、横にスクロールせずに収まる。
+const compactNameMinimumPx = 144;
+const compactTableMinimumPx = compactNameMinimumPx +
+  compactColumnPx.checkbox + compactColumnPx.modified + compactColumnPx.size + compactColumnPx.type;
 
 function ParentRowLabel({ iconBoxClassName }: { iconBoxClassName: string }) {
   const t = useTranslate();
@@ -29,6 +37,13 @@ function ParentRowLabel({ iconBoxClassName }: { iconBoxClassName: string }) {
       <span className="sr-only">{t("sftp.parentDirectory")}</span>
     </>
   );
+}
+
+// 狭いペインでは種別を列の幅で切るので、ポインタを当てたときに全体を見せる。広い表の列は中身に合わせて広がる。
+function EntryTypeCell({ entry, compact }: { entry: RemoteEntry; compact: boolean }) {
+  const t = useTranslate();
+  const label = t(entryTypeLabelKey(entry));
+  return <td className={`${bodyCell} ${compact ? "truncate" : fittedColumn} text-xs text-ink-muted`} title={compact ? label : undefined}>{label}</td>;
 }
 
 // The rows on a pointer's screen, a table with sortable columns. A pane, however narrow, keeps the table and
@@ -75,8 +90,17 @@ export function SFTPEntryTable({
   const showsThumbnails = thumbnailAlias !== null;
 
   return (
-    <table className={`w-full text-left text-sm ${compact ? "table-fixed" : "min-w-[44rem]"}`}>
-      {compact ? <colgroup><col className="w-9" /><col /><col className="w-36" /><col className="w-20" /><col className="w-20" /></colgroup> : null}
+    <table className={`w-full text-left text-sm ${compact ? "table-fixed" : "min-w-[44rem]"}`}
+      style={compact ? { minWidth: compactTableMinimumPx } : undefined}>
+      {compact ? (
+        <colgroup>
+          <col style={{ width: compactColumnPx.checkbox }} />
+          <col />
+          <col style={{ width: compactColumnPx.modified }} />
+          <col style={{ width: compactColumnPx.size }} />
+          <col style={{ width: compactColumnPx.type }} />
+        </colgroup>
+      ) : null}
       <thead className="sticky top-0 z-[1] bg-sidebar text-xs text-ink-faint"><tr>
         <th scope="col" className="w-9 py-2 pl-3.5 pr-2 font-normal">
           <input
@@ -91,7 +115,7 @@ export function SFTPEntryTable({
         <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={headerCell}>{t("sftp.name")}</SortableTableHeader>
         <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${fitted}`}>{t("sftp.modified")}</SortableTableHeader>
         <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${fitted} text-right`} buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
-        <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${compact ? "w-24 whitespace-nowrap" : fittedColumn}`}>{t("sftp.type")}</SortableTableHeader>
+        <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${compact ? "whitespace-nowrap" : fittedColumn}`}>{t("sftp.type")}</SortableTableHeader>
         {tableOwnership ? <>
         <SortableTableHeader column="uid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${fittedColumn}`}>{t("sftp.uid")}</SortableTableHeader>
         <SortableTableHeader column="gid" activeColumn={sort.key} direction={sort.direction} onSort={onSort} className={`${headerCell} ${fittedColumn}`}>{t("sftp.gid")}</SortableTableHeader>
@@ -143,7 +167,7 @@ export function SFTPEntryTable({
             </td>
             <td className={`${bodyCell} ${fitted} truncate whitespace-nowrap text-xs text-ink-faint`} title={new Date(entry.modifiedAt).toLocaleString(locale)}>{formatDateTime(entry.modifiedAt, locale)}</td>
             <td className={`${bodyCell} ${fitted} whitespace-nowrap text-right font-mono text-xs text-ink-muted`}>{entrySize(entry)}</td>
-            <td className={`${bodyCell} ${compact ? "w-24" : fittedColumn} whitespace-nowrap text-xs text-ink-muted`}>{t(entryTypeLabelKey(entry))}</td>
+            <EntryTypeCell entry={entry} compact={compact} />
             {tableOwnership ? <>
             <td className={`${bodyCell} ${fittedColumn} font-mono text-xs text-ink-muted`}>{entry.uid ?? "—"}</td>
             <td className={`${bodyCell} ${fittedColumn} font-mono text-xs text-ink-muted`}>{entry.gid ?? "—"}</td>

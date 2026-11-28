@@ -6,7 +6,8 @@ import type { HostLook } from "../shell/useDeclaredConfig";
 import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { SplitResizeHandle } from "../ui/SplitResizeHandle";
+import { SplitResizeHandle, fitSplitRatio, type SplitMinimum } from "../ui/SplitResizeHandle";
+import { useElementWidth } from "../ui/useElementWidth";
 import { useCompactViewport } from "../ui/useMediaQuery";
 import { Button } from "../ui/surface";
 import type { ActionMenuItem } from "../ui/ActionMenu";
@@ -29,6 +30,13 @@ import {
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
 import { IconButton } from "../ui/IconButton";
+
+// 左右に並べたペインが保つ最小の幅（px、枠を含む）。Local のペインの日本語の絞り込みの行（［＋］、最小の幅の絞り込みの欄、
+// ［リスト｜グリッド］）が1行に収まる約294px に余りを足した。接続先のペインは［検索対象］と［このフォルダ配下を検索する］の
+// 分だけ行が長く、この幅では［リスト｜グリッド］を次の行へ折り返す（SFTPPanel）。仕切りのドラッグでも、窓を狭めても、
+// これより狭くしない。並べるのは作業の領域が useCompactViewport の 680px 以上のときだけなので、2つ分と仕切りは必ず収まる。
+const minimumSplitPanePx = 300;
+const splitPaneMinimum: SplitMinimum = { first: minimumSplitPanePx, second: minimumSplitPanePx };
 
 // Why closing a tab waits for a confirmation, and what the dialog names.
 type CloseTabIntent =
@@ -99,6 +107,13 @@ export function SFTPWorkspace({
   const { runTarget } = useEngineApis();
   const [panes, setPanes] = useState<SFTPPane[]>(() => restorePanes(runTarget));
   const [splitRatio, changeSplitRatio] = useStoredValue(sftpSplitRatio);
+  // 窓を狭めて保存した比率では最小の幅を割るときは、保存した比率を変えずに、表示する比率だけを最小の幅まで寄せる。
+  // 仕切りの値とキーの操作は表示している比率から始めるので、仕切りが比率の基準にする行（2つのペインを並べた行）を測る。
+  const paneRow = useRef<HTMLDivElement | null>(null);
+  const paneRowWidth = useElementWidth(paneRow);
+  const displayedSplitRatio = fitSplitRatio(splitRatio, paneRowWidth, splitPaneMinimum);
+  const latestSplitRatio = useRef(displayedSplitRatio);
+  latestSplitRatio.current = displayedSplitRatio;
   const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0]?.id ?? "");
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [comparisonLocations, setComparisonLocations] = useState<{ left: SFTPLocation; right: SFTPLocation } | null>(null);
@@ -293,6 +308,15 @@ export function SFTPWorkspace({
     else placeTab(tabId, { paneId: pane.id, index });
   }
 
+  // 動かせなかった操作（最小の幅で押した ArrowLeft など）では保存しない。保存すると、窓を広げ直しても元の比率に戻らない。
+  // 仕切りはドラッグを始めたときの onRatioChange を離すまで呼ぶので、そのときの displayedSplitRatio ではなく、
+  // 最後に描いた比率か、まだ描いていない最後に保存した比率と比べる。
+  function resizeSplit(ratio: number) {
+    if (ratio === latestSplitRatio.current) return;
+    latestSplitRatio.current = ratio;
+    changeSplitRatio(ratio);
+  }
+
   // The panes trade places and each keeps its width, so the split looks mirrored.
   function swapPaneSides() {
     setPanes(swapPanes);
@@ -396,12 +420,15 @@ export function SFTPWorkspace({
     return (
       <Fragment key={pane.id}>
         {index > 0 && visibleSplit ? (
-          <SplitResizeHandle direction="horizontal" look="gap" ratio={splitRatio} label={t("sftp.resizePanes")} onRatioChange={changeSplitRatio} />
+          <SplitResizeHandle direction="horizontal" look="gap" ratio={displayedSplitRatio} minimum={splitPaneMinimum} label={t("sftp.resizePanes")} onRatioChange={resizeSplit} />
         ) : null}
         <div
           data-sftp-pane={pane.id}
-          className={`flex min-h-0 min-w-0 flex-col ${visibleSplit ? boardLook : ""}`}
-          style={{ flexBasis: visibleSplit ? `${index === 0 ? splitRatio : 100 - splitRatio}%` : "100%" }}
+          className={`flex min-h-0 flex-col ${visibleSplit ? boardLook : "min-w-0"}`}
+          // flexBasis は行の幅に対する % で、仕切りと隙間の分だけ縮むので、表示する比率でも最小の幅を数px 割る。min-width で止める。
+          style={visibleSplit
+            ? { flexBasis: `${index === 0 ? displayedSplitRatio : 100 - displayedSplitRatio}%`, minWidth: minimumSplitPanePx }
+            : { flexBasis: "100%" }}
           hidden={concealed}
           aria-label={t(index === 0 ? "sftp.firstPane" : "sftp.secondPane")}
           onPointerDown={() => setFocusedPaneId(pane.id)}
@@ -491,7 +518,7 @@ export function SFTPWorkspace({
           canChangeHost={(tab) => !dirtyTabs.has(tab.id)} onSelect={selectFileTab} onClose={requestCloseTab}
           onAdd={openFileTab} onDragStart={setDraggedTabId} onDragEnd={() => setDraggedTabId(null)} onMove={moveTabWithKeyboard}
         /> : null}
-        <div className={`flex min-h-0 min-w-0 flex-1 ${visibleSplit ? "gap-0.5" : ""}`}>
+        <div ref={paneRow} className={`flex min-h-0 min-w-0 flex-1 ${visibleSplit ? "gap-0.5" : ""}`}>
           {panes.map(renderPane)}
         </div>
         {/* The queue keeps one place in the tree whatever the layout. Mounted afresh, it would act on the last
