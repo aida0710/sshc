@@ -44,7 +44,14 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
   const retained = useRetainedSessions(panes.map((pane) => pane.sessionId), new Set(sessionById.keys()), retainedTerminals);
   const selected = state.activeSessionId;
-  const movingSession = drag.moving === null ? undefined : sessionById.get(drag.moving);
+  const pickedSession = drag.picked === null ? undefined : sessionById.get(drag.picked);
+  // endHeaderDrag は、見出しをつかんだドラッグの終わりである。名前の文字は押してもフォーカスを取らず、離しても
+  // クリックにならないので、見出しのクリックと同じく、キーボードをそのペインのターミナルへ渡す。タッチの画面は、
+  // ターミナルそのものを押すまでキーボードを出さない。
+  function endHeaderDrag(sessionId: string) {
+    drag.clear();
+    if (!touchTerminal) selectSession(sessionId);
+  }
   // dropHint は、edge の側（null なら入れ替え）に落としたときにどうなるかを言う。
   function dropHint(edge: PaneEdge | null): string {
     if (edge === null) return t("splitView.swap");
@@ -88,11 +95,11 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
       <div className={`flex min-h-0 min-w-0 flex-1 ${compact ? "" : "p-1"}`}>
         {/* 後ろに残したリモートセッションの分割表示は、見えていないので広さを測らない。 */}
         <div className="relative min-h-0 min-w-0 flex-1" data-split-view ref={behind ? undefined : splitView.observeArea}>
-          {/* Moving the drag source to make room for this hint interrupts native dragging. */}
-          {/* 選んだペインに印は付けないので、どのペインを選んだかはここで言う。 */}
-          {movingSession === undefined ? null : (
+          {/* ［ペインを移動］で選んだペインに印は付けないので、どのペインを選んだかはここで言う。ペインの上に重ねて出し、
+              ペインとターミナルの大きさを変えない。ドラッグの間は、落とす先の表示がどうなるかを言うので出さない。 */}
+          {pickedSession === undefined ? null : (
             <p role="status" className="pointer-events-none absolute inset-x-2 bottom-2 z-30 rounded-md bg-toolbar px-2 py-1 text-xs text-ink-muted">
-              {t("splitView.swapHint", { title: terminalDisplayTitle(movingSession) })}
+              {t("splitView.swapHint", { title: terminalDisplayTitle(pickedSession) })}
             </p>
           )}
           {/* The kept sessions are drawn by the same code under the same parent and key as the panes, so a
@@ -104,15 +111,17 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
             const hidden = kept || (singleVisible && !active);
             const target = drag.target?.sessionId === sessionId ? drag.target : null;
             const splitPane: SplitPaneControls | undefined = multiple && !compact && !kept ? {
-              moving: drag.moving === null ? null : drag.moving === sessionId ? "this" : "other",
+              moving: drag.picked === null ? null : drag.picked === sessionId ? "this" : "other",
               focusMode: state.focusMode,
               onMove: () => drag.pick(sessionId),
               onFocusMode: () => {
+                // 集中表示の間は［…］に移動の取り消しが無く、選んだペインも見えないので、選ぶのをやめる。
+                drag.clear();
                 selectSession(sessionId);
                 dispatch({ type: "focus-mode", enabled: !state.focusMode });
               },
               onRemove: () => splitView.removeFromSplit(sessionId),
-              drag: state.focusMode ? undefined : { onDragStart: (event) => drag.begin(event, sessionId), onDragEnd: drag.clear },
+              drag: state.focusMode ? undefined : { onDragStart: (event) => drag.begin(event, sessionId), onDragEnd: () => endHeaderDrag(sessionId) },
             } : undefined;
             return (
               <div key={sessionId} data-split-view-pane={kept || behind ? undefined : sessionId} data-split-view-kept={kept || behind ? sessionId : undefined}

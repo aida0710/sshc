@@ -381,6 +381,61 @@ test("swaps two panes and focuses one from their menus, and keeps the way out of
   await expect(logs).toBeVisible();
 });
 
+test("says how to finish a swap only while a pane chosen from its menu waits, not while a header is dragged", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  const build = pane(page, one);
+  const logs = pane(page, two);
+  const hint = page.getByRole("status").filter({ hasText: "Swap with this pane" });
+
+  // ドラッグの間は、落とす先のペインの上の表示が、どうなるかを言う。メニューで選ぶ案内は合わない。
+  const name = (await build.getByText("Build", { exact: true }).boundingBox())!;
+  const target = (await logs.boundingBox())!;
+  await page.mouse.move(name.x + 4, name.y + name.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 });
+  await expect(logs.getByRole("status").filter({ hasText: "Swap panes" })).toBeVisible();
+  await expect(hint).toHaveCount(0);
+  await page.mouse.up();
+
+  // 選んだあとで別のペインを集中表示すると、選んだペインは見えず、［…］にも取り消しが無いので、選ぶのをやめる。
+  await choosePaneMenuItem(build, "Move pane");
+  await expect(hint).toBeVisible();
+  await choosePaneMenuItem(logs, "Focus pane");
+  await expect(build).toBeHidden();
+  await expect(hint).toHaveCount(0);
+  await choosePaneMenuItem(logs, "Exit focus");
+  await expect(build).toBeVisible();
+  await build.getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Move pane", exact: true })).toBeVisible();
+});
+
+test("gives the keyboard to the pane whose header was dragged, whether or not the drop moved it", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  const build = pane(page, one);
+  const logs = pane(page, two);
+
+  // ドラッグは離してもクリックにならないので、見出しのクリックと同じくキーボードを渡さないと、どこにも無くなる。
+  await terminalKeyboard(logs).focus();
+  const own = (await build.boundingBox())!;
+  await build.getByText("Build", { exact: true }).dragTo(build, { targetPosition: { x: own.width / 2, y: own.height / 2 } });
+  await expect.poll(() => focusedPane(page)).toBe(one);
+
+  await terminalKeyboard(logs).focus();
+  await build.getByText("Build", { exact: true }).dragTo(logs);
+  await expect.poll(async () => (await build.boundingBox())!.x).toBeLessThan((await logs.boundingBox())!.x);
+  await expect.poll(() => focusedPane(page)).toBe(one);
+  await page.keyboard.type("echo DRAGGED:$((6 * 7))");
+  await page.keyboard.press("Enter");
+  await expect(build).toContainText("DRAGGED:42");
+  await expect(logs).not.toContainText("DRAGGED:42");
+});
+
 test("preserves terminal mounts through swaps, focus mode, sidebar selection and mobile widths", async ({ page, installation }) => {
   await openApplication(page, installation);
   const one = await openNamedShell(page, "Build");
