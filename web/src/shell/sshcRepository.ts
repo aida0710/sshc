@@ -1,4 +1,4 @@
-// sshc の GitHub のリポジトリ。About のコミットとリリースのページは、この下を指す。
+// sshc の GitHub のリポジトリ。画面のコミットとリリースのページへのリンクは、この下を指す。
 export const sshcRepositoryURL = "https://github.com/aida0710/sshc";
 
 // 本物の sshc エンジンが返すリリースのページ（releases/tag/<バージョン>）は、どれもこの下にある。
