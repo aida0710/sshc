@@ -412,13 +412,12 @@ test("keeps this machine's split view while a remote session engine is shown", a
   expect(await panes.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-split-view-pane")))).toEqual(splitSessions);
 });
 
-test("keeps the remote session's name and the VPN route in the header of a narrow pane clear of its buttons", async ({ page, installation }) => {
-  const titles = ["web", "api", "db"];
-  const vpnRoute = "pelican-office-ikev2-primary-route";
-  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
-  await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
-  await page.setViewportSize({ width: 1024, height: 700 });
-  await openApplication(page, installation);
+// 札は、縮まないと狭いペインで見出しのボタンに重なる長さにする（VPN プロファイルの名前は48字まで）。
+const vpnRoute = "pelican-office-ikev2-primary-route-build-farm";
+const remoteSessionTag = "on bastion";
+
+// splitRemoteSessionsInRow は、bastion のセッション titles を、左から順に右へ足して分割表示に並べ、そのペインを返す。
+async function splitRemoteSessionsInRow(page: Page, titles: readonly string[]): Promise<Locator[]> {
   await chooseBastion(page);
   const navigation = page.getByRole("navigation", { name: "Primary" });
   await navigation.getByRole("button", { name: titles[0]!, exact: true }).click();
@@ -429,9 +428,35 @@ test("keeps the remote session's name and the VPN route in the header of a narro
   }
   const panes = page.locator("[data-split-view-pane]");
   await expect(panes).toHaveCount(titles.length);
-  for (const terminal of await panes.all()) {
+  return panes.all();
+}
+
+test("shrinks the remote session's name and the VPN route in a pane's header to keep them clear of its buttons", async ({ page, installation }) => {
+  const titles = ["web", "api"];
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
+  await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  for (const terminal of await splitRemoteSessionsInRow(page, titles)) {
     const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
-    for (const label of ["on bastion", `VPN: ${vpnRoute}`]) {
+    // この幅では縮めれば入りきるので、見出しの左側で切らなくても、札の箱そのものがボタンの手前で終わる。
+    for (const label of [remoteSessionTag, `VPN: ${vpnRoute}`]) {
+      const chip = (await terminal.getByText(label, { exact: true }).boundingBox())!;
+      expect(chip.x + chip.width).toBeLessThanOrEqual(find.x);
+    }
+  }
+});
+
+test("keeps the remote session's name and the VPN route in the header of a narrow pane clear of its buttons", async ({ page, installation }) => {
+  const titles = ["web", "api", "db"];
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
+  await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await openApplication(page, installation);
+  for (const terminal of await splitRemoteSessionsInRow(page, titles)) {
+    const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+    // 最小幅のペインでは札の余白が入りきらないので、見えている部分がボタンの手前で終わることを見る。
+    for (const label of [remoteSessionTag, `VPN: ${vpnRoute}`]) {
       expect(await visibleRightEdge(terminal.getByText(label, { exact: true }))).toBeLessThanOrEqual(find.x);
     }
   }
