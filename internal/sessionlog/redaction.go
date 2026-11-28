@@ -1,6 +1,7 @@
 package sessionlog
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -46,14 +47,24 @@ type heldLine struct {
 }
 
 // addSecrets は、これから書く行で伏せる値を足す。手元に留まっている行も、まだ書いていないので伏せる。
+// 同じ値は、再接続のたびの起動スニペットや、同じコマンドを送るたびに渡される。重ねて持つと、行を受け取る
+// たびに同じ値を何度も探すので、持っている値は足さない。
 func (r *lineRedactor) addSecrets(values []string) {
 	for _, value := range values {
 		for _, shown := range secretForms(value) {
+			if r.hasSecret(shown) {
+				continue
+			}
 			r.secrets = append(r.secrets, redact.Secret{Value: []byte(shown)})
 			r.longest = max(r.longest, len(shown))
 		}
 	}
 	r.hideInHeldLines(0)
+}
+
+// hasSecret は、value をすでに伏せる値として持っているかを返す。
+func (r *lineRedactor) hasSecret(value string) bool {
+	return slices.ContainsFunc(r.secrets, func(secret redact.Secret) bool { return string(secret.Value) == value })
 }
 
 // secretForms は、value がログに映りうる形を返す。改行を含まない値は、そのまま返す。画面の行は改行を
