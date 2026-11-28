@@ -12,7 +12,7 @@ const commentLanguageScript = "scripts/ci/check-comment-language.mjs"
 
 // Go だけの PR でもコメントを足すので、検査は if の無い jobs.web-checks に置く。差分は PR の
 // merge commit とその1つ目の親（base）の間で取るので、取り出すコミットは2つ要る。1つだと
-// HEAD^1 が無く、検査は検査できなかったとして落ちる。
+// HEAD^1 が無いので、比べる先が無いとして検査が失敗する。
 func TestCIChecksTheLanguageOfAddedCommentsInEveryChange(t *testing.T) {
 	job, present := readWorkflowDocument(t).Jobs["web-checks"]
 	if !present {
