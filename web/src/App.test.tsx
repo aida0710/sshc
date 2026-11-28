@@ -14,6 +14,7 @@ import type { PasswordVaultStatus } from "./api/vault";
 import { fakeAndroidBridge } from "./android/fakeAndroidBridge";
 import { vaultStatus } from "./testing/vaultStatus";
 import { terminalSessionsApi, type TerminalSession } from "./api/terminalSessions";
+import { agentsWorkspaceId, defaultWorkspaceId, terminalWorkspacesApi } from "./api/terminalWorkspaces";
 import { localHostAlias } from "./sftp/localHost";
 import { PageHeader } from "./ui/page";
 
@@ -787,6 +788,48 @@ describe("App", () => {
       expect(screen.getByRole("link", { name: label })).toHaveAttribute("href");
     }
     expect(document.body).not.toHaveTextContent(csrfToken);
+  });
+
+  describe("the navigation button's mark for a program off the screen", () => {
+    const listedSession = (id: string, workspaceId: string, programStatus?: TerminalSession["programStatus"]): TerminalSession => ({
+      id, kind: "ssh", alias: id, workspaceId, title: id, startedAt: "2026-11-28T09:00:00Z", state: "connected", problem: "",
+      ...(programStatus === undefined ? {} : { programStatus }),
+    });
+    const mirageWaits = listedSession("mirage", defaultWorkspaceId, { state: "blocked", kind: "permission", app: "claude", version: 3 });
+    const dunlin = listedSession("dunlin", defaultWorkspaceId);
+    const agentRunDone = listedSession("agent-run", agentsWorkspaceId, { state: "done", app: "claude", version: 2 });
+
+    function renderWithSessions(sessions: TerminalSession[]) {
+      vi.spyOn(terminalWorkspacesApi, "list").mockResolvedValue({
+        workspaces: [
+          { id: defaultWorkspaceId, name: "", hidden: false, builtIn: true },
+          { id: agentsWorkspaceId, name: "", hidden: true, builtIn: true },
+        ],
+        maxWorkspaces: 50,
+      });
+      vi.spyOn(terminalSessionsApi, "terminalSessions").mockResolvedValue({ sessions, maxSessions: 50 });
+      render(<App bootstrap={vi.fn().mockResolvedValue({ csrfToken })} health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })} vault={() => Promise.resolve(vaultStatus())} />);
+    }
+
+    // ターミナルはサイドバーのいちばん上のセッションを出すので、一覧の順で表示するセッションを選ぶ。
+    it.each([
+      { page: "/terminal", sessions: [mirageWaits, dunlin], name: "Navigation", when: "the waiting session is on the screen" },
+      { page: "/terminal", sessions: [dunlin, mirageWaits], name: "Navigation (a session is waiting for you)", when: "another session is on the screen" },
+      { page: "/", sessions: [mirageWaits, dunlin], name: "Navigation (a session is waiting for you)", when: "Home is on the screen" },
+    ])("names the reason only while the waiting session is off the screen: $when", async ({ page, sessions, name }) => {
+      window.history.replaceState(null, "", page);
+      renderWithSessions(sessions);
+
+      expect(await screen.findByText(`terminal session ${sessions[0]?.id}`)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    });
+
+    it("leaves out a session in a hidden workspace, which the navigation lists no row for", async () => {
+      renderWithSessions([dunlin, agentRunDone]);
+
+      expect(await screen.findByText("terminal session dunlin")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Navigation" })).toBeInTheDocument();
+    });
   });
 
   it("keeps display settings out of the mobile header and closes its navigation with Android back", async () => {

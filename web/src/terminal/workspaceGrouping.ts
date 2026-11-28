@@ -1,6 +1,7 @@
 import type { TerminalSession, TerminalSessionPlace } from "../api/terminalSessions";
 import { agentsWorkspaceId, defaultWorkspaceId, type TerminalWorkspace } from "../api/terminalWorkspaces";
 import type { Translate } from "../i18n/context";
+import { interfaceState, type SettingsDocument } from "../settings/settingsStore";
 
 export type WorkspaceGroup = {
   workspace: TerminalWorkspace;
@@ -21,6 +22,12 @@ export function groupSessionsByWorkspace(
   return workspaces
     .filter((workspace) => showHidden || !workspace.hidden)
     .map((workspace) => ({ workspace, sessions: sessions.filter((session) => groupOf(session) === workspace.id) }));
+}
+
+// showsHiddenWorkspaces は、サイドバーの木が隠したワークスペースも出すかである。このマシンの画面の状態
+// （useThisMachineSettings）に残る。
+export function showsHiddenWorkspaces(thisMachineSettings: SettingsDocument | null): boolean {
+  return interfaceState(thisMachineSettings, "showHiddenTerminalWorkspaces") === "true";
 }
 
 // The session at the top of the sidebar: the first of the first workspace that

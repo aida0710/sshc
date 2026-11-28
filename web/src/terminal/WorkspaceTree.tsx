@@ -28,6 +28,7 @@ import { WorkspaceRow } from "./WorkspaceRow";
 import {
   beforeIdForWorkspaceMove,
   groupSessionsByWorkspace,
+  showsHiddenWorkspaces,
   workspaceDisplayName,
   type WorkspacePlace,
 } from "./workspaceGrouping";
@@ -103,7 +104,7 @@ export function WorkspaceTree({
   // Both follow this machine's state, which a change here updates at once.
   // たたんだワークスペースと隠したものを出すかは、このマシンの画面の状態に残す。
   const settings = useThisMachineSettings();
-  const showHidden = interfaceState(settings.document, "showHiddenTerminalWorkspaces") === "true";
+  const showHidden = showsHiddenWorkspaces(settings.document);
   const collapsedState = interfaceState(settings.document, "collapsedTerminalWorkspaces");
   const collapsed = useMemo(() => collapsedOf(parseMachineStateJSON(collapsedState, [])), [collapsedState]);
   const [pickerWorkspace, setPickerWorkspace] = useState<string | null>(null);

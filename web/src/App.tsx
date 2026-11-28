@@ -52,7 +52,7 @@ import { useUnseenBlockedProgramNotifications } from "./terminal/useUnseenBlocke
 import { useTerminalNotifications } from "./terminal/useTerminalNotifications";
 import { notificationsComeFromAndroid } from "./ui/browserNotifications";
 import { useSeenProgramStatus } from "./terminal/useSeenProgramStatus";
-import { offScreenProgramStatus } from "./terminal/offScreenProgramStatus";
+import { useNavigationAttention } from "./terminal/useNavigationAttention";
 import { NavigationButton } from "./shell/NavigationButton";
 import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
@@ -383,10 +383,11 @@ export function App({
   });
   const seenProgramStatus = useSeenProgramStatus(terminalSessions.sessions, terminalFace ? activeSessionId : null);
   useUnseenBlockedProgramNotifications(terminalSessions.sessions, seenProgramStatus, { t, onOpenSession: showSession });
-  // ナビゲーションを閉じている間、その中の行の印は見えない。画面に出ていないセッションのプログラムが人を要るときは、
-  // ナビゲーションを開くボタンの角に印を出す。スマホは表示中の1つ、PC は分割表示のペインのどれもが画面に出ている。
-  const navigationAttention = offScreenProgramStatus({
+  // ナビゲーションを閉じている間は、その中の行の印が見えない。そこで、画面に出ていないセッションの入力待ち・失敗・完了を、
+  // ナビゲーションを開くボタンの角にも出す。画面に出ているのは、スマホでは表示中のセッション、PC では分割表示のすべてのペイン。
+  const navigationAttention = useNavigationAttention({
     sessions: terminalSessions.sessions,
+    workspaces: terminalWorkspaces.workspaces,
     seen: seenProgramStatus,
     sessionsOnScreen: !terminalFace || activeSessionId === null ? [] : splitView.compact ? [activeSessionId] : panes,
   });
