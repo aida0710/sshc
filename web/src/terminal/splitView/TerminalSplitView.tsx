@@ -27,7 +27,8 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
   // retainedTerminals is how many terminals shown recently stay hidden behind the panes.
   retainedTerminals: number;
   // inPane is whether the session is one of the panes the section shows, not one kept hidden behind them (whether or
-  // not the section itself is on the screen). splitPane is undefined while the session is shown on its own.
+  // not the section itself is on the screen).
+  // splitPane は、分割表示に並んだペインとしての操作である。セッションを1つだけ出しているときは undefined。
   renderTerminal: (session: TerminalSession, splitPane: SplitPaneControls | undefined, inPane: boolean) => ReactNode;
   // behind is whether these are the terminals of a run target kept behind the one shown (TerminalScreen). Its panes
   // keep their places, and are marked as kept like the terminals behind the panes: none of them is on the screen.

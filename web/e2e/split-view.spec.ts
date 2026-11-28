@@ -309,7 +309,7 @@ test("moves a pane beside another pane's edge by its header or its row under Spl
   // Build was added to the right of Logs, the session shown last.
   expect((await build.boundingBox())!.x).toBeGreaterThan((await logs.boundingBox())!.x);
 
-  // Near the bottom edge of Logs, Build's header (its name) moves Build below Logs instead of swapping.
+  // Logs の下の端の近くへ Build の見出し（名前の部分）を落とすと、入れ替えずに Build を Logs の下へ移す。
   const below = (await logs.boundingBox())!;
   await build.getByText("Build", { exact: true }).dragTo(logs, { targetPosition: { x: below.width / 2, y: below.height - 12 } });
   await expect.poll(async () => (await build.boundingBox())!.y).toBeGreaterThan((await logs.boundingBox())!.y);
