@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -130,15 +131,18 @@ func TestASecretTheShellEchoesIsHiddenInTheLog(t *testing.T) {
 	}
 }
 
-// logLines は、ログの [sshc] の行を除いた行である。
-func logLines(log string) []string {
+// checkLogLines は、ログ log の、[sshc] の行を除いた行が want であることを確かめる。
+func checkLogLines(t *testing.T, log string, want []string) {
+	t.Helper()
 	var lines []string
 	for _, line := range strings.Split(strings.TrimSuffix(log, "\n"), "\n") {
 		if !strings.HasPrefix(line, "[sshc] ") {
 			lines = append(lines, line)
 		}
 	}
-	return lines
+	if !slices.Equal(lines, want) {
+		t.Fatalf("lines = %q, want %q", lines, want)
+	}
 }
 
 func TestASecretWrappedAtTheRightEdgeIsHiddenOnBothRows(t *testing.T) {
@@ -169,9 +173,7 @@ func TestASecretWrappedAtTheRightEdgeIsHiddenOnBothRows(t *testing.T) {
 					log.Write([]byte(output))
 				}
 			})
-			if lines := logLines(got); strings.Join(lines, "|") != strings.Join(test.want, "|") {
-				t.Fatalf("lines = %q, want %q", lines, test.want)
-			}
+			checkLogLines(t, got, test.want)
 		})
 	}
 }
@@ -184,10 +186,7 @@ func TestASecretWrappedBeforeTheTerminalGrewWiderIsStillHidden(t *testing.T) {
 		log.Resize(terminal.Size{Cols: 80, Rows: 3})
 		log.Write([]byte("one\r\ntwo\r\n"))
 	})
-	want := []string{"$ deploy --env r100 --token=[secret]", "[secret]", "one", "two"}
-	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
-		t.Fatalf("lines = %q, want %q", lines, want)
-	}
+	checkLogLines(t, got, []string{"$ deploy --env r100 --token=[secret]", "[secret]", "one", "two"})
 }
 
 func TestASecretLongerThanARowIsHiddenOnEveryRowItCovers(t *testing.T) {
@@ -202,10 +201,7 @@ func TestASecretLongerThanARowIsHiddenOnEveryRowItCovers(t *testing.T) {
 		log.Write([]byte(prefix + secret + "\r\n"))
 		log.Write([]byte("done\r\n$ \r\n$ \r\n$ \r\n"))
 	})
-	want := []string{prefix + "[secret]", "[secret]", "[secret]", "done", "$", "$", "$"}
-	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
-		t.Fatalf("lines = %q, want %q", lines, want)
-	}
+	checkLogLines(t, got, []string{prefix + "[secret]", "[secret]", "[secret]", "done", "$", "$", "$"})
 }
 
 func TestASpaceOfASecretOnTheLastColumnDoesNotLeaveItShown(t *testing.T) {
@@ -217,10 +213,7 @@ func TestASpaceOfASecretOnTheLastColumnDoesNotLeaveItShown(t *testing.T) {
 		log.Hide([]string{secret})
 		log.Write([]byte(prefix + secret + "\r\n"))
 	})
-	want := []string{"$ unlock --vault r100 --phrase=[secret]", "[secret]"}
-	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
-		t.Fatalf("lines = %q, want %q", lines, want)
-	}
+	checkLogLines(t, got, []string{"$ unlock --vault r100 --phrase=[secret]", "[secret]"})
 }
 
 func TestSecretsThatStartAlikeAreHiddenWhole(t *testing.T) {
@@ -228,9 +221,7 @@ func TestSecretsThatStartAlikeAreHiddenWhole(t *testing.T) {
 		log.Hide([]string{"pelican-", "pelican-Tail9secret"})
 		log.Write([]byte("$ login pelican-Tail9secret\r\n"))
 	})
-	if lines := logLines(got); len(lines) != 1 || lines[0] != "$ login [secret]" {
-		t.Fatalf("lines = %q", lines)
-	}
+	checkLogLines(t, got, []string{"$ login [secret]"})
 }
 
 func TestASecretHiddenWhileLinesWaitToBeWrittenIsHiddenInThem(t *testing.T) {
@@ -241,9 +232,7 @@ func TestASecretHiddenWhileLinesWaitToBeWrittenIsHiddenInThem(t *testing.T) {
 		log.Write([]byte("$ echo pelican-tail-77\r\n\x1b[2J"))
 		log.Hide([]string{"pelican-tail-77"})
 	})
-	if lines := logLines(got); len(lines) != 1 || lines[0] != "$ echo [secret]" {
-		t.Fatalf("lines = %q", lines)
-	}
+	checkLogLines(t, got, []string{"$ echo [secret]"})
 }
 
 func TestASecretWithALineBreakIsHiddenOnTheLinesTheShellShowsItOn(t *testing.T) {
@@ -252,10 +241,7 @@ func TestASecretWithALineBreakIsHiddenOnTheLinesTheShellShowsItOn(t *testing.T) 
 		log.Hide([]string{"mirage-first-9f\npelican-second-7c"})
 		log.Write([]byte("$ unlock mirage-first-9f\r\n$ pelican-second-7c\r\nbash: pelican-second-7c: not found\r\n"))
 	})
-	want := []string{"$ unlock [secret]", "$ [secret]", "bash: [secret]: not found"}
-	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
-		t.Fatalf("lines = %q, want %q", lines, want)
-	}
+	checkLogLines(t, got, []string{"$ unlock [secret]", "$ [secret]", "bash: [secret]: not found"})
 }
 
 func TestASecretThatOnlyEndsWithALineBreakIsHiddenWhateverItsLength(t *testing.T) {
@@ -263,9 +249,7 @@ func TestASecretThatOnlyEndsWithALineBreakIsHiddenWhateverItsLength(t *testing.T
 		log.Hide([]string{"r100pw\n"})
 		log.Write([]byte("$ login r100pw\r\n"))
 	})
-	if lines := logLines(got); len(lines) != 1 || lines[0] != "$ login [secret]" {
-		t.Fatalf("lines = %q", lines)
-	}
+	checkLogLines(t, got, []string{"$ login [secret]"})
 }
 
 func TestAShortLineOfASecretWithALineBreakIsLeftSoOrdinaryWordsStay(t *testing.T) {
@@ -274,10 +258,7 @@ func TestAShortLineOfASecretWithALineBreakIsLeftSoOrdinaryWordsStay(t *testing.T
 		log.Hide([]string{"r100\npelican-second-7c"})
 		log.Write([]byte("$ ssh r100\r\n$ pelican-second-7c\r\n"))
 	})
-	want := []string{"$ ssh r100", "$ [secret]"}
-	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
-		t.Fatalf("lines = %q, want %q", lines, want)
-	}
+	checkLogLines(t, got, []string{"$ ssh r100", "$ [secret]"})
 }
 
 func TestTheLogAndItsFolderAreTheOwnersOnly(t *testing.T) {
