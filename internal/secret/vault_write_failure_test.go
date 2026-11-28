@@ -53,8 +53,8 @@ func (f *vaultWriteFaultFileSystem) SyncDir(path string) error {
 	return f.FileSystem.SyncDir(path)
 }
 
-// vault だけを書く変更が途中で失敗しても、履歴の画面から「完了させる」ことの
-// できる保留記録を残さない。残ると、完了させたあとディスクは新しい vault、
+// vault だけを書く変更が途中で失敗しても、History の［完了する］で完了できる
+// 保留記録を残さない。残ると、完了したあとディスクは新しい vault、
 // メモリは古い vault になり、消したはずのシークレットを配り続ける。
 func TestAFailedVaultWriteLeavesNoPendingRecordAndKeepsMemoryWithDisk(t *testing.T) {
 	cases := map[string]func(*vaultWriteFaultFileSystem){

@@ -132,7 +132,7 @@ func (s *Service) commitVaultTransaction(transaction vaultTransaction) (storage.
 // commitVaultTransaction に載せる。apply は写しへ変更を加え、変わったかを返す。
 //
 // CommitAtomic で書くので、rename や SyncDir が失敗したときはその場で巻き戻る。
-// 履歴の画面から「完了させる」ことのできる保留記録を残さず、ディスクだけが新しい
+// History の［完了する］で完了できる保留記録を残さず、ディスクだけが新しい
 // vault になってメモリ上の vault が古いまま残ることがない。
 func (s *Service) commitVaultOnlyTransaction(operation string, apply func(clone *Vault) (bool, error)) error {
 	_, err := s.commitVaultTransaction(vaultTransaction{
