@@ -6184,7 +6184,7 @@ components:
         region: { type: string, maxLength: 64 }
         accessKeyId: { type: string, minLength: 1, maxLength: 512 }
         secretAccessKey: { type: string, minLength: 1, maxLength: 512 }
-        # trueの場合はengine内の既存の認証情報を再利用し、秘密値をクライアントへ返さない。
+        # trueの場合はengine内の既存の認証情報を再利用し、シークレットをクライアントへ返さない。
         reuseCredentials: { type: boolean }
     SyncSetupCheckResponse:
       type: object

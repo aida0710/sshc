@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 11以前のAuto Backupから、workspaceと秘密情報を含む全private dataを除外する。 -->
+<!-- Android 11以前のAuto Backupから、workspaceとシークレットを含む全private dataを除外する。 -->
 <full-backup-content>
     <exclude domain="root" path="." />
     <exclude domain="file" path="." />
