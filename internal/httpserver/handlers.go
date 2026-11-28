@@ -143,7 +143,7 @@ func (h Handlers) Recover(c *echo.Context) error {
 	return c.JSON(http.StatusOK, api.BootstrapResponse{CsrfToken: entry.Credentials.CSRFToken, BrowserToken: &entry.BrowserToken})
 }
 
-// SignOut は、このブラウザーのセッションを消し、登録 token が添えられていれば
+// SignOut は、このブラウザのセッションを消し、登録 token が添えられていれば
 // 登録と、その登録から入ったほかのセッションも消す。cookie と CSRF の検査は他の
 // API と同じ経路で済んでいる。登録を消すと engine を再起動しても入り直せないので、
 // 次に入るには `sshc open` の URL が要る。

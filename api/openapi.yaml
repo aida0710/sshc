@@ -85,7 +85,7 @@ paths:
         "500": { $ref: "#/components/responses/Problem" }
   /api/v1/session/sign-out:
     post:
-      # このブラウザーのセッションを消す。登録 token を添えると、engine の再起動後に
+      # このブラウザのセッションを消す。登録 token を添えると、engine の再起動後に
       # 黙って入り直すための登録も消え、次に入るには sshc open の URL が要る。
       operationId: signOutSession
       parameters:
