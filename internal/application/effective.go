@@ -173,6 +173,42 @@ func DiffEffective(before, after Effective) EffectiveDiff {
 	return diff
 }
 
+// maxEffectivePreviews は、1 回の保存のプレビューに載せる実効値の差分の上限。
+const maxEffectivePreviews = 50
+
+// previewAlias は、保存のプレビューで実効値を比べる接続名の、保存の前と後の名前である。
+// 名前の変更と複製では、後の値を新しい接続名で読む。
+type previewAlias struct {
+	before string
+	after  string
+}
+
+// unrenamed は、保存の前後で名前の変わらない接続名である。
+func unrenamed(alias string) previewAlias {
+	return previewAlias{before: alias, after: alias}
+}
+
+// effectivePreview は、保存の前と後のグラフで aliases の実効値を比べ、プレビューに載せる差分を返す。
+func (s *Service) effectivePreview(before, after *config.Graph, aliases []previewAlias) []EffectiveDiff {
+	var diffs []EffectiveDiff
+	for _, alias := range aliases {
+		if len(diffs) >= maxEffectivePreviews {
+			break
+		}
+		diffs = append(diffs, s.effectiveDiff(before, after, alias))
+	}
+	return diffs
+}
+
+// effectiveDiff は、保存の前と後のグラフで、1 つの接続名の実効値を比べる。
+func (s *Service) effectiveDiff(before, after *config.Graph, alias previewAlias) EffectiveDiff {
+	root, facts := s.workspace.Root(), s.localFacts()
+	return DiffEffective(
+		ComputeEffective(before, root, alias.before, facts),
+		ComputeEffective(after, root, alias.after, facts),
+	)
+}
+
 func indexEffective(effective Effective) map[string][]EffectiveEntry {
 	index := make(map[string][]EffectiveEntry, len(effective.Entries))
 	for _, entry := range effective.Entries {
