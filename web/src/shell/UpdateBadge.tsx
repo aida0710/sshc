@@ -7,10 +7,10 @@ import { useTranslate } from "../i18n/context";
 import { updateGlobalSettings, useSettings } from "../settings/settingsStore";
 import { availableRelease, isUpdateActive, useUpdateStatus } from "./useUpdateStatus";
 import { UpdateResultDialog } from "./UpdateResultDialog";
-import { isSafeHttpURL } from "../terminal/links";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { explainedUpdateReason, installsFromReleasePage, updateMessage } from "./updateMessage";
 import { readShownUpdateResult, updateDialogKey, updateJobToShow } from "./updateResultShown";
+import { isReleasePageURL } from "./sshcRepository";
 
 type UpdateBadgeProps = {
   api?: UpdateApi;
@@ -48,7 +48,7 @@ export function UpdateBadge({ api: givenApi, current = "", leading, indicator, e
   const versionLabel = t("update.version", { version: displayedCurrent });
   const reason = status === null ? undefined : explainedUpdateReason(status);
   const release = availableRelease(status);
-  const releasePage = status?.pageUrl !== undefined && isSafeHttpURL(status.pageUrl) ? status.pageUrl : undefined;
+  const releasePage = isReleasePageURL(status?.pageUrl) ? status?.pageUrl : undefined;
   const hasDetails = reason !== undefined || release !== undefined;
   // The notice of a release stays open until it is folded; a newer release unfolds it.
   // The reason only says how to update outside the Web UI, so it starts folded.
@@ -95,11 +95,13 @@ export function UpdateBadge({ api: givenApi, current = "", leading, indicator, e
       </div>
       <div id={detailsId} hidden={hasDetails && !isOpen} className="px-1 pb-1">
         {reason === undefined ? null : <p className={detailIndent}>{t(updateMessage(reason))}</p>}
-        {release === undefined || releasePage === undefined ? null : (
+        {release === undefined ? null : (
           <p className={detailIndent}>
-            <a href={releasePage} target="_blank" rel="noreferrer noopener" className="text-ink underline underline-offset-2">
-              {t(status !== null && installsFromReleasePage(status) ? "update.availableOnReleasePage" : "update.available", { version: release })}
-            </a>
+            {releasePage === undefined ? t("update.availableWithoutPage", { version: release }) : (
+              <a href={releasePage} target="_blank" rel="noreferrer noopener" className="text-ink underline underline-offset-2">
+                {t(status !== null && installsFromReleasePage(status) ? "update.availableOnReleasePage" : "update.available", { version: release })}
+              </a>
+            )}
           </p>
         )}
         {!offersUpdate ? null : (
