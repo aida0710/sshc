@@ -103,10 +103,10 @@ func connectionCut(err error) bool {
 var failureSentence = map[ConnectFailure]string{
 	ConnectFailureRefused:         "接続を拒否されました。SSHサーバーが動いているか、ポート番号が合っているかを確認してください。",
 	ConnectFailureTimedOut:        "接続先から応答がありません。接続先の電源とネットワーク、ファイアウォールを確認してください。",
-	ConnectFailureHostNotFound:    "接続先の名前を名前解決できません。HostNameを確認してください。",
-	ConnectFailureNoNetwork:       "ネットワークに接続できません。回線を確認してください。",
-	ConnectFailureHostUnreachable: "接続先まで届きません。ネットワークと接続先の電源を確認してください。",
-	ConnectFailureClosed:          "接続先が接続を切りました。接続先のSSHサーバーの状態を確認してください。",
+	ConnectFailureHostNotFound:    "接続先のホスト名を名前解決できません。HostNameを確認してください。",
+	ConnectFailureNoNetwork:       "ネットワークに接続できません。ネットワーク接続を確認してください。",
+	ConnectFailureHostUnreachable: "接続先に到達できません。ネットワークと接続先の電源を確認してください。",
+	ConnectFailureClosed:          "接続先が接続を切断しました。接続先のSSHサーバーの状態を確認してください。",
 }
 
 // typedFailureSentence は、この package の型で分かる失敗の文である。上から順に見る。
@@ -118,7 +118,7 @@ var typedFailureSentence = []struct {
 	{ErrHostKeyUnknown, "このホスト鍵はknown_hostsにありません。フィンガープリントを確認して登録してから、接続し直してください。"},
 	{ErrHostKeyChanged, "ホスト鍵が変わりました。Known Hostsを確認してから接続し直してください。"},
 	{ErrHostKeyRevoked, "ホスト鍵は失効済みとして登録されているため接続できません。"},
-	{ErrHostKeyChangedDuringRekey, "接続の途中でホスト鍵が変わったため、接続を切りました。"},
+	{ErrHostKeyChangedDuringRekey, "接続の途中でホスト鍵が変わったため、接続を切断しました。"},
 	{ErrNoIdentity, "利用できる秘密鍵またはssh-agentの鍵がありません。"},
 	{ErrNoAuthMethod, "この接続で利用できる認証方式がありません。"},
 	{ErrPromptAborted, "認証を中止しました。"},

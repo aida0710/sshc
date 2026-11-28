@@ -291,7 +291,7 @@ func (s *Session) CheckTransport(limit time.Duration) (answered bool) {
 	if errors.Is(err, context.Canceled) {
 		return false
 	}
-	s.closingTrace.say(connectionlog.Detailed, "回線が変わったあと、SSH接続が応答しないので切断します：%v", err)
+	s.closingTrace.say(connectionlog.Detailed, "ネットワークの切り替え後にSSH接続が応答しないため、切断します：%v", err)
 	_ = client.Close()
 	return false
 }

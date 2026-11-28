@@ -50,7 +50,7 @@ func TestAListingThatNamesAnAttemptLeavesTheReasonItFailedToBeRead(t *testing.T)
 		t.Fatal(err)
 	}
 	if !attempt.Finished || len(attempt.Log) != 2 ||
-		!strings.HasPrefix(attempt.Log[0], "[sshc] 接続先が接続を切りました。") ||
+		!strings.HasPrefix(attempt.Log[0], "[sshc] 接続先が接続を切断しました。") ||
 		!strings.HasSuffix(attempt.Log[1], "失敗の詳細：ssh: handshake failed: EOF") {
 		t.Errorf("attempt = %+v", attempt)
 	}
