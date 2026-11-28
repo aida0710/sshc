@@ -189,7 +189,7 @@ func TestAFailingProxyCommandSaysWhatItComplainedAbout(t *testing.T) {
 
 // 踏み台の向こうのホップは ProxyCommand を使えない。
 //
-// そのプログラムはこの機械で走る。手前のホップの中ではない。走らせても、
+// そのプログラムはこのマシンで走る。手前のホップの中ではない。走らせても、
 // 設定が言っている場所には届かない。
 func TestAHopReachedThroughAnotherRefusesItsProxyCommand(t *testing.T) {
 	path, contents, public := keyPair(t)

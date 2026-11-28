@@ -101,7 +101,7 @@ func validPort(value string) bool {
 	return err == nil && number > 0 && number <= 65535
 }
 
-// isLoopback は、その名前がこの機械だけを指すかを報告する。
+// isLoopback は、その名前がこのマシンだけを指すかを報告する。
 func isLoopback(host string) bool {
 	switch strings.ToLower(host) {
 	case "", "localhost":

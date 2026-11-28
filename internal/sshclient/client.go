@@ -475,7 +475,7 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 		return nil, err
 	}
 	if target.VPN != "" {
-		// VPN もこの機械から出る経路である。ProxyCommand と同じく、踏み台の
+		// VPN もこのマシンから出る経路である。ProxyCommand と同じく、踏み台の
 		// 向こうのホップには効かない。
 		if target.ProxyCommand != "" {
 			return nil, ErrVPNWithProxyCommand
@@ -490,7 +490,7 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 		return d.DialVPN(ctx, target.VPN, target.Address())
 	}
 	if target.ProxyCommand != "" {
-		// そのプログラムはこの機械で走る。手前のホップの中ではない。
+		// そのプログラムはこのマシンで走る。手前のホップの中ではない。
 		// 踏み台の向こうのホップに書かれていたら、走らせても設定が言っている
 		// 場所には届かない。
 		if through != nil {

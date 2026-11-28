@@ -17,7 +17,7 @@ import (
 // プロファイル lab と office を持つ engine の部品一式を組む。
 func engineServicesWithVPNProfiles(t *testing.T) *engineServices {
 	t.Helper()
-	// 改名と削除は経路を止める。docker を見つけられない環境にして、この機械の docker に
+	// 改名と削除は経路を止める。docker を見つけられない環境にして、このマシンの docker に
 	// 触れないようにする。
 	services, err := newEngineServices(Dependencies{
 		Home: t.TempDir(), Random: rand.Reader, DockerEnvironment: environmentWithoutDocker,
