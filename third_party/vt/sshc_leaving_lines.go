@@ -160,7 +160,7 @@ func (e *SnapshotEmulator) WriteString(output string) (int, error) {
 	return e.Write([]byte(output))
 }
 
-// pieceEnd は、output を from より後ろで区切る位置を返す。Emulator の Write は、読み終えるときに組み立て中の字を
+// pieceEnd は、output を from より後ろで区切る位置を返す。readOutput は、読み終えるときに組み立て中の字を
 // 書き出すので、字に続きうるバイト（UTF-8 の2バイト目より後ろや、結合文字）の前では区切らない。ASCII の
 // バイトはどれも、前の字に続かない。pieceExtensionLimit バイトのうちに ASCII のバイトが無ければ、そこで区切る。
 // パーサーは字の途中の状態を次の Write へ持ち越すので、そのとき割れるのは、区切りをまたぐ字のまとまり（結合文字を

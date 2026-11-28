@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"sshc/internal/terminal"
 )
 
@@ -276,6 +278,17 @@ func TestASecretWrappedAtASpaceAndBeforeAWideCharacterIsHiddenWhole(t *testing.T
 		log.Hide([]string{secret})
 		log.Write([]byte(prefix + secret + " && echo ok\r\n"))
 	}, []string{prefix + "[secret]", "[secret]", "[secret] && echo ok"})
+}
+
+// 画面を狭めて全角の字の右半分が新しい右端の外に出ても、ログはその字を書く。字はプログラムが書いたものである。
+func TestAWideCharacterCutByANarrowerTerminalStaysInTheLog(t *testing.T) {
+	const line = "$ echo pelican dunlin 鍵"
+	cutColumns := uint16(ansi.StringWidth(line) - 1)
+	checkBothWaysOffTheScreen(t, "the terminal is made narrower", func(log *Log) {
+		log.Write([]byte(line))
+		log.Resize(terminal.Size{Cols: cutColumns, Rows: 3})
+		log.Write([]byte("\r\n"))
+	}, []string{line})
 }
 
 func TestSecretsThatStartAlikeAreHiddenWhole(t *testing.T) {

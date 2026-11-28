@@ -226,7 +226,7 @@ func (e *SnapshotEmulator) mappedCharacter(content string, single int) (string, 
 	switch {
 	case single == singleShiftG2 || single == singleShiftG3:
 		charset = e.charsets[single]
-	case c < 128:
+	case c < utf8.RuneSelf: // ASCII の範囲の字は GL の集合で、ほかは GR の集合で写す。
 		charset = e.charsets[e.gl]
 	default:
 		charset = e.charsets[e.gr]

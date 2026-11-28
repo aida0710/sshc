@@ -83,6 +83,7 @@ func NewSnapshotEmulator(w, h int) *SnapshotEmulator {
 	e.boundCountsByTheScreen()
 	e.RegisterCsiHandler('b', e.repeatPreviousCharacterOnScreen)
 	e.keepWideCharactersWholeWhenShifting()
+	e.stopWaitingToWrapAsXtermJSDoes()
 	e.parser.SetHandler(e.parserHandler())
 	return e
 }
@@ -176,7 +177,10 @@ func (e *SnapshotEmulator) Resize(width, height int) {
 			cursor.X = min(cursor.X, width-1)
 			cursor.Y = min(cursor.Y, height-1)
 		}
-		eraseWideCellsCutAtTheRightEdge(screen)
+		// セッションのログには、プログラムが書いた字を書く。ログはスナップショットを書かないので、切られた字も残す。
+		if !e.leavingLines {
+			eraseWideCellsCutAtTheRightEdge(screen)
+		}
 	}
 }
 

@@ -9,7 +9,10 @@ import (
 
 // スナップショットのエミュレーターは、字の書き方、改行、画面の流し方、REP、回数の上限を自前で持つ（sshc_print.go、
 // sshc_snapshot.go、sshc_repeat.go、sshc_bounded_counts.go）。同じ出力なら、上流のエミュレーターとまったく同じ画面に
-// する。違うのは、右端にかかる幅2の字だけである。
+// する。上流と違う画面にするのは、右端にかかる幅2の字、幅2の字を ICH・DCH でずらすときと画面を狭めて右半分を
+// 切るとき（sshc_wide_edge.go）、右端で折り返しを待つ間の ICH・DCH・IL・DL・RI・カーソルの復元（sshc_pending_wrap.go）
+// である。ここでは幅2の字を右端にかけずに書き、RI と ?1049l は待たない位置で送る。ICH・DCH は、幅1の字だけの出力で
+// 比べる（TestTheSnapshotEmulatorShiftsNarrowCharactersAsTheUpstreamOneDoes）。
 func TestTheSnapshotEmulatorDrawsWhatTheUpstreamOneDraws(t *testing.T) {
 	pieces := []func(*rand.Rand) string{
 		func(r *rand.Rand) string { return strings.Repeat("word ", 1+r.IntN(12)) },
@@ -32,13 +35,16 @@ func TestTheSnapshotEmulatorDrawsWhatTheUpstreamOneDraws(t *testing.T) {
 		func(*rand.Rand) string { return "\x1b(0lqqk\x1b(B" },
 		// 幅2の字は、右端にかからない桁に書く。右端では、上流と違って xterm.js と同じに書く（sshc_print_test.go）。
 		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%d;%dH日本語", 1+r.IntN(12), 1+r.IntN(24)) },
+		// 最後の桁の字のあとで折り返しを待つ幅2の字は、上流と同じに次の行の頭に書く。折り返しを切っていると、
+		// 右端に入らない幅2の字になるので、折り返しを有効にしてから書く。
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[?7h\x1b[%d;30Hx日", 1+r.IntN(12)) },
 		func(*rand.Rand) string { return "é" },
 		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%d;%dH🎉!", 1+r.IntN(12), 1+r.IntN(27)) },
 		func(*rand.Rand) string { return "\x1bD" },
-		func(*rand.Rand) string { return "\x1bM" },
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%d;%dH\x1bM", 1+r.IntN(12), 1+r.IntN(30)) },
 		func(*rand.Rand) string { return "\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\" },
 		func(*rand.Rand) string { return "\x1b[?1049h" },
-		func(*rand.Rand) string { return "\x1b[?1049l" },
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%d;%dH\x1b[?1049l", 1+r.IntN(12), 1+r.IntN(30)) },
 		func(*rand.Rand) string { return "\x1b[20h" },
 		func(*rand.Rand) string { return "\x1b[20l" },
 		// 回数は、画面（30x12）の幅やマス目より少ないものも多いものも試す。
@@ -58,15 +64,69 @@ func TestTheSnapshotEmulatorDrawsWhatTheUpstreamOneDraws(t *testing.T) {
 		snapshot := NewSnapshotEmulator(30, 12)
 		_, _ = upstream.WriteString(output.String())
 		_, _ = snapshot.WriteString(output.String())
-		upstream.flushGrapheme()
-		snapshot.flushGrapheme()
-		if got, want := snapshot.Render(), upstream.Render(); got != want {
-			t.Fatalf("round %d: output %q\ndraws\n%s\nwant\n%s", round, output.String(), got, want)
+		checkUpstreamScreen(t, snapshot, upstream, fmt.Sprintf("round %d: output %q", round, output.String()))
+	}
+}
+
+// 幅1の字だけなら、ICH・DCH（sshc_wide_edge.go）も上流と同じ画面にする。左右の余白（DECSLRM）、上下の余白、背景色の
+// ペン、代替画面、折り返しの切り替え、REP、ECH と混ぜる。右端で折り返しを待つ間の ICH・DCH・IL・DL・RI・カーソルの
+// 復元は、xterm.js にそろえて上流と違う（sshc_pending_wrap_test.go）ので、どれもカーソルを動かしてから送る。上流は
+// 余白が画面の外だと panic するので、余白は画面の中に置く。
+func TestTheSnapshotEmulatorShiftsNarrowCharactersAsTheUpstreamOneDoes(t *testing.T) {
+	const width, height = 30, 12
+	// 1桁目と最後の桁も選ぶ。ICH・DCH は、そこで余白や行の端に接する。
+	moveCursor := func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%d;%dH", 1+r.IntN(height), 1+r.IntN(width)) }
+	pieces := []func(*rand.Rand) string{
+		func(r *rand.Rand) string { return strings.Repeat("word ", 1+r.IntN(12)) },
+		func(*rand.Rand) string { return "\r\n" },
+		func(*rand.Rand) string { return "\r" },
+		func(*rand.Rand) string { return "\b" },
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[4%dm", r.IntN(8)) },
+		func(*rand.Rand) string { return "\x1b[0m" },
+		func(r *rand.Rand) string { return moveCursor(r) + fmt.Sprintf("\x1b[%d@", r.IntN(width+10)) },
+		func(r *rand.Rand) string { return moveCursor(r) + fmt.Sprintf("\x1b[%dP", r.IntN(width+10)) },
+		func(r *rand.Rand) string { return moveCursor(r) + fmt.Sprintf("\x1b[%dL", r.IntN(4)) },
+		func(r *rand.Rand) string { return moveCursor(r) + fmt.Sprintf("\x1b[%dM", r.IntN(4)) },
+		func(r *rand.Rand) string { return moveCursor(r) + "\x1bM" },
+		func(*rand.Rand) string { return "\x1b7" },
+		func(r *rand.Rand) string { return moveCursor(r) + "\x1b8" },
+		func(*rand.Rand) string { return "\x1b[?69h" },
+		func(*rand.Rand) string { return "\x1b[?69l" },
+		func(r *rand.Rand) string {
+			return fmt.Sprintf("\x1b[%d;%ds", 1+r.IntN(width/2), width/2+1+r.IntN(width/2))
+		},
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%d;%dr", 1+r.IntN(5), 6+r.IntN(height-5)) },
+		func(*rand.Rand) string { return "\x1b[r" },
+		func(*rand.Rand) string { return "\x1b[?1049h" },
+		func(r *rand.Rand) string { return moveCursor(r) + "\x1b[?1049l" },
+		func(*rand.Rand) string { return "\x1b[?7l" },
+		func(*rand.Rand) string { return "\x1b[?7h" },
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%db", r.IntN(50)) },
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%dX", r.IntN(width+10)) },
+	}
+	random := rand.New(rand.NewPCG(3, 5))
+	for round := range 300 {
+		var output strings.Builder
+		for range 40 + random.IntN(80) {
+			output.WriteString(pieces[random.IntN(len(pieces))](random))
 		}
-		if got, want := snapshot.CursorPosition(), upstream.CursorPosition(); got != want || snapshot.atPhantom != upstream.atPhantom {
-			t.Fatalf("round %d: output %q leaves the cursor at %v (phantom %v), want %v (phantom %v)",
-				round, output.String(), got, snapshot.atPhantom, want, upstream.atPhantom)
-		}
+		upstream := NewEmulator(width, height)
+		snapshot := NewSnapshotEmulator(width, height)
+		_, _ = upstream.WriteString(output.String())
+		_, _ = snapshot.WriteString(output.String())
+		checkUpstreamScreen(t, snapshot, upstream, fmt.Sprintf("round %d: output %q", round, output.String()))
+	}
+}
+
+// checkUpstreamScreen は、スナップショットのエミュレーターが、上流のエミュレーターと同じ画面とカーソル、同じ折り返しの
+// 待ちを持つことを確かめる。
+func checkUpstreamScreen(t *testing.T, snapshot *SnapshotEmulator, upstream *Emulator, after string) {
+	t.Helper()
+	if got, want := snapshot.Render(), upstream.Render(); got != want {
+		t.Fatalf("%s\ndraws\n%s\nwant\n%s", after, got, want)
+	}
+	if got, want := snapshot.CursorPosition(), upstream.CursorPosition(); got != want || snapshot.atPhantom != upstream.atPhantom {
+		t.Fatalf("%s leaves the cursor at %v (phantom %v), want %v (phantom %v)", after, got, snapshot.atPhantom, want, upstream.atPhantom)
 	}
 }
 
@@ -80,7 +140,6 @@ func TestALongControlStringIsReadToItsEnd(t *testing.T) {
 		t.Fatal("the emulator left the image halfway through")
 	}
 	_, _ = emulator.WriteString(image[len(image)/2:] + "\aafter")
-	emulator.flushGrapheme()
 	if !emulator.AtGround() || strings.TrimSpace(emulator.String()) != "after" {
 		t.Fatalf("after the image the screen shows %q", emulator.String())
 	}

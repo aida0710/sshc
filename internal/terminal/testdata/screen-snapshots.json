@@ -128,6 +128,46 @@
     "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Ha 本\u001b[5Gb\u001b[1;3H"
   },
   {
+    "name": "deleting from the right half of a wide character through the next one erases both",
+    "cols": 40,
+    "rows": 3,
+    "output": "a日本b\u001b[1;3H\u001b[2P\u001b[2;1Hy",
+    "tail": "\u001b[2;1Hy",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Ha  b\u001b[1;3H"
+  },
+  {
+    "name": "deleting a character ends the wait to wrap after a wide character",
+    "cols": 40,
+    "rows": 3,
+    "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[Px",
+    "tail": "x",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u001b[1;40H"
+  },
+  {
+    "name": "inserting a line ends the wait to wrap after a wide character",
+    "cols": 40,
+    "rows": 3,
+    "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[Lx",
+    "tail": "x",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[2;1Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[H"
+  },
+  {
+    "name": "a reverse index ends the wait to wrap after a wide character",
+    "cols": 40,
+    "rows": 3,
+    "output": "\r\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001bMx",
+    "tail": "x",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[2;1Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[1;40H"
+  },
+  {
+    "name": "restoring the cursor ends the wait to wrap after a wide character",
+    "cols": 40,
+    "rows": 3,
+    "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b7\u001b8x",
+    "tail": "x",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[1;40H\u001b[m\u001b7\u001b[m\u001b[1;40H"
+  },
+  {
     "name": "the saved cursor and the pen survive",
     "cols": 30,
     "rows": 6,

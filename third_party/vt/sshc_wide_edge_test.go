@@ -3,6 +3,8 @@ package vt
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ICH（CSI Ps @）は、カーソルの上の幅2の字も、ほかの字と同じに右へずらす。bash の readline は、日本語の前に字を
@@ -39,6 +41,20 @@ func TestInsertingCharactersOnTheRightHalfOfAWideCharacterErasesIt(t *testing.T)
 	e := NewSnapshotEmulator(40, 2)
 	writeAll(t, e, "a日本b\x1b[1;3H\x1b[@")
 	checkScreen(t, e, shownScreen{rows: []string{"a   本b", ""}, cursorX: 2})
+}
+
+// ICH で幅2の字の右半分から右へずらした残りは、その字の背景色のまま空く。xterm.js（BufferLine の insertCells）は
+// その半分を字の属性のまま幅0のマスとして残し、WebGL の描画はそのマスにも字の背景色を塗る。空けたマスと、
+// 消えた左半分は、ICH を受けたときのペンで空く。
+func TestTheRestOfAWideCharacterInsertedIntoKeepsItsBackground(t *testing.T) {
+	e := NewSnapshotEmulator(40, 2)
+	writeAll(t, e, "a\x1b[41m日\x1b[0m本b\x1b[1;3H\x1b[43m\x1b[@")
+	checkScreen(t, e, shownScreen{rows: []string{"a   本b", ""}, cursorX: 2})
+	for column, want := range map[int]ansi.Color{1: ansi.Yellow, 2: ansi.Yellow, 3: ansi.Red} {
+		if cell := e.CellAt(column, 0); cell == nil || cell.Style.Bg != want {
+			t.Fatalf("column %d is %+v, want a blank in background %v", column, cell, want)
+		}
+	}
 }
 
 // DCH（CSI Ps P）は、カーソルの右の幅2の字も、ほかの字と同じに左へずらす。bash の readline は、日本語の前の字を
@@ -83,6 +99,15 @@ func TestDeletingHalfOfAWideCharacterErasesTheOtherHalf(t *testing.T) {
 		"the right half": {
 			output: "a日本b\x1b[1;3H\x1b[P",
 			want:   shownScreen{rows: []string{"a 本b", ""}, cursorX: 2},
+		},
+		// 後ろの字の右半分がカーソルに来ても、前の字の左半分と1字にはしない。
+		"the right half and the left half of the next one": {
+			output: "a日本b\x1b[1;3H\x1b[2P",
+			want:   shownScreen{rows: []string{"a  b", ""}, cursorX: 2},
+		},
+		"the right half and the next two": {
+			output: "a日本語b\x1b[1;3H\x1b[4P",
+			want:   shownScreen{rows: []string{"a  b", ""}, cursorX: 2},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
