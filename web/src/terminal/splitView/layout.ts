@@ -18,7 +18,7 @@ export type SplitViewState = {
 };
 export type SplitViewAction =
   | { type: "select"; sessionId: string | null; focus?: boolean }
-  // area は分割表示の領域の広さ。渡すと、どのペインにも最小の大きさを残せない分割を断る。
+  // area は分割表示の領域の広さ。渡すと、足す向きにどれかのペインが最小の大きさを割る分割を断る。
   | { type: "split"; sourceSessionId: string; targetSessionId: string; edge: PaneEdge; area?: SplitArea | undefined }
   | { type: "close"; sessionId: string }
   | { type: "swap"; sourceSessionId: string; targetSessionId: string }
@@ -133,8 +133,9 @@ export function reduceSplitView(state: SplitViewState, action: SplitViewAction):
       if (path === null) return state;
       // 足すたびに足した先のペインを半分に割ると、そのペインだけが細くなるので、加わった並びを均等に割り直す。
       const placed = replaceAt(withoutSource, path, (target) => paneBeside(target, sourceSessionId, edge));
-      const root = evenRunAbove(placed, path, edgeDirection(edge));
-      if (action.area !== undefined && !fitsSplitArea(root, action.area)) return state;
+      const direction = edgeDirection(edge);
+      const root = evenRunAbove(placed, path, direction);
+      if (action.area !== undefined && !fitsSplitArea(root, action.area, direction)) return state;
       return { root, activeSessionId: sourceSessionId, focusMode: false, focusRevision: state.focusRevision + 1 };
     }
     case "close":

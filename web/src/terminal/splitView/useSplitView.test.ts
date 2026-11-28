@@ -108,6 +108,23 @@ describe("what can go beside a session", () => {
     expect(result.current.splitView.splitRefusal("four", "right")).toBe("room");
   });
 
+  it("still adds a pane below a row narrowed below its minimum, since the height has room", () => {
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+    const { result } = setup();
+    act(() => { result.current.splitView.observeArea(document.createElement("div")); });
+    act(() => resizeArea({ width: 3 * minimumPanePx.width + 10, height: 600 }));
+    act(() => result.current.showSession("one"));
+    for (const [source, target] of [["two", "one"], ["three", "two"]] as const) {
+      act(() => result.current.splitView.split({ sourceSessionId: source, targetSessionId: target, edge: "right" }));
+    }
+    // 窓を狭めて、3つ並びの幅が最小の合計を割った。下に足しても幅は今より狭くならない。
+    act(() => resizeArea({ width: 3 * minimumPanePx.width - 10, height: 600 }));
+    expect(result.current.splitView.canSplit("four", "three", "right")).toBe(false);
+    expect(result.current.splitView.canSplit("four", "three", "bottom")).toBe(true);
+    act(() => result.current.splitView.split({ sourceSessionId: "four", targetSessionId: "three", edge: "bottom" }));
+    expect(paneSessionIds(result.current.splitView.state.root)).toEqual(["one", "two", "three", "four"]);
+  });
+
   it("forgets a request for a split when the run target changes", () => {
     const { result, rerender } = setup();
     act(() => result.current.splitView.requestSplit({ targetSessionId: "one", edge: "right" }));

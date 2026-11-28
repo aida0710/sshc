@@ -29,9 +29,11 @@ export function splitMinimum(node: SplitViewBranch): SplitMinimum {
 // SplitArea は、分割表示の領域の広さ（px）である。
 export type SplitArea = { width: number; height: number };
 
-// fitsSplitArea は、area の広さで、root のどのペインにも minimumPanePx を残せるかを返す。
-export function fitsSplitArea(root: SplitViewNode, area: SplitArea): boolean {
-  return minimumExtentPx(root, "horizontal") <= area.width && minimumExtentPx(root, "vertical") <= area.height;
+// fitsSplitArea は、area の direction の向きの広さで、root のどのペインにも minimumPanePx を残せるかを返す。
+// ペインを足す分割は、足した向きの最小の大きさしか増やさない。もう一方の向きは窓を狭めて既に足りないことが
+// あるが、足しても今より狭くはならないので、それを理由に断らない。
+export function fitsSplitArea(root: SplitViewNode, area: SplitArea, direction: SplitDirection): boolean {
+  return minimumExtentPx(root, direction) <= (direction === "horizontal" ? area.width : area.height);
 }
 
 export type PaneBounds = { left: number; top: number; width: number; height: number };
