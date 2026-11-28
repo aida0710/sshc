@@ -7,7 +7,9 @@ import {
   japaneseRepositoryDocuments,
   type JapanesePage,
 } from "../testing/japaneseDocuments";
-import { ja } from "./messages";
+import { engineCodeOutsideComments, repositoryComments } from "../testing/repositorySources";
+import { androidCatalogue } from "./androidCatalogue";
+import { ja, type MessageKey } from "./messages";
 
 // docs/writing-style.mdの用語表で使わないと決めた語のうち、文脈によらず誤りと言えるもの。
 // 「つなぐ」「名乗る」のように文脈によっては使える語は、誤検出になるので入れない。
@@ -36,15 +38,25 @@ function linesOf(pages: JapanesePage[]): Wording[] {
   return pages.flatMap((page) => page.lines.map((text, index) => ({ text, location: `${page.path}:${index + 1}` })));
 }
 
+// Androidでだけ出す文。androidCatalogue.tsが画面の文を差し替えたものと言い換えたもの。ja.tsと同じ文は、
+// 画面の文として読む。
+function androidOnlyJapanese(): Wording[] {
+  const android = androidCatalogue("ja");
+  return (Object.keys(ja) as MessageKey[])
+    .filter((key) => android[key] !== ja[key])
+    .map((key) => ({ text: android[key], location: `androidCatalogue.ts ${key}` }));
+}
+
+// 利用者が読む日本語: 画面、Androidの文言、pages、sshcエンジンが書く文。
 function userFacingJapanese(): Wording[] {
   const screen = Object.entries(ja).map(([key, text]) => ({ text, location: `ja.ts ${key}` }));
   const android = androidJapaneseLabels().map((text) => ({ text, location: "values-ja/strings.xml" }));
-  return [...screen, ...android, ...linesOf(japanesePages())];
+  return [...screen, ...androidOnlyJapanese(), ...android, ...linesOf(japanesePages()), ...engineCodeOutsideComments()];
 }
 
-function retiredTermsIn(wordings: Wording[]): string[] {
+function retiredTermsIn(wordings: Wording[], terms: Map<string, string>): string[] {
   return wordings.flatMap((wording) =>
-    [...retiredTerms]
+    [...terms]
       .filter(([term]) => wording.text.includes(term))
       .map(([term, replacement]) => `${wording.location}: 「${term}」→「${replacement}」`),
   );
@@ -52,7 +64,7 @@ function retiredTermsIn(wordings: Wording[]): string[] {
 
 describe("利用者が読む日本語", () => {
   it("使わないと決めた語を含まない", () => {
-    expect(retiredTermsIn(userFacingJapanese())).toEqual([]);
+    expect(retiredTermsIn(userFacingJapanese(), retiredTerms)).toEqual([]);
   });
 });
 
@@ -60,7 +72,36 @@ describe("利用者が読む日本語", () => {
 // pagesと同じ語で書いておく。
 describe("README、AGENTS.md、docs/の日本語", () => {
   it("使わないと決めた語を含まない", () => {
-    expect(retiredTermsIn(linesOf(japaneseRepositoryDocuments()))).toEqual([]);
+    expect(retiredTermsIn(linesOf(japaneseRepositoryDocuments()), retiredTerms)).toEqual([]);
+  });
+});
+
+// コードのコメントで探さない語と、その理由。ここに無い語は、コメントでも使わない。
+const termsAllowedInComments = new Map<string, string>([
+  ["端末", "コメントにはまだ残っている"],
+  ["経路", "コメントにはまだ残っている"],
+  ["ディレクトリ", "Goの標準ライブラリ（os.ReadDir、os.MkdirAllなど）と同じ語で説明する"],
+  ["実行先", "コードの識別子runTargetを説明する語として残すと決めた"],
+]);
+// 使わない語そのものを、一覧と説明のコメントに書いているファイル。
+const termListFile = "web/src/i18n/retiredJapaneseTerms.test.ts";
+
+// AIエージェントはコメントの語を画面やpagesへ写すので、コメントも同じ語で書く。
+describe("コードのコメント", () => {
+  const checkedComments = () => repositoryComments().filter((comment) => !comment.location.startsWith(`${termListFile}:`));
+
+  it("コメントで探さないとした語のほかは、使わないと決めた語を含まない", () => {
+    const termsForComments = new Map([...retiredTerms].filter(([term]) => !termsAllowedInComments.has(term)));
+    expect(retiredTermsIn(checkedComments(), termsForComments)).toEqual([]);
+  });
+
+  // コメントから無くなった語は、ここで落ちる。除外から外せば、コメントでも検査される。
+  it("コメントで探さないとした語は、どれも一覧にあり、今もコメントで使っている", () => {
+    const comments = checkedComments();
+    const stale = [...termsAllowedInComments.keys()].filter(
+      (term) => !retiredTerms.has(term) || !comments.some((comment) => comment.text.includes(term)),
+    );
+    expect(stale).toEqual([]);
   });
 });
 
@@ -81,7 +122,7 @@ const versionMeaningEdition: Misuse = {
 };
 
 describe("versionの意味の「版」", () => {
-  it("画面、pages、README、AGENTS.md、docs/では「バージョン」と書く", () => {
+  it("利用者が読む日本語と、README、AGENTS.md、docs/では「バージョン」と書く", () => {
     const wordings = [...userFacingJapanese(), ...linesOf(japaneseRepositoryDocuments())];
     expect(misusesIn(wordings, versionMeaningEdition)).toEqual([]);
   });
@@ -92,7 +133,7 @@ describe("versionの意味の「版」", () => {
 const secretMeaningHimitsu: Misuse = { pattern: /秘密(?!鍵)/, correction: "「秘密」→「シークレット」" };
 
 describe("secretの意味の「秘密」", () => {
-  it("画面、Androidの文言、pagesでは「シークレット」と書く", () => {
+  it("利用者が読む日本語では「シークレット」と書く", () => {
     expect(misusesIn(userFacingJapanese(), secretMeaningHimitsu)).toEqual([]);
   });
 });
@@ -103,7 +144,7 @@ const engineWithoutProductName: Misuse = { pattern: /(?<!sshc)エンジン/, cor
 const headingLine = /^(#{1,6}\s|title:)/;
 
 describe("sshcエンジンの呼び方", () => {
-  it("画面、pages、README、AGENTS.mdの本文では「sshcエンジン」と書く", () => {
+  it("利用者が読む日本語と、README、AGENTS.mdの本文では「sshcエンジン」と書く", () => {
     const body = [...userFacingJapanese(), ...linesOf([japaneseReadme(), japaneseAgentInstructions()])].filter(
       (wording) => !headingLine.test(wording.text),
     );
