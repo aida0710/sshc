@@ -363,7 +363,7 @@ export function TerminalQuickCommands({
             <SnippetVariableInputs
               variables={selected.variables}
               inputs={inputs}
-              onChange={(variable, value) => invalidate({ ...inputs, [variable.name]: value })}
+              onChange={invalidate}
             />
           )}
           {prepared === null ? (

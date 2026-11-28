@@ -191,6 +191,27 @@ describe("WorkspaceCommandCenter", () => {
     expect(screen.queryByRole("button", { name: "Send to 1 terminals" })).toBeNull();
   });
 
+  it("sends no value for a number typed and then cleared, so the engine uses the default", async () => {
+    snippets.library.mockResolvedValue({
+      snippets: [{ id: "tail", name: "Tail", command: "tail -n {{lines}} app.log", variables: [{ name: "lines", type: "integer", required: false, default: "3" }], createdAt: "2026-08-27T00:00:00Z", updatedAt: "2026-08-27T00:00:00Z" }],
+      startup: [],
+    });
+    const user = userEvent.setup();
+    render(<WorkspaceCommandCenter paneTargets={[edge]} onClose={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "Saved snippet" }));
+    const lines = await screen.findByRole("spinbutton", { name: "lines" });
+
+    await user.type(lines, "5");
+    await user.clear(lines);
+    await user.click(screen.getByRole("button", { name: "Preview execution" }));
+
+    expect(commands.preview).toHaveBeenCalledWith({
+      snippetId: "tail",
+      inputs: {},
+      targets: [{ targetId: "pane-a", sessionId: "session-a" }],
+    });
+  });
+
   it("previews secret snippets without exposing the value in the command preview", async () => {
     snippets.library.mockResolvedValue({
       snippets: [{ id: "secret", name: "Deploy", command: "deploy {{token}}", variables: [{ name: "token", type: "secret", required: true }], createdAt: "2026-08-27T00:00:00Z", updatedAt: "2026-08-27T00:00:00Z" }],

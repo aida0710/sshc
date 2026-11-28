@@ -16,7 +16,7 @@ describe("SnippetVariableInputs", () => {
     expect(screen.queryByText("{{lines}}")).toBeNull();
   });
 
-  it("says which default an empty field falls back to, and hands each change with its variable", () => {
+  it("says which default an empty field falls back to, and hands the inputs to send after each change", () => {
     const onChange = vi.fn();
     render(
       <LanguageProvider initial="ja">
@@ -35,6 +35,6 @@ describe("SnippetVariableInputs", () => {
     expect(screen.getByRole("option", { name: "既定値を使用（false）" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("combobox", { name: "verbose" }), { target: { value: "true" } });
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ name: "verbose" }), "true");
+    expect(onChange).toHaveBeenCalledWith({ verbose: "true" });
   });
 });
