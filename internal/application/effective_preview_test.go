@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func Test複数の接続名を持つブロックを移すとすべての接続名の差分がプレビューに出る(t *testing.T) {
+func TestMovePreviewShowsEveryAliasTheMovedBlockDeclares(t *testing.T) {
 	service, workspace := newTestService(t)
 	const config = "Include conf.d/*.conf\n\nHost r100 mirage\n\tUser ops\n"
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(config), 0o600); err != nil {
@@ -36,7 +36,7 @@ func Test複数の接続名を持つブロックを移すとすべての接続�
 	}
 }
 
-func Testグループへ移すプレビューに移した先のグループの設定が出る(t *testing.T) {
+func TestMovePreviewIntoAGroupShowsTheGroupSettings(t *testing.T) {
 	service, workspace := newTestService(t)
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"),
 		[]byte("Include conf.d/*.conf\n\nHost r100\n\tUser ops\n"), 0o600); err != nil {
@@ -65,7 +65,7 @@ func Testグループへ移すプレビューに移した先のグループの�
 	t.Fatalf("effective changes = %#v, want Port 2222 from the group", preview.Effective[0].Changes)
 }
 
-func Test名前の変更と複製のプレビューは元の接続名の値と新しい接続名の値を比べる(t *testing.T) {
+func TestRenameAndDuplicatePreviewsCompareTheOldAliasWithTheNewAlias(t *testing.T) {
 	const config = "Host r100\n\tHostName r100.example\n\tUser ops\n"
 	for _, kind := range []EditKind{EditRename, EditDuplicate} {
 		t.Run(string(kind), func(t *testing.T) {
