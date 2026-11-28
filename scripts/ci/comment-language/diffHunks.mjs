@@ -32,8 +32,10 @@ function unquotePath(quoted) {
 }
 
 // pathOf は、--- a/… や +++ b/… の行のパスを返す。/dev/null（無いファイル）なら undefined を返す。
+// git は空白を含むパスの後ろにタブを1つ付ける。パスの中のタブは引用符で囲んで \t と書くので、
+// 行の最後のタブはパスの一部ではない。
 function pathOf(headerLine, prefix) {
-  const path = unquotePath(headerLine.slice(4));
+  const path = unquotePath(headerLine.slice(4).replace(/\t$/, ""));
   return path === "/dev/null" ? undefined : path.slice(prefix.length);
 }
 

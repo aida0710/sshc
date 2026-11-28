@@ -65,6 +65,17 @@ describe("check-comment-language.mjs", () => {
     assert.match(stderr, /^internal\/session\/open\.go:4: It waits for the engine\.$/m);
   });
 
+  it("名前に空白を含むファイルに英語だけのコメントを足しても落ちる", () => {
+    write("web/src/session list.ts", "export const port = 22;\n");
+    commit("chore: 最初のコミット");
+    write("web/src/session list.ts", "// the default port of ssh\nexport const port = 22;\n");
+    commit("fix: 英語のコメントを足す");
+
+    const { status, stderr } = check("HEAD^1", "HEAD");
+    assert.equal(status, 1, stderr);
+    assert.match(stderr, /^web\/src\/session list\.ts:1: the default port of ssh$/m);
+  });
+
   it("消したファイルから別のファイルへ移しただけのコメントは通る", () => {
     write("web/src/old.ts", "// returns the session of the alias\nexport function old() {}\n");
     commit("chore: 最初のコミット");
