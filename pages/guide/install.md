@@ -38,7 +38,7 @@ SSHC_VERSION=v0.70.1 sh -c \
   'ftp -Vo - https://raw.githubusercontent.com/aida0710/sshc/v0.70.1/install.sh | sh'
 ```
 
-`sshc update`での更新はmacOS・Linuxの`install.sh`版と同じです。`sshc service install`には対応していません。ログインしたあとも動かし続けるには、tmuxやscreenの中で`sshc engine`を実行してください。
+`sshc update`での更新はmacOS・Linuxの`install.sh`版と同じです。`sshc service install`には対応していません。ログアウトしたあとも動かし続けるには、tmuxやscreenの中で`sshc engine`を実行してください。
 
 ## Windows
 
