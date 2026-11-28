@@ -436,6 +436,46 @@ test("gives the keyboard to the pane whose header was dragged, whether or not th
   await expect(logs).not.toContainText("DRAGGED:42");
 });
 
+// useTerminalsBy は、ペインの［…］のプリセットの設定で、タッチの自動の判定をやめ、ターミナルの使い方を mode に固定する。
+async function useTerminalsBy(terminal: Locator, mode: "Use by touch" | "Use by mouse") {
+  await terminal.getByRole("button", { name: "More terminal actions", exact: true }).click();
+  const preset = terminal.page().getByRole("menu", { name: "More terminal actions" }).getByRole("group", { name: /^Preset: / });
+  const detect = preset.getByRole("menuitemcheckbox", { name: "Detect touch automatically" });
+  if (await detect.isChecked()) await detect.click();
+  await preset.getByRole("menuitemradio", { name: mode }).click();
+  // タッチで使うターミナルには、指で選ぶための文字の層が重なる。
+  const fingerLayers = terminal.page().locator(".sshc-select-overlay");
+  if (mode === "Use by touch") await expect(fingerLayers).not.toHaveCount(0);
+  else await expect(fingerLayers).toHaveCount(0);
+}
+
+test("lets the name in a pane's header be selected rather than dragged while terminals are used by touch, and moves the pane by it with the mouse", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  const build = pane(page, one);
+  const logs = pane(page, two);
+  const buildIsRightOfLogs = async () => (await build.boundingBox())!.x > (await logs.boundingBox())!.x;
+  expect(await buildIsRightOfLogs()).toBe(true);
+
+  await useTerminalsBy(build, "Use by touch");
+  const name = build.getByText("Build", { exact: true });
+  await name.dragTo(logs);
+  await name.dblclick();
+  await expect.poll(() => page.evaluate(() => document.getSelection()?.toString())).toBe("Build");
+  // ドラッグはペインを動かさない。名前を選んだあとに見るので、落としていれば入れ替わり済みである。
+  expect(await buildIsRightOfLogs()).toBe(true);
+  // ［…］からは、タッチで使う設定でも入れ替えられる。
+  await choosePaneMenuItem(build, "Move pane");
+  await choosePaneMenuItem(logs, "Swap with this pane");
+  await expect.poll(buildIsRightOfLogs).toBe(false);
+
+  await useTerminalsBy(build, "Use by mouse");
+  await name.dragTo(logs);
+  await expect.poll(buildIsRightOfLogs).toBe(true);
+});
+
 test("preserves terminal mounts through swaps, focus mode, sidebar selection and mobile widths", async ({ page, installation }) => {
   await openApplication(page, installation);
   const one = await openNamedShell(page, "Build");

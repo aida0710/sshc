@@ -46,11 +46,10 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
   const selected = state.activeSessionId;
   const pickedSession = drag.picked === null ? undefined : sessionById.get(drag.picked);
   // endHeaderDrag は、見出しをつかんだドラッグの終わりである。名前の文字は押してもフォーカスを取らず、離しても
-  // クリックにならないので、見出しのクリックと同じく、キーボードをそのペインのターミナルへ渡す。タッチの画面は、
-  // ターミナルそのものを押すまでキーボードを出さない。
+  // クリックにならないので、見出しのクリックと同じく、キーボードをそのペインのターミナルへ渡す。
   function endHeaderDrag(sessionId: string) {
     drag.clear();
-    if (!touchTerminal) selectSession(sessionId);
+    selectSession(sessionId);
   }
   // dropHint は、edge の側（null なら入れ替え）に落としたときにどうなるかを言う。
   function dropHint(edge: PaneEdge | null): string {
@@ -121,7 +120,7 @@ export function TerminalSplitView({ splitView, sessions, retainedTerminals, rend
                 dispatch({ type: "focus-mode", enabled: !state.focusMode });
               },
               onRemove: () => splitView.removeFromSplit(sessionId),
-              drag: state.focusMode ? undefined : { onDragStart: (event) => drag.begin(event, sessionId), onDragEnd: () => endHeaderDrag(sessionId) },
+              drag: state.focusMode || touchTerminal ? undefined : { onDragStart: (event) => drag.begin(event, sessionId), onDragEnd: () => endHeaderDrag(sessionId) },
             } : undefined;
             return (
               <div key={sessionId} data-split-view-pane={kept || behind ? undefined : sessionId} data-split-view-kept={kept || behind ? sessionId : undefined}

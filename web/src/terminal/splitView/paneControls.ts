@@ -20,5 +20,6 @@ export type SplitPaneControls = {
   onFocusMode: () => void;
   onRemove: () => void;
   // drag は、見出しをつかんでペインを動かす操作である。集中表示の間は、落とす先のペインが見えないので無い。
+  // タッチで使う設定でも無い。見出しの名前は、長押しやなぞりで文字を選べるようにしておく（動かすのは［…］から）。
   drag: PaneDragHandlers | undefined;
 };
