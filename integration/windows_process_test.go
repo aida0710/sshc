@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sys/windows"
-
 	"sshc/internal/platform/windowsacl"
 )
 
@@ -60,25 +58,6 @@ func TestTheLockSurvivesNoOneAfterAnAbnormalDeath(t *testing.T) {
 	if !second.running() {
 		t.Fatalf("the next owner could not take the lock\n%s", second.Stderr.String())
 	}
-}
-
-// processAlive は、その pid のプロセスがまだ居るかを返す。
-//
-// 終了コードで見る。OpenProcess が成功しても、終了済みのプロセスの
-// ハンドルは開けてしまう。Windows では、誰かがハンドルを持っているあいだ
-// プロセスの器が残る。
-func processAlive(t *testing.T, pid int) bool {
-	t.Helper()
-	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
-	if err != nil {
-		return false
-	}
-	defer func() { _ = windows.CloseHandle(handle) }()
-	var code uint32
-	if err := windows.GetExitCodeProcess(handle, &code); err != nil {
-		return false
-	}
-	return code == 259 // STILL_ACTIVE
 }
 
 // ConPTY の子孫が engine より長生きしないことは、ここでは確かめない。
