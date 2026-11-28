@@ -131,7 +131,7 @@ export type AssembledTerminal = {
   // fit は、ターミナルを入れ物の大きさに合わせ直し、その大きさをエンジンへ伝える。
   fit: () => void;
   // send は、打ったものとして送る。sendKey は、キーバーのキーを送る。paste は、貼り付けとして送る。どれも利用者の
-  // 入力なので、スクロールバックを戻していれば、一番下へ戻してから送る。
+  // 入力なので、上へスクロールしていれば、一番下へ戻してから送る。
   send: (text: string) => void;
   sendKey: (key: KeyBarKey) => void;
   paste: (text: string) => void;
@@ -354,7 +354,7 @@ export function assembleTerminal({ container, live, start, wiring }: {
 
   // disposed は、片付けたあと真である。片付けたターミナルへは何も送らない。
   let disposed = false;
-  // showNewestRows は、スクロールバックを戻していれば、指を離したあとの惰性を止めて一番下へ戻す。xterm.js が戻すのは、
+  // showNewestRows は、上へスクロールしていれば、指を離したあとの惰性を止めて一番下へ戻す。xterm.js が戻すのは、
   // 自分が受け取った打鍵と貼り付けのときだけである（scrollOnUserInput）。入力欄・キーバーと、sshc が先に受け取る
   // 貼り付けとキーは、送る前にここで戻す。戻さないと、返事が見えている行の外に描かれる。惰性を止めないと、次の
   // フレームでまた古い行へ動く。全画面のプログラムの画面にはスクロールバックが無いので、何もしない。

@@ -1709,7 +1709,7 @@ async function openMockedTerminal(page: Page, installation: Installation): Promi
 }
 
 // 入力欄・キーバー・貼り付けの確認から送ったものは、xterm.js の入力を通らない。それでも xterm.js に打ったときと
-// 同じく、スクロールバックを戻していれば一番下へ戻り、返事の出る最後の行が見える。
+// 同じく、上へスクロールしていれば一番下へ戻り、返事の出る最後の行が見える。
 const sendsFromPhone: { name: string; send: (page: Page) => Promise<void> }[] = [
   {
     name: "the text box's Send",
@@ -1777,9 +1777,9 @@ test("a key tapped while a flick still coasts through the scrollback keeps the l
 });
 
 // 打っている行を押してカーソルを動かすのは、sshc が送る矢印で、利用者が打ったものではない。押した行が見えている
-// ので、スクロールバックを戻していても画面は動かさない。PC のクリックと同じである。
+// ので、上へスクロールしていても画面は動かさない。PC のクリックと同じである。
 test("a tap on the line being typed moves the cursor and leaves the scrollback where it was", async ({ page, installation }) => {
-  // 画面を消したあとは、プロンプトが一番上の行にあり、スクロールバックを少し戻しても見えている。
+  // 画面を消したあとは、プロンプトが一番上の行にあり、少し上へスクロールしても見えている。
   const messages = await mockTerminalSession(page, `${longOutput}\x1b[H\x1b[2J\x1b]133;A\x07$ \x1b]133;B\x07echo 0123456789`);
   await page.emulateMedia({ reducedMotion: "reduce" });
   const rows = await openMockedTerminal(page, installation);
@@ -1790,7 +1790,7 @@ test("a tap on the line being typed moves the cursor and leaves the scrollback w
   const rowHeight = await drawnLines.first().evaluate((row) => row.getBoundingClientRect().height);
   const box = (await rows.boundingBox())!;
 
-  // 3行戻す。行の途中で離した指は近いほうの行へ寄るので、半端を半行から離して、寄る先を決めておく。
+  // 3行上へスクロールする。行の途中で離した指は近いほうの行へ寄るので、半端を半行から離して、寄る先を決めておく。
   await swipe(page, { x: box.x + box.width / 2, y: box.y + box.height * 0.3 }, { x: box.x + box.width / 2, y: box.y + box.height * 0.3 + rowHeight * 2.8 });
   // 描き直しを待ってから、打っている行の場所を測る。
   await expect(drawnLines.nth(3)).toContainText("echo 0123456789");
