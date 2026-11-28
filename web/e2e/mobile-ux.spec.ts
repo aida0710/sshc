@@ -1786,18 +1786,22 @@ test("a tap on the line being typed moves the cursor and leaves the scrollback w
   const typed = drawnSpan(page, "echo 0123456789").last();
   await expect(typed).toBeVisible();
   await expect(rows).not.toContainText(/line \d+/);
-  const rowHeight = await drawnRowsIn(page.getByRole("region", { name: "Terminal for Demo shell" })).first().evaluate((row) => row.getBoundingClientRect().height);
+  const drawnLines = drawnRowsIn(page.getByRole("region", { name: "Terminal for Demo shell" }));
+  const rowHeight = await drawnLines.first().evaluate((row) => row.getBoundingClientRect().height);
   const box = (await rows.boundingBox())!;
 
-  await swipe(page, { x: box.x + box.width / 2, y: box.y + box.height * 0.3 }, { x: box.x + box.width / 2, y: box.y + box.height * 0.3 + rowHeight * 3.5 });
-  await expect(rows).toContainText(/line \d+/);
-  await expect(typed).toBeVisible();
+  // 3行戻す。行の途中で離した指は近いほうの行へ寄るので、半端を半行から離して、寄る先を決めておく。
+  await swipe(page, { x: box.x + box.width / 2, y: box.y + box.height * 0.3 }, { x: box.x + box.width / 2, y: box.y + box.height * 0.3 + rowHeight * 2.8 });
+  // 描き直しを待ってから、打っている行の場所を測る。
+  await expect(drawnLines.nth(3)).toContainText("echo 0123456789");
   const shownBefore = await rows.innerText();
   const typedBox = (await typed.boundingBox())!;
   const text = (await typed.textContent()) ?? "";
   await page.touchscreen.tap(typedBox.x + (text.indexOf("5") + 0.5) * (typedBox.width / text.length), typedBox.y + typedBox.height / 2);
 
   await expect.poll(() => messages.join("")).toContain("\x1b[D".repeat(5));
+  // 画面を動かしていれば、xterm.js は次のフレームで描き直す。それを待ってから読む。
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   expect(await rows.innerText()).toBe(shownBefore);
 });
 
