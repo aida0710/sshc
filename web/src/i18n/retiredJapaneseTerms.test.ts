@@ -43,7 +43,7 @@ function linesOf(pages: JapanesePage[]): Wording[] {
   return pages.flatMap((page) => page.lines.map((text, index) => ({ text, location: `${page.path}:${index + 1}` })));
 }
 
-// Androidでだけ出す文。androidCatalogue.tsが画面の文を差し替えたものと言い換えたもの。ja.tsと同じ文は、
+// Androidでだけ表示する文。androidCatalogue.tsが画面の文を差し替えたものと言い換えたもの。ja.tsと同じ文は、
 // 画面の文として読む。
 function androidOnlyJapanese(): Wording[] {
   const android = androidCatalogue("ja");

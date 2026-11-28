@@ -1,4 +1,4 @@
-// commentLines.mjs の型。web/src のテスト（退けた語の検査）が TypeScript から読むので置く。
+// commentLines.mjs の型。web/src のテスト（使わないと決めた語の検査）が TypeScript から読むので置く。
 
 export type Language = "go" | "java" | "kotlin" | "javascript" | "css";
 

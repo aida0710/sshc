@@ -30,7 +30,7 @@
 
 ## 日本語の用語
 
-画面（`web/src/i18n/messages/ja.ts`、Androidの`values-ja/strings.xml`と、Androidでだけ出す`web/src/i18n/androidCatalogue.ts`の文）、sshcエンジンが書く文、pages、README、docs/、コードのコメントの日本語は次の表に従います。2026-09-23〜24と2026-09-30に決めたものです。直訳調や和語への置き換えを避け、日本のIT利用者がソフトウェアで普段目にする言い方にします。
+画面（`web/src/i18n/messages/ja.ts`、Androidの`values-ja/strings.xml`と、Androidでだけ表示する`web/src/i18n/androidCatalogue.ts`の文）、sshcエンジンが書く文、pages、README、docs/、コードのコメントの日本語は次の表に従います。2026-09-23〜24と2026-09-30に決めたものです。直訳調や和語への置き換えを避け、日本のIT利用者がソフトウェアで普段目にする言い方にします。
 
 | 使用する表現 | 避ける表現 | 備考 |
 | --- | --- | --- |
@@ -70,7 +70,7 @@
 表の語のうち、文脈によらず誤りと言えるもの（端末、資格情報、施錠、握手、ブラウザー、ディレクトリ、経路など）は、`web/src/i18n/retiredJapaneseTerms.test.ts`が次の範囲で検査します。
 
 - 画面、Androidの文言、pages
-- sshcエンジンが書く文。internal/、cmd/、mobile/にあるテストでないGoのファイルの、コメントを除いた部分を読みます。TypeScriptのコードを書き出すコマンド（rulegen、runtimegen）は、文字列が書き出すコードのコメントとテストケースの説明なので除きます
+- sshcエンジンが書く文。internal/、cmd/、mobile/にあるテストでないGoのファイルの、コメントを除いた部分を読みます。TypeScriptのコードを生成するコマンド（rulegen、runtimegen）の文字列は、生成するコードの一部なので除きます
 - README、AGENTS.md、docs/直下の文書。名前に日付を持つ監査や調査の記録と、この文書は除きます
 - コードのコメント。gitに追加したGo、TypeScript、JavaScript、Java、Kotlin、CSSのファイルを読みます。コメントの見分け方は、足したコメントの言語の検査（`scripts/ci/check-comment-language.mjs`）と同じです。次の語はコメントでは検査しません
   - 端末、経路: コメントにはまだ残っています

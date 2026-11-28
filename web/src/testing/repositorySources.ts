@@ -53,13 +53,12 @@ export function repositoryComments(): SourceText[] {
 
 // sshcエンジンのGoのコード。テストは除く。
 const engineSource = /^(?:internal|cmd|mobile)\/.*(?<!_test)\.go$/;
-// TypeScriptのコードを書き出すコマンド。文字列は、書き出すコードのコメントとテストケースの説明で、
-// sshcエンジンが書く文ではない。書き出したコメントは、書き出した先（web/src/rules/generated.tsなど）を
-// repositoryCommentsが読む。
+// TypeScriptのコードを生成するコマンド。文字列は生成するコードの一部で、sshcエンジンが書く文ではない。
+// 生成したコードのコメントは、生成先（web/src/rules/generated.tsなど）をrepositoryCommentsが読む。
 const typeScriptGenerator = /^internal\/(?:validate\/cmd\/rulegen|api\/cmd\/runtimegen)\//;
 
 // engineCodeOutsideComments は、sshcエンジンのGoのコードを、コメントを除いた行にして返す。Goの識別子は
-// 英数字なので、ここにある日本語は、sshcエンジンが書く文字列の中の文である。
+// 英数字なので、ここにある日本語は文字列の中の文である（サーバーのプロンプトと照合する語も入る）。
 export function engineCodeOutsideComments(): SourceText[] {
   engineCode ??= trackedFiles()
     .filter((path) => engineSource.test(path) && !typeScriptGenerator.test(path))
