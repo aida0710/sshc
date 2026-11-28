@@ -53,6 +53,13 @@ describe("findEnglishComments", () => {
     ]);
   });
 
+  it("CSS のコメントも同じに見る", () => {
+    const source = ["/* The frame shown while a remote session is chosen. */", ":root { --ui-remote: #6550d0; }"].join("\n");
+    assert.deepEqual(flaggedLines(addedFile(source, { path: "web/src/theme/themes/dark.css", language: "css" })), [
+      "web/src/theme/themes/dark.css:1",
+    ]);
+  });
+
   it("かなか漢字を含む行と、英単語が3つ並ばない行は通す", () => {
     const passing = [
       "// alias の session を返す",

@@ -75,12 +75,23 @@ describe("commentLinesOf", () => {
     const source = ['val path = "${root("//")}/x" /* 外 /* 内 */ まだ外 */', "fun `doesn't crash`() {} // 名前の後"].join("\n");
     assert.deepEqual(commentsOf(source, "kotlin"), { 1: ["/* 外 /* 内 */ まだ外 */"], 2: ["// 名前の後"] });
   });
+
+  it("CSS は /* */ だけをコメントにし、url() の // と文字列の中の /* を読み飛ばす", () => {
+    const source = [
+      ".banner { background: url(//pelican.example/banner.png); }",
+      '.mark::before { content: "/* 文字列の中 */"; } /* 文字列の後 */',
+      "/* 一行目",
+      "   二行目 */",
+    ].join("\n");
+    assert.deepEqual(commentsOf(source, "css"), { 2: ["/* 文字列の後 */"], 3: ["/* 一行目"], 4: ["   二行目 */"] });
+  });
 });
 
 describe("languageOfPath", () => {
   it("コメントを読める拡張子だけに言語を返す", () => {
     assert.equal(languageOfPath("internal/sftp/service.go"), "go");
     assert.equal(languageOfPath("web/src/App.tsx"), "javascript");
+    assert.equal(languageOfPath("web/src/index.css"), "css");
     assert.equal(languageOfPath("scripts/ci/check-gofmt.sh"), undefined);
     assert.equal(languageOfPath("README.md"), undefined);
   });

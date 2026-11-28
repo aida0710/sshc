@@ -36,6 +36,11 @@ const languages = {
     jsxText: true,
     literals: [literal('"'), literal("'"), literal("`", { multiline: true, templates: true })],
   },
+  css: {
+    // CSS のコメントは /* */ だけで、url(//…) のように // はコメントではない。
+    lineComments: false,
+    literals: [literal('"'), literal("'")],
+  },
 };
 
 const languageOfExtension = {
@@ -47,6 +52,7 @@ const languageOfExtension = {
   ".mjs": "javascript",
   ".ts": "javascript",
   ".tsx": "javascript",
+  ".css": "css",
 };
 
 // languageOfPath は、パスの拡張子から言語を返す。見ない拡張子なら undefined を返す。
@@ -155,7 +161,8 @@ function regexEnd(source, start) {
 
 // findCommentRanges は、source のコメントの範囲を [start, end) の文字の位置で返す。
 function findCommentRanges(source, language) {
-  const { literals, nestedBlockComments = false, regexLiterals = false, jsxText = false } = languages[language];
+  const { literals, lineComments = true, nestedBlockComments = false, regexLiterals = false, jsxText = false } =
+    languages[language];
   const ranges = [];
   // 開いているテンプレートの式（${ … }）ごとに、その字句と、式の中で開いている { の数を積む。
   const openExpressions = [];
@@ -173,7 +180,7 @@ function findCommentRanges(source, language) {
 
   while (position < source.length) {
     const character = source[position];
-    if (source.startsWith("//", position)) {
+    if (lineComments && source.startsWith("//", position)) {
       if (jsxText && source[position - 1] === ":") {
         position = lineEndOf(source, position);
         continue;
