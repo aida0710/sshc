@@ -21,7 +21,7 @@ var (
 	ErrNoPassword = errors.New("no password is stored for that host")
 	// ErrNoPasswordMutation は、要求が vault の意味上の状態を変えないことを報告する。
 	ErrNoPasswordMutation = errors.New("password mutation makes no change")
-	// ErrCredentialAlreadyExists は、新規共有資格情報が既存名を上書きするのを防ぐ。
+	// ErrCredentialAlreadyExists は、新しい共有の認証情報が既存名を上書きするのを防ぐ。
 	ErrCredentialAlreadyExists = errors.New("a credential of that kind already has that name")
 	// ErrUnknownPasswordMutation は接続作成が扱う三つのパスワード源以外を拒否する。
 	ErrUnknownPasswordMutation = errors.New("that is not a password mutation kind")
@@ -50,7 +50,7 @@ var (
 // ErrStorageBusy と同じく、HTTP 層が storage を import せずに待ち時間を伝えるための別名である。
 const StorageBusyWait = storage.MutationLockWait
 
-// IdleTimeout は、最後に資格情報を使用してから vault を自動ロックするまでの時間。
+// IdleTimeout は、最後に認証情報を使用してから vault を自動ロックするまでの時間。
 // engine の起動形態にかかわらず適用する。
 const IdleTimeout = 12 * time.Hour
 

@@ -166,7 +166,7 @@ func TestSettingTheSameVPNSecretsLeavesTheVaultUnwritten(t *testing.T) {
 	}
 }
 
-// VPN の秘密は、資格情報の画面と API の名前空間には現れない。
+// VPN の秘密は、認証情報の画面と API の名前空間には現れない。
 func TestVPNSecretsAreNotReachableThroughTheCredentialNamespaces(t *testing.T) {
 	service, manager := newVPNSecretsService(t)
 	setVPNSecrets(t, service, manager, "tundra", wireGuardRecord)
@@ -180,7 +180,7 @@ func TestVPNSecretsAreNotReachableThroughTheCredentialNamespaces(t *testing.T) {
 	}
 	for kind, names := range listed {
 		if len(names) != 0 {
-			t.Fatalf("資格情報の一覧に %s が %v として現れた", kind, names)
+			t.Fatalf("認証情報の一覧に %s が %v として現れた", kind, names)
 		}
 	}
 }

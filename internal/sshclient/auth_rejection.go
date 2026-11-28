@@ -8,7 +8,7 @@ import (
 // ErrAuthenticationRejected は、差し出した認証をサーバーがどれも受け入れなかったことを表す。
 //
 // 鍵が authorized_keys から外された、パスワードが違う、差し出した鍵が多すぎて
-// MaxAuthTries で切られた、といった失敗である。設定か資格情報を直さない限り、
+// MaxAuthTries で切られた、といった失敗である。設定か認証情報を直さない限り、
 // 繋ぎ直しても同じ理由で断られる。
 var ErrAuthenticationRejected = errors.New("the server rejected every authentication method offered")
 

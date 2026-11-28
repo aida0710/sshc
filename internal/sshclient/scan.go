@@ -17,8 +17,8 @@ const DefaultScanTimeout = 15 * time.Second
 
 // errKeyCollected は、鍵を受け取ったので握手を止めるという合図である。
 //
-// 失敗ではない。鍵を集めるのに資格情報は要らないので、鍵が手に入った時点で
-// 用は済んでいる。そこから認証へ進むと、集めるだけのはずの操作が資格情報を
+// 失敗ではない。鍵を集めるのに認証情報は要らないので、鍵が手に入った時点で
+// 用は済んでいる。そこから認証へ進むと、集めるだけのはずの操作が認証情報を
 // 差し出すことになる。
 var errKeyCollected = errors.New("sshclient: the host key was collected")
 
@@ -95,7 +95,7 @@ func scanOne(
 	var found ssh.PublicKey
 	_, _, _, err = ssh.NewClientConn(conn, address, &ssh.ClientConfig{
 		// 認証方式をひとつも渡さない。ここまで進む前に断つので使われないが、
-		// 渡さないこと自体が「資格情報を持ち込まない」という宣言である。
+		// 渡さないこと自体が「認証情報を持ち込まない」という宣言である。
 		User:              "sshc-keyscan",
 		HostKeyAlgorithms: []string{algorithm},
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {

@@ -16,7 +16,7 @@ import (
 	"sshc/internal/objectstore"
 )
 
-// AWS が公開している SigV4 テストスイートの資格情報。署名そのものはもう SDK の
+// AWS が公開している SigV4 テストスイートの認証情報。署名そのものはもう SDK の
 // 責任なので既知解テストは持たないが、鍵が回線へ漏れていないことを確かめる
 // テストには、探すべき具体的な文字列が要る。
 const (
@@ -246,7 +246,7 @@ func TestEveryRequestIsSignedAndCarriesNoCredentialInTheURL(t *testing.T) {
 }
 
 func TestAPlaintextEndpointIsRefused(t *testing.T) {
-	// 本文はここへ届く前に暗号化されているが、資格情報はそうではない。
+	// 本文はここへ届く前に暗号化されているが、認証情報はそうではない。
 	client := objectstore.Client{
 		Endpoint:    "http://example.com",
 		Bucket:      "sshc",

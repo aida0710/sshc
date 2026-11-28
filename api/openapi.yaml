@@ -4829,7 +4829,7 @@ components:
           type: string
           enum: [password, key_passphrase, totp]
         name: { type: string }
-        # この資格情報を指しているもの。パスワードなら alias、パスフレーズなら
+        # この認証情報を指しているもの。パスワードなら alias、パスフレーズなら
         # 鍵のパスである。値そのものは決して含まない。
         uses: { type: array, items: { type: string } }
         # パスワードまたはTOTPなら uses と同じ alias。パスフレーズなら、その鍵を
@@ -6184,7 +6184,7 @@ components:
         region: { type: string, maxLength: 64 }
         accessKeyId: { type: string, minLength: 1, maxLength: 512 }
         secretAccessKey: { type: string, minLength: 1, maxLength: 512 }
-        # trueの場合はengine内の既存資格情報を再利用し、秘密値をクライアントへ返さない。
+        # trueの場合はengine内の既存の認証情報を再利用し、秘密値をクライアントへ返さない。
         reuseCredentials: { type: boolean }
     SyncSetupCheckResponse:
       type: object

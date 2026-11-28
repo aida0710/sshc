@@ -70,7 +70,7 @@ type Auth struct {
 	// ssh.AuthMethod は暗号化された interface なので、外から包めない。
 	// どの方式で通ったかを言えるのは、方式を組み立てるここだけである。
 	Observe func(method string)
-	// ObserveCredential は、保存済み資格情報を認証質問へ使えたかを、秘密値を
+	// ObserveCredential は、保存済みの認証情報を認証質問へ使えたかを、秘密値を
 	// 渡さずに報告する。接続ログ専用であり、コードや質問への回答は含めない。
 	ObserveCredential func(target Target, event CredentialEvent, echoed bool)
 	// typedPasswords は、この接続の行き先で打ったパスワードを覚える。Dialer.connect が接続ごとの
@@ -88,7 +88,7 @@ type Auth struct {
 	trace *tracer
 }
 
-// CredentialEvent は、認証中の保存済み資格情報に関する安全な診断である。
+// CredentialEvent は、認証中の保存済みの認証情報に関する安全な診断である。
 type CredentialEvent string
 
 const (
@@ -383,7 +383,7 @@ func (round keyboardRound) hasOneHiddenNonTOTPQuestion() bool {
 // traceChallenge は、サーバーが出した keyboard-interactive の問いを接続ログに書く。
 //
 // 問いの文はサーバーが書いたものなので、端末へ出す前に制御文字を落とす。
-// 保存済みの資格情報で答えた問いはユーザーの画面に出ないため、何を聞かれて
+// 保存済みの認証情報で答えた問いはユーザーの画面に出ないため、何を聞かれて
 // いたかを知る手段はこの行だけである。
 func (a Auth) traceChallenge(name string, questions []string, echos []bool) {
 	if !a.trace.enabled(connectionlog.Full) {
@@ -601,7 +601,7 @@ type keyboardChallenge struct {
 	echos                      []bool
 }
 
-// challengeAnswers は、問いごとの答えと、保存済みの資格情報ですでに答えたかである。
+// challengeAnswers は、問いごとの答えと、保存済みの認証情報ですでに答えたかである。
 type challengeAnswers struct {
 	values   []string
 	answered []bool

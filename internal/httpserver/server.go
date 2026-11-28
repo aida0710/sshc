@@ -364,8 +364,8 @@ func New(options Options) (*Server, error) {
 	//
 	// 無効な Host や、`/api/` の fetch/origin/session/CSRF に反する要求は、
 	// 停止中かどうかに関わらず今までどおり弾かれ、数にも入らない。逆に、
-	// ルート側で検証する非 API の資格情報より stoppingGate が先に動くため、停止開始後は
-	// 資格情報を確かめる前に 503 が返る。この順序はテストで
+	// ルート側で検証する非 API の認証情報より stoppingGate が先に動くため、停止開始後は
+	// 認証情報を確かめる前に 503 が返る。この順序はテストで
 	// 固定する。
 	e.Use(server.stoppingGate)
 

@@ -249,7 +249,7 @@ func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
 }
 
 // engineTestServer は、テスト用 handoff の秘密（testHandoff）を知る偽 engine として
-// CLI の challenge に答え、それ以外の要求を handler へ渡す。CLI は秘密や資格情報を
+// CLI の challenge に答え、それ以外の要求を handler へ渡す。CLI は秘密や認証情報を
 // 送る前に必ずこの証明を求めるので、偽 engine を立てる全テストがここを通る。
 func engineTestServer(handler http.Handler) *httptest.Server {
 	secret := testHandoff("").Secret

@@ -261,7 +261,7 @@ func TestStartupWithALockedVaultLeavesAVaultWriteThatNeedsTheKeyForAfterUnlock(t
 	}
 }
 
-// 資格情報だけを書く変更は、vault がまだ作られていないときも、ロック中と同じに断る。
+// 認証情報だけを書く変更は、vault がまだ作られていないときも、ロック中と同じに断る。
 // 接続の保存が ErrNoVault を返すのとは分けてある（TestConnectionSecretsMutationRequiresAnUnlockedExistingVault）。
 func TestAVaultOnlyWriteReportsAMissingVaultAsLocked(t *testing.T) {
 	service, _ := newService(t)

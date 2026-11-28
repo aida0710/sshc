@@ -33,7 +33,7 @@ type state struct {
 	Key string `json:"key"`
 	// Target は Endpoint、Bucket、Region、Key から作る同期先の識別子。同じ Key を
 	// 使う別バケットへ設定を変えたとき、以前の ETag と Base を流用しないために持つ。
-	// 資格情報と direction は同期先そのものではないため含めない。
+	// 認証情報と direction は同期先そのものではないため含めない。
 	Target string `json:"target,omitempty"`
 	// Base は、そのスナップショットのマニフェスト。あとの pull に「別のマシンで削除
 	// された」と「前回の同期以降ここで作られた」の違いを教えるのが、これで

@@ -24,7 +24,7 @@ import (
 )
 
 // neverTravels は、ワークスペースに存在しても同期対象から除外するファイル。
-// オブジェクトストア資格情報や端末固有の状態をスナップショットへ含めない。
+// オブジェクトストアの認証情報や端末固有の状態をスナップショットへ含めない。
 // パスは持ち主のパッケージの定数から組み立て、持ち主が名前を変えても除外が外れない
 // ようにする。
 var neverTravels = slices.Concat([]string{
@@ -32,7 +32,7 @@ var neverTravels = slices.Concat([]string{
 	path.Join(storage.StateDirectoryName, enginelog.DirectoryName),
 	// パスワードなしの Vault を開く、このマシンだけの鍵。
 	secret.LocalKeyPath,
-	// オブジェクトストアの資格情報。暗号化されてはいるが、自分のバケットへの鍵を運ぶ
+	// オブジェクトストアの認証情報。暗号化されてはいるが、自分のバケットへの鍵を運ぶ
 	// スナップショットは、スナップショットをひとつ入手した者が以後のすべてを取得
 	// できることを意味する。
 	secret.SettingsPath,
@@ -143,7 +143,7 @@ func inboundReserved(relative string) bool {
 // Collect は、スナップショットに含めるべきすべてのファイルを読む。
 //
 // すなわち、~/.ssh 配下の通常ファイルすべてと、パスワードの vault 文書である。
-// 同期資格情報、端末固有の状態、処理中の一時ファイルは除外し、symlink と socket、
+// 同期の認証情報、端末固有の状態、処理中の一時ファイルは除外し、symlink と socket、
 // FIFO、device はたどらず運ばない。
 func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 	contents := map[string][]byte{}

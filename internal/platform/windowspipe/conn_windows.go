@@ -406,7 +406,7 @@ func (operation *operation) remaining() uint32 {
 	return uint32(milliseconds)
 }
 
-// pipeAddress は、この接続の宛先である。資格情報を持たない。
+// pipeAddress は、この接続の宛先である。認証情報を持たない。
 // 名前は固定であり、そこに秘密は現れない。
 type pipeAddress string
 

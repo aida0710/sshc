@@ -24,7 +24,7 @@ func sealedVault(t *testing.T, entries map[string]string) []byte {
 	}
 	for alias, password := range entries {
 		// 「このホストのためにパスワードを保存する」とは、alias にちなんで名付けられた
-		// 資格情報と、その alias がそれを指すこと、の組である。
+		// 認証情報と、その alias がそれを指すこと、の組である。
 		if err := vault.Set(secret.KindPassword, alias, password); err != nil {
 			t.Fatalf("Set(%q) = %v", alias, err)
 		}
@@ -202,7 +202,7 @@ func TestSetRefusesAnUnsafeAliasAndAnEmptyPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 資格情報名は alias ではないため、Set では alias の書式を検証しない。
+	// 認証情報の名前は alias ではないため、Set では alias の書式を検証しない。
 	// alias を受け取る Assign が検証を担当する。
 	if err := vault.Set(secret.KindPassword, "shared", "x"); err != nil {
 		t.Fatalf("Set = %v", err)

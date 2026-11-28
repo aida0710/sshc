@@ -57,7 +57,7 @@ type testServer struct {
 	dialed       []string
 	connected    int
 	// attempts は、認証がこのサーバーへ届いた回数である。鍵を集めるだけの
-	// 操作が資格情報を差し出していないことを、これで言う。
+	// 操作が認証情報を差し出していないことを、これで言う。
 	attempts int
 	// keyboardAnswers は、keyboard-interactive の質問へクライアントが返した答えの
 	// 並びである。質問に答えずに打ち切った回は入らない。

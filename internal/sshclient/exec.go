@@ -53,7 +53,7 @@ var ErrCommandTimedOut = fmt.Errorf("the remote command did not finish within it
 // 端末は要求しない。引数も無い。コマンドはリモートのシェルが 1 本の
 // 文字列として受け取る。これは OpenSSH の `ssh host 'command'` と同じである。
 //
-// 保存済み資格情報は対話接続と同じ認証経路で使用するが、追加質問は拒否する。
+// 保存済みの認証情報は対話接続と同じ認証経路で使用するが、追加質問は拒否する。
 // 保存済みの結果で通らない接続はそこで失敗し、ユーザー入力を待たない。
 //
 // keepalive は ServerAliveInterval を設定した接続にだけ送る。上限を置かずに長く

@@ -231,7 +231,7 @@ type KeyReplacementProvider func() (oldKey string, commit func() error, err erro
 
 // remoteBinding は、ひとつの設定保存で切り替わるリモート接続一式。
 //
-// client は Endpoint、Bucket、Region、資格情報を自分の中にも保持する。したがって、
+// client は Endpoint、Bucket、Region、認証情報を自分の中にも保持する。したがって、
 // client と config を別々に読むと、再設定と同期が重なったときに、古いバケットへ
 // 新しいパスで書くような、どの保存設定にも存在しなかった組合せを作れてしまう。
 type remoteBinding struct {

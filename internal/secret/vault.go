@@ -1,4 +1,4 @@
-// Package secret は、OpenSSH 接続で使用する資格情報を暗号化して保存する。
+// Package secret は、OpenSSH 接続で使用する認証情報を暗号化して保存する。
 // 保存先はワークスペース内の ~/.ssh/sshc/secrets。鍵はマスターパスワード、
 // またはパスワードなしモードの端末専用乱数から導出する。
 package secret
@@ -50,7 +50,7 @@ const (
 	MaxPasswordLength = 1024
 )
 
-// Kind は、資格情報の名前空間を表す。
+// Kind は、認証情報の名前空間を表す。
 //
 // ホストは KindPassword と KindTOTP のみを、鍵は KindKeyPassphrase のみを参照できる。名前空間が
 // ひとつなら、ホストのパスワード選択画面が鍵のパスフレーズを提示できてしまい、それを
@@ -71,12 +71,12 @@ const (
 	// 同時に消えるので、分けて持つとプロファイルを作る・改名する・消すたびに
 	// 複数件の整合を取ることになる。
 	//
-	// この名前空間は host にも鍵にも割り当てない。資格情報の画面と API にも
-	// 現れない。VPN 経路の設定の一部であり、接続先へ送る資格情報ではない。
+	// この名前空間は host にも鍵にも割り当てない。認証情報の画面と API にも
+	// 現れない。VPN 経路の設定の一部であり、接続先へ送る認証情報ではない。
 	KindVPN Kind = "vpn"
 )
 
-// ValidKind は、資格情報の画面と API が名指してよい名前空間かを報告する。この
+// ValidKind は、認証情報の画面と API が名指してよい名前空間かを報告する。この
 // 集合が決まる唯一の場所なので、ルートとフォームがそれについて食い違うことは
 // ありえない。
 func ValidKind(kind Kind) bool {
@@ -85,7 +85,7 @@ func ValidKind(kind Kind) bool {
 
 // storedKind は、vault が値を保存する名前空間かを報告する。
 //
-// ValidKind より広い。VPN の秘密は vault が保存するが、資格情報として host や
+// ValidKind より広い。VPN の秘密は vault が保存するが、認証情報として host や
 // 鍵へ割り当てるものではないので、画面と API の集合には入れない。
 func storedKind(kind Kind) bool {
 	return ValidKind(kind) || kind == KindVPN
@@ -137,7 +137,7 @@ func newMaps() (map[Kind]map[string]string, map[Kind]map[string]string) {
 		map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}, KindTOTP: {}}
 }
 
-// Empty は、この vault が資格情報も参照も保持していないことを報告する。
+// Empty は、この vault が認証情報も参照も保持していないことを報告する。
 // 初回 pull では空のローカル vault を競合する編集として扱わない。
 func (v *Vault) Empty() bool {
 	for _, secrets := range v.secrets {
@@ -153,7 +153,7 @@ func (v *Vault) Empty() bool {
 	return len(v.dedicatedPasswords) == 0 && len(v.dedicatedKeyPassphrases) == 0
 }
 
-// Names は、ある種別の資格情報名をソートして返す。名前そのものは秘密ではない。
+// Names は、ある種別の認証情報の名前をソートして返す。名前そのものは秘密ではない。
 // 秘密なのは、それが表す値の方である。
 func (v *Vault) Names(kind Kind) []string {
 	return slices.Sorted(maps.Keys(v.secrets[kind]))
@@ -271,7 +271,7 @@ func (v *Vault) clone() *Vault {
 	}
 }
 
-// Set は、名前の下に資格情報を保存する。新規作成か、値の置き換えである。
+// Set は、名前の下に認証情報を保存する。新規作成か、値の置き換えである。
 func (v *Vault) Set(kind Kind, name, value string) error {
 	if !storedKind(kind) {
 		return ErrUnknownKind
@@ -293,8 +293,8 @@ func (v *Vault) Set(kind Kind, name, value string) error {
 	return nil
 }
 
-// RenameCredential は名前付き資格情報そのものを改名し、すべての参照を追従させる。
-// subject の Rename とは別の操作であり、既存の別資格情報を暗黙に上書きしない。
+// RenameCredential は名前付きの認証情報そのものを改名し、すべての参照を追従させる。
+// subject の Rename とは別の操作であり、既存の別の認証情報を暗黙に上書きしない。
 func (v *Vault) RenameCredential(kind Kind, from, to string) error {
 	if !storedKind(kind) {
 		return ErrUnknownKind
@@ -322,7 +322,7 @@ func (v *Vault) RenameCredential(kind Kind, from, to string) error {
 	return nil
 }
 
-// Delete は資格情報を忘れる。まだ何かが指しているあいだは拒否する。
+// Delete は認証情報を忘れる。まだ何かが指しているあいだは拒否する。
 //
 // 秘密に名前を付ける意味は、多くの subject がひとつのエントリを共有することにある。
 // だからその足元でエントリを取り除けば、あとになって、別のどこかで、すべての
@@ -335,7 +335,7 @@ func (v *Vault) Delete(kind Kind, name string) error {
 	return nil
 }
 
-// Uses は、資格情報を参照している subject をソートして列挙する。
+// Uses は、認証情報を参照している subject をソートして列挙する。
 func (v *Vault) Uses(kind Kind, name string) []string {
 	var uses []string
 	for subject, referenced := range v.subjects[kind] {
@@ -347,7 +347,7 @@ func (v *Vault) Uses(kind Kind, name string) []string {
 	return uses
 }
 
-// Assign は、subject を同じ種別の資格情報へ向ける。
+// Assign は、subject を同じ種別の認証情報へ向ける。
 //
 // 種別こそが防護のすべてである。ホストは alias を名前とし、アカウントのパスワード
 // だけを参照できる。鍵はワークスペース相対のパスを名前とし、鍵のパスフレーズだけを
@@ -385,13 +385,13 @@ func (v *Vault) Unassign(kind Kind, subject string) {
 	}
 }
 
-// Assigned は、subject が参照している資格情報を返す。
+// Assigned は、subject が参照している認証情報を返す。
 func (v *Vault) Assigned(kind Kind, subject string) (string, bool) {
 	name, ok := v.subjects[kind][subject]
 	return name, ok
 }
 
-// Subjects は、ある資格情報を参照している、ある種別のすべての subject を返す。
+// Subjects は、ある認証情報を参照している、ある種別のすべての subject を返す。
 func (v *Vault) Subjects(kind Kind) []string {
 	subjects := maps.Clone(v.subjects[kind])
 	if kind == KindPassword {
@@ -543,14 +543,14 @@ func (v *Vault) RelocateSubjects(kind Kind, relocations map[string]string) (bool
 	return true, nil
 }
 
-// maxVaultNameLength は、Vault が資格情報の名前として受け付ける上限（UTF-8 のバイト数）
+// maxVaultNameLength は、Vault が認証情報の名前として受け付ける上限（UTF-8 のバイト数）
 // である。共有の認証情報の名前は、HTTP の入口が MaxCredentialNameLength で先に断る。VPN
 // プロファイルのシークレットはプロファイル名を名前にする。プロファイル名は 48 文字まで
 // 使えるので（internal/vpn）、4 バイトの字だけの名前でも収まる長さにする。
 const maxVaultNameLength = 192
 
 // validCredentialName は、ユーザーが打ち込み、画面が表示できる名前を受け付ける。これは
-// alias ではない。資格情報は、それが何のためのものかにちなんで名付けられ、それは
+// alias ではない。認証情報は、それが何のためのものかにちなんで名付けられ、それは
 // ホスト名ではなく「オフィスの VM 群」かもしれないからだ。
 func validCredentialName(name string) bool {
 	if name == "" || len(name) > maxVaultNameLength {

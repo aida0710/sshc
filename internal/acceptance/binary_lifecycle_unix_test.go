@@ -101,7 +101,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatalf("the binary announced nothing within 15s; stderr:\n%s", stderr.String())
 	}
-	// engine はアクセス URLを出さない。出せば、ワンタイムの資格情報が端末にも
+	// engine はアクセス URLを出さない。出せば、ワンタイムの認証情報が端末にも
 	// ログにも残る。言うのは、次に何を打てばよいかだけである。
 	if announced != "sshc: create the password vault with `sshc vault create`" {
 		t.Fatalf("engine announcement = %q", announced)
@@ -156,7 +156,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 	// 経路可能なアドレス上の同じポートへの接続は受け付けてはならない。
 	assertBoundToLoopbackOnly(t, host)
 
-	// engine はブートストラップを出力しない。資格情報は名簿にあり、それを
+	// engine はブートストラップを出力しない。認証情報は名簿にあり、それを
 	// 持つのは `sshc ssh <alias>` である。ここではその公開された経路を通す。
 	status, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+httpserver.StatusPath, nil)
 	if err != nil {
@@ -174,7 +174,7 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 		t.Fatalf("cli status = %d", answeredStatus)
 	}
 
-	// 資格情報なしでは、同じ経路が応答してはならない。
+	// 認証情報なしでは、同じ経路が応答してはならない。
 	unauthenticated, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+httpserver.StatusPath, nil)
 	if err != nil {
 		t.Fatal(err)

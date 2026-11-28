@@ -268,7 +268,7 @@ func exitForCause(cause error) int {
 
 // announceReadiness は、受付が始まったことを伝える。
 //
-// アクセス URLはここに出さない。出せば、ログにも端末にもワンタイムの資格情報が
+// アクセス URLはここに出さない。出せば、ログにも端末にもワンタイムの認証情報が
 // 残る。アクセス URLは `sshc` が求めたときに 1 つずつ発行される。
 func announceReadiness(stdout io.Writer) func(app.Readiness) error {
 	return func(readiness app.Readiness) error {

@@ -56,7 +56,7 @@ func TestOpenStartsAnEngineThatOutlivesTheCommandUntilStopped(t *testing.T) {
 	}
 }
 
-// engine はアクセス URLを出さない。出せば、端末にもログにもワンタイムの資格情報
+// engine はアクセス URLを出さない。出せば、端末にもログにもワンタイムの認証情報
 // が残る。読み手はスクロールバックであり、それは誰にでも見せられる場所ではない。
 func TestHeadlessRunsInTheForegroundWithoutPublishingABootstrapToken(t *testing.T) {
 	home := isolatedHome(t)

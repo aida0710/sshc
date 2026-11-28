@@ -227,7 +227,7 @@ func TestStoredTOTPAnswersAnExplicitChallengeWithoutPrompting(t *testing.T) {
 	}
 }
 
-// 拒否は設定か資格情報を直すまで続くので、呼び出し側が型で見分けて再試行を止める。
+// 拒否は設定か認証情報を直すまで続くので、呼び出し側が型で見分けて再試行を止める。
 func TestARefusedKeyIsReportedAsAnAuthenticationRejection(t *testing.T) {
 	_, _, accepted := keyPair(t)
 	path, contents, _ := keyPair(t)

@@ -22,7 +22,7 @@ import (
 // エンドポイントが設定されていなければスキップするので、`go test ./...` は密閉
 // されたままである。`make integration` はコンテナで SeaweedFS を起動して設定し、
 // CI も同じことをする。S3 互換のサーバーなら何でもよい。SeaweedFS、MinIO、
-// あるいは本物の資格情報を使った R2 そのものでも。
+// あるいは本物の認証情報を使った R2 そのものでも。
 const (
 	endpointVariable = "SSHC_TEST_S3_ENDPOINT"
 	keyVariable      = "SSHC_TEST_S3_KEY"

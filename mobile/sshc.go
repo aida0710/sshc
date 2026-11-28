@@ -283,7 +283,7 @@ func fail(kind int, err error) error {
 }
 
 // safeFailureDetail は画面、clipboard、logcatへ渡せる診断文へ縮約する。
-// 入口資格情報、一般的なcredential parameter、URL userinfo、制御文字を除去する。
+// 入口の認証情報、一般的なcredential parameter、URL userinfo、制御文字を除去する。
 func safeFailureDetail(err error) string {
 	if err == nil {
 		return ""

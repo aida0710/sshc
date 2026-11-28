@@ -48,7 +48,7 @@ func (d Dialer) Connect(ctx context.Context, target Target) (*Connection, error)
 //
 // 接続を見ている人が未知のホスト鍵に答えられるとき（SFTP のタブが最初の一覧を取る接続）は、
 // ターミナルと同じく各段の StrictHostKeyChecking に従い、ask ではその人に尋ねる。認証の
-// 入力（パスフレーズ、パスワード、ワンタイムパスワード）は尋ねず、保存済みの資格情報だけを使う。
+// 入力（パスフレーズ、パスワード、ワンタイムパスワード）は尋ねず、保存済みの認証情報だけを使う。
 //
 // 答えられる人がいなければ、ホスト鍵を尋ねる先が無い。保存した接続先が普段は対話の確認を
 // 許していても、どの段でも未知の鍵を断る。最後の接続先だけにすると、ProxyJump の段が
@@ -64,7 +64,7 @@ func subsystemRoute(ctx context.Context, target Target) (Target, Prompter) {
 }
 
 func requireKnownHosts(target Target) Target {
-	// StrictHostKeyCheckingの強制は、非対話処理が資格情報を未知のhostへ送らないための
+	// StrictHostKeyCheckingの強制は、非対話処理が認証情報を未知のhostへ送らないための
 	// 安全側の変更である。保存時に確認した接続経路そのものは変わっていないので、
 	// password bindingには強制前の値を使う。そうしないと、この関数自身が変更した
 	// Strictだけを理由に、正しい保存passwordを拒否してしまう。

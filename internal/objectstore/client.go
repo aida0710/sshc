@@ -58,7 +58,7 @@ var (
 	// ErrObjectTooLarge は、単一リクエストの上限を超える本文を拒否する。
 	ErrObjectTooLarge = errors.New("the object is too large for a single request")
 	// sharedDefaultHTTPClient は、操作ごとに SDK クライアントを組み立てても接続プールを
-	// 共有する。資格情報やエンドポイントは HTTP クライアントには保持されない。
+	// 共有する。認証情報やエンドポイントは HTTP クライアントには保持されない。
 	sharedDefaultHTTPClient = awshttp.NewBuildableClient().WithTimeout(defaultRequestTimeout)
 )
 
@@ -113,7 +113,7 @@ type Client struct {
 }
 
 // ErrInsecureEndpoint は、ループバックでない平文のエンドポイントを拒否する。
-// 本文はここへ届く前に暗号化されているが、資格情報はそうではない。回線から
+// 本文はここへ届く前に暗号化されているが、認証情報はそうではない。回線から
 // 拾った署名を再生すれば、そのクロックスキューのウィンドウが閉じるまでは有効な
 // リクエストである。
 var ErrInsecureEndpoint = errors.New("the object store endpoint must be https unless it is loopback")
@@ -135,7 +135,7 @@ var loopbackHosts = map[string]bool{"127.0.0.1": true, "::1": true, "localhost":
 // api は、この呼び出しのために構成された SDK のクライアントを返す。
 //
 // LoadDefaultConfig は通らない。あれは環境変数・共有プロファイル・SSO・そして
-// インスタンスメタデータの順に資格情報を探しに行くもので、そのうちひとつは
+// インスタンスメタデータの順に認証情報を探しに行くもので、そのうちひとつは
 // ネットワークへ手を伸ばす。ここで欲しいのは利用者が入力した鍵ひとつだけなので、
 // 静的なプロバイダを直接渡す。これにより、このアプリケーションが自分以外へ通信する
 // のは更新確認だけ、という性質が保たれる。

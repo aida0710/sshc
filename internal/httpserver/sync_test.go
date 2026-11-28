@@ -1241,7 +1241,7 @@ func TestSetupThatCannotReachTheBucketIsNotStored(t *testing.T) {
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	// 何を尋ねても断る bucket。資格情報の打ち間違いは、ここからはこう見える。
+	// 何を尋ねても断る bucket。認証情報の打ち間違いは、ここからはこう見える。
 	refusing := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	})

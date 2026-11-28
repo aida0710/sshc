@@ -257,7 +257,7 @@ func TestDialingAPipeThatIsNotThereFails(t *testing.T) {
 	}
 }
 
-// 宛先の表示に資格情報は現れない。エラーもログもこれを含む。
+// 宛先の表示に認証情報は現れない。エラーもログもこれを含む。
 func TestTheAddressIsTheFixedPipeNameAndNothingElse(t *testing.T) {
 	server := newPipeServer(t)
 	accepting := server.accepting()

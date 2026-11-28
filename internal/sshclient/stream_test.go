@@ -297,7 +297,7 @@ func TestStreamForwardsStandardInputToTheCommand(t *testing.T) {
 	}
 }
 
-// 非対話であることは、vault に保存済みの資格情報まで使わないという意味では
+// 非対話であることは、vault に保存済みの認証情報まで使わないという意味では
 // ない。追加質問は拒否しつつ、対話接続と同じ password 認証を通す。
 func TestStreamUsesAStoredPasswordWithoutConsumingCommandInput(t *testing.T) {
 	received := make(chan string, 1)

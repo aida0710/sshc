@@ -33,7 +33,7 @@ var (
 )
 
 // SchemaVersionError は、復号後に判明したvault documentのバージョンの違いである。schema番号は
-// 秘密ではなく、診断へ載せても資格情報やpassphraseを明かさない。
+// 秘密ではなく、診断へ載せても認証情報やpassphraseを明かさない。
 type SchemaVersionError struct {
 	Found     int
 	Supported int
@@ -55,7 +55,7 @@ func (e *SchemaVersionError) Is(target error) bool {
 
 // document は平文であり、この形でこのパッケージの外へ出ることは決してない。
 //
-// 資格情報のマップが二つ、そして種別ごとに参照のマップがひとつ。ホストは alias で、
+// 認証情報のマップが二つ、そして種別ごとに参照のマップがひとつ。ホストは alias で、
 // 鍵はワークスペース相対のパスでキー付けされる。名前の付いた秘密は、いくつの
 // subject が指していても一度だけ保存される。この形により、
 // 20 台のマシンが共有するパスワードを、一か所でローテーションできる。

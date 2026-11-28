@@ -20,7 +20,7 @@ const MaxWorkingDirectoryBytes = 4096
 // isDirectoryText は、シェルが報告したフォルダか API に送られたフォルダが、下の検査がさらに見てよい文字かを
 // 返す。空でなく、MaxWorkingDirectoryBytes に収まり、制御文字と書式の文字を含まず、ネットワークやデバイスの
 // パスでないことを確かめる。`//host/share` や `\\host\share` は Windows の UNC パスで、あるかを確かめる
-// だけで、そのホストへ SMB でつなぎ、利用者の Windows の資格情報を差し出してしまう。値を決めるのはシェルの
+// だけで、そのホストへ SMB でつなぎ、利用者の Windows の認証情報を差し出してしまう。値を決めるのはシェルの
 // 出力なので、何かが開く前に断る。
 func isDirectoryText(directory string) bool {
 	if directory == "" || len(directory) > MaxWorkingDirectoryBytes {
