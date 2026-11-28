@@ -29,6 +29,7 @@ import { TerminalPortForwards } from "./TerminalPortForwards";
 import { useProgramProgress } from "./useProgramProgress";
 import { TerminalProgressBar } from "./TerminalProgressBar";
 import { TerminalHeader } from "./TerminalHeader";
+import type { MarkedProgramState } from "./programStatus";
 import { defaultFontSize } from "./fontSize";
 import { FontSizeTip } from "./FontSizeTip";
 import { useFontSizeTip } from "./useFontSizeTip";
@@ -110,6 +111,8 @@ type TerminalViewProps = {
   onOpenRemotePath?: (alias: string, path: string, action: RemotePathAction) => void;
   // onOpenNavigation は、スマホの上のバーからサイドバーを開く。スマホでは、このバーがアプリの見出しの代わりになる。
   onOpenNavigation?: (() => void) | undefined;
+  // navigationAttention は、ほかのセッションのプログラムが人を要るとき、上のバーのナビゲーションのボタンに出す状態である。
+  navigationAttention?: MarkedProgramState | null;
   osc52Enabled?: boolean;
   // vpnProfile は、この接続が通るVPN経路の名前である。空なら通らない。
   vpnProfile?: string;
@@ -170,6 +173,7 @@ export function TerminalView({
   tint,
   onOpenRemotePath,
   onOpenNavigation,
+  navigationAttention = null,
   osc52Enabled: initialOsc52Enabled = false,
   vpnProfile = "",
   runTarget,
@@ -562,7 +566,7 @@ export function TerminalView({
 
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
-      <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} runTarget={runTarget} onOpenNavigation={onOpenNavigation}>
+      <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} runTarget={runTarget} onOpenNavigation={onOpenNavigation} navigationAttention={navigationAttention}>
         {mobile ? null : (
           <IconButton label={t("terminal.search")} size="toolbar" tone="faint" className="focus:bg-hover"
             onClick={search.toggle}>

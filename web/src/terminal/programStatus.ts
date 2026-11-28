@@ -11,6 +11,10 @@ export type ProgramStatus = components["schemas"]["TerminalProgramStatus"];
 // ShownProgramStatus is a status a row shows. An idle program shows nothing.
 export type ShownProgramStatus = ProgramStatus & { state: Exclude<ProgramStatus["state"], "idle"> };
 
+// MarkedProgramState は、人を待つ・失敗した・終わった状態である。どれも丸の中に記号を描いた印で出す
+// （ProgramStatusMark）。作業中は回る輪か進み具合の輪で出すので、ここに入らない。
+export type MarkedProgramState = Exclude<ShownProgramStatus["state"], "working">;
+
 // SeenProgramStatus is, per session, the newest program status version this
 // browser has had on screen with the session. A done or failed result newer
 // than that has not been seen.

@@ -1,10 +1,10 @@
 import { InspectorToggle, type InspectorContent } from "../ui/Inspector";
-import { Icon } from "../ui/icons";
 import { useLanguage } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
 import { type RefObject } from "react";
-import { IconButton } from "../ui/IconButton";
+import type { MarkedProgramState } from "../terminal/programStatus";
+import { NavigationButton } from "./NavigationButton";
 
 // A slot of the top bar shows only while it holds something shown. A kept section that is hidden (KeptSections)
 // leaves its way back and its actions in the slots, hidden with an inline display: none (PageChromePortal).
@@ -16,6 +16,7 @@ export function AppHeader({
   navigationId,
   navigationToggleRef,
   navigationPinned = false,
+  navigationAttention,
   onToggleNavigation,
   inspector,
   inspectorOpen,
@@ -31,6 +32,8 @@ export function AppHeader({
   navigationToggleRef?: RefObject<HTMLButtonElement | null>;
   // navigationPinned: the navigation stays open beside the bar (a tablet held upright), so there is nothing to toggle.
   navigationPinned?: boolean;
+  // navigationAttention は、セッションのプログラムが人を要るとき、ナビゲーションのボタンの角に出す状態である。
+  navigationAttention: MarkedProgramState | null;
   onToggleNavigation: () => void;
   inspector: InspectorContent | null;
   inspectorOpen: boolean;
@@ -48,17 +51,18 @@ export function AppHeader({
     <header data-app-header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:hidden">
       <div ref={backSlotRef} data-page-back className={`flex shrink-0 items-center ${hiddenWithoutShownContent}`} />
       {/* The menu button gives way to a page's way back that is shown. */}
-      {navigationPinned ? null : <IconButton
+      {navigationPinned ? null : <NavigationButton
         ref={navigationToggleRef}
         label={t("shell.navigationToggle")}
+        icon="menu"
+        iconClassName="h-4 w-4"
+        attention={navigationAttention}
         size="bar"
         aria-expanded={navigationOpen}
         aria-controls={navigationId}
         onClick={onToggleNavigation}
         className="[[data-page-back]:has(>:not([style*='display:_none']))~&]:hidden"
-      >
-        <Icon name="menu" className="h-4 w-4" />
-      </IconButton>}
+      />}
 
       <p className="min-w-0 flex-1 truncate text-sm font-semibold">
         {route.kind === "section" && route.section !== undefined

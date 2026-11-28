@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { ProgramProgress } from "./programProgress";
 import type { ShownProgramStatus } from "./programStatus";
+import { ProgramStatusMark, statusMarkCircle } from "./ProgramStatusMark";
 import { useSharedTurn } from "../ui/useSharedTurn";
 import { sessionMarkerClass } from "./sessionStatus";
 
@@ -11,15 +12,8 @@ import { sessionMarkerClass } from "./sessionStatus";
 // letters sit in that line depends on the platform's font: measured, the circle is
 // within 1px of their middle on Android and Windows, and only Linux at twice the
 // pixel density draws the letters a pixel higher.
-const markerCircle = "mt-[3.5px] size-[11px] shrink-0 rounded-full";
-
-// The mark that stands for each program status that needs the person: a filled
-// circle with a sign once it waits on them, failed or is done.
-const programStatusMarks: Record<Exclude<ShownProgramStatus["state"], "working">, { fill: string; sign: string }> = {
-  blocked: { fill: "bg-notice-ink shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-notice-ink)_22%,transparent)]", sign: "!" },
-  error: { fill: "bg-danger", sign: "×" },
-  done: { fill: "bg-live", sign: "✓" },
-};
+const placeInRow = "mt-[3.5px] shrink-0";
+const markerCircle = `${placeInRow} ${statusMarkCircle}`;
 
 // The progress ring takes the colors of the bar under the pane header (TerminalProgressBar).
 const progressRingColors: Record<Exclude<ProgramProgress["state"], "indeterminate">, string> = {
@@ -41,13 +35,7 @@ export function SessionMarker({ session, unread, programStatus, programProgress 
   programProgress: ProgramProgress | null;
 }) {
   if (programStatus !== null && programStatus.state !== "working") {
-    const mark = programStatusMarks[programStatus.state];
-    return (
-      <span aria-hidden="true" data-program-status={programStatus.state}
-        className={`${markerCircle} flex items-center justify-center text-[8px] font-bold leading-none text-canvas ${mark.fill}`}>
-        {mark.sign}
-      </span>
-    );
+    return <ProgramStatusMark state={programStatus.state} className={placeInRow} />;
   }
   if (programProgress !== null && programProgress.state !== "indeterminate") {
     return <span aria-hidden="true" data-program-progress={programProgress.state}

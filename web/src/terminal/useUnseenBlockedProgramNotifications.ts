@@ -7,11 +7,11 @@ import { announceBlockedProgram } from "./sessionNotificationAnnouncement";
 import { blockedProgramNotification } from "./terminalNotifications";
 import { useOpenNotifiedSession } from "./useOpenNotifiedSession";
 
-// useUnseenBlockedProgramNotifications notifies a person who leaves sshc about programs that started waiting while they
-// were on another session or page. Only the sidebar told them, and a notification comes only for a change with sshc out
-// of sight (useBlockedProgramNotifications, Android's BlockedProgramWatcher), so nothing else will: the program just
-// goes on waiting. A status is announced once, however many times the person comes and goes, and Android keeps to one
-// for a wait it has announced.
+// useUnseenBlockedProgramNotifications は、ほかのセッションやページを見ている間に待ち始めたプログラムを、sshc から
+// 離れるときに通知する。sshc の中では、サイドバーの行とナビゲーションを開くボタンの角の印（offScreenProgramStatus）が
+// 知らせていた。通知は sshc が見えていない間の変化にしか出ない（useBlockedProgramNotifications、Android の
+// BlockedProgramWatcher）ので、ここで出さないと、プログラムは待ち続ける。人が何度出入りしても1つの状態は1度だけ
+// 知らせ、Android は知らせた待ちについて通知を1つに保つ。
 export function useUnseenBlockedProgramNotifications(
   sessions: TerminalSession[],
   seen: SeenProgramStatus,

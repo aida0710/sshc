@@ -1,18 +1,18 @@
 import type { ReactNode } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
-import { Icon } from "../ui/icons";
+import { NavigationButton } from "../shell/NavigationButton";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import { useSessionDestination } from "./sessionDestination";
+import type { MarkedProgramState } from "./programStatus";
 import { exitedAbnormally, sessionStateText, sessionStatusTone } from "./sessionStatus";
 import type { StreamLink } from "./streamLink";
 import { terminalDisplayTitle } from "./terminalPresentation";
-import { IconButton } from "../ui/IconButton";
 import { Tag } from "../ui/Tag";
 
 // TerminalHeader は、ターミナルの上の見出しである。広い画面では40pxの行、スマホではアプリの見出しに代わる
 // 上のバーになる（ナビゲーションを開くボタン、名前と行き先、右側の操作）。右側の操作は children で受け取る。
-export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, onOpenNavigation, children }: {
+export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, onOpenNavigation, navigationAttention, children }: {
   session: TerminalSession;
   link: StreamLink;
   mobile: boolean;
@@ -21,6 +21,8 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
   // runTarget は、このセッションが動いているエンジンの SSH の別名である。このマシンで動いていれば undefined。
   runTarget: string | undefined;
   onOpenNavigation: (() => void) | undefined;
+  // navigationAttention は、ほかのセッションのプログラムが人を要るとき、ナビゲーションのボタンの角に出す状態である。
+  navigationAttention: MarkedProgramState | null;
   children: ReactNode;
 }) {
   const t = useTranslate();
@@ -33,10 +35,9 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
   return (
     <div className={`group/header relative flex shrink-0 items-center ${mobile ? "h-[54px] gap-1.5 pl-0.5 pr-1.5" : "h-10 gap-[9px] bg-term-bg pl-3.5 pr-2.5"}`}>
       {mobile && onOpenNavigation !== undefined ? (
-        <IconButton label={t("shell.navigationToggle")} size="bar" onClick={onOpenNavigation}>
-          {/* ほかの画面の見出しのメニューのボタンと同じアイコンにする。‹ は「戻る」と読まれた。 */}
-          <Icon name="menu" className="size-5" />
-        </IconButton>
+        // ほかの画面の見出しのメニューのボタンと同じアイコンにする。‹ は「戻る」と読まれた。
+        <NavigationButton label={t("shell.navigationToggle")} icon="menu" iconClassName="size-5" attention={navigationAttention}
+          size="bar" onClick={onOpenNavigation} />
       ) : null}
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-[9px]">

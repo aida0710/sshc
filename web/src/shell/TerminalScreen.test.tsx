@@ -70,6 +70,7 @@ function Screen({ api, targets, connectedEngines = new Set() }: { api: TerminalS
       runTargetLink={{ phase: "ready", refusal: null, connectedEngines }}
       onOpenRemotePath={vi.fn()}
       onOSC52Change={vi.fn(async () => undefined)}
+      navigationAttention={null}
       onOpenVault={vi.fn()}
     />
   );
@@ -248,6 +249,7 @@ function OpeningScreen({ api, targets }: { api: TerminalSessionsApi; targets: Ru
       runTargetLink={{ phase: "ready", refusal: null, connectedEngines }}
       onOpenRemotePath={vi.fn()}
       onOSC52Change={vi.fn(async () => undefined)}
+      navigationAttention={null}
       onOpenVault={vi.fn()}
     />
   );

@@ -18,6 +18,7 @@ import { RunTargetConnectingPanel } from "../terminal/RunTargetConnectingPanel";
 import { RunTargetRefusalPanel } from "../terminal/RunTargetRefusalPanel";
 import type { RunTargetLink } from "../terminal/useRunTargetLink";
 import type { RunTargetsState } from "../terminal/useRunTargets";
+import type { MarkedProgramState } from "../terminal/programStatus";
 import { useKeepScreenAwake } from "../terminal/keepScreenAwake";
 import { useScreenWakeLock } from "../terminal/useScreenWakeLock";
 
@@ -50,12 +51,16 @@ export function TerminalScreen({
   onOpenRemotePath,
   onOSC52Change,
   onOpenNavigation,
+  navigationAttention,
   onOpenVault,
 }: {
   // onOpenVault は、選んでいる sshc エンジンの Vault の画面を開く（Vault が無いときに作る）。
   onOpenVault: () => void;
   // onOpenNavigation opens the sidebar from a phone's terminal top bar; undefined while the sidebar stays open.
   onOpenNavigation?: (() => void) | undefined;
+  // navigationAttention は、ほかのセッションのプログラムが人を要るとき、スマホの上のバーのナビゲーションのボタンに出す
+  // 状態である（offScreenProgramStatus）。
+  navigationAttention: MarkedProgramState | null;
   visible: boolean;
   terminalSessions: TerminalSessionsState;
   activeSessionId: string | null;
@@ -171,6 +176,7 @@ export function TerminalScreen({
           onAnswerPasswordSave={(save) => terminalSessions.answerPasswordSave(session.id, save)}
           onOpenRemotePath={onOpenRemotePath}
           onOpenNavigation={onOpenNavigation}
+          navigationAttention={navigationAttention}
         />
         </Suspense>
       </div>

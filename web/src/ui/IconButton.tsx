@@ -42,7 +42,7 @@ export type IconButtonSize = keyof typeof sizes;
 export type IconButtonTone = keyof typeof tones;
 export type IconButtonGround = keyof typeof grounds;
 
-type IconButtonProps = {
+export type IconButtonProps = {
   // label は、読み上げの名前と、載せたときの吹き出し。字の無いボタンなので必ず要る。
   label: string;
   size: IconButtonSize;

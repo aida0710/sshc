@@ -452,6 +452,13 @@ describe("TerminalView", () => {
       expect(openNavigation).toHaveBeenCalledOnce();
     });
 
+    it("marks the menu button and says why while a program in another session waits for the person", () => {
+      render(<TerminalView session={session} onOpenNavigation={vi.fn()} navigationAttention="blocked" api={{ streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+
+      const toggle = screen.getByRole("button", { name: "Navigation (a session is waiting for you)" });
+      expect(toggle.querySelector("[data-program-status]")).toHaveAttribute("data-program-status", "blocked");
+    });
+
     it("keeps a phone's notices behind a button in the top bar, and shows them when it is tapped", async () => {
       render(<TerminalView session={{
         ...session, kind: "ssh", alias: "bastion", title: "bastion", state: "exited",

@@ -52,6 +52,8 @@ import { useUnseenBlockedProgramNotifications } from "./terminal/useUnseenBlocke
 import { useTerminalNotifications } from "./terminal/useTerminalNotifications";
 import { notificationsComeFromAndroid } from "./ui/browserNotifications";
 import { useSeenProgramStatus } from "./terminal/useSeenProgramStatus";
+import { offScreenProgramStatus } from "./terminal/offScreenProgramStatus";
+import { NavigationButton } from "./shell/NavigationButton";
 import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
 import { mobileViewportQuery, navigationRailQuery, pinnedNavigationQuery, useMediaQuery } from "./ui/useMediaQuery";
@@ -83,8 +85,6 @@ import { paneSessionIds, type PaneEdge } from "./terminal/splitView/layout";
 import { SplitRequestDialog } from "./terminal/splitView/SplitRequestDialog";
 import { TerminalRestorePrompt } from "./terminal/TerminalRestorePrompt";
 import { useFocusBackAfterInert } from "./ui/useFocusBackAfterInert";
-import { Icon } from "./ui/icons";
-import { IconButton } from "./ui/IconButton";
 
 const transferReconcileIntervalMs = 2_000;
 
@@ -383,6 +383,13 @@ export function App({
   });
   const seenProgramStatus = useSeenProgramStatus(terminalSessions.sessions, terminalFace ? activeSessionId : null);
   useUnseenBlockedProgramNotifications(terminalSessions.sessions, seenProgramStatus, { t, onOpenSession: showSession });
+  // ナビゲーションを閉じている間、その中の行の印は見えない。画面に出ていないセッションのプログラムが人を要るときは、
+  // ナビゲーションを開くボタンの角に印を出す。スマホは表示中の1つ、PC は分割表示のペインのどれもが画面に出ている。
+  const navigationAttention = offScreenProgramStatus({
+    sessions: terminalSessions.sessions,
+    seen: seenProgramStatus,
+    sessionsOnScreen: !terminalFace || activeSessionId === null ? [] : splitView.compact ? [activeSessionId] : panes,
+  });
 
 
   function addConnection() {
@@ -469,6 +476,7 @@ export function App({
           navigationId={navigationId}
           navigationToggleRef={navigationTriggerRef}
           navigationPinned={navigationPinned}
+          navigationAttention={navigationAttention}
           onToggleNavigation={() => setNavigationOpen((open) => !open)}
           inspector={inspector}
           inspectorOpen={inspectorOpen}
@@ -512,10 +520,8 @@ export function App({
           {navigationHidden ? (
             // The column the hidden navigation leaves (hiddenNavigationWidth): only the button that shows it again.
             <div className="flex justify-center pt-3">
-              <IconButton label={t("shell.navigationShow")} size="panel"
-                onClick={toggleNavigation}>
-                <Icon name="navigationShow" className="size-4" />
-              </IconButton>
+              <NavigationButton label={t("shell.navigationShow")} icon="navigationShow" iconClassName="size-4" attention={navigationAttention}
+                size="panel" onClick={toggleNavigation} />
             </div>
           ) : null}
           <AppNavigation
@@ -599,6 +605,7 @@ export function App({
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                       onOpenNavigation={navigationPinned ? undefined : () => setNavigationOpen(true)}
+                      navigationAttention={navigationAttention}
                       onOpenVault={openVault}
                     />
                   </div>
