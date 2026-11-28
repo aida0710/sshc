@@ -15,7 +15,31 @@ or that upstream makes slow (a line feed that moves rows instead of cells, ASCII
 printed without a new string for each character), and it keeps the cursors and the
 margins on the screen where upstream lets output move them off and panics.
 `sshc_snapshot_test.go` checks that the handlers that are only faster draw what
-upstream draws. `sshc_shown_screen.go` reads the screen shown as text.
+upstream draws. `sshc_print.go` prints characters, and there sshc draws what
+upstream does not: upstream blanks a wide character that does not fit in the
+last column, and after one that fills the last two columns it does not wait to
+wrap, so the next character erases it. sshc prints as xterm.js does: the
+character goes to the next row and leaves the last column empty in the pen (a
+cell with no content, which the session log does not take for a space:
+`TextLine.WrapGap`), or with wraparound off it is left out. Every parser
+handler first puts out the character held back, so upstream's handleGrapheme
+is never reached. `sshc_wide_edge.go` takes ICH and DCH (CSI Ps @ and P): it
+moves wide characters whole, where upstream's ICH blanks the copy it has just
+moved and upstream's DCH blanks each wide character it moves, and like xterm.js
+it erases what is left of a wide character only half moved or deleted. It also
+erases a wide character that a narrower `Resize` leaves cut at the right edge:
+the snapshot would write it in the last column, and the browser's terminal
+would wrap it to the next row and, on the bottom row, scroll the screen. Two
+cases at the right edge still differ from xterm.js. The width of a character comes from `ansi.GraphemeWidth` whether mode 2027 is on or
+not, so an emoji with VS16 (❤️) takes two columns where xterm.js gives it one
+while 2027 is off; in the last column sshc moves it to the next row and
+xterm.js does not. With wraparound off, xterm.js erases a wide character in the
+last two columns when a wide character that does not fit is printed on its
+right half at the start of a run of printed characters, and keeps it when that
+happens within a run. A run ends at an escape sequence and at the end of each
+piece of output the browser is given, so sshc does not follow this and always
+keeps the character.
+`sshc_shown_screen.go` reads the screen shown as text.
 `sshc_leaving_lines.go` has `NewLeavingLinesEmulator`, which keeps the lines
 leaving the main screen (scrolled off its top, or erased) for the session log,
 and reads output in pieces so that the scrollback, which drops its oldest line

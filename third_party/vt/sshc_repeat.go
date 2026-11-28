@@ -22,19 +22,19 @@ func (e *SnapshotEmulator) repeatPreviousCharacterOnScreen(params ansi.Params) b
 	cells := count - 1
 	if cells > 0 && e.gsingle != 0 {
 		// 1字だけの文字の集合の切り替え（SS2・SS3）は、最初の1字にだけ効く。
-		e.handleGrapheme(string(character), 1)
+		e.putGrapheme(string(character), 1)
 		cells--
 	}
 	e.putRepeatedCells(character, cells)
-	e.handlePrint(character)
+	e.print(character)
 	return true
 }
 
 // putRepeatedCells は、字 character を cells 回書くのと同じ画面にする。character は1バイトの字である
-// （handleGrapheme が lastChar に残すのはそれだけ）。
+// （putGrapheme が lastChar に残すのはそれだけ）。
 func (e *SnapshotEmulator) putRepeatedCells(character rune, cells int) {
 	content := string(character)
-	if mapped, ok := e.charsets[e.gl][byte(character)]; ok {
+	if mapped, ok := e.mappedCharacter(content, 0); ok {
 		content = mapped
 	}
 	width := e.Width()

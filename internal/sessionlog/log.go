@@ -225,11 +225,11 @@ type waitingNote struct {
 	before int
 }
 
-// writeLines は、width 桁の画面にあった行 texts を、シークレットを伏せて書く。値が折り返しをまたぐことがあるので、
+// writeLines は、width 桁の画面にあった行 lines を、シークレットを伏せて書く。値が折り返しをまたぐことがあるので、
 // 行は続きの行が来るまで lineRedactor に留まることがある。
-func (w *lineWriter) writeLines(texts []string, width int) {
-	for _, text := range texts {
-		w.writeShownLine(text, width)
+func (w *lineWriter) writeLines(lines []vt.TextLine, width int) {
+	for _, line := range lines {
+		w.writeShownLine(line, width)
 	}
 }
 
@@ -238,7 +238,7 @@ func (w *lineWriter) writeLines(texts []string, width int) {
 // 最後の続いた行から次の行へまたぐ値は見つかる。
 func (w *lineWriter) writeLeftLines(left []vt.LeftLine, width int) {
 	for _, line := range left {
-		w.writeShownLine(line.Text, width)
+		w.writeShownLine(line.TextLine, width)
 		if line.Repeats > 0 {
 			w.writeReleased(w.redactor.addNote(w.noteLine(fmt.Sprintf(repeatedLineNote, line.Repeats))))
 			w.linesLeft(line.Repeats)
@@ -247,8 +247,8 @@ func (w *lineWriter) writeLeftLines(left []vt.LeftLine, width int) {
 }
 
 // writeShownLine は、width 桁の画面に出た1行を、シークレットを伏せて書く。
-func (w *lineWriter) writeShownLine(text string, width int) {
-	w.writeReleased(w.redactor.add(text, width))
+func (w *lineWriter) writeShownLine(line vt.TextLine, width int) {
+	w.writeReleased(w.redactor.add(line, width))
 	w.linesLeft(1)
 }
 

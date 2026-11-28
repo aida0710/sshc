@@ -51,15 +51,6 @@ type SnapshotEmulator struct {
 	left []LeftLine
 }
 
-// asciiContents are the cell contents of the printable ASCII characters, made once: the emulator's own print makes
-// a new string for every character.
-var asciiContents = func() (contents [ansi.DEL]string) {
-	for c := byte(ansi.SP); c < ansi.DEL; c++ {
-		contents[c] = string(rune(c))
-	}
-	return contents
-}()
-
 // NewSnapshotEmulator returns an emulator for following a terminal's output. It keeps no scrollback: the output
 // the engine still holds is replayed after a snapshot, and older lines are not kept. It sends no replies: the
 // terminal the program talks to answers it.
@@ -91,64 +82,9 @@ func NewSnapshotEmulator(w, h int) *SnapshotEmulator {
 	e.keepScrollRegionOnScreen()
 	e.boundCountsByTheScreen()
 	e.RegisterCsiHandler('b', e.repeatPreviousCharacterOnScreen)
-	e.parser.SetHandler(ansi.Handler{
-		Print:     e.print,
-		Execute:   e.handleControl,
-		HandleCsi: e.handleCsi,
-		HandleEsc: e.handleEsc,
-		HandleDcs: e.handleDcs,
-		HandleOsc: e.handleOsc,
-		HandleApc: e.handleApc,
-		HandlePm:  e.handlePm,
-		HandleSos: e.handleSos,
-	})
+	e.keepWideCharactersWholeWhenShifting()
+	e.parser.SetHandler(e.parserHandler())
 	return e
-}
-
-// print is the emulator's print with a shorter way for the common case. The emulator holds each character back
-// until the next one shows its grapheme cluster has ended; a printable ASCII character after a printable ASCII one
-// ends it for certain, and the one held back needs neither the segmenter nor a new string. Any escape sequence or
-// control character puts out the one held back first, so the character sets in use are still the ones for it.
-func (e *SnapshotEmulator) print(r rune) {
-	if r >= ansi.SP && r < ansi.DEL && len(e.grapheme) == 1 && e.grapheme[0] >= ansi.SP && e.grapheme[0] < ansi.DEL &&
-		e.charsets[e.gl] == nil && e.gsingle == 0 {
-		e.putASCII(e.grapheme[0])
-		e.grapheme[0] = byte(r)
-		return
-	}
-	e.handlePrint(r)
-}
-
-// putASCII is the emulator's handleGrapheme for one printable ASCII character with no character set to map it.
-func (e *SnapshotEmulator) putASCII(c byte) {
-	e.lastChar = rune(c)
-	e.putNarrowCell(asciiContents[c])
-}
-
-// putNarrowCell は、幅1の字 content を、handleGrapheme と同じに書く。行の端で折り返し、カーソルを進める。
-// 文字の集合で写すのは呼ぶ側である。
-func (e *SnapshotEmulator) putNarrowCell(content string) {
-	screen := e.scr
-	x, y := screen.cur.X, screen.cur.Y
-	if e.atPhantom && e.autowrap {
-		if !e.scrollUpAtBottom() {
-			e.index()
-		}
-		y, x = screen.cur.Y, 0
-	}
-	cell := uv.Cell{Content: content, Width: 1, Style: screen.cur.Pen, Link: screen.cur.Link}
-	// Over a one-column cell there is no wide character to clear first, which is all the buffer's SetCell adds
-	// besides marking the row for redrawing, which nothing here does.
-	if row := screen.buf.Lines[y]; x < len(row) && row[x].Width == 1 {
-		row[x] = cell
-	} else {
-		screen.SetCell(x, y, &cell)
-	}
-	e.atPhantom = e.autowrap && x >= screen.Width()-1
-	if !e.atPhantom {
-		x++
-	}
-	screen.setCursor(x, y, false)
 }
 
 // scrollingLinefeed is the emulator's line feed when it scrolls (scrollUpAtBottom). It reports false to leave
@@ -240,6 +176,7 @@ func (e *SnapshotEmulator) Resize(width, height int) {
 			cursor.X = min(cursor.X, width-1)
 			cursor.Y = min(cursor.Y, height-1)
 		}
+		eraseWideCellsCutAtTheRightEdge(screen)
 	}
 }
 
@@ -345,7 +282,7 @@ func (e *SnapshotEmulator) softReset() {
 // cursor, the scroll region, the modes, the character sets and the pen. It works on a terminal that showed
 // something before, without clearing that terminal's scrollback.
 func (e *SnapshotEmulator) Snapshot() string {
-	e.flushGrapheme()
+	e.flushClusters()
 	var b strings.Builder
 	e.writePrologue(&b)
 	main, alt := &e.scrs[0], &e.scrs[1]
@@ -436,6 +373,12 @@ func writeRow(b *strings.Builder, line uv.Line) {
 		if cell.IsZero() {
 			continue
 		}
+		if isWrapGap(cell) {
+			// xterm.js も、このマスを、字を書いたときのペンで空ける。ペンがあれば、そのペンの空白で書く。
+			blank := *cell
+			blank.Content = " "
+			cell = &blank
+		}
 		if cell.Equal(&uv.EmptyCell) {
 			pendingBlanks++
 			continue
@@ -514,11 +457,10 @@ func (e *SnapshotEmulator) writeState(b *strings.Builder, screen *Screen) {
 	}
 	position := cursor.Position
 	if e.atPhantom {
-		// The cursor waits past the last column: the next character starts a new row. Writing the last cell again
-		// leaves a terminal waiting the same way.
-		last := screen.buf.Line(position.Y).At(screen.Width() - 1)
-		if last != nil && !last.IsZero() && last.Width == 1 {
-			writeCursorPosition(b, uv.Pos(screen.Width()-1, position.Y))
+		// カーソルは最後の桁の先で待っていて、次の字は新しい行に書く。最後の桁を使う字をもう一度書くと、
+		// ターミナルも同じに待つ。
+		if column, last := characterInTheLastColumn(screen.buf.Line(position.Y)); last != nil {
+			writeCursorPosition(b, uv.Pos(column, position.Y))
 			b.WriteString(last.Style.String())
 			b.WriteString(last.Content)
 			b.WriteString(ansi.ResetStyle)
@@ -542,6 +484,20 @@ func (e *SnapshotEmulator) writeState(b *strings.Builder, screen *Screen) {
 	if cursor.Link.URL != "" {
 		b.WriteString(ansi.SetHyperlink(cursor.Link.URL, cursor.Link.Params))
 	}
+}
+
+// characterInTheLastColumn は、行の最後の桁を使っている字と、その字が始まる桁を返す。幅2の字なら、最後の2桁を
+// 使う字である。字が無ければ nil を返す。
+func characterInTheLastColumn(line uv.Line) (int, *uv.Cell) {
+	column := len(line) - 1
+	for column > 0 && line[column].IsZero() {
+		column--
+	}
+	cell := line.At(column)
+	if cell == nil || cell.IsZero() || isWrapGap(cell) || column+cell.Width != len(line) {
+		return 0, nil
+	}
+	return column, cell
 }
 
 func writeCursorPosition(b *strings.Builder, position uv.Position) {

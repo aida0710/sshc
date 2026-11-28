@@ -216,6 +216,68 @@ func TestASpaceOfASecretOnTheLastColumnDoesNotLeaveItShown(t *testing.T) {
 	checkLogLines(t, got, []string{"$ unlock --vault r100 --phrase=[secret]", "[secret]"})
 }
 
+// 全角の字は2桁を使う。右端に1桁しか残っていなければ、その字は次の行の頭に出る。右端の2桁をちょうど埋めれば、
+// 次の字が次の行の頭に出る。値に色を付けて映すシェルもある。
+func TestASecretWithWideCharactersAtTheRightEdgeIsHiddenWhole(t *testing.T) {
+	const after = " && echo ok"
+	for name, test := range map[string]struct {
+		prefix, secret, pen string
+		// columns は、値の前の字の桁数である。readLog のターミナルは 40 桁。
+		columns int
+	}{
+		"the second wide character does not fit in the last column": {
+			prefix: "$ unlock --vault dunlin --passphrase=", secret: "鍵穴Tail9", columns: 37,
+		},
+		"a wide character fills the last two columns": {
+			prefix: "$ unlock --vault pelican --passphrase=", secret: "鍵Tail9", columns: 38,
+		},
+		"a wide character after 39 columns of the value and its prefix, in a background colour": {
+			prefix: "$ unlock --vault dunlin --passphrase=", secret: "r9鍵Tail9", pen: "\x1b[44m", columns: 37,
+		},
+		"the second wide character does not fit, in a foreground colour": {
+			prefix: "$ unlock --vault dunlin --passphrase=", secret: "鍵穴Tail9", pen: "\x1b[31m", columns: 37,
+		},
+	} {
+		if len(test.prefix) != test.columns {
+			t.Fatalf("%s: the example's prefix takes %d columns, want %d", name, len(test.prefix), test.columns)
+		}
+		hidden := []string{test.prefix + "[secret]", "[secret]" + after}
+		checkBothWaysOffTheScreen(t, name, func(log *Log) {
+			log.Hide([]string{test.secret})
+			log.Write([]byte(test.prefix + test.pen + test.secret + "\x1b[0m" + after + "\r\n"))
+		}, hidden)
+	}
+}
+
+// checkBothWaysOffTheScreen は、write のあと、行が画面から流れても、画面に残ったままログを閉じても、ログの行が
+// want になることを確かめる。流れた行と、閉じるときに画面にある行は、別の道で書く。
+func checkBothWaysOffTheScreen(t *testing.T, name string, write func(*Log), want []string) {
+	t.Helper()
+	t.Run(name+", the rows scroll off", func(t *testing.T) {
+		got := readLog(t, func(log *Log) {
+			write(log)
+			log.Write([]byte("ok\r\n$ \r\n$ \r\n"))
+		})
+		checkLogLines(t, got, append(slices.Clone(want), "ok", "$", "$"))
+	})
+	t.Run(name+", the rows are on the screen when the log closes", func(t *testing.T) {
+		checkLogLines(t, readLog(t, write), want)
+	})
+}
+
+// 値は、1行目の右端の空白で折り返し、2行目の右端に入らない全角の字で折り返す。
+func TestASecretWrappedAtASpaceAndBeforeAWideCharacterIsHiddenWhole(t *testing.T) {
+	const prefix = "$ unlock --vault r100 --phrase="
+	secret := "pelican9 " + strings.Repeat("dunlin7", 6)[:39] + "鍵穴9"
+	if len(prefix)+strings.IndexByte(secret, ' ') != 39 {
+		t.Fatal("the example must put the space of the secret on the last of the 40 columns")
+	}
+	checkBothWaysOffTheScreen(t, "the value wraps twice", func(log *Log) {
+		log.Hide([]string{secret})
+		log.Write([]byte(prefix + secret + " && echo ok\r\n"))
+	}, []string{prefix + "[secret]", "[secret]", "[secret] && echo ok"})
+}
+
 func TestSecretsThatStartAlikeAreHiddenWhole(t *testing.T) {
 	got := readLog(t, func(log *Log) {
 		log.Hide([]string{"pelican-", "pelican-Tail9secret"})

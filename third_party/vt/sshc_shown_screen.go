@@ -9,12 +9,17 @@ func (e *SnapshotEmulator) AltScreenShown() bool { return e.altScreenShown() }
 // ShownCells returns the text of every cell of the screen shown, row by row: " " for an empty cell and "" for the
 // second cell of a wide character, so that a column means the same column on every row.
 func (e *SnapshotEmulator) ShownCells() [][]string {
-	e.flushGrapheme()
+	e.flushClusters()
 	rows := make([][]string, e.Height())
 	for y := range rows {
 		rows[y] = make([]string, e.Width())
 		for x := range rows[y] {
-			rows[y][x] = e.CellAt(x, y).Content
+			cell := e.CellAt(x, y)
+			if isWrapGap(cell) {
+				rows[y][x] = " "
+				continue
+			}
+			rows[y][x] = cell.Content
 		}
 	}
 	return rows

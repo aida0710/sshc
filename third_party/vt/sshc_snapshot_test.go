@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// The snapshot emulator prints ASCII, feeds lines, scrolls, repeats and bounds counts its own way (sshc_snapshot.go,
-// sshc_repeat.go, sshc_bounded_counts.go). Given the same output, it must leave the screen exactly as the upstream
-// emulator does.
+// スナップショットのエミュレーターは、字の書き方、改行、画面の流し方、REP、回数の上限を自前で持つ（sshc_print.go、
+// sshc_snapshot.go、sshc_repeat.go、sshc_bounded_counts.go）。同じ出力なら、上流のエミュレーターとまったく同じ画面に
+// する。違うのは、右端にかかる幅2の字だけである。
 func TestTheSnapshotEmulatorDrawsWhatTheUpstreamOneDraws(t *testing.T) {
 	pieces := []func(*rand.Rand) string{
 		func(r *rand.Rand) string { return strings.Repeat("word ", 1+r.IntN(12)) },
@@ -30,9 +30,10 @@ func TestTheSnapshotEmulatorDrawsWhatTheUpstreamOneDraws(t *testing.T) {
 		func(*rand.Rand) string { return "\x1b[?7l" },
 		func(*rand.Rand) string { return "\x1b[?7h" },
 		func(*rand.Rand) string { return "\x1b(0lqqk\x1b(B" },
-		func(*rand.Rand) string { return "日本語" },
+		// 幅2の字は、右端にかからない桁に書く。右端では、上流と違って xterm.js と同じに書く（sshc_print_test.go）。
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%d;%dH日本語", 1+r.IntN(12), 1+r.IntN(24)) },
 		func(*rand.Rand) string { return "é" },
-		func(*rand.Rand) string { return "🎉!" },
+		func(r *rand.Rand) string { return fmt.Sprintf("\x1b[%d;%dH🎉!", 1+r.IntN(12), 1+r.IntN(27)) },
 		func(*rand.Rand) string { return "\x1bD" },
 		func(*rand.Rand) string { return "\x1bM" },
 		func(*rand.Rand) string { return "\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\" },
@@ -178,12 +179,26 @@ func TestRandomOutputAtRandomSizesReadsWithoutAPanic(t *testing.T) {
 	for seed := range runs {
 		random := rand.New(rand.NewPCG(uint64(seed), 0))
 		emulator := NewSnapshotEmulator(1+random.IntN(100), 1+random.IntN(40))
-		for range writesPerRun {
+		for write := range writesPerRun {
 			_, _ = emulator.WriteString(randomTerminalOutput(random))
 			if random.IntN(3) == 0 {
 				emulator.Resize(1+random.IntN(100), 1+random.IntN(40))
 			}
+			checkNoWideCellPastTheRightEdge(t, emulator, fmt.Sprintf("seed %d, write %d", seed, write))
 			_ = emulator.Snapshot()
+		}
+	}
+}
+
+// checkNoWideCellPastTheRightEdge は、どちらの画面のどの行も、最後の桁に幅2の字の左半分を持たないことを確かめる。
+// スナップショットがその字を書くと、ブラウザのターミナルは次の行へ折り返し、下の行なら画面を流す。
+func checkNoWideCellPastTheRightEdge(t *testing.T, emulator *SnapshotEmulator, after string) {
+	t.Helper()
+	for index := range emulator.scrs {
+		for y, row := range emulator.scrs[index].buf.Lines {
+			if last := len(row) - 1; last >= 0 && row[last].Width > 1 {
+				t.Fatalf("after %s, row %d of screen %d ends in the left half of %q", after, y, index, row[last].Content)
+			}
 		}
 	}
 }

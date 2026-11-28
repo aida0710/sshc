@@ -14,6 +14,15 @@ func writeAll(t *testing.T, e *SnapshotEmulator, text string) {
 	}
 }
 
+// mainScreenTexts は、主画面の、字のある行までの各行の字である。
+func mainScreenTexts(e *SnapshotEmulator) []string {
+	var texts []string
+	for _, line := range e.MainScreenLines() {
+		texts = append(texts, line.Text)
+	}
+	return texts
+}
+
 // expandLeftLines は、続けて同じ行が流れたことを Repeats で表した行を、1行ずつに戻す。
 func expandLeftLines(lines []LeftLine) []string {
 	var texts []string
@@ -34,7 +43,7 @@ func TestLinesScrolledOffTheTopLeaveTheScreenInOrder(t *testing.T) {
 	if got := e.TakeLeftLines(); got != nil {
 		t.Fatalf("left again = %v, want nothing new", got)
 	}
-	if got, want := e.MainScreenLines(), []string{"three", "four", "five"}; !slices.Equal(got, want) {
+	if got, want := mainScreenTexts(e), []string{"three", "four", "five"}; !slices.Equal(got, want) {
 		t.Fatalf("screen = %q, want %q", got, want)
 	}
 }
@@ -50,7 +59,7 @@ func TestRowsRedrawnInPlaceDoNotLeaveTheScreen(t *testing.T) {
 	if got := e.TakeLeftLines(); got != nil {
 		t.Fatalf("left = %v, want nothing while the rows were redrawn", got)
 	}
-	if got, want := e.MainScreenLines(), []string{"$ run", "done"}; !slices.Equal(got, want) {
+	if got, want := mainScreenTexts(e), []string{"$ run", "done"}; !slices.Equal(got, want) {
 		t.Fatalf("screen = %q, want %q", got, want)
 	}
 }
@@ -73,7 +82,7 @@ func TestWhatAFullScreenProgramDrawsNeverLeavesIntoTheLog(t *testing.T) {
 	if got := e.TakeLeftLines(); got != nil {
 		t.Fatalf("left = %v, want nothing from the alternate screen", got)
 	}
-	if got, want := e.MainScreenLines(), []string{"$ vim", "$"}; !slices.Equal(got, want) {
+	if got, want := mainScreenTexts(e), []string{"$ vim", "$"}; !slices.Equal(got, want) {
 		t.Fatalf("screen = %q, want %q", got, want)
 	}
 }
@@ -137,7 +146,7 @@ func TestReadingInPiecesKeepsCharactersThatSpanThePieces(t *testing.T) {
 	}
 	pieces, whole := NewLeavingLinesEmulator(width, height), NewLeavingLinesEmulator(width, height)
 	writeAll(t, pieces, output.String())
-	if _, err := whole.Emulator.Write([]byte(output.String())); err != nil {
+	if _, err := whole.readOutput([]byte(output.String())); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := pieces.Snapshot(), whole.Snapshot(); got != want {
@@ -158,7 +167,7 @@ func TestCuttingInsideACharacterKeepsTheCharacter(t *testing.T) {
 		output := before + run
 		pieces, whole := NewLeavingLinesEmulator(width, height), NewLeavingLinesEmulator(width, height)
 		writeAll(t, pieces, output)
-		if _, err := whole.Emulator.Write([]byte(output)); err != nil {
+		if _, err := whole.readOutput([]byte(output)); err != nil {
 			t.Fatal(err)
 		}
 		if got, want := pieces.Snapshot(), whole.Snapshot(); got != want {

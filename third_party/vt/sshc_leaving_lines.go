@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"strings"
 	"unicode/utf8"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -78,10 +79,39 @@ func (e *SnapshotEmulator) keepLeavingLine(top uv.Line, regionTop int) {
 	}
 }
 
-// LeftLine は、主画面から流れた1行である（TakeLeftLines）。
-type LeftLine struct {
+// TextLine は、画面の1行の字である（TakeLeftLines、MainScreenLines）。
+type TextLine struct {
 	// Text は、行の字である。行末の空白は除く。
 	Text string
+	// WrapGap は、行の最後の桁が、右端に入らない幅2の字が次の行へ移ったために空いた桁（wrapGapCell）かである。
+	// その桁は字の間の空白ではない。行は次の行へ続いている。
+	WrapGap bool
+}
+
+// textLineOf は、width 桁の画面の行 line の字である。scrollback に入った行は、行末の空いたマスを落としてあるので、
+// width より短いことがある。
+func textLineOf(line uv.Line, width int) TextLine {
+	var text strings.Builder
+	pendingBlanks := 0
+	for index := range line {
+		cell := &line[index]
+		switch {
+		case cell.IsZero():
+		case cell.Equal(&uv.EmptyCell) || isWrapGap(cell):
+			pendingBlanks++
+		default:
+			for ; pendingBlanks > 0; pendingBlanks-- {
+				text.WriteByte(' ')
+			}
+			text.WriteString(cell.Content)
+		}
+	}
+	return TextLine{Text: text.String(), WrapGap: width > 0 && len(line) == width && isWrapGap(&line[width-1])}
+}
+
+// LeftLine は、主画面から流れた1行である（TakeLeftLines）。
+type LeftLine struct {
+	TextLine
 	// Repeats は、この行のすぐあとに、同じ行がさらに何行流れたかである。画面より長い REP は同じ行を何度も
 	// 流すので、エミュレーターはそれを1行ずつ持たずに数える（sshc_repeat.go）。
 	Repeats int
@@ -102,7 +132,7 @@ func (e *SnapshotEmulator) moveLeftLines() {
 		return
 	}
 	for _, line := range kept.lines {
-		e.left = append(e.left, LeftLine{Text: line.String()})
+		e.left = append(e.left, LeftLine{TextLine: textLineOf(line, e.Width())})
 	}
 	kept.Clear()
 }
@@ -111,12 +141,12 @@ func (e *SnapshotEmulator) moveLeftLines() {
 // 流れた行を移す。1回の読み取りでも、画面を何度も流す出力（SU を並べる）は、そのバイト数より多くの行を流す。
 func (e *SnapshotEmulator) Write(output []byte) (int, error) {
 	if !e.leavingLines {
-		return e.Emulator.Write(output)
+		return e.readOutput(output)
 	}
 	pieceBytes := max(1, leavingLinesCapacity/2/leavingLinesPerByte(e.Height()))
 	for start := 0; start < len(output); {
 		end := pieceEnd(output, start+pieceBytes)
-		if _, err := e.Emulator.Write(output[start:end]); err != nil {
+		if _, err := e.readOutput(output[start:end]); err != nil {
 			return start, err
 		}
 		e.moveLeftLines()
@@ -153,12 +183,12 @@ func (e *SnapshotEmulator) MainScreenRowsWithText() int {
 
 // MainScreenLines returns the text of the main screen's rows down to the last one with text, without trailing spaces:
 // what is still shown when the log ends.
-func (e *SnapshotEmulator) MainScreenLines() []string {
+func (e *SnapshotEmulator) MainScreenLines() []TextLine {
 	main := &e.scrs[0]
 	last := lastRowWithText(main)
-	texts := make([]string, 0, last+1)
+	lines := make([]TextLine, 0, last+1)
 	for y := 0; y <= last; y++ {
-		texts = append(texts, main.buf.Line(y).String())
+		lines = append(lines, textLineOf(main.buf.Line(y), e.Width()))
 	}
-	return texts
+	return lines
 }
