@@ -11,6 +11,11 @@ import { IconButton } from "../ui/IconButton";
 import { Tag } from "../ui/Tag";
 import type { PaneDragHandlers } from "./splitView/paneControls";
 
+// detailSize は、見出しの名前の後ろに並べる行き先と札の大きさである。幅に余裕があれば全文まで広がり、無ければ「…」で
+// 縮む。112px（basis-28）も残らなければ、次の行へ折り返して隠れる。それより狭いと、VPN の札は「VPN経由：」の
+// 後ろのルートの名前がほとんど見えず、出しても役に立たない（行き先なら約15字が見える幅）。
+const detailSize = "min-w-0 grow basis-28 max-w-max";
+
 // TerminalHeader は、ターミナルの上の見出しである。広い画面では40pxの行、スマホではアプリの見出しに代わる
 // 上のバーになる（ナビゲーションを開くボタン、名前と行き先、右側の操作）。右側の操作は children で受け取る。
 export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, onOpenNavigation, paneDrag, children }: {
@@ -33,6 +38,8 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
   // 見出しが状態を言葉で出すのは、接続中のあいだだけである。接続済みは点が言い、再接続中・終了・ブラウザの
   // リンクが落ちているときは見出しの下の行が1度だけ言う。言葉は、どの場合もスクリーンリーダー向けに残す。
   const saysState = session.state === "connecting" && link.phase === "live";
+  // スマホには言葉を置く幅が無いが、読み上げには残す。
+  const stateText = <span role="status" className={!saysState || mobile ? "sr-only" : `shrink-0 text-xs ${sessionStatusTone(session)}`}>{connectionStatus}</span>;
   return (
     <div className={`relative flex shrink-0 items-center ${mobile ? "h-[54px] gap-1.5 pl-0.5 pr-1.5" : "h-10 gap-[9px] bg-term-bg pl-3.5 pr-2.5"}`}>
       {mobile && onOpenNavigation !== undefined ? (
@@ -43,12 +50,10 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
       ) : null}
       <div className={`min-w-0 flex-1 ${paneDrag === undefined ? "" : "cursor-grab"}`}
         {...(paneDrag === undefined ? {} : { draggable: true, onDragStart: paneDrag.onDragStart, onDragEnd: paneDrag.onDragEnd })}>
-        {/* 最小幅のペインでは、名前と行き先を縮めきっても、VPN とリモートセッションの札の余白が入りきらないことがある。
-            入りきらない分は、右のボタンに重ねずにここで切る。 */}
-        <div className="flex min-w-0 items-center gap-[9px] overflow-hidden">
+        <div className="flex min-w-0 items-center">
           <span
             aria-hidden="true"
-            className={`size-2 shrink-0 rounded-full ${
+            className={`mr-[9px] size-2 shrink-0 rounded-full ${
               session.state === "exited"
                 ? exitedAbnormally(session) ? "bg-danger" : "bg-ink-faint"
                 : session.state === "reconnecting" || session.state === "connecting" || link.phase !== "live"
@@ -56,15 +61,20 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
                   : "bg-live"
             }`}
           />
-          {/* 名前も行き先や札と一緒に縮める。縮まないと、入りきらない分が右のボタンの上に重なる。 */}
+          {/* 名前は最後に縮める。行き先と札は、名前が幅を取った残りにだけ並べる。 */}
           <p title={displayTitle} className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-base" : "max-w-48 text-ui"}`}>{displayTitle}</p>
-          {mobile ? null : <span title={destination} className="min-w-0 truncate font-mono text-xs text-ink-faint">{destination}</span>}
-          {/* スマホには言葉を置く幅が無いが、読み上げには残す。 */}
-          <span role="status" className={!saysState || mobile ? "sr-only" : `shrink-0 text-xs ${sessionStatusTone(session)}`}>{connectionStatus}</span>
-          {mobile ? null : <VPNProfileChip name={vpnProfile} />}
-          {/* 札は接続名を含み長さが決まらないので、名前と同じく縮める。縮まないと、狭いペインで右のボタンに重なる。 */}
-          {mobile || runTarget === undefined ? null : (
-            <Tag tone="accent" truncate>{t("runTarget.runningOn", { alias: runTarget })}</Tag>
+          {mobile ? stateText : (
+            // 行き先と札は1行に入る分だけ出し、入りきらないものは次の行へ折り返して、この行の高さの外で隠す。
+            // 行の先頭のものは折り返せないので、幅の無い ::before を先頭に置き、行き先も札と同じく隠れるようにする。
+            // 名前との間は ::before の後ろの間なので、名前が幅を使い切ったときは、この間も取らない。
+            <div className="flex h-5 min-w-0 flex-1 flex-wrap items-center gap-x-[9px] overflow-hidden before:h-5 before:content-['']">
+              <span title={destination} className={`truncate font-mono text-xs text-ink-faint ${detailSize}`}>{destination}</span>
+              {stateText}
+              <VPNProfileChip name={vpnProfile} className={detailSize} />
+              {runTarget === undefined ? null : (
+                <span className={`flex ${detailSize}`}><Tag tone="accent" truncate>{t("runTarget.runningOn", { alias: runTarget })}</Tag></span>
+              )}
+            </div>
           )}
         </div>
         {mobile ? (
