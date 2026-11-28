@@ -1,23 +1,11 @@
 import { useEffect, useRef } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
-import { showAndroidBlockedProgramNotification } from "../android/native";
 import type { Translate } from "../i18n/context";
-import { notificationsComeFromAndroid, showBrowserNotification, type BrowserNotification } from "../ui/browserNotifications";
-import { terminalNotificationTag } from "./notificationTags";
-import { playNotificationSound } from "./notificationSound";
+import { notificationsComeFromAndroid } from "../ui/browserNotifications";
 import type { SeenProgramStatus } from "./programStatus";
+import { announceBlockedProgram } from "./sessionNotificationAnnouncement";
 import { blockedProgramNotification } from "./terminalNotifications";
 import { useOpenNotifiedSession } from "./useOpenNotifiedSession";
-
-// A person's own Android settings give a waiting program's channel its sound, so only a browser plays one.
-function announce(notification: BrowserNotification): void {
-  if (notificationsComeFromAndroid()) {
-    showAndroidBlockedProgramNotification(notification);
-    return;
-  }
-  playNotificationSound();
-  showBrowserNotification(notification);
-}
 
 // useUnseenBlockedProgramNotifications notifies a person who leaves sshc about programs that started waiting while they
 // were on another session or page. Only the sidebar told them, and a notification comes only for a change with sshc out
@@ -43,7 +31,7 @@ export function useUnseenBlockedProgramNotifications(
         if (notification === null || version === undefined) continue;
         if ((seenNow.get(session.id) ?? 0) >= version || announced.current.get(session.id) === version) continue;
         announced.current.set(session.id, version);
-        announce({ ...notification, tag: terminalNotificationTag(session.id), onClick: () => open(session.id) });
+        announceBlockedProgram({ sessionId: session.id, notification, openNotifiedSession: open });
       }
     }
     function announceOnHiding() {
