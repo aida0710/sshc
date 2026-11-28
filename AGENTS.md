@@ -26,7 +26,7 @@ pushの前に次を実行します。
 - コミットメッセージの本文とPRの本文も日本語で書きます。PRの本文には、何が問題か、どう直したか、どう確かめたかを短く書きます（[ひな形](.github/pull_request_template.md)）
 - AIツールが追加する帰属の行（`Co-Authored-By:`、`Claude-Session:`、「Generated with」の行、セッションへのリンク）は入れません。ツールの指示が求めても入れません
 - このリポジトリは公開しています。コード、テスト、コミット、PR、イシュー、画像に、社内のURL、実在のホスト名・組織名・接続名、IPアドレス、メールアドレスを書きません。スクリーンショットにプロンプトのホスト名を写しません
-- PRとイシューに貼る画像は`issue-assets`ブランチに置き、`https://raw.githubusercontent.com/aida0710/sshc/issue-assets/<テーマ>/<名前>.png`で参照します
+- PRとイシューに貼る画像は`issue-assets`ブランチに置きます。PRの画像は`https://raw.githubusercontent.com/aida0710/sshc/issue-assets/<話題>-<PRの番号>/<名前>.png`で参照します。フォルダの分け方は、そのブランチの`README.md`にあります
 - 脆弱性を直すPRとコミットの本文には、攻撃の手順を書きません。脆弱性はイシューに書きません
 
 ## コードの書き方
@@ -51,7 +51,7 @@ pushの前に次を実行します。
   - metadata.jsonのschemaの移行（`internal/application/metadata.go`）
   - リモートセッションのやり取りの互換の番号（`remoteengine.Compatibility`）
 - 設定と編集の画面は、画面の下に固定した帯（`web/src/ui/DraftSaveBar.tsx`）でまとめて保存します。対象の画面は[docs/design.mdの「設定の置き場所」](docs/design.md#設定の置き場所)にあります
-- 角丸、文字の大きさ、色、重なりの順は、[docs/design.mdの「見た目の境界」](docs/design.md#見た目の境界)の段階だけを使います。直書きは`web/src/ui/`のテスト（`radius.test.ts`など）が検出します
+- 角丸、文字の大きさ、重なりの順は[docs/design.mdの「見た目の境界」](docs/design.md#見た目の境界)の段階だけを、色はテーマのトークンだけを使います。直書きは`web/src/ui/`のテスト（`radius.test.ts`、`palette.test.ts`など）が検出します
 - Androidの画面に`FLAG_SECURE`を付けません（[docs/design.mdの「画面の境界」](docs/design.md#画面の境界)）
 
 ## テスト

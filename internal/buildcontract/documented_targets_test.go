@@ -21,7 +21,7 @@ import (
 // 何を打ったかの記録であり、いま打てる必要はない。
 
 // currentDocuments は、いま読まれて実行される文書である。
-// 英語の pages は「make sure」のような文が `make <的>` の形に当たるので入れない。
+// 英語の pages は「make it」「make a」のような文が `make <的>` の形に当たるので入れない。
 var currentDocuments = []string{
 	"README.md",
 	"AGENTS.md",
