@@ -1,3 +1,4 @@
+import { symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, openApplication, openSection, test } from "./support/environment";
 import { chooseEntryOnPhone, openLocalSFTPDirectory, openSecondSFTPPane, sftpTabStrip } from "./support/sftp";
@@ -68,6 +69,51 @@ for (const hasTouch of [false, true]) {
     });
   });
 }
+
+// 左右に並べたペインが狭くても、列を消さず名前も潰さない。入りきらない分は一覧を横にスクロールする。
+test("keeps file names readable in narrow side-by-side panes and scrolls the list sideways instead", async ({ page, installation }) => {
+  await installation.write("narrow/report-001.csv", "a,b");
+  const directory = join(installation.home, ".ssh/narrow");
+  await symlink(join(directory, "report-001.csv"), join(directory, "latest-report"));
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory });
+  await page.getByRole("button", { name: "Side by side", exact: true }).click();
+  const left = page.getByRole("tabpanel").first();
+  const name = left.getByRole("button", { name: "report-001.csv", exact: true }).locator("[title]").first();
+  await expect(name).toBeVisible();
+  await expect.poll(() => name.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+  await expect.poll(() => left.getByTestId("sftp-file-list").evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
+  await expect(left.getByRole("columnheader")).toHaveCount(5);
+  // 狭い列で種別の文字が切れても、ポインタを当てれば全体が読める。
+  await expect(left.getByRole("row", { name: /latest-report/u }).getByRole("cell", { name: "Symlink", exact: true })).toHaveAttribute("title", "Symlink");
+});
+
+// 仕切りを端まで動かしても、そのあと窓を狭めても、ペインの操作の部品はペインの中に収まる。
+test("keeps a side-by-side pane wide enough for its controls when the divider or the window narrows it", async ({ page, installation }) => {
+  await installation.write("narrow/notes.txt", "notes");
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory: join(installation.home, ".ssh/narrow") });
+  await page.getByRole("button", { name: "Side by side", exact: true }).click();
+  const leftPane = page.locator("[data-sftp-pane]").first();
+  const controlsInside = async () => {
+    const pane = (await leftPane.boundingBox())!;
+    const controls = await Promise.all([
+      leftPane.getByRole("group", { name: "How the list is shown", exact: true }).boundingBox(),
+      leftPane.getByRole("button", { name: "Refresh directory", exact: true }).boundingBox(),
+    ]);
+    return controls.every((control) => control !== null && control.x + control.width <= pane.x + pane.width);
+  };
+  const handle = page.getByRole("separator", { name: "Resize the panes", exact: true });
+  await handle.focus();
+  for (let step = 0; step < 12; step++) await page.keyboard.press("ArrowLeft");
+  await expect.poll(controlsInside).toBe(true);
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await expect.poll(controlsInside).toBe(true);
+});
 
 test("opens a local shell in the displayed directory from the SFTP terminal button", async ({ page, installation }) => {
   await installation.write("shell-start/notes.txt", "notes");

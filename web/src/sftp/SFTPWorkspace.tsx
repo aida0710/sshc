@@ -6,7 +6,7 @@ import type { HostLook } from "../shell/useDeclaredConfig";
 import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { SplitResizeHandle } from "../ui/SplitResizeHandle";
+import { SplitResizeHandle, type SplitMinimum } from "../ui/SplitResizeHandle";
 import { useCompactViewport } from "../ui/useMediaQuery";
 import { Button } from "../ui/surface";
 import type { ActionMenuItem } from "../ui/ActionMenu";
@@ -29,6 +29,12 @@ import {
   type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
 } from "./sftpPanes";
 import { IconButton } from "../ui/IconButton";
+
+// 左右に並べたペインが保つ最小の幅（px、枠を含む）。日本語の絞り込みの行（［＋］、絞り込みの欄、［リスト｜グリッド］）が
+// 約282px 要り、絞り込みの欄に字が入る余りを足した。仕切りのドラッグでも、窓を狭めても、これより狭くしない。
+// 並べるのは作業の領域が useCompactViewport の 680px 以上のときだけなので、2つ分と仕切りは必ず収まる。
+const minimumSplitPanePx = 300;
+const splitPaneMinimum: SplitMinimum = { first: minimumSplitPanePx, second: minimumSplitPanePx };
 
 // Why closing a tab waits for a confirmation, and what the dialog names.
 type CloseTabIntent =
@@ -396,12 +402,15 @@ export function SFTPWorkspace({
     return (
       <Fragment key={pane.id}>
         {index > 0 && visibleSplit ? (
-          <SplitResizeHandle direction="horizontal" look="gap" ratio={splitRatio} label={t("sftp.resizePanes")} onRatioChange={changeSplitRatio} />
+          <SplitResizeHandle direction="horizontal" look="gap" ratio={splitRatio} minimum={splitPaneMinimum} label={t("sftp.resizePanes")} onRatioChange={changeSplitRatio} />
         ) : null}
         <div
           data-sftp-pane={pane.id}
-          className={`flex min-h-0 min-w-0 flex-col ${visibleSplit ? boardLook : ""}`}
-          style={{ flexBasis: visibleSplit ? `${index === 0 ? splitRatio : 100 - splitRatio}%` : "100%" }}
+          className={`flex min-h-0 flex-col ${visibleSplit ? boardLook : "min-w-0"}`}
+          // 保存した比率は変えずに、窓を狭めて最小の幅を割るペインを広げる。窓を広げ直せば元の比率に戻る。
+          style={visibleSplit
+            ? { flexBasis: `${index === 0 ? splitRatio : 100 - splitRatio}%`, minWidth: minimumSplitPanePx }
+            : { flexBasis: "100%" }}
           hidden={concealed}
           aria-label={t(index === 0 ? "sftp.firstPane" : "sftp.secondPane")}
           onPointerDown={() => setFocusedPaneId(pane.id)}
