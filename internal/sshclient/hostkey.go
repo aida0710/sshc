@@ -149,7 +149,7 @@ func (lookup *hostKeyLookup) hostEntries() ([]hostEntry, error) {
 // のは、その接続を開いたターミナルでなければならない。別のターミナルに出た問いは、
 // 誰も判定できないまま接続を止める。
 //
-// 鍵の指紋と照合の結果を言うのは、「一致しない鍵」と断られたユーザーが、
+// 鍵のフィンガープリントと照合の結果を言うのは、「一致しない鍵」と断られたユーザーが、
 // どの鍵が来て known_hosts のどれと比べたのかを知る手段が他に無いからである。
 func (lookup *hostKeyLookup) callback(prompt Prompter, trace *tracer) ssh.HostKeyCallback {
 	target := lookup.target
@@ -204,7 +204,7 @@ type knownHostsLocation struct {
 
 type conflictingHostKey struct {
 	at knownHostsLocation
-	// key は種類と指紋である。鍵そのものは書かない。長すぎて突き合わせに向かない。
+	// key は種類とフィンガープリントである。鍵そのものは書かない。長すぎて突き合わせに向かない。
 	key string
 }
 

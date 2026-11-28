@@ -184,7 +184,7 @@ type openConnectDocument struct {
 	Server   string `json:"server"`
 	Username string `json:"username"`
 	Protocol string `json:"protocol"`
-	// ServerCertificate は、相手の証明書を固定する指紋である。空なら公的な
+	// ServerCertificate は、サーバーの証明書を固定するフィンガープリントである。空なら公的な
 	// 認証局として検証させる。
 	ServerCertificate string `json:"serverCertificate"`
 	Password          string `json:"password"`

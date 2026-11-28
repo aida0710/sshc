@@ -194,9 +194,9 @@ func TestAnOpenConnectProfileIsRefusedWhenItCannotBecomeARoute(t *testing.T) {
 		{"装置が --config= で始まる", func(settings *OpenConnectSettings) { settings.Server = "--config=/dev/stdin" }},
 		{"利用者名が空", func(settings *OpenConnectSettings) { settings.Username = "" }},
 		{"知らない方式", func(settings *OpenConnectSettings) { settings.Protocol = "openvpn" }},
-		{"指紋の形が違う", func(settings *OpenConnectSettings) { settings.ServerCertificate = "abc123" }},
-		{"指紋がsha1", func(settings *OpenConnectSettings) { settings.ServerCertificate = "sha1:abc123" }},
-		{"指紋に空白", func(settings *OpenConnectSettings) { settings.ServerCertificate = "sha256:a b" }},
+		{"フィンガープリントの形式が違う", func(settings *OpenConnectSettings) { settings.ServerCertificate = "abc123" }},
+		{"フィンガープリントがsha1", func(settings *OpenConnectSettings) { settings.ServerCertificate = "sha1:abc123" }},
+		{"フィンガープリントに空白", func(settings *OpenConnectSettings) { settings.ServerCertificate = "sha256:a b" }},
 		{"知らない二段目", func(settings *OpenConnectSettings) { settings.SecondFactor = "sms-maybe" }},
 		{"合図の語に空白", func(settings *OpenConnectSettings) {
 			settings.SecondFactor = SecondFactorApprove

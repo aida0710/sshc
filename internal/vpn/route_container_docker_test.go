@@ -691,7 +691,7 @@ func startAnyConnectServer(
 		"certtool --certificate-info --infile /etc/ocserv/server-cert.pem"+
 			" | grep -o 'pin-sha256:[A-Za-z0-9+/=]*' | head -1")
 	if err != nil || !strings.HasPrefix(strings.TrimSpace(pin), "pin-sha256:") {
-		t.Fatalf("AnyConnect互換サーバーの証明書の指紋が読めない: %q, %v", pin, err)
+		t.Fatalf("AnyConnect互換サーバーの証明書のフィンガープリントを読めない: %q, %v", pin, err)
 	}
 	return strings.TrimSpace(address), strings.TrimSpace(pin)
 }

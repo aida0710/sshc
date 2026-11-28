@@ -677,7 +677,7 @@
       "reason": "unsupported"
     },
     {
-      "name": "openconnect の証明書の指紋に接頭辞が無い",
+      "name": "openconnect の証明書のフィンガープリントに接頭辞が無い",
       "profile": {
         "name": "campus",
         "backend": "openconnect",
@@ -691,7 +691,7 @@
       "reason": "format"
     },
     {
-      "name": "openconnect の証明書の指紋に空白がある",
+      "name": "openconnect の証明書のフィンガープリントに空白がある",
       "profile": {
         "name": "campus",
         "backend": "openconnect",

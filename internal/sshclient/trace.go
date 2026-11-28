@@ -193,9 +193,9 @@ func (t *tracer) checkingHostKey(target Target, hop, hops int, key ssh.PublicKey
 	})
 }
 
-// describeKey は、鍵を種類と SHA256 指紋で言う。
+// describeKey は、鍵を種類と SHA256 のフィンガープリントで言う。
 //
-// `ssh -v` が鍵を言うときと同じ形である。指紋があれば、ユーザーは
+// `ssh -v` が鍵を言うときと同じ形である。フィンガープリントがあれば、ユーザーは
 // `ssh-keygen -lf` の出力や known_hosts の行と突き合わせられる。
 func describeKey(key ssh.PublicKey) string {
 	return key.Type() + " " + ssh.FingerprintSHA256(key)

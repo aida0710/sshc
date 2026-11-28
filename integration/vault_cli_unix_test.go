@@ -17,7 +17,7 @@ const canary = "correct-horse-battery-staple-9f2c1"
 
 // 見つけたものを書き出さない。秘密を探す検査が、見つけた秘密を失敗の
 // 文言に載せてしまえば、それを CI のログへ配ることになる。どこで見つけたかは
-// 場所と経路だけで足りる。照合は指紋で行う。
+// 場所と経路だけで足りる。照合はハッシュで行う。
 func canaryDigest() string {
 	sum := sha256.Sum256([]byte(canary))
 	return hex.EncodeToString(sum[:])
