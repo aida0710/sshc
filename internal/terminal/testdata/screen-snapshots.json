@@ -40,6 +40,94 @@
     "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H0123456789\u001b[1;10H\u001b[m9\u001b[m"
   },
   {
+    "name": "a wide character that does not fit in the last column goes to the next row",
+    "cols": 40,
+    "rows": 4,
+    "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日本x\r\nnext",
+    "tail": "x\r\nnext",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[40G\u001b[2;1H本\u001b[3G\u001b[2;3H"
+  },
+  {
+    "name": "a wide character that does not fit leaves the last column in its pen",
+    "cols": 40,
+    "rows": 4,
+    "output": "\u001b[31;44maaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[0mx",
+    "tail": "\u001b[0mx",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H\u001b[m\u001b[31;44maaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \u001b[m\u001b[2;1H\u001b[m\u001b[31;44m日\u001b[3G\u001b[m\u001b[2;3H\u001b[31;44m"
+  },
+  {
+    "name": "a wide character that does not fit on the bottom row scrolls the screen",
+    "cols": 40,
+    "rows": 2,
+    "output": "top\r\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日x",
+    "tail": "x",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u001b[2;1H日\u001b[3G\u001b[2;3H"
+  },
+  {
+    "name": "a wide character that fills the last two columns waits to wrap",
+    "cols": 40,
+    "rows": 4,
+    "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日x",
+    "tail": "x",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[1;39H\u001b[m日\u001b[m"
+  },
+  {
+    "name": "a wide character that fills the last two columns waits to wrap for a wide one",
+    "cols": 40,
+    "rows": 4,
+    "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日本",
+    "tail": "本",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[1;39H\u001b[m日\u001b[m"
+  },
+  {
+    "name": "wraparound off leaves out a wide character that does not fit",
+    "cols": 40,
+    "rows": 4,
+    "output": "\u001b[?7laaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\r\nnext",
+    "tail": "\r\nnext",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u001b[?7l\u001b[1;40H"
+  },
+  {
+    "name": "inserting characters pushes a wide character off the right edge",
+    "cols": 40,
+    "rows": 2,
+    "output": "top\r\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa日\u001b[2;1H\u001b[@x",
+    "tail": "x",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Htop\u001b[2;1H aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u001b[2;1H"
+  },
+  {
+    "name": "inserting a character before a wide character moves it right",
+    "cols": 40,
+    "rows": 3,
+    "output": "日本ab\u001b[1;1H\u001b[@\u001b[2;1Hy",
+    "tail": "\u001b[2;1Hy",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H 日\u001b[4G本\u001b[6Gab\u001b[H"
+  },
+  {
+    "name": "deleting a character before a wide character moves it left",
+    "cols": 40,
+    "rows": 3,
+    "output": "$ echo x日本\u001b[1;8H\u001b[P\u001b[2;1Hy",
+    "tail": "\u001b[2;1Hy",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H$ echo 日\u001b[10G本\u001b[12G\u001b[1;8H"
+  },
+  {
+    "name": "deleting the left half of a wide character erases the other half",
+    "cols": 40,
+    "rows": 3,
+    "output": "日本ab\u001b[1;1H\u001b[P\u001b[2;1Hy",
+    "tail": "\u001b[2;1Hy",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[H 本\u001b[4Gab\u001b[H"
+  },
+  {
+    "name": "deleting the right half of a wide character erases the other half",
+    "cols": 40,
+    "rows": 3,
+    "output": "a日本b\u001b[1;3H\u001b[P\u001b[2;1Hy",
+    "tail": "\u001b[2;1Hy",
+    "screen": "\u001b[?1049l\u001b[!p\u001b[<99u\u001b[?1l\u001b[?5l\u001b[?9l\u001b[?66l\u001b[?1000l\u001b[?1001l\u001b[?1002l\u001b[?1003l\u001b[?1004l\u001b[?1005l\u001b[?1006l\u001b[?1007l\u001b[?1015l\u001b[?1016l\u001b[?2004l\u001b[?2027l\u001b[?2031l\u001b[?5522l\u001b[4l\u001b[20l\u001b]8;;\u0007\u001b[H\u001b[2J\u001b[Ha 本\u001b[5Gb\u001b[1;3H"
+  },
+  {
     "name": "the saved cursor and the pen survive",
     "cols": 30,
     "rows": 6,

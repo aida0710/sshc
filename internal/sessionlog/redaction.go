@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"sshc/internal/redact"
+	"sshc/third_party/vt"
 )
 
 // redaction は、シェルが映したシークレットの代わりにログへ書く印である。スニペットの伏せた文と同じ印にする。
@@ -23,8 +24,9 @@ const minimumSecretLineLength = 8
 //
 // ログ用の画面は行を1行ずつ返し、右端で折り返した続きも別の行になる。値が折り返しをまたぐと、どちらの行にも
 // 値そのものは無い。そこで、手元の行をつないで値を探し、またいだ部分を両方の行で伏せる。行は、そのあとに
-// 最も長い値の分の文字が続くまで手元に留める。vt の行は折り返したかどうかを持たないので、改行で終わった行も
-// つないで探す。別々の行にたまたま値の前と後ろが並ぶと伏せることになるが、伏せ過ぎは漏れより害が小さい。
+// 最も長い値の分の文字が続くまで手元に留める。vt の行は、幅2の字が次の行へ移った行（vt.TextLine の WrapGap）の
+// ほかは折り返したかどうかを持たないので、改行で終わった行もつないで探す。別々の行にたまたま値の前と後ろが
+// 並ぶと伏せることになるが、伏せ過ぎは漏れより害が小さい。
 type lineRedactor struct {
 	secrets []redact.Secret
 	// longest は、secrets のうち最も長い値のバイト数である。
@@ -99,18 +101,29 @@ func secretForms(value string) []string {
 
 func isLineBreak(character rune) bool { return character == '\n' || character == '\r' }
 
-// add は、width 桁の画面を出た行 text を受け取り、書いてよくなった行を伏せて返す。
-func (r *lineRedactor) add(text string, width int) []string {
+// add は、width 桁の画面を出た行 line を受け取り、書いてよくなった行を伏せて返す。
+func (r *lineRedactor) add(line vt.TextLine, width int) []string {
+	text := line.Text
 	if len(r.secrets) == 0 {
 		return []string{text}
 	}
-	r.held = append(r.held, heldLine{text: text, blanks: max(width-ansi.StringWidth(text), 0)})
+	r.held = append(r.held, heldLine{text: text, blanks: blankColumns(line, width)})
 	r.hideInHeldLines(len(r.held) - 1)
 	if text == "" {
 		// 折り返した行は右端まで埋まり、続きの行には文字がある。空の行をまたいで続く値は無い。
 		return r.releaseAll()
 	}
 	return r.releaseReady()
+}
+
+// blankColumns は、width 桁の画面の行 line の、字の右から右端までの空いた桁の数である。右端に入らない幅2の字が
+// 次の行へ移ったために空いた桁は、値の中の空白ではないので数えない。
+func blankColumns(line vt.TextLine, width int) int {
+	blanks := width - ansi.StringWidth(line.Text)
+	if line.WrapGap {
+		blanks--
+	}
+	return max(blanks, 0)
 }
 
 // addNote は、[sshc] の行 note を、これまでに受け取った行のあとに書くよう預かり、いま書いてよければ返す。
