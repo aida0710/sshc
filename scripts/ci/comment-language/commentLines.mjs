@@ -238,7 +238,7 @@ function findCommentRanges(source, language) {
 }
 
 // commentLinesOf は、コメントのある行の番号（1 から数える）ごとに、その行にかかるコメントの断片
-// （// や /* などの印を含む）と、その行がコメントだけでできているかを返す。
+// （// や /* などの印を含む）と、コメントを除いた残り（code）と、その行がコメントだけでできているかを返す。
 export function commentLinesOf(source, language) {
   const lineStarts = [0];
   for (let index = source.indexOf("\n"); index >= 0; index = source.indexOf("\n", index + 1)) {
@@ -271,7 +271,11 @@ export function commentLinesOf(source, language) {
       cursor = end;
     }
     code += source.slice(cursor, lineEndOf(source, cursor));
-    lines.set(number, { pieces: spans.map(({ start, end }) => source.slice(start, end)), commentOnly: code.trim() === "" });
+    lines.set(number, {
+      pieces: spans.map(({ start, end }) => source.slice(start, end)),
+      code,
+      commentOnly: code.trim() === "",
+    });
   }
   return lines;
 }
