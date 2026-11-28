@@ -23,7 +23,7 @@ type preparedRemoteKeyPlan struct {
 	config []byte
 }
 
-// RemoteKeyHandlers はリモートホストに公開鍵を登録する。
+// RemoteKeyHandlers は接続先に公開鍵を登録する。
 //
 // Diagnostics は、確認画面が表示する接続先と、接続時に実行される
 // 実行可能ディレクティブを供給する。登録直前にも同じ計画を再構築し、
@@ -87,7 +87,7 @@ func remoteKeyProblem(c *echo.Context, err error) error {
 	return unexpectedProblem(c, "registration_failed", err)
 }
 
-// Plan はリモートホストに接続せずに変更内容を説明する。
+// Plan は接続先に接続せずに変更内容を説明する。
 func (h RemoteKeyHandlers) Plan(c *echo.Context) error {
 	var request api.RemoteKeyPlanRequest
 	if err := decodeJSON(c, &request); err != nil {

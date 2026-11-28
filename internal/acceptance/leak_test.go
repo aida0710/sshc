@@ -282,7 +282,7 @@ func TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken(t *testing.T) {
 
 // requiresConfirmation は、design §8.2 が action token の背後に
 // 置く route の系列を指定する: 接続するもの、Terminal を起動する
-// もの、known_hosts を編集するもの、リモートホストに key を登録する
+// もの、known_hosts を編集するもの、接続先に key を登録する
 // もの、private key を reveal するもの、あるいはそれを完全削除するもの。
 //
 // POST /api/v1/diagnostics/effective は意図的に含まれていない。

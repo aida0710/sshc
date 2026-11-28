@@ -21,7 +21,7 @@ import { RemoteKeyPlanCard } from "./RemoteKeyPlanCard";
 import { unavoidableDirectives } from "../diagnostics/executableDirectives";
 import { literalTextEntry } from "../ui/softKeyboard";
 
-// 公開鍵をリモートホストの authorized_keys へ登録する画面。「1. 公開鍵」で鍵を、「2. 接続先」で
+// 公開鍵を接続先の authorized_keys へ登録する画面。「1. 公開鍵」で鍵を、「2. 接続先」で
 // ホストを選び、［登録内容を確認］で sshcエンジンが設定から求めた登録内容（接続しない）を見せて
 // から、［鍵を登録］で初めてホストへ接続する。
 

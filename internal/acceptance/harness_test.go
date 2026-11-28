@@ -6,7 +6,7 @@
 // ホームディレクトリを構築し、それに対して app.Build 経由で
 // production server を起動し、プロセス、terminal、agent のインターフェースを、プログラムを一切
 // 起動しない recorder に置き換える。ここにあるテストは、本物のホームディレクトリ、
-// 本物の agent、Terminal、リモートホストのいずれも読まない。
+// 本物の agent、Terminal、リモートのホストのいずれも読まない。
 package acceptance_test
 
 import (
