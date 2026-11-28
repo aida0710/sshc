@@ -17,7 +17,7 @@ export GOTOOLCHAIN
 
 # 1 行が 1 つの組み立てで、「名前: 環境変数」の形。名前は報告の [windows] のような印になる。
 # macOS と Android は、その OS の C コンパイラが無くても型を検査できるよう cgo を切る。
-# このため、macOS で cgo を要るファイル（internal/serialtransport/backend_detailed.go）は、
+# このため、macOS では cgo が要るファイル（internal/serialtransport/backend_detailed.go）は、
 # macOS の組み立てとしては解析しない。
 go tool staticcheck -matrix ./... <<'MATRIX'
 linux: GOOS=linux GOARCH=amd64

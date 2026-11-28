@@ -12,15 +12,22 @@ const staticcheckScript = "scripts/ci/staticcheck.sh"
 
 // 静的解析は、必須の検査「Dependency security」（jobs.security）の手順として流す。staticcheck の版は
 // go.mod の tool で固定するので、CI が go install で別に入れると、版が2か所に分かれる。
+// if を付けると解析しない変更ができ、continue-on-error を付けると指摘があっても必須の検査が通る。
 func TestCIRunsStaticcheckThroughTheSharedScript(t *testing.T) {
 	job, present := readWorkflowDocument(t).Jobs["security"]
 	if !present {
 		t.Fatal("jobs.security is missing")
 	}
+	if job.If != "" {
+		t.Errorf("jobs.security runs only if %q; staticcheck must run for every change", job.If)
+	}
 	found := false
 	for _, step := range job.Steps {
 		if strings.TrimSpace(step.Run) == staticcheckScript {
 			found = true
+			if step.If != "" || step.ContinueOnError != nil {
+				t.Errorf("jobs.security step %q must run %s for every change without if or continue-on-error", stepLabel(step), staticcheckScript)
+			}
 			continue
 		}
 		if strings.Contains(step.Run, "staticcheck") {

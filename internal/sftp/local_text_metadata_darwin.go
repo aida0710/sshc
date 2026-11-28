@@ -114,14 +114,13 @@ func setDarwinTextSecurity(staged *os.File, security []byte) error {
 	return darwinTextAttributes(staged, darwinTextAttributeRequest{operation: darwinFsetattrlistSyscall, attributes: &attributes, buffer: buffer})
 }
 
-// x/sys には、開いたファイルの記述子を取る fgetattrlist・fsetattrlist の包みが無い（パスを取る Setattrlist だけ）。
-// パスで引き直すと、確かめたファイルとは別のものの ACL を読み書きしうるので、Darwin のシステムコールを番号で呼ぶ。
-// Apple が安定を約束するのは libSystem の関数で、システムコールの番号ではない。x/sys もこの番号を非推奨にしているが、
-// 使える包みが無いので番号で呼び続ける。
+// x/sys には、ファイル記述子を取る fgetattrlist・fsetattrlist の関数が無い（パスを取る Setattrlist だけ）。
+// パスで指定すると、開いたファイルとは別のファイルの ACL を読み書きしうるので、Darwin のシステムコールを番号で呼ぶ。
+// Apple が互換を約束するのは libSystem の関数でシステムコールの番号ではないため、x/sys はこの番号を非推奨にしている。
 const (
-	//lint:ignore SA1019 記述子を取る包みが x/sys に無い（上の注記）
+	//lint:ignore SA1019 ファイル記述子を取る関数が x/sys に無い（上の注記）
 	darwinFgetattrlistSyscall = unix.SYS_FGETATTRLIST
-	//lint:ignore SA1019 記述子を取る包みが x/sys に無い（上の注記）
+	//lint:ignore SA1019 ファイル記述子を取る関数が x/sys に無い（上の注記）
 	darwinFsetattrlistSyscall = unix.SYS_FSETATTRLIST
 )
 
