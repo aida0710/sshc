@@ -35,6 +35,18 @@ async function splitWithMenu(page: Page, title: string, edge: "right" | "below" 
   await action.press("Enter");
 }
 
+// headerButtonNames は、ペインの見出しに並ぶボタンの名前を、左から順に返す。
+async function headerButtonNames(terminal: Locator): Promise<string[]> {
+  const header = terminal.getByRole("button", { name: "Find", exact: true }).locator("xpath=..");
+  return header.getByRole("button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label") ?? ""));
+}
+
+// choosePaneMenuItem は、ペインの見出しの［…］を開き、item を選ぶ。
+async function choosePaneMenuItem(terminal: Locator, item: string) {
+  await terminal.getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await terminal.page().getByRole("menuitem", { name: item, exact: true }).click();
+}
+
 async function runCommand(terminal: Locator, command: string) {
   const keyboard = terminalKeyboard(terminal);
   await keyboard.focus();
@@ -287,7 +299,7 @@ test("takes one session out of a split from the terminal's menu on a phone, and 
   await expect(sessionRow(page, "Logs")).toHaveCount(1);
 });
 
-test("moves a pane beside another pane's edge by its handle or its row under Split views", async ({ page, installation }) => {
+test("moves a pane beside another pane's edge by its header or its row under Split views", async ({ page, installation }) => {
   await openApplication(page, installation);
   const one = await openNamedShell(page, "Build");
   const two = await openNamedShell(page, "Logs");
@@ -297,9 +309,9 @@ test("moves a pane beside another pane's edge by its handle or its row under Spl
   // Build was added to the right of Logs, the session shown last.
   expect((await build.boundingBox())!.x).toBeGreaterThan((await logs.boundingBox())!.x);
 
-  // Near the bottom edge of Logs, Build's handle moves Build below Logs instead of swapping.
+  // Near the bottom edge of Logs, Build's header (its name) moves Build below Logs instead of swapping.
   const below = (await logs.boundingBox())!;
-  await build.getByRole("button", { name: "Swap Build pane" }).dragTo(logs, { targetPosition: { x: below.width / 2, y: below.height - 12 } });
+  await build.getByText("Build", { exact: true }).dragTo(logs, { targetPosition: { x: below.width / 2, y: below.height - 12 } });
   await expect.poll(async () => (await build.boundingBox())!.y).toBeGreaterThan((await logs.boundingBox())!.y);
   expect((await build.boundingBox())!.x).toBe((await logs.boundingBox())!.x);
 
@@ -309,6 +321,64 @@ test("moves a pane beside another pane's edge by its handle or its row under Spl
   await group.getByRole("listitem").filter({ hasText: "Logs" }).dragTo(build, { targetPosition: { x: right.width - 12, y: right.height / 2 } });
   await expect.poll(async () => (await logs.boundingBox())!.x).toBeGreaterThan((await build.boundingBox())!.x);
   expect((await logs.boundingBox())!.y).toBe((await build.boundingBox())!.y);
+});
+
+test("shows only Find, the menu and the remove button in a pane's header, the last two side by side", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  for (const [id, title] of [[one, "Build"], [two, "Logs"]] as const) {
+    const terminal = pane(page, id);
+    const remove = `Remove ${title} from split view`;
+    expect(await headerButtonNames(terminal)).toEqual(["Find", "More terminal actions", remove]);
+    const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+    const menu = (await terminal.getByRole("button", { name: "More terminal actions", exact: true }).boundingBox())!;
+    const close = (await terminal.getByRole("button", { name: remove, exact: true }).boundingBox())!;
+    // ［…］と［×］の間は、検索と［…］の間と同じだけ空く。見えないボタンが挟まると広がる。
+    expect(close.x - (menu.x + menu.width)).toBeCloseTo(menu.x - (find.x + find.width), 0);
+  }
+});
+
+test("swaps two panes and focuses one from their menus, and keeps the way out of focus in the header", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  const build = pane(page, one);
+  const logs = pane(page, two);
+  expect((await build.boundingBox())!.x).toBeGreaterThan((await logs.boundingBox())!.x);
+
+  const hint = page.getByRole("status").filter({ hasText: "Swap with this pane" });
+  await choosePaneMenuItem(build, "Move pane");
+  await expect(hint).toBeVisible();
+  await choosePaneMenuItem(build, "Cancel move");
+  await expect(hint).toHaveCount(0);
+  await choosePaneMenuItem(build, "Move pane");
+  await choosePaneMenuItem(logs, "Swap with this pane");
+  await expect.poll(async () => (await build.boundingBox())!.x).toBeLessThan((await logs.boundingBox())!.x);
+  await expect(hint).toHaveCount(0);
+
+  await choosePaneMenuItem(build, "Focus pane");
+  await expect(logs).toBeHidden();
+  // 集中表示の間は、戻すボタンを見出しに見えるまま出す。ポインターが見出しの外にあり、フォーカスがターミナルにあっても。
+  await terminalKeyboard(build).focus();
+  const center = (await build.locator("[data-terminal-host]").boundingBox())!;
+  await page.mouse.move(center.x + center.width / 2, center.y + center.height / 2);
+  const exit = build.getByRole("button", { name: "Exit focus", exact: true });
+  expect(await exit.evaluate((button) => getComputedStyle(button).opacity)).toBe("1");
+  expect(await headerButtonNames(build)).toEqual(["Find", "More terminal actions", "Exit focus", "Remove Build from split view"]);
+  // 集中表示の間は入れ替える相手が見えないので、［…］に移動は出さない。
+  await build.getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Move pane", exact: true })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Exit focus", exact: true }).click();
+  await expect(logs).toBeVisible();
+
+  await choosePaneMenuItem(build, "Focus pane");
+  await expect(logs).toBeHidden();
+  await exit.click();
+  await expect(logs).toBeVisible();
 });
 
 test("preserves terminal mounts through swaps, focus mode, sidebar selection and mobile widths", async ({ page, installation }) => {
@@ -324,11 +394,11 @@ test("preserves terminal mounts through swaps, focus mode, sidebar selection and
   await page.keyboard.press("Control+f");
   const search = first.getByRole("textbox", { name: "Search terminal output" });
   await search.fill("mount-canary");
-  await first.getByRole("button", { name: "Swap Build pane" }).click();
-  await second.getByRole("button", { name: "Swap Logs pane" }).click();
-  expect((await first.boundingBox())!.x).toBeLessThan((await second.boundingBox())!.x);
+  await choosePaneMenuItem(first, "Move pane");
+  await choosePaneMenuItem(second, "Swap with this pane");
+  await expect.poll(async () => (await first.boundingBox())!.x).toBeLessThan((await second.boundingBox())!.x);
   await expect(search).toHaveValue("mount-canary");
-  await first.getByRole("button", { name: "Focus Build pane" }).click();
+  await choosePaneMenuItem(first, "Focus pane");
   await expect(second).toBeHidden();
   await page.getByRole("button", { name: "Logs", exact: true }).click();
   await expect(second).toBeVisible();
@@ -351,8 +421,8 @@ test("preserves terminal mounts through swaps, focus mode, sidebar selection and
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(first).toBeVisible();
   await expect(search).toHaveValue("mount-canary");
-  await first.getByRole("button", { name: "Swap Build pane" }).dragTo(second);
-  expect((await first.boundingBox())!.x).toBeGreaterThan((await second.boundingBox())!.x);
+  await first.getByText("Build", { exact: true }).dragTo(second);
+  await expect.poll(async () => (await first.boundingBox())!.x).toBeGreaterThan((await second.boundingBox())!.x);
 });
 
 test("opens a new session beside the only session from the terminal's menu", async ({ page, installation }) => {

@@ -390,18 +390,25 @@ describe("TerminalView", () => {
     expect(within(screen.getByRole("button", { name: "Find" }).parentElement!).getAllByRole("button")).toHaveLength(2);
   });
 
-  it("places additional actions in the existing header and removes them without reopening the terminal", async () => {
+  it("adds a split pane's remove button to the header, and the way out of focus while focused, without reopening the terminal", async () => {
     const api = { streamPath: "/terminal/stream", terminalSessionDirectory: async () => null, terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
-    const onAction = vi.fn();
-    const view = render(<TerminalView session={session} api={api} headerActions={<button onClick={onAction}>Pane action</button>} />);
+    const splitPane = { moving: null, focusMode: false, onMove: vi.fn(), onFocusMode: vi.fn(), onRemove: vi.fn(), drag: undefined };
+    const view = render(<TerminalView session={session} api={api} splitPane={splitPane} />);
     await waitFor(() => expect(streams).toHaveLength(1));
     const header = screen.getByRole("button", { name: "Find" }).parentElement!;
+    const headerButtons = () => within(header).getAllByRole("button").map((button) => button.getAttribute("aria-label"));
     expect(within(header).getByText("zsh", { exact: true })).toBeVisible();
-    await userEvent.click(within(header).getByRole("button", { name: "Pane action" }));
-    expect(onAction).toHaveBeenCalledOnce();
+    expect(headerButtons()).toEqual(["Find", "More terminal actions", "Remove zsh from split view"]);
+    await userEvent.click(within(header).getByRole("button", { name: "Remove zsh from split view" }));
+    expect(splitPane.onRemove).toHaveBeenCalledOnce();
+
+    view.rerender(<TerminalView session={session} api={api} splitPane={{ ...splitPane, focusMode: true }} />);
+    expect(headerButtons()).toEqual(["Find", "More terminal actions", "Exit focus", "Remove zsh from split view"]);
+    await userEvent.click(within(header).getByRole("button", { name: "Exit focus" }));
+    expect(splitPane.onFocusMode).toHaveBeenCalledOnce();
 
     view.rerender(<TerminalView session={session} api={api} />);
-    expect(screen.queryByRole("button", { name: "Pane action" })).toBeNull();
+    expect(headerButtons()).toEqual(["Find", "More terminal actions"]);
     expect(streams).toHaveLength(1);
     expect(streams[0]!.stream.close).not.toHaveBeenCalled();
   });

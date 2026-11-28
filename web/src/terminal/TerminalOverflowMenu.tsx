@@ -6,6 +6,7 @@ import { MenuPanel } from "../ui/MenuPanel";
 import { isScreenWakeLockSupported, saveKeepScreenAwake, useKeepScreenAwake } from "./keepScreenAwake";
 import { saveTouchMode, useDetectedTouchMode, useTouchMode, type FixedTouchMode } from "./touchMode";
 import type { PaneEdge } from "./splitView/layout";
+import type { MovingPane, SplitPaneControls } from "./splitView/paneControls";
 import { useSettingScopeLabel } from "../settings/SettingScopeTag";
 
 export function TerminalOverflowMenu({
@@ -20,6 +21,7 @@ export function TerminalOverflowMenu({
   onClose,
   onSplit,
   onRemoveFromSplit,
+  splitPane,
   onSearch,
   onPreviousPrompt,
   onNextPrompt,
@@ -38,6 +40,8 @@ export function TerminalOverflowMenu({
   onSplit?: ((edge: PaneEdge) => void) | undefined;
   // onRemoveFromSplit is offered while the terminal is in a split. The session goes on outside it.
   onRemoveFromSplit?: (() => void) | undefined;
+  // splitPane は、分割表示に並んだペインの［…］だけが出す、入れ替えと集中表示の操作である。
+  splitPane?: Pick<SplitPaneControls, "moving" | "focusMode" | "onMove" | "onFocusMode"> | undefined;
   // onSearch is offered here on a phone, whose top bar keeps only the other actions.
   onSearch?: (() => void) | undefined;
   // The previous and next prompt, offered on a phone, which has no keys for them.
@@ -82,6 +86,13 @@ export function TerminalOverflowMenu({
             onSelect={action(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</MenuItem>
         );
       })}
+      {/* 集中表示の間は入れ替える相手のペインが見えないので、移動は出さない。 */}
+      {splitPane === undefined || splitPane.focusMode ? null : (
+        <MenuItem onSelect={action(splitPane.onMove)}>{t(moveLabel(splitPane.moving))}</MenuItem>
+      )}
+      {splitPane === undefined ? null : (
+        <MenuItem onSelect={action(splitPane.onFocusMode)}>{t(splitPane.focusMode ? "splitView.exitFocus" : "splitView.focus")}</MenuItem>
+      )}
       {onRemoveFromSplit === undefined ? null : (
         <MenuItem onSelect={action(onRemoveFromSplit)}>
           {t("splitView.remove")}
@@ -132,6 +143,14 @@ export function TerminalOverflowMenu({
       </MenuGroup>
     </MenuPanel>
   );
+}
+
+// moveLabel は、［ペインを移動］の項目の名前である。押すと、どれも usePaneDrag の pick を呼ぶ。入れ替えるペインを
+// 選んでいる途中なら、選んだペインでは選ぶのをやめ、ほかのペインではそのペインと入れ替える。
+function moveLabel(moving: MovingPane): MessageKey {
+  if (moving === "this") return "splitView.cancelMove";
+  if (moving === "other") return "splitView.swapWithThis";
+  return "splitView.move";
 }
 
 const fixedTouchModes: { mode: FixedTouchMode; label: MessageKey; hint: MessageKey }[] = [

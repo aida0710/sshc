@@ -63,6 +63,53 @@ describe("TerminalOverflowMenu", () => {
     expect(screen.queryByRole("menuitem", { name: "Remove from split view" })).not.toBeInTheDocument();
   });
 
+  it("offers moving and focusing the pane only to a pane of a split view, and closes after either", async () => {
+    const move = vi.fn();
+    const focus = vi.fn();
+    const close = vi.fn();
+    const { unmount } = render(
+      <LanguageProvider>
+        <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} splitPane={{ moving: null, focusMode: false, onMove: move, onFocusMode: focus }} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={close} />
+      </LanguageProvider>,
+    );
+    await userEvent.click(screen.getByRole("menuitem", { name: "Move pane" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Focus pane" }));
+    expect(move).toHaveBeenCalledOnce();
+    expect(focus).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledTimes(2);
+    unmount();
+
+    renderMenu();
+    expect(screen.queryByRole("menuitem", { name: "Move pane" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Focus pane" })).toBeNull();
+  });
+
+  it("names the move by which pane was chosen to swap", () => {
+    const { rerender } = render(
+      <LanguageProvider>
+        <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} splitPane={{ moving: "this", focusMode: false, onMove: () => undefined, onFocusMode: () => undefined }} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={() => undefined} />
+      </LanguageProvider>,
+    );
+    expect(screen.getByRole("menuitem", { name: "Cancel move" })).toBeVisible();
+
+    rerender(
+      <LanguageProvider>
+        <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} splitPane={{ moving: "other", focusMode: false, onMove: () => undefined, onFocusMode: () => undefined }} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={() => undefined} />
+      </LanguageProvider>,
+    );
+    expect(screen.getByRole("menuitem", { name: "Swap with this pane" })).toBeVisible();
+  });
+
+  it("offers ending focus, and no move, while the pane is focused", () => {
+    render(
+      <LanguageProvider>
+        <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} splitPane={{ moving: null, focusMode: true, onMove: () => undefined, onFocusMode: () => undefined }} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={() => undefined} />
+      </LanguageProvider>,
+    );
+    expect(screen.getByRole("menuitem", { name: "Exit focus" })).toBeVisible();
+    expect(screen.queryByRole("menuitem", { name: "Move pane" })).toBeNull();
+  });
+
   it("saves the scrollback to a file from the menu", async () => {
     const save = vi.fn();
     render(

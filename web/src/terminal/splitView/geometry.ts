@@ -3,9 +3,10 @@ import { fitSplitRatio, type SplitDirection, type SplitMinimum } from "../../ui/
 import type { PaneEdge, SplitPath, SplitViewBranch, SplitViewNode } from "./layout";
 
 // minimumPanePx は、余白を含めてペインに残す最小の大きさである（PC の組み方で測った）。仕切りをドラッグしたとき、
-// ペインを足すとき（layout.ts の split）、窓を狭めたとき（splitViewGeometry）に守る。幅は、見出しの点と数文字に
-// 縮めた名前（52px）、検索と［…］のボタン（2 × 28px）、入れ替え・大きく表示・閉じるのボタン（88px）と余白。
-// 高さは、見出しの 40px、ターミナルの余白の 17px と1行の 15px。これより小さいと閉じるボタンが見えなくなるか、
+// ペインを足すとき（layout.ts の split）、窓を狭めたとき（splitViewGeometry）に守る。見出しに要る幅は 188px
+// （点と数文字に縮めた名前の 52px、検索・［…］・外すボタンの 3 × 28px と余白）だが、窓の幅ごとに横に並べられる
+// ペインの数（1280px で4つ、1024px で3つ）を変えないよう 248px にしてある。余る 60px は名前に回る。
+// 高さは、見出しの 40px、ターミナルの余白の 17px と1行の 15px。これより小さいと外すボタンが見えなくなるか、
 // シェルが前の大きさで書き続ける間、xterm が描く行が無くなる。
 export const minimumPanePx = { width: 248, height: 80 };
 

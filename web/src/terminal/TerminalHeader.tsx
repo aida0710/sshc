@@ -9,10 +9,11 @@ import type { StreamLink } from "./streamLink";
 import { terminalDisplayTitle } from "./terminalPresentation";
 import { IconButton } from "../ui/IconButton";
 import { Tag } from "../ui/Tag";
+import type { PaneDragHandlers } from "./splitView/paneControls";
 
 // TerminalHeader は、ターミナルの上の見出しである。広い画面では40pxの行、スマホではアプリの見出しに代わる
 // 上のバーになる（ナビゲーションを開くボタン、名前と行き先、右側の操作）。右側の操作は children で受け取る。
-export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, onOpenNavigation, children }: {
+export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, onOpenNavigation, paneDrag, children }: {
   session: TerminalSession;
   link: StreamLink;
   mobile: boolean;
@@ -21,6 +22,8 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
   // runTarget は、このセッションが動いているエンジンの SSH の別名である。このマシンで動いていれば undefined。
   runTarget: string | undefined;
   onOpenNavigation: (() => void) | undefined;
+  // paneDrag は、分割表示のペインを、見出しの名前の部分をつかんで動かす操作である。右のボタンからは動かせない。
+  paneDrag: PaneDragHandlers | undefined;
   children: ReactNode;
 }) {
   const t = useTranslate();
@@ -31,14 +34,15 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
   // リンクが落ちているときは見出しの下の行が1度だけ言う。言葉は、どの場合もスクリーンリーダー向けに残す。
   const saysState = session.state === "connecting" && link.phase === "live";
   return (
-    <div className={`group/header relative flex shrink-0 items-center ${mobile ? "h-[54px] gap-1.5 pl-0.5 pr-1.5" : "h-10 gap-[9px] bg-term-bg pl-3.5 pr-2.5"}`}>
+    <div className={`relative flex shrink-0 items-center ${mobile ? "h-[54px] gap-1.5 pl-0.5 pr-1.5" : "h-10 gap-[9px] bg-term-bg pl-3.5 pr-2.5"}`}>
       {mobile && onOpenNavigation !== undefined ? (
         <IconButton label={t("shell.navigationToggle")} size="bar" onClick={onOpenNavigation}>
           {/* ほかの画面の見出しのメニューのボタンと同じアイコンにする。‹ は「戻る」と読まれた。 */}
           <Icon name="menu" className="size-5" />
         </IconButton>
       ) : null}
-      <div className="min-w-0 flex-1">
+      <div className={`min-w-0 flex-1 ${paneDrag === undefined ? "" : "cursor-grab"}`}
+        {...(paneDrag === undefined ? {} : { draggable: true, onDragStart: paneDrag.onDragStart, onDragEnd: paneDrag.onDragEnd })}>
         {/* 最小幅のペインでは、名前と行き先を縮めきっても、VPN とリモートセッションの札の余白が入りきらないことがある。
             入りきらない分は、右のボタンに重ねずにここで切る。 */}
         <div className="flex min-w-0 items-center gap-[9px] overflow-hidden">

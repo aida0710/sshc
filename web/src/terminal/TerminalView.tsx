@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
@@ -67,6 +67,8 @@ import { useReducedMotion } from "../theme/motionContext";
 import { ToastMessage } from "../ui/ToastMessage";
 import { toastVisibleMs } from "../ui/ToastProvider";
 import type { PaneEdge } from "./splitView/layout";
+import type { SplitPaneControls } from "./splitView/paneControls";
+import { PaneToolbar } from "./splitView/PaneToolbar";
 import { isTypingElsewhere, isTypingOutsideTerminals } from "./terminalFocus";
 import { IconButton } from "../ui/IconButton";
 
@@ -79,7 +81,8 @@ type TerminalViewProps = {
   // 作り直すと、画面が一瞬止まり、折り返しの違う DOM のレンダラーのマスで先に文字が描かれた。
   inPane?: boolean;
   focusRequest?: number;
-  headerActions?: ReactNode;
+  // splitPane は、分割表示に並んだペインとしての操作である。ペインが1つのときとモバイル幅では無い。
+  splitPane?: SplitPaneControls | undefined;
   onSplit?: (edge: PaneEdge) => void;
   // onRemoveFromSplit は、このセッションを、出ている分割から外す。
   onRemoveFromSplit?: () => void;
@@ -148,7 +151,7 @@ export function TerminalView({
   active = true,
   inPane = true,
   focusRequest,
-  headerActions,
+  splitPane,
   onSplit,
   onRemoveFromSplit,
   splitRefusal,
@@ -561,7 +564,7 @@ export function TerminalView({
 
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
-      <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} runTarget={runTarget} onOpenNavigation={onOpenNavigation}>
+      <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} runTarget={runTarget} onOpenNavigation={onOpenNavigation} paneDrag={splitPane?.drag}>
         {mobile ? null : (
           <IconButton label={t("terminal.search")} size="toolbar" tone="faint" className="focus:bg-hover"
             onClick={search.toggle}>
@@ -582,7 +585,9 @@ export function TerminalView({
         >
           <Icon name="moreHorizontal" className={mobile ? "size-5" : "size-4"} />
         </IconButton>
-        {headerActions}
+        {splitPane === undefined ? null : (
+          <PaneToolbar title={displayTitle} focusMode={splitPane.focusMode} onFocusMode={splitPane.onFocusMode} onRemove={splitPane.onRemove} />
+        )}
         {overflowOpen ? (
           <TerminalOverflowMenu
             {...(mobile ? {
@@ -591,6 +596,7 @@ export function TerminalView({
               onNextPrompt: () => assembled.current?.prompts.jump(1),
             } : {})}
             onSplit={onSplit}
+            splitPane={splitPane}
             onRemoveFromSplit={onRemoveFromSplit}
             splitRefusal={splitRefusal}
             triggerRef={overflowTrigger}
