@@ -435,8 +435,7 @@ export function TerminalView({
         }
         // 打っている行を押すと、カーソルもそこへ動く。その場所で打てるよう、キーボードも上げる。
         const cell = cellAtPoint(view, point);
-        const keys = cell === null ? null : assembled.current?.promptCursor.arrowsTo(cell) ?? null;
-        if (keys !== null) assembled.current?.send(keys);
+        if (cell !== null) assembled.current?.moveCursorTo(cell);
         return false;
       },
       // スマホは入力欄に打つ。日本語は、送る前にそこで変換する。キーバーの Ctrl や Alt を付けて打つキーは、

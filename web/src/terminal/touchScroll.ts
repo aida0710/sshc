@@ -195,6 +195,10 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number, options
   };
 }
 
+// TouchScrollAttachment は、指のスクロールをつないだものである。cancel は、指を離したあとの惰性と行への寄せを
+// 止め、行を行の上に戻す。detach は、つないだものを外す。
+export type TouchScrollAttachment = { cancel: () => void; detach: () => void };
+
 // Drives the scroller from single-finger touches on the container. A
 // selection held inside the container wins over scrolling.
 //
@@ -207,7 +211,7 @@ export function attachTouchScroll(
   target: TouchScrollTarget,
   cellHeight: () => number,
   options: TouchScrollOptions & { selectionHeld: () => boolean },
-): () => void {
+): TouchScrollAttachment {
   let finger: Finger = { clientX: 0, clientY: 0, touched: null };
   const scroll = newTouchScroll({ scrollLines: (amount) => target.scrollLines(amount, finger) }, cellHeight, {
     ...options,
@@ -254,12 +258,15 @@ export function attachTouchScroll(
   container.addEventListener("touchend", touchEnd, { passive: true });
   container.addEventListener("touchcancel", scroll.cancel, { passive: true });
   container.ownerDocument.addEventListener("selectionchange", selectionChanged);
-  return () => {
-    container.removeEventListener("touchstart", touchStart);
-    container.removeEventListener("touchmove", touchMove);
-    container.removeEventListener("touchend", touchEnd);
-    container.removeEventListener("touchcancel", scroll.cancel);
-    container.ownerDocument.removeEventListener("selectionchange", selectionChanged);
-    scroll.cancel();
+  return {
+    cancel: scroll.cancel,
+    detach: () => {
+      container.removeEventListener("touchstart", touchStart);
+      container.removeEventListener("touchmove", touchMove);
+      container.removeEventListener("touchend", touchEnd);
+      container.removeEventListener("touchcancel", scroll.cancel);
+      container.ownerDocument.removeEventListener("selectionchange", selectionChanged);
+      scroll.cancel();
+    },
   };
 }

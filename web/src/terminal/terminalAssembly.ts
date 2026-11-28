@@ -25,7 +25,7 @@ import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./me
 import type { TerminalProgress } from "./osc9Progress";
 import { createTerminalOutput } from "./output";
 import { inspectTerminalPaste } from "./pasteGuard";
-import { attachPromptCursorClicks, type PromptCursor } from "./promptCursor";
+import { attachPromptCursorClicks } from "./promptCursor";
 import { attachPromptJumpKeys, type PromptJump } from "./promptJump";
 import { createScrollbackOffset } from "./scrollbackOffset";
 import { asksForSecret, secretPromptRowsRead } from "./secretPrompt";
@@ -34,7 +34,7 @@ import { createStatusLineRouter } from "./statusLine";
 import { createStatusLineTerminal, type StatusLineTerminal } from "./statusLineTerminal";
 import type { ExitReport } from "./stream";
 import { createStreamLink, type StreamLink, type StreamLinkController } from "./streamLink";
-import { cellAtPoint, type ScreenPoint } from "./tappedLink";
+import { cellAtPoint, type BufferCell, type ScreenPoint } from "./tappedLink";
 import { registerTerminalActions } from "./terminalActions";
 import { terminalCopyActions, type TerminalCopyActions } from "./terminalCopyActions";
 import { isInNoticeCard } from "./terminalFocus";
@@ -130,13 +130,16 @@ export type AssembledTerminal = {
   view: Terminal;
   // fit は、ターミナルを入れ物の大きさに合わせ直し、その大きさをエンジンへ伝える。
   fit: () => void;
-  // send は、打ったものとして送る。sendKey は、キーバーのキーを送る。paste は、貼り付けとして送る。
+  // send は、打ったものとして送る。sendKey は、キーバーのキーを送る。paste は、貼り付けとして送る。どれも利用者の
+  // 入力なので、スクロールバックを戻していれば、一番下へ戻してから送る。
   send: (text: string) => void;
   sendKey: (key: KeyBarKey) => void;
   paste: (text: string) => void;
+  // moveCursorTo は、打っている行の cell へ、シェルのカーソルを矢印のキーで動かす。押した行は見えているので、
+  // 画面は動かさない。
+  moveCursorTo: (cell: BufferCell) => void;
   copy: TerminalCopyActions;
   prompts: PromptJump;
-  promptCursor: PromptCursor;
   commandDisplay: CommandDisplay;
   linkUnderlines: LinkUnderlines;
   ligatureDrawing: LigatureDrawing | null;
@@ -330,7 +333,7 @@ export function assembleTerminal({ container, live, start, wiring }: {
 
   // 指はスクロールバックを、ブラウザのページのようにピクセル単位で動かす。xterm.js だけでは1行ずつ動く。
   const scrollbackOffset = createScrollbackOffset(container, view);
-  const detachTouchScroll = attachTouchScroll(container, terminalTouchScrollTarget(view, scrollbackOffset), () => cellHeight(view, container), {
+  const touchScroll = attachTouchScroll(container, terminalTouchScrollTarget(view, scrollbackOffset), () => cellHeight(view, container), {
     selectionHeld: () => selectionHeldIn(container),
     reducedMotion: () => live().reducedMotion,
   });
@@ -351,6 +354,18 @@ export function assembleTerminal({ container, live, start, wiring }: {
 
   // disposed は、片付けたあと真である。片付けたターミナルへは何も送らない。
   let disposed = false;
+  // showNewestRows は、スクロールバックを戻していれば一番下へ戻す。xterm.js は、自分が受け取った打鍵と貼り付けで
+  // しか戻さない（scrollOnUserInput）。入力欄・キーバーと、sshc が先に受け取る貼り付けとキーは xterm.js を通らない
+  // ので、送る前にここで戻す。戻さないと、返事が見えている行の外に描かれる。指を離したあとの惰性も止める。止めないと、
+  // 次のフレームでまた古い行へ動く。全画面のプログラムの画面にはスクロールバックが無いので、何もしない。
+  const showNewestRows = () => {
+    const buffer = view.buffer.active;
+    if (disposed || buffer.viewportY === buffer.baseY) return;
+    touchScroll.cancel();
+    view.scrollToBottom();
+  };
+  // send は、画面を動かさずに送る。プログラムへの答えとプロンプトのカーソルを動かす矢印も送る。xterm.js が受け取った
+  // 打鍵は、xterm.js が一番下へ戻してからここへ来る。
   const send = (text: string) => {
     if (disposed) return;
     // Enter でつなぎ直すあいだ、ほかのキーはどこへも行かない。つなぎ直したシェルに打たれると、コマンドとして
@@ -362,8 +377,15 @@ export function assembleTerminal({ container, live, start, wiring }: {
     }
     link.currentStream()?.send(text);
   };
+  // sendTyped は、利用者が打ったものを送る。
+  const sendTyped = (text: string) => {
+    showNewestRows();
+    send(text);
+  };
+  // 貼り付けは、どれも利用者の操作である。
   const paste = (text: string) => {
     if (disposed) return;
+    showNewestRows();
     link.currentStream()?.send(prepareTerminalPaste(text, view.modes.bracketedPasteMode));
   };
   view.onData((data) => {
@@ -399,7 +421,10 @@ export function assembleTerminal({ container, live, start, wiring }: {
     takePaste: (items) => kittyClipboard.takePaste(items),
     copied: () => wiring.notice(translate("copy.done")),
     enhancedKey: (event) => encodeIntlYen(event, live().jisYenBackslash),
-    sendEnhancedKey: (sequence) => link.currentStream()?.send(sequence),
+    sendEnhancedKey: (sequence) => {
+      showNewestRows();
+      link.currentStream()?.send(sequence);
+    },
     selectionIsSearchMatch: wiring.search.isSelectingMatch,
   });
   const unregisterActions = registerTerminalActions(sessionId, {
@@ -417,12 +442,15 @@ export function assembleTerminal({ container, live, start, wiring }: {
   return {
     view,
     fit: fitAndSync,
-    send,
-    sendKey: (key) => send(keyBarInput(key, wiring.takeModifiers(), { applicationCursorKeys: view.modes.applicationCursorKeysMode })),
+    send: sendTyped,
+    sendKey: (key) => sendTyped(keyBarInput(key, wiring.takeModifiers(), { applicationCursorKeys: view.modes.applicationCursorKeysMode })),
     paste,
+    moveCursorTo: (cell) => {
+      const keys = promptCursor.arrowsTo(cell);
+      if (keys !== null) send(keys);
+    },
     copy,
     prompts,
-    promptCursor,
     commandDisplay,
     linkUnderlines,
     ligatureDrawing: parts.ligatureDrawing,
@@ -433,7 +461,7 @@ export function assembleTerminal({ container, live, start, wiring }: {
       link.close();
       stopObservingSize();
       stopWatchingShown();
-      detachTouchScroll();
+      touchScroll.detach();
       detachHeldButtonMouseModes();
       scrollbackOffset.dispose();
       detachFontZoom();

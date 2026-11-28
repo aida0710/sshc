@@ -281,7 +281,7 @@ function touchEvent(container: HTMLElement, type: "touchstart" | "touchmove" | "
 function fingerHarness() {
   const container = document.createElement("div");
   const sent: number[] = [];
-  const detach = attachTouchScroll(container, { scrollLines: (amount) => sent.push(amount) }, () => 20, {
+  const { detach } = attachTouchScroll(container, { scrollLines: (amount) => sent.push(amount) }, () => 20, {
     selectionHeld: () => false,
     reducedMotion: () => true,
   });
