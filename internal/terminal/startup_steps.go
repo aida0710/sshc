@@ -39,11 +39,11 @@ type ShellOutput interface {
 }
 
 // startupStepTimedOutNotice は、待つ文字が出なかったために起動時の手順を止めたことを、ターミナルで伝える。
-const startupStepTimedOutNotice = "接続時の自動実行を止めました。「%s」が%d秒のうちに表示されませんでした。"
+const startupStepTimedOutNotice = "接続時の自動実行を停止しました。「%s」が%d秒以内に表示されませんでした。"
 
 // startupStepsUnwatchableNotice は、手順を実行できなかったことを伝える。シェルの出力を sshc 自身の行と
 // 見分けられない process のときに出す。
-const startupStepsUnwatchableNotice = "この接続ではシェルの出力を待てないため、接続時の自動実行の手順を送りませんでした。"
+const startupStepsUnwatchableNotice = "この接続ではシェルの出力を待機できないため、接続時の自動実行の手順を送信しませんでした。"
 
 // maxWatchedShellOutput は、次の手順の文字を探すために、最後の手順からあとにシェルが書いたものをどれだけ
 // 持つかである。待つ文字はプロンプトで、最後に書かれる。

@@ -379,7 +379,7 @@ func (s *Session) prepareManualReconnect() (func(context.Context, Size) (Process
 }
 
 // defaultReconnectStopNotice は、再接続を止めた理由に専用の文が無いときに書く文である。
-const defaultReconnectStopNotice = "設定を直さない限り同じ理由で失敗するため、自動再接続を停止しました。"
+const defaultReconnectStopNotice = "設定を修正しない限り同じ理由で失敗するため、自動再接続を停止しました。"
 
 // reconnectStopNotice は、再接続を止めたときにターミナルへ書く文を返す。
 func (s *Session) reconnectStopNotice(problem string) string {

@@ -964,7 +964,7 @@ func TestTheReconnectStopNoticeFollowsTheReason(t *testing.T) {
 		want    string
 	}{
 		{"vpn_route_disconnected", "VPNルートが切断されたため"},
-		{"host_key_changed", "設定を直さない限り同じ理由で失敗するため"},
+		{"host_key_changed", "設定を修正しない限り同じ理由で失敗するため"},
 	} {
 		t.Run(test.problem, func(t *testing.T) {
 			spy := &readyOpenSpy{}

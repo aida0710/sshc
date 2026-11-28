@@ -146,7 +146,7 @@ func TestAStepWhoseTextDoesNotComeStopsTheStepsAndSaysWhy(t *testing.T) {
 	)
 	shell := spy.at(0)
 	testwait.Until(t, func() bool { return strings.Contains(string(snapshotOf(session)), "「Password:」") })
-	if got := string(snapshotOf(session)); !strings.Contains(got, "\r\n[sshc] 接続時の自動実行を止めました。") {
+	if got := string(snapshotOf(session)); !strings.Contains(got, "\r\n[sshc] 接続時の自動実行を停止しました。") {
 		t.Fatalf("terminal = %q, want an [sshc] line of its own that says the steps stopped", got)
 	}
 	if got := shell.keystrokes(); got != "" {
@@ -174,7 +174,7 @@ func TestAStepDoesNotAnswerWhatSshcWritesIntoTheTerminal(t *testing.T) {
 	testwait.Until(t, shell.watching)
 	shell.feed("[sshc] Password: ")
 	testwait.Until(t, func() bool {
-		return strings.Contains(string(snapshotOf(session)), "接続時の自動実行を止めました")
+		return strings.Contains(string(snapshotOf(session)), "接続時の自動実行を停止しました")
 	})
 	if got := shell.keystrokes(); got != "" {
 		t.Fatalf("typed %q into sshc's own prompt", got)

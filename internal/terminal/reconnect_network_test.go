@@ -63,7 +63,7 @@ func TestWhileTheOperatingSystemSaysThereIsNoNetworkNoAttemptIsMadeOrCounted(t *
 	if view := session.View(); view.Reconnect.Attempt != 1 {
 		t.Errorf("waiting used up an attempt: %+v", view.Reconnect)
 	}
-	if !strings.Contains(string(snapshotOf(session)), "ネットワークが戻ったらすぐ再接続します") {
+	if !strings.Contains(string(snapshotOf(session)), "ネットワークが復旧したら再接続します") {
 		t.Errorf("the terminal does not say it waits: %q", snapshotOf(session))
 	}
 

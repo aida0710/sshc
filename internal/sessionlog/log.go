@@ -22,10 +22,10 @@ const MaxFileBytes = 100 << 20
 const maxPendingBytes = 8 << 20
 
 const (
-	stoppedAtLimitNote = "ログが上限（100 MiB）に達したので、ここから先は書きません。"
-	droppedOutputNote  = "出力が速すぎたため、ログに書けなかった出力があります。"
+	stoppedAtLimitNote = "ログが上限（100MiB）に達したため、以降の出力は記録しません。"
+	droppedOutputNote  = "出力が速すぎたため、一部の出力をログに記録できませんでした。"
 	// repeatedLineNote は、画面より長い REP が同じ行を何度も流したとき、その行のあとに書く（vt.LeftLine）。
-	repeatedLineNote = "上と同じ行が、さらに %d 行続きました。"
+	repeatedLineNote = "上と同じ行が、さらに%d行続きました。"
 )
 
 // Log is the log of one session: the lines its terminal showed, as text, in a file of its own. Lines are written once

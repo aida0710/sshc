@@ -14,7 +14,7 @@ import (
 )
 
 // noticeNetworkChange は、回線が変わって切れた接続を繋ぎ直すときにターミナルへ書く行である。
-const noticeNetworkChange = "回線が変わったので、すぐ再接続します"
+const noticeNetworkChange = "ネットワークが切り替わったため、再接続します"
 
 // noticeTimedRetry は、待ち時間を置いて繋ぎ直すときにターミナルへ書く行である。
 const noticeTimedRetry = "秒後に再接続します"

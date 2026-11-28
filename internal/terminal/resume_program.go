@@ -104,11 +104,12 @@ func (s *Session) resumeAnnouncementLocked() string {
 		return ""
 	}
 	command, inItsDirectory := s.resumeCommandLocked(program.command)
-	where := " "
+	// コマンドの前後の空白は、ターミナルからコマンドだけを選んでコピーしやすいように残す。
+	howToResume := "再開するには "
 	if !inItsDirectory {
-		where = "動かしていたフォルダで "
+		howToResume = "再開するには、実行していたフォルダで "
 	}
-	return "\r\n[sshc] 前のシェルで" + program.name + "が動いていました。続きから始めるには" + where + command + " を実行してください。\r\n"
+	return "\r\n[sshc] 前のシェルで" + program.name + "を実行していました。" + howToResume + command + " を実行してください。\r\n"
 }
 
 // forgetProgramToResumeOnEnter は、利用者が新しいシェルで何かを実行したら、案内を捨てる。案内は役目を終えたか、
