@@ -253,7 +253,7 @@ func TestASecretThatOnlyEndsWithALineBreakIsHiddenWhateverItsLength(t *testing.T
 }
 
 func TestAShortLineOfASecretWithALineBreakIsLeftSoOrdinaryWordsStay(t *testing.T) {
-	// 改行を含む値の短い行まで伏せると、同じ語のふつうの出力も消える。
+	// 改行を含む値の短い行まで伏せると、同じ語の通常の出力も消える。
 	got := readLog(t, func(log *Log) {
 		log.Hide([]string{"r100\npelican-second-7c"})
 		log.Write([]byte("$ ssh r100\r\n$ pelican-second-7c\r\n"))
