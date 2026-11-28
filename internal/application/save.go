@@ -77,7 +77,7 @@ type planned struct {
 	base                  map[string][]byte
 	baseline              map[string]bool
 	preview               SavePreview
-	// previewAliases は、plan が最終的な設定値の差分をプレビューに載せる接続名である。差分は、
+	// previewAliases は、plan が実効値の差分をプレビューに載せる接続名である。差分は、
 	// グループ設定の書き直しまで入れた後のグラフで作る。
 	previewAliases []previewAlias
 	keyRelocations []RelocatedKeyFile

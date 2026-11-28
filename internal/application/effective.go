@@ -173,10 +173,10 @@ func DiffEffective(before, after Effective) EffectiveDiff {
 	return diff
 }
 
-// maxEffectivePreviews は、1 回の保存の preview に載せる実効値の差分の上限。
+// maxEffectivePreviews は、1 回の保存のプレビューに載せる実効値の差分の上限。
 const maxEffectivePreviews = 50
 
-// previewAlias は、保存のプレビューで最終的な設定値を比べる接続名の、保存の前と後の名前である。
+// previewAlias は、保存のプレビューで実効値を比べる接続名の、保存の前と後の名前である。
 // 名前の変更と複製では、後の値を新しい接続名で読む。
 type previewAlias struct {
 	before string
@@ -188,7 +188,7 @@ func unrenamed(alias string) previewAlias {
 	return previewAlias{before: alias, after: alias}
 }
 
-// effectivePreview は、保存の前と後のグラフで aliases の最終的な設定値を比べ、プレビューに載せる差分を返す。
+// effectivePreview は、保存の前と後のグラフで aliases の実効値を比べ、プレビューに載せる差分を返す。
 func (s *Service) effectivePreview(before, after *config.Graph, aliases []previewAlias) []EffectiveDiff {
 	var diffs []EffectiveDiff
 	for _, alias := range aliases {
@@ -200,7 +200,7 @@ func (s *Service) effectivePreview(before, after *config.Graph, aliases []previe
 	return diffs
 }
 
-// effectiveDiff は、保存の前と後のグラフで、1 つの接続名の最終的な設定値を比べる。
+// effectiveDiff は、保存の前と後のグラフで、1 つの接続名の実効値を比べる。
 func (s *Service) effectiveDiff(before, after *config.Graph, alias previewAlias) EffectiveDiff {
 	root, facts := s.workspace.Root(), s.localFacts()
 	return DiffEffective(
