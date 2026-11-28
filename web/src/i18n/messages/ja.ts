@@ -1840,6 +1840,7 @@ export const ja = {
   "update.version": "バージョン{version}",
   "update.available": "{version}が公開されています。変更点を見る",
   "update.availableOnReleasePage": "{version}が公開されています。リリースページを開く",
+  "update.availableWithoutPage": "{version}が公開されています",
   "update.openReleasePage": "リリースページを開く",
   "desktop.closeAllHeading": "Open connections",
   "desktop.closeAllNote":

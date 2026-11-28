@@ -1842,6 +1842,7 @@ export const en = {
   "update.version": "Version {version}",
   "update.available": "{version} is available — read what changed",
   "update.availableOnReleasePage": "{version} is available. Open the release page",
+  "update.availableWithoutPage": "{version} is available",
   "update.openReleasePage": "Open the release page",
   "desktop.closeAllHeading": "Open connections",
   "desktop.closeAllNote":

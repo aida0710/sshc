@@ -53,6 +53,14 @@ describe("AboutPage", () => {
     expect(within(notes[0] as HTMLElement).getByRole("link", { name: "View on GitHub" })).toHaveAttribute("href", status.releases?.[0]?.pageUrl);
   });
 
+  it("shows a release's notes without linking to a page that is not sshc's release page", async () => {
+    const elsewhere = { version: "v1.2.0", pageUrl: "https://example.invalid/aida0710/sshc/releases/tag/v1.2.0", body: "Notes from elsewhere" };
+    const { container } = render(<AboutPage api={api} updates={updates({ ...status, releases: [elsewhere, ...(status.releases ?? []).slice(1)] })} />);
+    expect(await screen.findByText("Notes from elsewhere")).toBeVisible();
+    const newest = container.querySelector("details") as HTMLElement;
+    expect(within(newest).queryByRole("link", { name: "View on GitHub" })).not.toBeInTheDocument();
+  });
+
   it("checks for updates on opening and shares the result with the sidebar", async () => {
     const update = updates({ current: "v1.0.0", available: false });
     let finish: (status: UpdateStatus) => void = () => {};
@@ -201,6 +209,12 @@ describe("AboutPage", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(screen.getByText("Update the Android app by installing the latest APK.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Update sshc" })).not.toBeInTheDocument();
+  });
+
+  it("does not send an Android app to a page that is not sshc's release page", async () => {
+    render(<AboutPage api={api} updates={updates({ ...androidApp, pageUrl: "https://example.invalid/aida0710/sshc/releases/tag/v1.2.0" })} />);
+    expect(await screen.findByText("Update the Android app by installing the latest APK.")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Open the release page" })).not.toBeInTheDocument();
   });
 
   it("has nothing to say about installing while an Android app is the latest", async () => {
