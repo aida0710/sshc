@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, openSettingsPage, test } from "./support/environment";
 import { drawnRowFont, markTerminal, terminalKeyboard } from "./support/terminal";
 
@@ -206,6 +206,25 @@ function terminalSession(id: string, title: string, workspaceId = "default") {
   return { id, kind: "shell", workspaceId, title, startedAt: "2026-10-29T00:00:00Z", state: "connected", problem: "", forwards: [] };
 }
 
+// sshSession は、bastion から接続先 alias へ SSH で接続したセッションである。
+function sshSession(alias: string) {
+  return { ...terminalSession(alias, alias), kind: "ssh", alias };
+}
+
+// answerVPNRouteOnBastion は、bastion の SSH の設定が、aliases の接続先に VPN ルート vpnRoute を付けていると答える。
+// 設定のほかの部分は、このマシンの答えのままにする。stubRunTarget のあとに呼ぶと、こちらの答えが先に使われる。
+async function answerVPNRouteOnBastion(page: Page, { aliases, vpnRoute }: { aliases: readonly string[]; vpnRoute: string }) {
+  await page.route(`**${bastionBase}/config/overview`, async (route) => {
+    const response = await route.fetch({
+      url: new URL("/api/v1/config/overview", route.request().url()).href,
+      headers: { ...route.request().headers(), "sec-fetch-site": "same-origin" },
+    });
+    const overview = await response.json() as { metadata: { hosts?: unknown[] } };
+    overview.metadata.hosts = aliases.map((alias) => ({ identity: { path: "~/.ssh/config", alias }, vpn: vpnRoute }));
+    await route.fulfill({ response, json: overview });
+  });
+}
+
 // stubLocalSessions makes this machine's engine list the sessions given, and add what Home opens to them.
 async function stubLocalSessions(page: Page, sessions: ReturnType<typeof terminalSession>[]) {
   await page.route("**/api/v1/terminal/sessions**", async (route) => {
@@ -393,9 +412,11 @@ test("keeps this machine's split view while a remote session engine is shown", a
   expect(await panes.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-split-view-pane")))).toEqual(splitSessions);
 });
 
-test("keeps the remote session's name in the header of a narrow pane clear of its buttons", async ({ page, installation }) => {
+test("keeps the remote session's name and the VPN route in the header of a narrow pane clear of its buttons", async ({ page, installation }) => {
   const titles = ["web", "api", "db"];
-  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map((title) => terminalSession(title, title)) });
+  const vpnRoute = "pelican-office-ikev2-primary-route";
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
+  await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
   await page.setViewportSize({ width: 1024, height: 700 });
   await openApplication(page, installation);
   await chooseBastion(page);
@@ -409,11 +430,23 @@ test("keeps the remote session's name in the header of a narrow pane clear of it
   const panes = page.locator("[data-split-view-pane]");
   await expect(panes).toHaveCount(titles.length);
   for (const terminal of await panes.all()) {
-    const name = (await terminal.getByText("on bastion", { exact: true }).boundingBox())!;
     const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
-    expect(name.x + name.width).toBeLessThanOrEqual(find.x);
+    for (const label of ["on bastion", `VPN: ${vpnRoute}`]) {
+      expect(await visibleRightEdge(terminal.getByText(label, { exact: true }))).toBeLessThanOrEqual(find.x);
+    }
   }
 });
+
+// visibleRightEdge は、要素の見えている部分の右端（px）である。はみ出しを切る祖先の外は見えないので、その右端で止める。
+async function visibleRightEdge(element: Locator): Promise<number> {
+  return element.evaluate((node) => {
+    let right = node.getBoundingClientRect().right;
+    for (let ancestor = node.parentElement; ancestor !== null; ancestor = ancestor.parentElement) {
+      if (getComputedStyle(ancestor).overflowX !== "visible") right = Math.min(right, ancestor.getBoundingClientRect().right);
+    }
+    return right;
+  });
+}
 
 test("frames the whole window and names the engine while a remote session is chosen, on every screen", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });

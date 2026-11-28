@@ -39,7 +39,9 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
         </IconButton>
       ) : null}
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-[9px]">
+        {/* 最小幅のペインでは、名前と行き先を縮めきっても、VPN とリモートセッションの札の余白が入りきらないことがある。
+            入りきらない分は、右のボタンに重ねずにここで切る。 */}
+        <div className="flex min-w-0 items-center gap-[9px] overflow-hidden">
           <span
             aria-hidden="true"
             className={`size-2 shrink-0 rounded-full ${
