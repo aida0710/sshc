@@ -247,6 +247,13 @@ async function mockTerminalSession(page: Page, output: string, redraw = ""): Pro
   return messages;
 }
 
+// openMockedTerminal は、mockTerminalSession のセッションのターミナルを開き、見えている行を返す。
+async function openMockedTerminal(page: Page, installation: Installation): Promise<Locator> {
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  return drawnRows(page).filter({ visible: true });
+}
+
 test("quick navigation and terminal keys remain available in portrait and touch landscape", async ({ page, installation }) => {
   const messages = await mockTerminalSession(page, "Mobile terminal demo\r\nFiles: projects/  archives/  report.txt\r\n$ ");
   await page.setViewportSize({ width: 390, height: 640 });
@@ -1365,8 +1372,7 @@ const keyBarKeyMinimumWidth = 39;
 test("all the keys of the key bar show on a phone 412px wide, each as tall as a finger", async ({ page, installation }) => {
   await mockTerminalSession(page, "$ ");
   await page.setViewportSize({ width: 412, height: 800 });
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  await openMockedTerminal(page, installation);
   const keys = page.getByLabel("On-screen keys", { exact: true });
   await expect(keys).toBeVisible();
   const buttons = await keys.getByRole("button").all();
@@ -1386,8 +1392,7 @@ test("all the keys of the key bar show on a phone 412px wide, each as tall as a 
 test("on a narrower phone the row of keys scrolls sideways and 「…」 stays in sight", async ({ page, installation }) => {
   const messages = await mockTerminalSession(page, "Mobile terminal demo\r\n$ ");
   await page.setViewportSize({ width: 360, height: 640 });
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  await openMockedTerminal(page, installation);
   const keys = page.getByLabel("On-screen keys", { exact: true });
   await expect(keys).toBeVisible();
   for (const button of await keys.getByRole("button").all()) {
@@ -1608,8 +1613,7 @@ for (const program of fullScreenPrograms) {
     const messages = await mockTerminalSession(page, `${longOutput}\r\n`, `${program.modes}\x1b[2J\x1b[HFull-screen program`);
     // A flick coasts on after the finger lifts. With reduced motion it does not, so each swipe sends only its own turns.
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await openApplication(page, installation);
-    await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+    await openMockedTerminal(page, installation);
     const screen = page.getByRole("region", { name: "Terminal for Demo shell" });
     await expect(screen).toContainText("Full-screen program");
     const box = await screen.boundingBox();
@@ -1655,9 +1659,7 @@ test("a swipe across the page opens the navigation and a swipe back closes it", 
 
 test("a sideways swipe over the terminal opens the navigation, and one up and down scrolls the terminal", async ({ page, installation }) => {
   await mockTerminalSession(page, longOutput);
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
-  const rows = drawnRows(page).filter({ visible: true });
+  const rows = await openMockedTerminal(page, installation);
   await expect(rows).toContainText("line 80");
   const box = (await rows.boundingBox())!;
   const navigation = page.locator("[data-app-navigation]");
@@ -1675,9 +1677,7 @@ test("a sideways swipe over the terminal opens the navigation, and one up and do
 // 自分でスクロールするプログラムも動かさない。
 test("a slanted swipe that opens the navigation leaves the terminal's scrollback where it was", async ({ page, installation }) => {
   await mockTerminalSession(page, longOutput);
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
-  const rows = drawnRows(page).filter({ visible: true });
+  const rows = await openMockedTerminal(page, installation);
   await expect(rows).toContainText("line 80");
   const box = (await rows.boundingBox())!;
   const shownBefore = await rows.innerText();
@@ -1690,8 +1690,7 @@ test("a slanted swipe that opens the navigation leaves the terminal's scrollback
 test("a slanted swipe that opens the navigation sends no wheel turns to a full-screen program", async ({ page, installation }) => {
   const program = fullScreenPrograms[0]!;
   const messages = await mockTerminalSession(page, `${longOutput}\r\n`, `${program.modes}\x1b[2J\x1b[HFull-screen program`);
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  await openMockedTerminal(page, installation);
   const screen = page.getByRole("region", { name: "Terminal for Demo shell" });
   await expect(screen).toContainText("Full-screen program");
   const box = (await screen.boundingBox())!;
@@ -1699,6 +1698,103 @@ test("a slanted swipe that opens the navigation sends no wheel turns to a full-s
   await swipe(page, { x: 80, y: box.y + box.height * 0.3 }, { x: 330, y: box.y + box.height * 0.3 + 90 });
   await expect(page.locator("[data-app-navigation]")).toHaveAttribute("data-navigation-open", "true");
   expect(countSent(messages, program.forward) + countSent(messages, program.back)).toBe(0);
+});
+
+// 入力欄・キーバー・貼り付けの確認から送ったものは、xterm.js の入力を通らない。それでも xterm.js に打ったときと
+// 同じく、上へスクロールしていれば一番下へ戻り、返事の出る最後の行が見える。
+const sendsFromPhone: { name: string; send: (page: Page) => Promise<void> }[] = [
+  {
+    name: "the text box's Send",
+    send: async (page) => {
+      await page.getByLabel("Text to send to the terminal", { exact: true }).fill("echo sent");
+      await page.getByRole("button", { name: "Send", exact: true }).tap();
+    },
+  },
+  {
+    name: "a key of the key bar",
+    send: (page) => page.getByLabel("On-screen keys", { exact: true }).getByRole("button", { name: "Ctrl+C", exact: true }).tap(),
+  },
+  {
+    name: "the review of text with a line break",
+    send: async (page) => {
+      await page.getByLabel("Text to send to the terminal", { exact: true }).fill("echo one\necho two");
+      await page.getByRole("button", { name: "Send", exact: true }).tap();
+      await page.getByRole("dialog", { name: /^Review paste to / }).getByRole("button", { name: "Paste", exact: true }).tap();
+    },
+  },
+];
+for (const entry of sendsFromPhone) {
+  test(`${entry.name} brings the last line back into sight from the scrollback`, async ({ page, installation }) => {
+    await mockTerminalSession(page, longOutput);
+    // 指を離したあとの惰性を止めておく。惰性で動いているうちに送るときは、次のテストで確かめる。
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const rows = await openMockedTerminal(page, installation);
+    await expect(rows).toContainText("line 80");
+    const box = (await rows.boundingBox())!;
+
+    await swipe(page, { x: box.x + box.width / 2, y: box.y + box.height * 0.3 }, { x: box.x + box.width / 2, y: box.y + box.height * 0.8 });
+    await expect(rows).not.toContainText("line 80");
+
+    await entry.send(page);
+    await expect(rows).toContainText("line 80");
+  });
+}
+
+test("a key tapped while a flick still coasts through the scrollback keeps the last line in sight", async ({ page, installation }) => {
+  await mockTerminalSession(page, longOutput);
+  const rows = await openMockedTerminal(page, installation);
+  await expect(rows).toContainText("line 80");
+  const key = await page.getByLabel("On-screen keys", { exact: true }).getByRole("button", { name: "Ctrl+C", exact: true }).elementHandle();
+
+  // 指を下へ払って離し、行が惰性で古いほうへ動いているうちに ^C を押す。
+  await page.evaluate(async (key) => {
+    const surface = document.querySelector<HTMLElement>(".sshc-select-overlay")!;
+    const touch = (type: string, y: number) => {
+      const finger = new Touch({ identifier: 1, target: surface, clientX: 200, clientY: y });
+      surface.dispatchEvent(new TouchEvent(type, { touches: type === "touchend" ? [] : [finger], changedTouches: [finger], bubbles: true, cancelable: true }));
+    };
+    const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    touch("touchstart", 200);
+    for (const y of [230, 260, 290, 320]) {
+      await nextFrame();
+      touch("touchmove", y);
+    }
+    touch("touchend", 320);
+    await nextFrame();
+    (key as HTMLButtonElement).click();
+    // 惰性が続いていれば、このあいだに行は古いほうへ10行あまり動き、最後の行は見えなくなる。
+    for (let frame = 0; frame < 10; frame += 1) await nextFrame();
+  }, key);
+  await expect(rows).toContainText("line 80");
+});
+
+// 打っている行を押してカーソルを動かすのは、sshc が送る矢印で、利用者が打ったものではない。押した行が見えている
+// ので、上へスクロールしていても画面は動かさない。PC のクリックと同じである。
+test("a tap on the line being typed moves the cursor and leaves the scrollback where it was", async ({ page, installation }) => {
+  // 画面を消したあとは、プロンプトが一番上の行にあり、少し上へスクロールしても見えている。
+  const messages = await mockTerminalSession(page, `${longOutput}\x1b[H\x1b[2J\x1b]133;A\x07$ \x1b]133;B\x07echo 0123456789`);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const rows = await openMockedTerminal(page, installation);
+  const typed = drawnSpan(page, "echo 0123456789").last();
+  await expect(typed).toBeVisible();
+  await expect(rows).not.toContainText(/line \d+/);
+  const drawnLines = drawnRowsIn(page.getByRole("region", { name: "Terminal for Demo shell" }));
+  const rowHeight = await drawnLines.first().evaluate((row) => row.getBoundingClientRect().height);
+  const box = (await rows.boundingBox())!;
+
+  // 3行上へスクロールする。行の途中で離した指は近いほうの行へ寄るので、半端を半行から離して、寄る先を決めておく。
+  await swipe(page, { x: box.x + box.width / 2, y: box.y + box.height * 0.3 }, { x: box.x + box.width / 2, y: box.y + box.height * 0.3 + rowHeight * 2.8 });
+  // 描き直しを待ってから、打っている行の場所を測る。
+  await expect(drawnLines.nth(3)).toContainText("echo 0123456789");
+  const shownBefore = await rows.innerText();
+  const typedBox = (await typed.boundingBox())!;
+  const text = (await typed.textContent()) ?? "";
+  await page.touchscreen.tap(typedBox.x + (text.indexOf("5") + 0.5) * (typedBox.width / text.length), typedBox.y + typedBox.height / 2);
+
+  await expect.poll(() => messages.join("")).toContain("\x1b[D".repeat(5));
+  // 画面を動かしていれば、xterm.js は次のフレームで描き直す。それを待ってから読む。
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  expect(await rows.innerText()).toBe(shownBefore);
 });
 
 // placedByHand reads whether a swipe left the navigation's position written on it rather than in the

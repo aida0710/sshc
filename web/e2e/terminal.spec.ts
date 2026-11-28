@@ -643,6 +643,54 @@ for (const chord of ["Control+v", "Control+Shift+V"]) {
   });
 }
 
+async function pasteWithKeyboard(page: Page) {
+  await page.evaluate(() => navigator.clipboard.writeText("echo pasted"));
+  await page.keyboard.press("Control+v");
+}
+
+// 貼り付けと JIS の ¥ のキーは、sshc が xterm.js より先に受け取って送る。xterm.js に打ったときと同じく、
+// 上へスクロールしていれば一番下へ戻り、プロンプトの上の行が見える。modes は、出力の前にシェルが printf で
+// 有効にするモードである。
+const inputsTakenBeforeXterm: { name: string; modes?: string; press: (page: Page) => Promise<void> }[] = [
+  { name: "a paste", press: pasteWithKeyboard },
+  {
+    name: "a paste handed to a program that turned on paste events",
+    // 5522 は kitty の貼り付けの知らせで、sshc は貼り付けをプログラムへの答えとして送る（kittyClipboard.ts）。
+    modes: "\\033[?5522h",
+    press: pasteWithKeyboard,
+  },
+  {
+    name: "the yen key typed as a backslash",
+    // Playwright のキーボードには JIS の ¥ のキーが無いので、ブラウザが出す keydown を xterm.js の入力欄へ直接出す。
+    press: (page) => terminalKeyboard(page).evaluate((keyboard) => {
+      keyboard.dispatchEvent(new KeyboardEvent("keydown", { key: "¥", code: "IntlYen", bubbles: true, cancelable: true }));
+    }),
+  },
+];
+for (const input of inputsTakenBeforeXterm) {
+  test(`${input.name} brings the last lines back into sight from the scrollback`, async ({ page, context, installation }) => {
+    test.skip(process.platform === "win32", "seq is POSIX here");
+    await installation.write("sshc/metadata.json", standardPresetMetadata({ terminal: { jisYenBackslash: true } }));
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openApplication(page, installation);
+    await openSessionList(page);
+    await openLocalShell(page);
+    const turnOnModes = input.modes === undefined ? "" : `printf '${input.modes}'; `;
+    await typeIntoTerminal(page, `${turnOnModes}seq 1 200; echo end-$((40+2))`);
+    const rows = drawnRows(page).filter({ visible: true });
+    await expect(rows).toContainText("end-42", { timeout: 20_000 });
+
+    const box = (await terminalScreen(page).boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -3000);
+    await expect(rows).not.toContainText("end-42");
+
+    await terminalKeyboard(page).focus();
+    await input.press(page);
+    await expect(rows).toContainText("end-42");
+  });
+}
+
 // Coming back to the page rechecks the vault, and the app is inert meanwhile, which takes the focus off the
 // terminal. Typing right after coming back must still reach the shell, without clicking the terminal first.
 test("keeps the keyboard on the terminal after the page is hidden and shown again", async ({ page, installation }) => {
