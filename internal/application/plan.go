@@ -86,19 +86,11 @@ func (s *Service) planFileEdit(graph *config.Graph, request EditRequest) (planne
 	}
 
 	if request.Alias != "" {
-		pending := map[string][]byte{filepath.Clean(absolute): updated}
-		after, err := s.resolveWith(pending)
-		if err != nil {
-			return planned{}, err
-		}
-		alias := request.Alias
+		alias := unrenamed(request.Alias)
 		if request.Kind == EditRename || request.Kind == EditDuplicate {
-			alias = request.NewAlias
+			alias.after = request.NewAlias
 		}
-		prepared.preview.Effective = []EffectiveDiff{DiffEffective(
-			ComputeEffective(graph, s.workspace.Root(), request.Alias, s.localFacts()),
-			ComputeEffective(after, s.workspace.Root(), alias, s.localFacts()),
-		)}
+		prepared.previewAliases = []previewAlias{alias}
 	}
 	return prepared, nil
 }
@@ -231,22 +223,9 @@ func (s *Service) planMoveHost(graph *config.Graph, request EditRequest) (planne
 		})
 	}
 
-	pending := map[string][]byte{
-		filepath.Clean(sourceAbsolute):      sourceUpdated,
-		filepath.Clean(destinationAbsolute): destinationUpdated,
-	}
-	after, err := s.resolveWith(pending)
-	if err != nil {
-		return planned{}, err
-	}
+	// 移したブロックが宣言する接続名は、どれも書かれる場所が変わる。
 	for _, alias := range declaredAliases(moved) {
-		if len(prepared.preview.Effective) >= maxEffectivePreviews {
-			break
-		}
-		prepared.preview.Effective = append(prepared.preview.Effective, DiffEffective(
-			ComputeEffective(graph, root, alias, s.localFacts()),
-			ComputeEffective(after, root, alias, s.localFacts()),
-		))
+		prepared.previewAliases = append(prepared.previewAliases, unrenamed(alias))
 	}
 	return prepared, nil
 }
@@ -348,10 +327,7 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 		if host.Group == "" || host.Identity.IsZero() || len(prepared.preview.Effective) >= maxEffectivePreviews {
 			continue
 		}
-		diff := DiffEffective(
-			ComputeEffective(graph, root, host.Identity.Alias, s.localFacts()),
-			ComputeEffective(after, root, host.Identity.Alias, s.localFacts()),
-		)
+		diff := s.effectiveDiff(graph, after, unrenamed(host.Identity.Alias))
 		if len(diff.Changes) == 0 {
 			continue
 		}

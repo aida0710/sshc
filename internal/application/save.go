@@ -11,9 +11,6 @@ import (
 	"sshc/internal/storage"
 )
 
-// maxEffectivePreviews は、1 回の保存の preview に載せる実効値の差分の上限。
-const maxEffectivePreviews = 50
-
 var (
 	ErrUnknownEditKind  = errors.New("unknown edit kind")
 	ErrGroupNotDeclared = errors.New("no generated Include line declares that group")
@@ -80,7 +77,10 @@ type planned struct {
 	base                  map[string][]byte
 	baseline              map[string]bool
 	preview               SavePreview
-	keyRelocations        []RelocatedKeyFile
+	// previewAliases は、plan が最終的な設定値の差分をプレビューに載せる接続名である。差分は、
+	// グループ設定の書き直しまで入れた後のグラフで作る。
+	previewAliases []previewAlias
+	keyRelocations []RelocatedKeyFile
 }
 
 // addChange は、change を計画に足す。書く前の中身を読み、保存の直前に照合する基（base）と
@@ -192,16 +192,7 @@ func (s *Service) plan(request EditRequest) (planned, error) {
 	if err != nil {
 		return planned{}, err
 	}
-	if request.Alias != "" {
-		alias := request.Alias
-		if request.Kind == EditRename || request.Kind == EditDuplicate {
-			alias = request.NewAlias
-		}
-		prepared.preview.Effective = []EffectiveDiff{DiffEffective(
-			ComputeEffective(graph, s.workspace.Root(), request.Alias, s.localFacts()),
-			ComputeEffective(after, s.workspace.Root(), alias, s.localFacts()),
-		)}
-	}
+	prepared.preview.Effective = s.effectivePreview(graph, after, prepared.previewAliases)
 	return prepared, nil
 }
 

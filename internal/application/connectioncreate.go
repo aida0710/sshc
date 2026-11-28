@@ -326,10 +326,7 @@ func (s *Service) planCreateConnection(
 	if err != nil {
 		return planned{}, HostIdentity{}, err
 	}
-	prepared.preview.Effective = []EffectiveDiff{DiffEffective(
-		ComputeEffective(graph, s.workspace.Root(), request.Alias, s.localFacts()),
-		ComputeEffective(after, s.workspace.Root(), request.Alias, s.localFacts()),
-	)}
+	prepared.preview.Effective = s.effectivePreview(graph, after, []previewAlias{unrenamed(request.Alias)})
 	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, metadata, request.Alias)
 	if err != nil {
 		return planned{}, HostIdentity{}, err
