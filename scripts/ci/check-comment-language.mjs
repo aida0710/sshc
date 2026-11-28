@@ -24,7 +24,15 @@ import { exemptionMarker, findEnglishComments } from "./comment-language/english
 const defaultBase = "origin/main";
 
 // 見ないファイル。ほかから取り込んだコードと、生成したコードは、ここで書いたコメントではない。
-const excludedPaths = [/^third_party\//, /(?:^|\/)node_modules\//, /\.gen\.go$/, /\.generated\.ts$/, /^web\/src\/api\/schema\.d\.ts$/];
+// 生成したコードは名前が .gen.go か generated.ts で終わる（web/src/rules/generated.ts のように
+// 点の付かないものもある）。openapi-typescript が書く schema.d.ts だけは名前で見分けられない。
+const excludedPaths = [
+  /^third_party\//,
+  /(?:^|\/)node_modules\//,
+  /\.gen\.go$/,
+  /(?:^|[/.])generated\.ts$/,
+  /^web\/src\/api\/schema\.d\.ts$/,
+];
 
 // 差分とファイルの中身は、大きな PR でも読み切れるようにする（spawnSync の既定は 1 MiB）。
 const gitOutputLimit = 1 << 30;

@@ -82,6 +82,7 @@ describe("check-comment-language.mjs", () => {
     write("third_party/xterm/addon.ts", english);
     write("internal/api/models.gen.go", english);
     write("web/src/api/validators.generated.ts", english);
+    write("web/src/rules/generated.ts", english);
     write("web/src/api/schema.d.ts", english);
     write("scripts/notes.sh", "# returns the session of the alias\n");
     commit("chore: 生成物を足す");
