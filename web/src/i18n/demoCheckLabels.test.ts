@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { labelPatterns } from "../testing/catalogueLabels";
+import { repositoryRoot } from "../testing/repositoryRoot";
 import { ja, type MessageKey } from "./messages";
 
 // The browser demo's check (demo/scripts/check-browser.mjs) goes through the Japanese screens by the
@@ -24,7 +24,6 @@ const screenNames = new Map<string, MessageKey>([
   ["接続済み", "terminal.connected"],
 ]);
 
-const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const read = (...path: string[]) => readFileSync(join(repositoryRoot, ...path), "utf8");
 const check = read("demo", "scripts", "check-browser.mjs");
 // The names on the demo page around the sshc screen: its wording and its language switch.

@@ -1,10 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative, sep } from "node:path";
+import { repositoryRoot } from "./repositoryRoot";
 
 // webの外にある日本語（pages、README、AGENTS.md、docs/の文書、Androidの文言）をテストから読む。
 
-const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const pagesRoot = join(repositoryRoot, "pages");
 const docsRoot = join(repositoryRoot, "docs");
 const readme = join(repositoryRoot, "README.md");
