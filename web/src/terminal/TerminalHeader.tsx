@@ -11,9 +11,10 @@ import { IconButton } from "../ui/IconButton";
 import { Tag } from "../ui/Tag";
 import type { PaneDragHandlers } from "./splitView/paneControls";
 
-// detailSize は、見出しの名前の後ろに並べる行き先と札の大きさである。幅に余裕があれば全文まで広がり、無ければ「…」で
-// 縮む。112px（basis-28）も残らなければ、次の行へ折り返して隠れる。それより狭いと、VPN の札は「VPN経由：」の
-// 後ろのルートの名前がほとんど見えず、出しても役に立たない（行き先なら約15字が見える幅）。
+// detailSize は、見出しの名前の後ろに並べる行き先と札の大きさである。残りの幅に全文が入らなければ「…」で縮むが、
+// 112px（basis-28）より狭くはしない。112px（それより短いものは全文の幅）も残らなければ、次の行へ折り返して隠れる。
+// 112px より狭いと、VPN の札は「VPN経由：」の後ろのルートの名前がほとんど見えず、出しても役に立たない（行き先なら
+// 約15字が見える幅）。
 const detailSize = "min-w-0 grow basis-28 max-w-max";
 
 // TerminalHeader は、ターミナルの上の見出しである。広い画面では40pxの行、スマホではアプリの見出しに代わる
