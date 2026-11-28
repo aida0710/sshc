@@ -8,14 +8,13 @@ import { exitedAbnormally, sessionStateText, sessionStatusTone } from "./session
 import type { StreamLink } from "./streamLink";
 import { terminalDisplayTitle } from "./terminalPresentation";
 import { IconButton } from "../ui/IconButton";
-import { Tag } from "../ui/Tag";
 import type { PaneDragHandlers } from "./splitView/paneControls";
 
 // detailSize は、見出しの名前の後ろに並べる行き先と札の大きさである。残りの幅に全文が入らなければ「…」で縮むが、
 // 112px（basis-28）より狭くはしない。112px（それより短いものは全文の幅）も残らなければ、次の行へ折り返して隠れる。
 // 112px より狭いと、VPN の札は「VPN経由：」の後ろのルートの名前がほとんど見えず、出しても役に立たない（行き先なら
-// 約15字が見える幅）。並んだものは残りの幅を同じだけ分け合うので、次の札が並びに加わると、それまで広がっていた
-// 行き先や札は 112px まで縮む。折り返すかどうかは 112px で決まるので、行き先を全文にしてから札を出す形にはできない。
+// 約15字が見える幅）。並んだものは残りの幅を同じだけ分け合うので、VPN の札が並びに加わると、それまで広がっていた
+// 行き先は 112px まで縮む。折り返すかどうかは 112px で決まるので、行き先を全文にしてから札を出す形にはできない。
 const detailSize = "min-w-0 grow basis-28 max-w-max";
 
 // detailRowHeight は、行き先と札の行の高さである。いちばん高い VPN の札（10px の字の行 15px、上下の余白 4px、枠 2px）に
@@ -24,14 +23,12 @@ const detailRowHeight = "h-[21px] before:h-[21px]";
 
 // TerminalHeader は、ターミナルの上の見出しである。広い画面では40pxの行、スマホではアプリの見出しに代わる
 // 上のバーになる（ナビゲーションを開くボタン、名前と行き先、右側の操作）。右側の操作は children で受け取る。
-export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, onOpenNavigation, paneDrag, children }: {
+export function TerminalHeader({ session, link, mobile, vpnProfile, onOpenNavigation, paneDrag, children }: {
   session: TerminalSession;
   link: StreamLink;
   mobile: boolean;
   // vpnProfile は、この接続が通るVPN経路の名前である。空なら通らない。
   vpnProfile: string;
-  // runTarget は、このセッションが動いているエンジンの SSH の別名である。このマシンで動いていれば undefined。
-  runTarget: string | undefined;
   onOpenNavigation: (() => void) | undefined;
   // paneDrag は、分割表示のペインを、見出しの名前の部分をつかんで動かす操作である。右のボタンからは動かせない。
   paneDrag: PaneDragHandlers | undefined;
@@ -77,9 +74,6 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
               <span title={destination} className={`truncate font-mono text-xs text-ink-faint ${detailSize}`}>{destination}</span>
               {stateText}
               <VPNProfileChip name={vpnProfile} className={detailSize} />
-              {runTarget === undefined ? null : (
-                <span className={`flex ${detailSize}`}><Tag tone="accent" truncate>{t("runTarget.runningOn", { alias: runTarget })}</Tag></span>
-              )}
             </div>
           )}
         </div>

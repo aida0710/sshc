@@ -414,7 +414,6 @@ test("keeps this machine's split view while a remote session engine is shown", a
 
 // 札は、縮まないと狭いペインで見出しのボタンに重なる長さにする（VPN プロファイルの名前は48字まで）。
 const vpnRoute = "pelican-office-ikev2-primary-route-build-farm";
-const remoteSessionTag = "on bastion";
 
 // splitRemoteSessionsInRow は、bastion のセッション titles を、左から順に右へ足して分割表示に並べ、そのペインを返す。
 async function splitRemoteSessionsInRow(page: Page, titles: readonly string[]): Promise<Locator[]> {
@@ -431,7 +430,7 @@ async function splitRemoteSessionsInRow(page: Page, titles: readonly string[]): 
   return panes.all();
 }
 
-test("shows the VPN route and the engine's tag whole and clear of the buttons in a pane wide enough for them", async ({ page, installation }) => {
+test("shows the VPN route whole and clear of the buttons in a pane wide enough for it", async ({ page, installation }) => {
   const titles = ["web", "api"];
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
   await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
@@ -440,14 +439,12 @@ test("shows the VPN route and the engine's tag whole and clear of the buttons in
   for (const terminal of await splitRemoteSessionsInRow(page, titles)) {
     const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
     // この幅では縮めれば入りきるので、札は隠れずに見え、札の箱そのものがボタンの手前で終わる。札の上下も切れない。
-    // 実行先の札の文字は札の地の内側の要素なので、札の地の箱（title に同じ文字を持つ）を見る。
-    for (const chip of [terminal.getByTitle(remoteSessionTag, { exact: true }), terminal.getByText(`VPN: ${vpnRoute}`, { exact: true })]) {
-      const visible = await visibleBox(chip);
-      expect(visible.width).toBeGreaterThan(0);
-      expect(visible.height).toBe(visible.wholeHeight);
-      const box = (await chip.boundingBox())!;
-      expect(box.x + box.width).toBeLessThanOrEqual(find.x);
-    }
+    const chip = terminal.getByText(`VPN: ${vpnRoute}`, { exact: true });
+    const visible = await visibleBox(chip);
+    expect(visible.width).toBeGreaterThan(0);
+    expect(visible.height).toBe(visible.wholeHeight);
+    const box = (await chip.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(find.x);
   }
 });
 
@@ -463,7 +460,7 @@ test("keeps a long connection name whole in a pane with room for it, hiding the 
   const [name, address] = await terminal!.getByText(longTitle, { exact: true }).all();
   expect(await isShortened(name!)).toBe(false);
   const find = (await terminal!.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
-  for (const detail of [address!, terminal!.getByText(remoteSessionTag, { exact: true }), terminal!.getByText(`VPN: ${vpnRoute}`, { exact: true })]) {
+  for (const detail of [address!, terminal!.getByText(`VPN: ${vpnRoute}`, { exact: true })]) {
     const visible = await visibleBox(detail);
     if (visible.width > 0) expect(visible.right).toBeLessThanOrEqual(find.x);
   }
@@ -481,7 +478,7 @@ test("keeps the connection names in narrow panes' headers whole, and hides the a
     // bastion の SSH の設定にこの接続先は無いので、名前の右の行き先も接続名と同じ文字になる。
     await expect(terminal.getByText(title, { exact: true })).toHaveCount(2);
     const [name, address] = await terminal.getByText(title, { exact: true }).all();
-    const details = [address!, terminal.getByText(remoteSessionTag, { exact: true }), terminal.getByText(`VPN: ${vpnRoute}`, { exact: true })];
+    const details = [address!, terminal.getByText(`VPN: ${vpnRoute}`, { exact: true })];
     const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
     for (const detail of details) {
       const visible = await visibleBox(detail);

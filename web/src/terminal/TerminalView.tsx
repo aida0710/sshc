@@ -564,7 +564,7 @@ export function TerminalView({
 
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
-      <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} runTarget={runTarget} onOpenNavigation={onOpenNavigation} paneDrag={splitPane?.drag}>
+      <TerminalHeader session={session} link={link} mobile={mobile} vpnProfile={vpnProfile} onOpenNavigation={onOpenNavigation} paneDrag={splitPane?.drag}>
         {mobile ? null : (
           <IconButton label={t("terminal.search")} size="toolbar" tone="faint" className="focus:bg-hover"
             onClick={search.toggle}>

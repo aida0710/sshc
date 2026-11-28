@@ -667,7 +667,6 @@ export const en = {
   "runTarget.remove": "Remove from the list",
   "runTarget.add": "Add an engine…",
   "runTarget.addHeading": "Add the engine on an SSH host",
-  "runTarget.runningOn": "on {alias}",
   "runTarget.notRunning": "The sshc engine is not running on {alias}. Start it there with sshc service install or sshc open.",
   "runTarget.notRunningTitle": "The sshc engine is not running",
   "runTarget.notRunningHeading": "The sshc engine on {alias} is not running",

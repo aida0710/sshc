@@ -671,7 +671,6 @@ export const ja = {
   "runTarget.remove": "一覧から外す",
   "runTarget.add": "sshcエンジンを追加…",
   "runTarget.addHeading": "SSHの接続先のsshcエンジンを追加",
-  "runTarget.runningOn": "{alias}で実行中",
   "runTarget.notRunning": "{alias}でsshcエンジンが動いていません。{alias}でsshc service installかsshc openを実行してください。",
   "runTarget.notRunningTitle": "sshcエンジンが動いていません",
   "runTarget.notRunningHeading": "{alias}のsshcエンジンが動いていません",
