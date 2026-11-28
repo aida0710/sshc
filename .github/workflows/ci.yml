@@ -1,9 +1,9 @@
 # すべての push と pull request に対する検証ワークフロー。
 # ジョブは失敗した検査を識別できる単位に分割する。
 #
-# go、web、deadcode、generated の各ジョブの検査は、ローカルの `make test` と
-# `make verify-generated` にそろえる。ただし Windows だけの段と、web の axe 検査は
-# ローカルのこの 2 つに含まれない。E2E は時間がかかるので、CI では主要画面の axe
+# go、web、deadcode、generated の各ジョブの検査と、security のジョブの staticcheck は、
+# ローカルの `make test` と `make verify-generated` にそろえる。ただし Windows だけの段と、
+# web の axe 検査はローカルのこの 2 つに含まれない。E2E は時間がかかるので、CI では主要画面の axe
 # 検査だけを走らせ、全体は `make e2e` でローカル実行する。統合テストは
 # `make integration` でも走らせられる。Android の APK、VPN のコンテナイメージ、
 # 文書サイトのビルド、依存の脆弱性は CI だけで確かめる。
@@ -948,10 +948,10 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
           govulncheck ./...
+      # make test と同じスクリプトで、Linux・Windows・macOS・Android の組み立てを解析する。
+      # staticcheck の版は go.mod の tool で固定してある。
       - name: Go static analysis
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
-          staticcheck ./...
+        run: scripts/ci/staticcheck.sh
       # 本番の依存は例外なしで監査し、開発の依存は scripts/ci/npm-audit-allowed.tsv に
       # 期限と理由と一緒に書いた勧告だけを許す。
       - name: npm vulnerability audit
