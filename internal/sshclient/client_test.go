@@ -817,8 +817,8 @@ func TestAnUnreachableAddressFailsWithinItsTimeout(t *testing.T) {
 	}
 }
 
-// 接続できなかった理由は、DescribeFailure が返す文にしてから端末へ書く。Open は握手を
-// 待たずに返るので、`sshc ssh` が握手の途中の失敗を CLI の案内にできるのはここだけである。
+// 接続できなかった理由は、DescribeFailure が返す文にしてから端末へ書く。Open はハンドシェイクを
+// 待たずに返るので、`sshc ssh` がハンドシェイクの途中の失敗を CLI の案内にできるのはここだけである。
 func TestAFailureDuringTheHandshakeIsWrittenInTheWordsDescribeFailureGives(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "hunter2"})
 	refused := errors.New("the workspace refused to write known_hosts")

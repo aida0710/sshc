@@ -21,7 +21,7 @@ import (
 // streamSetup は、この検査が繰り返す組み立てをひとつにまとめる。
 //
 // 鍵はサーバーより先に作る。受け付ける鍵は ssh.ServerConfig を組んだ時点で
-// 決まるので、あとから足しても認証は通らない。握手そのものが失敗する。
+// 決まるので、あとから足しても認証は通らない。ハンドシェイクそのものが失敗する。
 func streamSetup(
 	t *testing.T, options serverOptions,
 ) (*testServer, sshclient.Dialer, sshclient.Target) {

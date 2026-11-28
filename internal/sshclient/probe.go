@@ -116,7 +116,7 @@ func (d Dialer) probeChain(
 // methodRecorder は、どの方式がいつ試されたかを見る。
 //
 // x/crypto は「どれで通ったか」を返さないが、方式は順に試され、通った時点で
-// 握手が終わる。だから最後に呼ばれた方式が通った方式である。推測ではない。
+// ハンドシェイクが終わる。だから最後に呼ばれた方式が通った方式である。推測ではない。
 type methodRecorder struct {
 	mutex    sync.Mutex
 	attempts []string

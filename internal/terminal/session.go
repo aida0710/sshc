@@ -669,7 +669,7 @@ func (s *Session) pump(now func() time.Time) {
 		if ready != nil && !ready.connectedAt.IsZero() {
 			settledAt = ready.connectedAt
 		}
-		// 握手に長く掛かった時間は安定稼働に数えない。Ready に失敗した
+		// ハンドシェイクに長く掛かった時間は安定稼働に数えない。Ready に失敗した
 		// 再接続で予算を戻すと、失敗し続ける接続が永久に回り続ける。
 		if connectionErr == nil && info.At.Sub(settledAt) >= ReconnectSettled {
 			s.mutex.Lock()

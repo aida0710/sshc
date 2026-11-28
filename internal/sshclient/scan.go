@@ -15,7 +15,7 @@ import (
 // 対して上限が種別の数（ScanAlgorithms の長さ）だけ掛かり、その倍数だけ待たされる。
 const DefaultScanTimeout = 15 * time.Second
 
-// errKeyCollected は、鍵を受け取ったので握手を止めるという合図である。
+// errKeyCollected は、鍵を受け取ったのでハンドシェイクを中断するという合図である。
 //
 // 失敗ではない。鍵を集めるのに認証情報は要らないので、鍵が手に入った時点で
 // 用は済んでいる。そこから認証へ進むと、集めるだけのはずの操作が認証情報を
@@ -24,7 +24,7 @@ var errKeyCollected = errors.New("sshclient: the host key was collected")
 
 // ScanHostKeys は、そのアドレスが提示するホスト鍵を集める。
 //
-// 認証しない。種別ごとに握手を始め、鍵を受け取ったところで断る。これは
+// 認証しない。種別ごとにハンドシェイクを始め、鍵を受け取ったところで断る。これは
 // ssh-keyscan がしていることと同じである。
 func ScanHostKeys(
 	ctx context.Context,

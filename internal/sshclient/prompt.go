@@ -258,7 +258,7 @@ func writeMaskedPromptFeedback(output io.Writer, answer []byte, displayedRunes *
 	return nil
 }
 
-// InputBuffer は、握手のあいだに打たれたバイト列を溜める。
+// InputBuffer は、ハンドシェイクのあいだに打たれたバイト列を溜める。
 //
 // io.Pipe ではない。あれは書き込みが読み取りを待つ。問いが出ていない間に
 // 打たれた文字で WebSocket の読み手が止まり、その接続全体が固まる。ここは

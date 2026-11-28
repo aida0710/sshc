@@ -794,7 +794,7 @@ func TestHarnessStartsTheProductionServerAgainstAnIsolatedHome(t *testing.T) {
 
 // recordingScanner は、ホスト鍵を集めるインターフェースである。
 //
-// このスイートはネットワークへ出ない。本物の握手を見るのは
+// このスイートはネットワークへ出ない。本物のハンドシェイクを見るのは
 // internal/sshclient の側であり、ここが確かめるのは、確認の無い要求が
 // このインターフェースに届かないことである。
 type recordingScanner struct {

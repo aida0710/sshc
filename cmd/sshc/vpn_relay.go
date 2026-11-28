@@ -204,7 +204,7 @@ func askVPNRelay(ctx context.Context, connection net.Conn, address string) (vpn.
 // runVPNProxy は、標準入出力をその経路の中継へ繋ぐ。
 //
 // ホストの ssh・scp・git が ProxyCommand として使うための口である。SSH の
-// 握手も鍵もそれらの側にあり、こちらが運ぶのはバイト列だけである。
+// ハンドシェイクも鍵もそれらの側にあり、こちらが運ぶのはバイト列だけである。
 func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandEnvironment) int {
 	// 標準出力はデータの通り道である。案内も診断もここへは書かない。
 	relay, err := dialVPNRelay(ctx, environment.stateDir, environment.client,

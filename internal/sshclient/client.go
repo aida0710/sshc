@@ -48,7 +48,7 @@ type Dialer struct {
 	// DescribeFailure は、接続できなかった理由を端末へ書く前に、CLI の失敗の文へ置き換える。
 	// nil なら画面のターミナルの日本語の文（FailureSentence）を書く。
 	//
-	// `sshc ssh` は CLI の英語の案内を、端末に書くこの文で出す。Open は握手を待たずに
+	// `sshc ssh` は CLI の英語の案内を、端末に書くこの文で出す。Open はハンドシェイクを待たずに
 	// 返るので、呼び出し側が Open の戻り値で失敗を受け取って書き換えることはできない。
 	DescribeFailure func(error) error
 	// OfferPasswordSave は、打ったパスワードで認証が通ったあとに、Vault に保存するかを
@@ -58,8 +58,8 @@ type Dialer struct {
 
 // Open は、この alias のセッションをひとつ返す。
 //
-// 握手を待たずに返る。接続の途中でユーザーに尋ねることがあり、その問いは
-// この Process の出力を通って端末へ出るからである。握手を終えてから返すと、
+// ハンドシェイクを待たずに返る。接続の途中でユーザーに尋ねることがあり、その問いは
+// この Process の出力を通って端末へ出るからである。ハンドシェイクを終えてから返すと、
 // 誰も繋がっていない出力へ問いを書くことになる。
 //
 // 接続できなかった理由は、端末へ書かれて終了済みセッションとして残る。
@@ -430,7 +430,7 @@ func (d Dialer) attemptHop(ctx context.Context, request hopConnection, hostKeys 
 // tracerへ流す。共有値を書き換えないため、同時接続でもobserverが混ざらない。
 //
 // 返す関数は、最後に試した方式の名前である。x/crypto/ssh は通った方式を
-// 教えないが、方式は順に試され、通った瞬間に握手が終わるので、最後に
+// 教えないが、方式は順に試され、通った瞬間にハンドシェイクが終わるので、最後に
 // 試したものが通ったものである。
 func (d Dialer) authWithTrace(trace *tracer) (Auth, func() string) {
 	auth := d.Auth
@@ -716,7 +716,7 @@ func newClientConn(
 // withComplaints は、プログラムが標準エラーへ書いたものを理由に足す。
 //
 // 繋がらなかった理由は、たいていそこにしかない。`ssh -W` は
-// "Connection refused" を stderr へ書き、こちらから見えるのは「握手が
+// "Connection refused" を stderr へ書き、こちらから見えるのは「ハンドシェイクが
 // 通らなかった」だけになる。
 func withComplaints(err error, conn net.Conn) error {
 	command, ok := conn.(*commandconn.Conn)

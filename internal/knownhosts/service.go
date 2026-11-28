@@ -161,7 +161,7 @@ func (s *Service) Add(candidate Candidate, expectedFingerprint string, acknowled
 	return s.appendEntry(s.Path(), candidate)
 }
 
-// Remember は、接続の握手で受け入れたホスト鍵を path の known_hosts へ 1 行追加する。
+// Remember は、接続のハンドシェイクで受け入れたホスト鍵を path の known_hosts へ 1 行追加する。
 //
 // 鍵を受け入れるかは、接続がすでに StrictHostKeyChecking と利用者の確認で決めて
 // いる。path は UserKnownHostsFile の最初のファイルである。sshc が書けるのは

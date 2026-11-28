@@ -60,7 +60,7 @@ func newKnownHostsServerWith(t *testing.T, contents string, connectionNames func
 	}
 	manager := storage.NewManager(workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x2f}, 8192)))
 
-	// 鍵を集める継ぎ目は差し替える。本物の握手を見るのは internal/sshclient である。
+	// 鍵を集める継ぎ目は差し替える。本物のハンドシェイクを見るのは internal/sshclient である。
 	blob, err := base64.StdEncoding.DecodeString(knownHostKey)
 	if err != nil {
 		t.Fatal(err)

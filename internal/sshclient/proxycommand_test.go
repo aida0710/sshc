@@ -157,7 +157,7 @@ func TestTheProxyCommandIsAnnouncedEvenWhenQuiet(t *testing.T) {
 
 // 繋がらなかった理由は、たいていプログラムの標準エラーにしかない。
 //
-// `ssh -W` は "Connection refused" をそこへ書く。握手の失敗としてだけ見せると、
+// `ssh -W` は "Connection refused" をそこへ書く。ハンドシェイクの失敗としてだけ見せると、
 // 読むユーザーには何が起きたのか分からない。
 func TestAFailingProxyCommandSaysWhatItComplainedAbout(t *testing.T) {
 	if runtime.GOOS == "windows" {

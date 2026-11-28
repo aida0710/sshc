@@ -24,7 +24,7 @@ const (
 	FailurePPPAuthentication FailureReason = "ppp_authentication"
 	// FailureOpenConnect は、openconnect が装置へ繋げなかったことを表す。
 	FailureOpenConnect FailureReason = "openconnect_failed"
-	// FailureHandshakeTimeout は、WireGuard の相手と握手できなかったことを表す（鍵、サーバー）。
+	// FailureHandshakeTimeout は、WireGuard のピアとハンドシェイクできなかったことを表す（鍵、サーバー）。
 	FailureHandshakeTimeout FailureReason = "handshake_timeout"
 	// FailureTargetUnresolved は、VPN の中で接続先の名前解決に失敗したことを表す。
 	FailureTargetUnresolved FailureReason = "target_unresolved"
