@@ -594,6 +594,10 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # コメントの言語の検査が、1 つ前のコミットとの差分を読む。PR では merge commit を取り出すので、
+          # 1 つ目の親（base）との差分が PR の変更になる。
+          fetch-depth: 2
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 26
@@ -603,6 +607,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+
+      # 足したコメントが日本語かを、この変更の差分だけで検査する（scripts/ci/check-comment-language.mjs）。
+      # Go だけの PR でも検査するので、if の無いこの job に置く。依存を使わないので npm ci の前に流す。
+      - name: Comment language checker tests
+        working-directory: .
+        run: node --test scripts/ci/comment-language/*.test.mjs
+      - name: Comment language of added comments
+        working-directory: .
+        run: node scripts/ci/check-comment-language.mjs HEAD^1 HEAD
 
       # `npm ci` はロックされたバージョンをそのままインストールし、lockfile と
       # package.json が食い違えば失敗する。このプロジェクトはすべての依存を固定
