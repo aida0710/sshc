@@ -482,6 +482,8 @@ export function SFTPPanel({
       className="h-8 w-full rounded-md border border-control-line bg-well py-1 pl-7 pr-2 text-xs md:h-7"
     />
   );
+  // 行を選んでいるあいだ、絞り込みの行は選んだ件数と操作の帯に変わる。
+  const showsSelectionBar = selectedEntries.length > 0 && !(mobileInteraction && search.mobileSearchOpen);
   const selectionLabel = selectedEntry === null
     ? t("sftp.selectedCountSize", { count: selectedEntries.length, size: formatBytes(selectedEntries.reduce((sum, entry) => sum + (entry.type === "file" ? entry.size : 0), 0)) })
     : t("sftp.selected", { name: selectedEntry.name });
@@ -575,8 +577,10 @@ export function SFTPPanel({
           onDrop={(event) => { void transfers.acceptDrop(event); }}
         >
           {/* A pane with nothing listed has nothing to filter. The row stays for the file inputs it holds. */}
-          <div hidden={mobileInteraction || !connected} className={mobileInteraction || !connected ? "hidden" : "relative flex shrink-0 items-center gap-1 border-b border-line px-3 py-1.5"}>
-            {selectedEntries.length > 0 && !(mobileInteraction && search.mobileSearchOpen) ? (
+          {/* 狭いペインで絞り込みの欄が最小の幅を割るときは、［リスト｜グリッド］を次の行へ折り返す。
+              行を選んだときの帯は、選んだ名前を切って1行に収めるので折り返さない。 */}
+          <div hidden={mobileInteraction || !connected} className={mobileInteraction || !connected ? "hidden" : `relative flex shrink-0 items-center gap-1 border-b border-line px-3 py-1.5 ${showsSelectionBar ? "" : "flex-wrap"}`}>
+            {showsSelectionBar ? (
               <>
                 <IconButton label={t("sftp.clearSelection")} size={mobileInteraction ? "barLarge" : "toolbar"} onClick={list.clearSelection}>
                   <Icon name="close" className={mobileInteraction ? "size-5" : "size-3.5"} />
@@ -615,7 +619,8 @@ export function SFTPPanel({
                 <Icon name="plus" className="size-4" />
               </IconButton>
             ) : null}
-            <label className="relative min-w-24 max-w-52 grow">
+            {/* 折り返すかは縮める前の幅で決まる。basis を最小の幅にそろえ、最小の幅も入らないときだけ折り返す。 */}
+            <label className="relative min-w-24 max-w-52 grow basis-24">
               <span className="sr-only">{t("sftp.filter")}</span>
               <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
               {filterInput}
