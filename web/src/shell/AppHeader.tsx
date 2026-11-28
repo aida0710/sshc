@@ -32,7 +32,7 @@ export function AppHeader({
   navigationToggleRef?: RefObject<HTMLButtonElement | null>;
   // navigationPinned: the navigation stays open beside the bar (a tablet held upright), so there is nothing to toggle.
   navigationPinned?: boolean;
-  // navigationAttention は、セッションのプログラムが人を要るとき、ナビゲーションのボタンの角に出す状態である。
+  // navigationAttention は、ナビゲーションのボタンの角に出す状態である（useNavigationAttention）。
   navigationAttention: MarkedProgramState | null;
   onToggleNavigation: () => void;
   inspector: InspectorContent | null;

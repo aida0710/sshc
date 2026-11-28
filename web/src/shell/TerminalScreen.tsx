@@ -58,8 +58,7 @@ export function TerminalScreen({
   onOpenVault: () => void;
   // onOpenNavigation opens the sidebar from a phone's terminal top bar; undefined while the sidebar stays open.
   onOpenNavigation?: (() => void) | undefined;
-  // navigationAttention は、ほかのセッションのプログラムが人を要るとき、スマホの上のバーのナビゲーションのボタンに出す
-  // 状態である（offScreenProgramStatus）。
+  // navigationAttention は、スマホの上のバーのナビゲーションのボタンの角に出す状態である（useNavigationAttention）。
   navigationAttention: MarkedProgramState | null;
   visible: boolean;
   terminalSessions: TerminalSessionsState;

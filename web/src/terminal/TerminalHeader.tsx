@@ -21,7 +21,7 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
   // runTarget は、このセッションが動いているエンジンの SSH の別名である。このマシンで動いていれば undefined。
   runTarget: string | undefined;
   onOpenNavigation: (() => void) | undefined;
-  // navigationAttention は、ほかのセッションのプログラムが人を要るとき、ナビゲーションのボタンの角に出す状態である。
+  // navigationAttention は、ナビゲーションのボタンの角に出す状態である（useNavigationAttention）。
   navigationAttention: MarkedProgramState | null;
   children: ReactNode;
 }) {

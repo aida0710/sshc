@@ -111,7 +111,7 @@ type TerminalViewProps = {
   onOpenRemotePath?: (alias: string, path: string, action: RemotePathAction) => void;
   // onOpenNavigation は、スマホの上のバーからサイドバーを開く。スマホでは、このバーがアプリの見出しの代わりになる。
   onOpenNavigation?: (() => void) | undefined;
-  // navigationAttention は、ほかのセッションのプログラムが人を要るとき、上のバーのナビゲーションのボタンに出す状態である。
+  // navigationAttention は、上のバーのナビゲーションのボタンの角に出す状態である（useNavigationAttention）。
   navigationAttention?: MarkedProgramState | null;
   osc52Enabled?: boolean;
   // vpnProfile は、この接続が通るVPN経路の名前である。空なら通らない。

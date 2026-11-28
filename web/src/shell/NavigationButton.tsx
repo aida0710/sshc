@@ -16,13 +16,14 @@ type NavigationButtonProps = Omit<IconButtonProps, "children"> & {
   icon: IconName;
   // iconClassName はアイコンの大きさである。置く場所の字に合わせてあるので、呼ぶ側が決める。
   iconClassName: string;
-  // attention は、画面に出ていないセッションのプログラムが人を要るときの状態である（offScreenProgramStatus）。
+  // attention は、画面に出ていないセッションの入力待ち・失敗・完了のうち、いちばん急ぐもの（useNavigationAttention）。
+  // null なら印を出さない。
   attention: MarkedProgramState | null;
 };
 
 // NavigationButton は、閉じているナビゲーションを開くボタンである（スマホの上のバーの ☰、PC で隠したナビゲーションの
 // 列のボタン）。閉じている間は、ナビゲーションの中のセッションの行の印が見えない。そこで、画面に出ていないセッションの
-// プログラムが人を要るときは、行と同じ印をアイコンの右上に重ねる。印は読み上げから隠すので、理由は名前に足す。
+// 入力待ち・失敗・完了を、行と同じ印でアイコンの右上に重ねる。印は読み上げから隠すので、理由は名前に足す。
 export const NavigationButton = forwardRef<HTMLButtonElement, NavigationButtonProps>(function NavigationButton(
   { icon, iconClassName, attention, label, ...rest },
   ref,
