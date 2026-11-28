@@ -2,12 +2,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// webの外にある日本語（pages、README、docs/の文書、Androidの文言）をテストから読む。
+// webの外にある日本語（pages、README、AGENTS.md、docs/の文書、Androidの文言）をテストから読む。
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const pagesRoot = join(repositoryRoot, "pages");
 const docsRoot = join(repositoryRoot, "docs");
 const readme = join(repositoryRoot, "README.md");
+const agentInstructions = join(repositoryRoot, "AGENTS.md");
 const androidJapaneseStrings = join(repositoryRoot, "android", "app", "src", "main", "res", "values-ja", "strings.xml");
 
 export type JapanesePage = { path: string; lines: string[] };
@@ -46,14 +47,18 @@ export function japaneseReadme(): JapanesePage {
   return readJapanesePage(readme);
 }
 
-// READMEと、docs/直下の文書。docs/releases（公開済みのリリースノート）とdocs/superpowers
-// （作業の計画）は書いた時点の記録なので入れない。
+export function japaneseAgentInstructions(): JapanesePage {
+  return readJapanesePage(agentInstructions);
+}
+
+// READMEと、AGENTS.md（開発の決まり）と、docs/直下の文書。docs/releases（公開済みのリリースノート）と
+// docs/superpowers（作業の計画）は書いた時点の記録なので入れない。
 export function japaneseRepositoryDocuments(): JapanesePage[] {
   const docs = readdirSync(docsRoot, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
     .filter((entry) => !datedRecordName.test(entry.name) && entry.name !== termTableDocument)
     .map((entry) => readJapanesePage(join(docsRoot, entry.name)));
-  return [japaneseReadme(), ...docs];
+  return [japaneseReadme(), japaneseAgentInstructions(), ...docs];
 }
 
 export function androidJapaneseLabels(): string[] {

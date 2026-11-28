@@ -94,7 +94,7 @@ sshc help                    # すべてのコマンド
 
 ## 開発
 
-Go 1.26とNode.js 26が必要です。
+Go 1.26とNode.js 26が必要です。コードの書き方、コミットとPRの形式、作らない機能は[AGENTS.md](AGENTS.md)にまとめています。
 
 ```sh
 make build

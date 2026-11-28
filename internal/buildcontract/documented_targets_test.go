@@ -21,13 +21,17 @@ import (
 // 何を打ったかの記録であり、いま打てる必要はない。
 
 // currentDocuments は、いま読まれて実行される文書である。
+// 英語の pages は「make it」「make a」のような文が `make <的>` の形に当たるので入れない。
 var currentDocuments = []string{
 	"README.md",
+	"AGENTS.md",
 	filepath.Join("docs", "design.md"),
 	filepath.Join("docs", "release-install.md"),
 	filepath.Join("docs", "headless-examples.md"),
 	filepath.Join("docs", "manual-acceptance.md"),
 	filepath.Join("docs", "manual-test-matrix.md"),
+	filepath.Join("pages", "guide", "install.md"),
+	filepath.Join("internal", "ui", "dist", "README.md"),
 }
 
 // makefileTargets は、Makefile が持っている的の集合を返す。
