@@ -354,10 +354,10 @@ export function assembleTerminal({ container, live, start, wiring }: {
 
   // disposed は、片付けたあと真である。片付けたターミナルへは何も送らない。
   let disposed = false;
-  // showNewestRows は、スクロールバックを戻していれば一番下へ戻す。xterm.js は、自分が受け取った打鍵と貼り付けで
-  // しか戻さない（scrollOnUserInput）。入力欄・キーバーと、sshc が先に受け取る貼り付けとキーは xterm.js を通らない
-  // ので、送る前にここで戻す。戻さないと、返事が見えている行の外に描かれる。指を離したあとの惰性も止める。止めないと、
-  // 次のフレームでまた古い行へ動く。全画面のプログラムの画面にはスクロールバックが無いので、何もしない。
+  // showNewestRows は、スクロールバックを戻していれば、指を離したあとの惰性を止めて一番下へ戻す。xterm.js が戻すのは、
+  // 自分が受け取った打鍵と貼り付けのときだけである（scrollOnUserInput）。入力欄・キーバーと、sshc が先に受け取る
+  // 貼り付けとキーは、送る前にここで戻す。戻さないと、返事が見えている行の外に描かれる。惰性を止めないと、次の
+  // フレームでまた古い行へ動く。全画面のプログラムの画面にはスクロールバックが無いので、何もしない。
   const showNewestRows = () => {
     const buffer = view.buffer.active;
     if (disposed || buffer.viewportY === buffer.baseY) return;
@@ -382,7 +382,7 @@ export function assembleTerminal({ container, live, start, wiring }: {
     showNewestRows();
     send(text);
   };
-  // 貼り付けは、どれも利用者の操作である。
+  // paste を呼ぶのはどれも利用者の貼り付けなので、いつも一番下へ戻す。
   const paste = (text: string) => {
     if (disposed) return;
     showNewestRows();

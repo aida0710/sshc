@@ -195,8 +195,8 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number, options
   };
 }
 
-// TouchScrollAttachment は、指のスクロールをつないだものである。cancel は、指を離したあとの惰性と行への寄せを
-// 止め、行を行の上に戻す。detach は、つないだものを外す。
+// TouchScrollAttachment は、attachTouchScroll が返す操作である。cancel は、指を離したあとの惰性を止め、1行の途中まで
+// ずらして描いた行を元の位置に戻す。detach は、指のスクロールを外す。
 export type TouchScrollAttachment = { cancel: () => void; detach: () => void };
 
 // Drives the scroller from single-finger touches on the container. A

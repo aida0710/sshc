@@ -655,7 +655,7 @@ const inputsTakenBeforeXterm: { name: string; press: (page: Page) => Promise<voi
   },
   {
     name: "the yen key typed as a backslash",
-    // Playwright の配列には JIS の ¥ のキーが無いので、ブラウザが出すキーの知らせを xterm.js の入力欄へ出す。
+    // Playwright のキーボードには JIS の ¥ のキーが無いので、ブラウザが出す keydown を xterm.js の入力欄へ直接出す。
     press: (page) => terminalKeyboard(page).evaluate((keyboard) => {
       keyboard.dispatchEvent(new KeyboardEvent("keydown", { key: "¥", code: "IntlYen", bubbles: true, cancelable: true }));
     }),
