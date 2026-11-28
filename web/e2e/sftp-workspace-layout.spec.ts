@@ -218,6 +218,31 @@ test("moves the divider from where a narrowed window shows it and keeps the spli
   await expect.poll(leftWidth).toBeGreaterThan(narrowestAtNarrow + 1);
 });
 
+// 仕切りをドラッグして、離さずに始めの位置へ戻すと、ペインも始めの幅に戻る。
+test("returns the panes to their widths when one drag brings the divider back to where it started", async ({ page, installation }) => {
+  await installation.write("narrow/notes.txt", "notes");
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await openApplication(page, installation);
+  await openSection(page, "SFTP");
+  await openLocalSFTPDirectory({ page, pane: page.getByRole("tabpanel"), directory: join(installation.home, ".ssh/narrow") });
+  await page.getByRole("button", { name: "Side by side", exact: true }).click();
+  const leftPane = page.locator("[data-sftp-pane]").first();
+  await expect(leftPane.getByRole("button", { name: "notes.txt", exact: true })).toBeVisible();
+  const handle = page.getByRole("separator", { name: "Resize the panes", exact: true });
+  const startValue = await handle.getAttribute("aria-valuenow");
+  const startWidth = (await leftPane.boundingBox())!.width;
+  const grip = (await handle.boundingBox())!;
+  const start = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 120, start.y, { steps: 12 });
+  await expect.poll(async () => (await leftPane.boundingBox())!.width).toBeGreaterThan(startWidth + 60);
+  await page.mouse.move(start.x, start.y, { steps: 12 });
+  await page.mouse.up();
+  await expect(handle).toHaveAttribute("aria-valuenow", startValue!);
+  await expect.poll(async () => Math.abs((await leftPane.boundingBox())!.width - startWidth)).toBeLessThanOrEqual(1);
+});
+
 test("opens a local shell in the displayed directory from the SFTP terminal button", async ({ page, installation }) => {
   await installation.write("shell-start/notes.txt", "notes");
   const directory = join(installation.home, ".ssh/shell-start");

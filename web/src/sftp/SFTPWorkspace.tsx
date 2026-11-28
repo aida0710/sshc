@@ -112,6 +112,8 @@ export function SFTPWorkspace({
   const paneRow = useRef<HTMLDivElement | null>(null);
   const paneRowWidth = useElementWidth(paneRow);
   const displayedSplitRatio = fitSplitRatio(splitRatio, paneRowWidth, splitPaneMinimum);
+  const latestSplitRatio = useRef(displayedSplitRatio);
+  latestSplitRatio.current = displayedSplitRatio;
   const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0]?.id ?? "");
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [comparisonLocations, setComparisonLocations] = useState<{ left: SFTPLocation; right: SFTPLocation } | null>(null);
@@ -307,8 +309,12 @@ export function SFTPWorkspace({
   }
 
   // 動かせなかった操作（最小の幅で押した ArrowLeft など）では保存しない。保存すると、窓を広げ直しても元の比率に戻らない。
+  // 仕切りはドラッグを始めたときの onRatioChange を離すまで呼ぶので、そのときの displayedSplitRatio ではなく、
+  // 最後に描いた比率か、まだ描いていない最後に保存した比率と比べる。
   function resizeSplit(ratio: number) {
-    if (ratio !== displayedSplitRatio) changeSplitRatio(ratio);
+    if (ratio === latestSplitRatio.current) return;
+    latestSplitRatio.current = ratio;
+    changeSplitRatio(ratio);
   }
 
   // The panes trade places and each keeps its width, so the split looks mirrored.
