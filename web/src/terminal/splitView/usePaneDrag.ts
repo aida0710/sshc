@@ -63,7 +63,7 @@ export function usePaneDrag(splitView: SplitViewController) {
     atGroupLimit: splitView.activeGroupNumber === null && splitView.groups.length >= maximumSplitGroups,
     // lacksRoom は、いま重ねている側に落としても、どれかのペインが最小の大きさを割るので分割しないこと。
     // サイドバーの行は落とすまで何のセッションか分からないので、新しいペインとして見る。
-    lacksRoom: target !== null && target.edge !== null && splitView.lacksRoomFor(target.sessionId, target.edge, movingSession),
+    lacksRoom: target !== null && target.edge !== null && splitView.lacksRoomFor(movingSession, target.sessionId, target.edge),
     clear,
     dragOver,
     drop,

@@ -52,8 +52,7 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
                   : "bg-live"
             }`}
           />
-          {/* 名前も行き先と一緒に縮み、狭いペインでは点と数文字まで縮む（geometry.ts の minimumPanePx の前提）。
-              縮まないと、入りきらない分が右のボタンの上に重なる。 */}
+          {/* 名前も行き先や札と一緒に縮める。縮まないと、入りきらない分が右のボタンの上に重なる。 */}
           <p title={displayTitle} className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-base" : "max-w-48 text-ui"}`}>{displayTitle}</p>
           {mobile ? null : <span title={destination} className="min-w-0 truncate font-mono text-xs text-ink-faint">{destination}</span>}
           {/* スマホには言葉を置く幅が無いが、読み上げには残す。 */}

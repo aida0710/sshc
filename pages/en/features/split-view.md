@@ -15,7 +15,7 @@ Arrange SSH and local shell sessions in up to four panes. You can choose session
 
 You can also choose **Show in split view on the right** or **Show in split view below** from the **…** menu in a terminal heading or sidebar session row. The heading menu then asks which session to add. **New session** opens a new pane with a duplicate of the session, a local shell or another connection; with no other session to add, the menu goes straight to that choice. These actions split the selected pane.
 
-Adding a pane evens out the panes in the same row (or column, when added below). A side where some pane would become narrower (or shorter) than its heading's buttons cannot take another pane, and that menu item is unavailable.
+Adding a pane evens out the panes in the same row (or column, when added below). A side where some pane would drop below its minimum size (wide enough for its heading's buttons, tall enough for its heading and one row of the terminal) cannot take another pane, and that menu item is unavailable.
 
 Assign keys to **Split right** and **Split below** under **Settings → Keyboard shortcuts** to open the same choice from the keyboard (they have no default keys).
 

@@ -2,14 +2,11 @@ import type { CSSProperties } from "react";
 import { fitSplitRatio, type SplitDirection, type SplitMinimum } from "../../ui/SplitResizeHandle";
 import type { PaneEdge, SplitPath, SplitViewBranch, SplitViewNode } from "./layout";
 
-// minimumPanePx is the least a pane keeps, padding included, however the
-// splits around it are dragged (measured in the desktop layout). Across: the
-// header's name cut to its dot and a few letters (52px), its search and "…"
-// buttons (2 × 28px), the swap, focus and close buttons (88px) and the
-// padding. Down: the 40px header, the terminal's 17px of padding and one
-// 15px row. A smaller pane pushes its close button out of sight, or leaves
-// xterm no row to draw while the shell writes on at the last size.
-// ペインを足すとき（layout.ts の split）と、窓を狭めたとき（splitViewGeometry）にも守る。
+// minimumPanePx は、余白を含めてペインに残す最小の大きさである（PC の組み方で測った）。仕切りをドラッグしたとき、
+// ペインを足すとき（layout.ts の split）、窓を狭めたとき（splitViewGeometry）に守る。幅は、見出しの点と数文字に
+// 縮めた名前（52px）、検索と［…］のボタン（2 × 28px）、入れ替え・大きく表示・閉じるのボタン（88px）と余白。
+// 高さは、見出しの 40px、ターミナルの余白の 17px と1行の 15px。これより小さいと閉じるボタンが見えなくなるか、
+// シェルが前の大きさで書き続ける間、xterm が描く行が無くなる。
 export const minimumPanePx = { width: 248, height: 80 };
 
 // minimumExtentPx is the least a part of the split takes along direction: its
@@ -50,7 +47,7 @@ function boundsStyle(bounds: PaneBounds): CSSProperties {
   return { left: `${bounds.left}%`, top: `${bounds.top}%`, width: `${bounds.width}%`, height: `${bounds.height}%` };
 }
 
-// Flat placements let React keep each terminal mounted as the split tree changes.
+// 置き場所を平らな一覧で返すので、分割の木が変わっても React は各ターミナルをマウントしたまま保てる。
 // area は分割表示の領域の広さで、まだ測っていなければ null。広さが分かれば、覚えている比率のままでは
 // 最小の大きさを割るペイン（窓を狭めたときなど）に、最小の大きさを残す比率で描く。覚えている比率は変えないので、
 // 窓を広げ直せば元の比率に戻る。

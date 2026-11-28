@@ -9,8 +9,9 @@ import { useSplitArea } from "./useSplitArea";
 // SplitRequest is a session waiting to be told what goes beside it, and on which side.
 export type SplitRequest = { targetSessionId: string; edge: PaneEdge };
 
-// SplitRefusal says why nothing can go beside a session: it has ended, every split a new pane would need is taken,
-// or no other session can be opened. room は、その側にペインを足すと、どれかのペインが最小の大きさを割ること。
+// SplitRefusal は、セッションの横に何も置けない理由である。ended はセッションが終了した、groups は新しいペインに
+// 要る分割をすべて使っている、sessions はほかのセッションを開けない、room はその側にペインを足すとどれかのペインが
+// 最小の大きさを割る、ことを言う。
 export type SplitRefusal = "ended" | "groups" | "sessions" | "room";
 
 // A session not open yet has no id. The reducer only needs one to ask whether a new pane has room.
@@ -61,7 +62,7 @@ export function useSplitView({ sessions, sessionsLoaded = true, runTarget, maxSe
   }, [sessionsLoaded, liveSessionIds, groupState.groups, dispatch]);
 
   // acceptsSplit は、分割表示が、sourceSessionId のペインを target の edge の側に並べる分割を受け入れるかを返す。
-  // areaToFit を渡すと、その広さでどのペインにも最小の大きさが残るかも見る（null なら見ない）。
+  // areaToFit を渡すと、その広さで、足す向きにどのペインにも最小の大きさが残るかも見る（null なら見ない）。
   function acceptsSplit({ sourceSessionId, targetSessionId, edge }: SplitRequest & { sourceSessionId: string }, areaToFit: SplitArea | null): boolean {
     return reduceSplitGroups(groupState, { type: "split", sourceSessionId, targetSessionId, edge, area: areaToFit ?? undefined }) !== groupState;
   }
@@ -79,18 +80,18 @@ export function useSplitView({ sessions, sessionsLoaded = true, runTarget, maxSe
   }
   // lacksRoomFor は、sourceSessionId のペイン（null なら新しいペイン）を target の edge の側に並べる分割を、
   // ペインの数や分割の数でなく、分割表示の広さだけが理由で断るかを返す。
-  function lacksRoomFor(targetSessionId: string, edge: PaneEdge, sourceSessionId: string | null): boolean {
+  function lacksRoomFor(sourceSessionId: string | null, targetSessionId: string, edge: PaneEdge): boolean {
     const request = { sourceSessionId: sourceSessionId ?? sessionNotOpenYet, targetSessionId, edge };
     return acceptsSplit(request, null) && !acceptsSplit(request, area);
   }
-  // splitRefusal is why neither a session already open nor a new one can go beside the target, or null when one can.
-  // 開いているセッションか新しいセッションのどれかが、広さだけが理由で置けないなら room とする。4つ並んだ分割を
-  // 狭めたときは、新しいペインはペインの数で、分割の中のペインの移動は広さで断るため。
+  // splitRefusal は、開いているセッションも新しいセッションも target の edge の側に置けない理由である。置けるものが
+  // あれば null。どれかが広さだけを理由に置けないなら room とする。4つ並んだ分割を狭めたときは、新しいペインは
+  // ペインの数で、分割の中のペインの移動は広さで断るため。
   function splitRefusal(targetSessionId: string, edge: PaneEdge): SplitRefusal | null {
     if (!liveSessionIds.has(targetSessionId)) return "ended";
     const candidates = sessions.filter((candidate) => candidate.id !== targetSessionId && liveSessionIds.has(candidate.id));
     if (candidates.some((candidate) => canSplit(candidate.id, targetSessionId, edge)) || canOpenBeside(targetSessionId, edge)) return null;
-    const refusedForRoom = [...candidates.map((candidate) => candidate.id), null].some((sourceSessionId) => lacksRoomFor(targetSessionId, edge, sourceSessionId));
+    const refusedForRoom = [...candidates.map((candidate) => candidate.id), null].some((sourceSessionId) => lacksRoomFor(sourceSessionId, targetSessionId, edge));
     if (refusedForRoom) return "room";
     return atSessionLimit ? "sessions" : "groups";
   }
