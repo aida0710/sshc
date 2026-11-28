@@ -9,18 +9,18 @@ import (
 //
 // コンテナの agent は受け取った本文をそのまま置き、相手のアドレスだけを自分で
 // 引いて埋める。IPsec は相手のアドレスを設定に書くので、名前を引く場所が違えば
-// 別の装置へ繋ぎうる。
+// 別のVPNサーバーへ接続しうる。
 
 // L2TPSettings は、l2tp_ipsec backendの秘密でない設定である。
 type L2TPSettings struct {
-	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で
-	// 引く。IPsecは相手のアドレスを設定に書くので、引く場所が違えば別の装置へ
-	// 繋ぎうる。
+	// Server は、VPNサーバーのホスト名またはアドレスである。ホスト名はコンテナの中で
+	// 名前解決する。IPsecはサーバーのアドレスを設定に書くので、名前解決する場所が違えば
+	// 別のVPNサーバーへ接続しうる。
 	Server string
-	// Username は、VPNの利用者名である。パスワードはVaultにある。
+	// Username は、VPNのユーザー名である。パスワードはVaultにある。
 	Username string
-	// IKE と ESP は、装置に合わせて暗号方式を指定する。空なら、どちらも
-	// L2TP装置との互換性を持たせた候補を使う。
+	// IKE と ESP は、VPNサーバーに合わせて暗号スイートを指定する。空なら、どちらも
+	// L2TPのVPNサーバーとの互換性を持たせた候補を使う。
 	IKE string
 	ESP string
 }
@@ -29,12 +29,12 @@ type L2TPSettings struct {
 const pppMTU = 1280
 
 // IKEv1では、1つのproposalに複数の暗号・MAC・DH群を並べても、それぞれ先頭の
-// 1つしか送られない。IKEもESPも、L2TP装置で使われる組み合わせを独立した候補として
+// 1つしか送られない。IKEもESPも、L2TPのVPNサーバーで使われる組み合わせを独立した候補として
 // 提示する。
 //
 // ipsec.conf は指定した候補のあとに strongSwan の既定の候補も提示するが、そこから
 // 送られるのは AES-128・SHA-256 と、イメージのプラグインで最初に使えるDH群
-// （ECP-256）の1組だけである。MODPとSHA-1だけを受け付ける装置は、これに応答しない。
+// （ECP-256）の1組だけである。MODPとSHA-1だけを受け付けるVPNサーバーは、これに応答しない。
 // IKEはSHA-256とMODP 3072・2048を優先し、SHA-1とMODP 2048・1024も提示する。
 const defaultL2TPIKE = "aes256-sha256-modp3072,aes128-sha256-modp3072," +
 	"aes256-sha256-modp2048,aes128-sha256-modp2048," +
@@ -53,7 +53,7 @@ type l2tpBackend struct{}
 func (l2tpBackend) device() string { return "/dev/ppp" }
 
 // capabilities は既定のままにする。strongSwan・xl2tpd・pppd がどの権限を使うかを、
-// 実際のVPN装置に対して確かめられていない。
+// 実際のVPNサーバーに対して確かめられていない。
 func (l2tpBackend) capabilities() []string { return commonCapabilities }
 
 func (l2tpBackend) validateSettings(profile Profile) error {

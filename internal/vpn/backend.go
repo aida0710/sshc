@@ -12,7 +12,7 @@ const (
 	// WireGuard は userspace の wireguard-go でトンネルを張る。
 	WireGuard BackendName = "wireguard"
 	// L2TPIPsec は strongSwan と xl2tpd と pppd でトンネルを張る。大学や
-	// 会社の装置に多い方式である。
+	// 会社のVPNサーバーに多い方式である。
 	L2TPIPsec BackendName = "l2tp_ipsec"
 	// OpenConnect は openconnect でトンネルを張る。Cisco AnyConnect と
 	// その仲間（ocserv、GlobalProtect、Pulse など）へ繋ぐ。
@@ -73,7 +73,7 @@ type backend interface {
 type agentSectionRequest struct {
 	profile Profile
 	secrets Secrets
-	// now は、二段目のコードを作る時刻である。
+	// now は、二要素認証のコードを作る時刻である。
 	now time.Time
 }
 
@@ -107,6 +107,6 @@ func backendFor(name BackendName) (backend, error) {
 
 // commonCapabilities は、既定の権限のまま NET_ADMIN だけを足す指定である。
 //
-// 要る権限を実際の装置で確かめられていない backend が使う。確かめずに削ると、
+// 要る権限を実際のVPNサーバーで確かめられていない backend が使う。確かめずに削ると、
 // 繋がらなくなった理由が権限にあることを利用者が知る手段が無い。
 var commonCapabilities = []string{"--cap-add", "NET_ADMIN"}

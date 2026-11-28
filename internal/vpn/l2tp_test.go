@@ -65,7 +65,7 @@ func TestThePreSharedKeyIsWrittenAsHexadecimal(t *testing.T) {
 	}
 }
 
-// 利用者名とパスワードは pppd の1語として書く。
+// ユーザー名とパスワードは pppd の1語として書く。
 func TestTheUserAndPasswordAreQuotedForPPP(t *testing.T) {
 	documents := l2tpDocuments(*l2tpProfile().L2TP, *l2tpSecrets().L2TP)
 

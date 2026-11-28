@@ -7234,7 +7234,7 @@ components:
       additionalProperties: false
       required: [server, username]
       properties:
-        # VPN装置の名前またはアドレス。名前はコンテナの中で引く。
+        # VPNサーバーのホスト名またはアドレス。ホスト名はコンテナの中で名前解決する。
         server: { type: string, minLength: 1, maxLength: 320 }
         username: { type: string, minLength: 1, maxLength: 256 }
         # サーバーのプロトコル（anyconnect / nc / pulse / gp / f5 / fortinet / array）。
@@ -7244,7 +7244,7 @@ components:
         # または `pin-sha256:`（公開鍵の PIN、base64）で始める。公的な認証局の証明書を
         # 使うサーバーでは空でよい。
         serverCertificate: { type: string, maxLength: 128 }
-        # 二段目の質問への答え方（`approve` または `totp`）。空なら答えない。
+        # 二要素認証の方法（`approve` または `totp`）。空なら何も送らない。
         # 値は engine が確かめる。
         secondFactor: { type: string, maxLength: 16 }
         # secondFactor が approve のときに、サーバーが追加の入力を求めたら送る文字列
@@ -7274,10 +7274,10 @@ components:
       additionalProperties: false
       required: [server, username]
       properties:
-        # VPN装置の名前またはアドレス。名前はコンテナの中で引く。
+        # VPNサーバーのホスト名またはアドレス。ホスト名はコンテナの中で名前解決する。
         server: { type: string, minLength: 1, maxLength: 320 }
         username: { type: string, minLength: 1, maxLength: 256 }
-        # 古い装置と暗号方式が合わないときだけ書く。
+        # 古いVPNサーバーと暗号スイートが合わないときだけ書く。
         ike: { type: string, maxLength: 256 }
         esp: { type: string, maxLength: 256 }
     WireGuardProfile:

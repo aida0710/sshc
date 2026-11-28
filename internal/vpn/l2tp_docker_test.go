@@ -16,7 +16,7 @@ import (
 // SA）を、製品のイメージと手順（backend-l2tp_ipsec.sh の start_ipsec）で確かめる。
 //
 // IKEv1 では、proposal ごとに暗号・MAC・DH群の先頭の1つしか送られない。どの組み合わせを
-// 並べたかが、そのまま接続できる装置を決める。イメージのプラグインが変わると strongSwan の
+// 並べたかが、そのまま接続できるVPNサーバーを決める。イメージのプラグインが変わると strongSwan の
 // 既定の候補も変わるので、ここで実際に交渉させる。
 //
 // L2TP と PPP のサーバーは立てない。SSHC_VPN_DOCKER_TEST=1 のときだけ走る。

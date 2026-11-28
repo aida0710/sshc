@@ -11,8 +11,8 @@ import (
 // 付ける環境変数である。
 const fakeOpenConnectVariable = "SSHC_VPN_FAKE_OPENCONNECT"
 
-// runFakeOpenConnect は、装置の承認を待っている openconnect の代わりをする。SIGINT を
-// 受けるまで待ち、受けたら装置からログオフしたことにして logged-off と書いて終わる。
+// runFakeOpenConnect は、VPNサーバーの承認を待っている openconnect の代わりをする。SIGINT を
+// 受けるまで待ち、受けたらVPNサーバーからログオフしたことにして logged-off と書いて終わる。
 //
 // sh は背後で起動したコマンドに SIGINT を無視させ、uutils の timeout はその無視を下の
 // コマンドへ引き継ぐ。openconnect は SIGINT の扱いを sigaction で自分で決めるので、それ

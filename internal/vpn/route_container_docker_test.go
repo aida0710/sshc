@@ -402,7 +402,7 @@ func TestRoutesLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 
 // L2TP/IPsec の枝も、設定の書き出しからトンネルの開始までを実際に走らせる。
 //
-// 本物のVPN装置は用意しない。届かない相手に対して、設定の解釈・経路の準備・
+// 本物のVPNサーバーは用意しない。届かない相手に対して、設定の解釈・経路の準備・
 // strongSwan の起動まで進み、そこで理由を添えて失敗することを確かめる。ここで
 // 止まらなければ、jq の読み出し、ファイルの書き出し、名前の解決、iptables、
 // ipsec の起動までは動いている。
@@ -467,7 +467,7 @@ func requireLogs(t *testing.T, manager *Manager, ctx context.Context, profileNam
 
 // openconnect の枝も、相手が応えなければそこで止まり、理由を残す。
 //
-// 実際のVPN装置に対しては確かめられていない。ここで確かめるのは、コンテナが
+// 実際のVPNサーバーに対しては確かめられていない。ここで確かめるのは、コンテナが
 // openconnect を起動できること、応えない相手で待ち続けないこと、失敗の文面に
 // パスワードが現れないことである。
 func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
@@ -575,7 +575,7 @@ func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
 // 名乗るアドレスである。ocserv は ipv4-network の最初のアドレスを自分に使う。
 const anyConnectServerAddress = "192.168.99.1"
 
-// anyConnectTOTPSeed は、二段目のコードを作る種である（RFC 6238 の試験鍵）。
+// anyConnectTOTPSeed は、二要素認証のコードを作るTOTPのシークレットである（RFC 6238 の試験鍵）。
 // users.oath へは同じ値を16進で書く。
 const (
 	anyConnectTOTPSeed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
@@ -696,10 +696,10 @@ func startAnyConnectServer(
 	return strings.TrimSpace(address), strings.TrimSpace(pin)
 }
 
-// 本物の AnyConnect 互換サーバーへ、パスワードと二段目のコードで繋ぎ、その
+// 本物の AnyConnect 互換サーバーへ、パスワードと二要素認証のコードで接続し、その
 // トンネルの中にいる相手へ engine が届く。
 //
-// 二段目の答えは標準入力の次の行として送る。承認を待つ設定（Duo の push など）
+// 二要素認証の入力は標準入力の次の行として送る。承認を待つ設定（Duo の push など）
 // も同じ道を通り、送る語が違うだけである。
 func TestAConnectionReachesTheTargetThroughAnAnyConnectTunnel(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
@@ -736,9 +736,9 @@ func TestAConnectionReachesTheTargetThroughAnAnyConnectTunnel(t *testing.T) {
 	users, err := manager.docker.output(ctx, "exec", anyConnectServerName(),
 		"occtl", "--socket-file", "/run/occtl.socket", "--json", "show", "users")
 	if err != nil {
-		t.Fatalf("装置の利用者の一覧を読めない: %v", err)
+		t.Fatalf("VPNサーバーのユーザーの一覧を読めない: %v", err)
 	}
 	if strings.Contains(users, "fixture") {
-		t.Fatalf("畳んだあとも装置にセッションが残った: %s", users)
+		t.Fatalf("切断したあともVPNサーバーにセッションが残った: %s", users)
 	}
 }

@@ -44,7 +44,7 @@ const (
 	// ReasonNameNeedsDNS は、接続先を名前で書いたのに、プロファイルに DNS サーバーが
 	// 無いことを表す。
 	ReasonNameNeedsDNS Reason = "name_needs_dns"
-	// ReasonUnsupported は、知らない値（backend、方式、二段目の答え方）であることを表す。
+	// ReasonUnsupported は、知らない値（backend、方式、二要素認証の方法）であることを表す。
 	ReasonUnsupported Reason = "unsupported"
 	// ReasonUnexpected は、選んだ backend と違う backend の節があることを表す。
 	ReasonUnexpected Reason = "unexpected"

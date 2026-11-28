@@ -11,17 +11,17 @@ import (
 // openconnect backend。
 //
 // openconnect は接続のたびに外部スクリプトを呼び、そこで interface と経路を
-// 作らせる。既定の vpnc-script は装置が配った既定経路とDNSをそのまま入れる。
+// 作らせる。既定の vpnc-script はVPNサーバーが配った既定経路とDNSをそのまま入れる。
 // それでは、このコンテナが「接続先ひとつだけを通す」約束を守れない。だから
 // 自分の script（container/vpnc-script）をイメージに焼き、それを呼ばせる。
 
 // OpenConnectSettings は、openconnect backendの秘密でない設定である。
 type OpenConnectSettings struct {
-	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で引く。
+	// Server は、VPNサーバーのホスト名またはアドレスである。ホスト名はコンテナの中で名前解決する。
 	Server string
-	// Username は、VPNの利用者名である。パスワードはVaultにある。
+	// Username は、VPNのユーザー名である。パスワードはVaultにある。
 	Username string
-	// Protocol は、その装置が話す方式である。空なら anyconnect。
+	// Protocol は、VPNサーバーのプロトコルである。空なら anyconnect。
 	Protocol string
 	// ServerCertificate は、サーバーの証明書を固定するフィンガープリントである
 	// （openConnectFingerprintPrefixes の `sha256:...` または `pin-sha256:...`）。
@@ -30,27 +30,27 @@ type OpenConnectSettings struct {
 	ServerCertificate string
 	// SecondFactor は、パスワードのあとへの備えである。空なら何もしない。
 	SecondFactor string
-	// ApprovalWord は、SecondFactor が approve のときに二段目へ送る語である。
-	// 空なら何も送らない。装置が二段目を聞いてくる場合だけ書く（Duo なら
-	// push、装置によっては phone や sms）。
+	// ApprovalWord は、SecondFactor が approve のときに二要素認証の入力として送る語である。
+	// 空なら何も送らない。VPNサーバーが二要素認証の入力を求める場合だけ書く（Duo なら
+	// push、VPNサーバーによっては phone や sms）。
 	ApprovalWord string
 }
 
-// パスワードのあとに装置がすることへの備えである。
+// パスワードのあとにVPNサーバーがすることへの備えである。
 const (
-	// SecondFactorApprove は、利用者が電話で承認するのを待つ。Duo Mobile などが
-	// 通知を出し、承認するまで装置は応答を返さない。
+	// SecondFactorApprove は、ユーザーがスマートフォンで承認するのを待つ。Duo Mobile などが
+	// 通知を出し、承認するまでVPNサーバーは応答を返さない。
 	//
-	// 二段目を聞いてくる装置と、何も聞かずに通知だけ出す装置がある。前者には
+	// 二要素認証の入力を求めるVPNサーバーと、何も求めずに通知だけ出すVPNサーバーがある。前者には
 	// ApprovalWord を送り、後者には何も送らない。どちらも、待つ長さが普通の
 	// 接続より長いことは同じである。
 	SecondFactorApprove = "approve"
-	// SecondFactorTOTP は、Vault に置いた種から作ったコードを送る。
+	// SecondFactorTOTP は、Vault に置いたTOTPのシークレットから作ったコードを送る。
 	SecondFactorTOTP = "totp"
 )
 
 // defaultOpenConnectProtocol は、方式を書かなかったときに使う方式である。
-// Cisco AnyConnect と、それに合わせた装置（ocserv など）が話す。
+// Cisco AnyConnect と、それと互換のVPNサーバー（ocserv など）が使う。
 const defaultOpenConnectProtocol = "anyconnect"
 
 // openConnectProtocols は、openconnect が話せる方式のうち、このプロファイルで
@@ -65,7 +65,7 @@ var openConnectProtocols = map[string]bool{
 var openConnectFingerprintPrefixes = []string{"sha256:", "pin-sha256:"}
 
 // totpMinimumRemaining は、渡すコードに残しておく有効な時間である。窓の終わり
-// 間際に作ると、装置へ届く前に次のコードへ変わる。
+// 間際に作ると、VPNサーバーへ届く前に次のコードへ変わる。
 const totpMinimumRemaining = 5 * time.Second
 
 type openConnectBackend struct{}
@@ -188,11 +188,11 @@ type openConnectDocument struct {
 	// 認証局として検証させる。
 	ServerCertificate string `json:"serverCertificate"`
 	Password          string `json:"password"`
-	// SecondFactor は、装置が二段目に聞いてきたときに送る1行である。空なら
+	// SecondFactor は、VPNサーバーが二要素認証の入力を求めたときに送る1行である。空なら
 	// 何も送らない。agent は中身を解さず、そのまま openconnect へ渡す。
 	SecondFactor string `json:"secondFactor,omitempty"`
 	// WaitsForApproval は、この接続が人の承認を待つかである。agent はこれを
-	// ログへ書く。何も聞いてこない装置では、待っているあいだ出力が止まる。
+	// ログへ書く。何も求めてこないVPNサーバーでは、待っているあいだ出力が止まる。
 	// 理由が書いていないと、止まったのか待っているのかが分からない。
 	WaitsForApproval bool `json:"waitsForApproval,omitempty"`
 }
@@ -205,18 +205,18 @@ func openConnectProtocol(settings OpenConnectSettings) string {
 	return settings.Protocol
 }
 
-// secondFactorAnswer は、装置が二段目に聞いてくることへの答えを作る。
+// secondFactorAnswer は、VPNサーバーが求める二要素認証の入力を作る。
 //
 // openconnect は、パスワードを標準入力から読んだあと、次の質問にも標準入力の
-// 次の行を使う。フォームの名前も項目の名前も装置ごとに違うので、そこへは触れ
-// ない。答えが空なら、二段目を聞かない装置だということである。
+// 次の行を使う。フォームの名前も項目の名前もVPNサーバーごとに違うので、そこへは触れ
+// ない。答えが空なら、二要素認証の入力を求めないVPNサーバーだということである。
 func secondFactorAnswer(settings OpenConnectSettings, secrets OpenConnectSecrets, now time.Time) (string, error) {
 	switch settings.SecondFactor {
 	case "":
 		return "", nil
 	case SecondFactorApprove:
-		// 何も聞かずに通知だけ出す装置には、送る語が無い。空の行を送ると、
-		// 二段目を聞く装置に「空の答え」を渡すことになる。
+		// 何も求めずに通知だけ出すVPNサーバーには、送る語が無い。空の行を送ると、
+		// 二要素認証の入力を求めるVPNサーバーに「空の答え」を渡すことになる。
 		return settings.ApprovalWord, nil
 	case SecondFactorTOTP:
 		config, err := totp.Parse(secrets.TOTPSecret)
@@ -234,7 +234,7 @@ func secondFactorAnswer(settings OpenConnectSettings, secrets OpenConnectSecrets
 
 // secondFactorWait は、コードを作る前に待つ長さである。
 //
-// TOTP のコードは窓ごとに変わる。窓の終わり間際に作ったコードは、装置へ届く
+// TOTP のコードは窓ごとに変わる。窓の終わり間際に作ったコードは、VPNサーバーへ届く
 // までに古くなりうる。そのときは次の窓が始まるまで待つ。
 func secondFactorWait(profile Profile, secrets Secrets, now time.Time) time.Duration {
 	if profile.OpenConnect == nil || profile.OpenConnect.SecondFactor != SecondFactorTOTP ||

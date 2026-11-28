@@ -46,16 +46,16 @@ type VPNProfile struct {
 
 // OpenConnectProfile は、openconnect backend の秘密でない設定である。
 type OpenConnectProfile struct {
-	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で引く。
+	// Server は、VPNサーバーのホスト名またはアドレスである。ホスト名はコンテナの中で名前解決する。
 	Server string `json:"server"`
-	// Username は、VPNの利用者名である。パスワードは Vault にある。
+	// Username は、VPNのユーザー名である。パスワードは Vault にある。
 	Username string `json:"username"`
-	// Protocol は、その装置が話す方式である。空なら anyconnect。
+	// Protocol は、VPNサーバーのプロトコルである。空なら anyconnect。
 	Protocol string `json:"protocol,omitempty"`
 	// ServerCertificate は、サーバーの証明書を固定するフィンガープリントである
 	// （`sha256:...` または `pin-sha256:...`）。
 	ServerCertificate string `json:"serverCertificate,omitempty"`
-	// SecondFactor は、二段目の質問への答え方である（`approve` または `totp`）。
+	// SecondFactor は、二要素認証の方法である（`approve` または `totp`）。
 	// 空なら答えない。
 	SecondFactor string `json:"secondFactor,omitempty"`
 	// ApprovalWord は、SecondFactor が approve のときに、サーバーが追加の入力を
@@ -65,11 +65,11 @@ type OpenConnectProfile struct {
 
 // L2TPProfile は、l2tp_ipsec backend の秘密でない設定である。
 type L2TPProfile struct {
-	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で引く。
+	// Server は、VPNサーバーのホスト名またはアドレスである。ホスト名はコンテナの中で名前解決する。
 	Server string `json:"server"`
-	// Username は、VPNの利用者名である。パスワードは Vault にある。
+	// Username は、VPNのユーザー名である。パスワードは Vault にある。
 	Username string `json:"username"`
-	// IKE と ESP は、古い装置と暗号方式が合わないときだけ書く。
+	// IKE と ESP は、古いVPNサーバーと暗号スイートが合わないときだけ書く。
 	IKE string `json:"ike,omitempty"`
 	ESP string `json:"esp,omitempty"`
 }

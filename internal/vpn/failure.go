@@ -16,13 +16,13 @@ const (
 	FailureUnknown FailureReason = "unknown"
 	// FailureTimeout は、engine が待つ上限までに経路ができなかったことを表す。
 	FailureTimeout FailureReason = "timeout"
-	// FailureServerUnresolved は、VPN 装置の名前を引けなかったことを表す。
+	// FailureServerUnresolved は、VPNサーバーのホスト名を名前解決できなかったことを表す。
 	FailureServerUnresolved FailureReason = "server_unresolved"
 	// FailureIPsecNegotiation は、IPsec が成立しなかったことを表す（事前共有鍵、暗号方式）。
 	FailureIPsecNegotiation FailureReason = "ipsec_negotiation"
-	// FailurePPPAuthentication は、PPP の認証が通らなかったことを表す（利用者名、パスワード）。
+	// FailurePPPAuthentication は、PPP の認証が通らなかったことを表す（ユーザー名、パスワード）。
 	FailurePPPAuthentication FailureReason = "ppp_authentication"
-	// FailureOpenConnect は、openconnect が装置へ繋げなかったことを表す。
+	// FailureOpenConnect は、openconnect がVPNサーバーへ接続できなかったことを表す。
 	FailureOpenConnect FailureReason = "openconnect_failed"
 	// FailureHandshakeTimeout は、WireGuard のピアとハンドシェイクできなかったことを表す（鍵、サーバー）。
 	FailureHandshakeTimeout FailureReason = "handshake_timeout"
