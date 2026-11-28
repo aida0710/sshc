@@ -418,7 +418,13 @@ export function assembleTerminal({ container, live, start, wiring }: {
     settings: () => live().clipboardSettings,
     refuse: () => wiring.problem(translate("terminal.clipboardRefused")),
     nothingToPaste: (image) => wiring.notice(translate(image ? "terminal.pasteImageUnsupported" : "terminal.pasteEmpty")),
-    takePaste: (items) => kittyClipboard.takePaste(items),
+    // 貼り付けの知らせを有効にしたプログラムへは、貼り付けをプログラムへの答えとして送る。答えの send は画面を
+    // 動かさないので、ここで一番下へ戻す。
+    takePaste: (items) => {
+      const taken = kittyClipboard.takePaste(items);
+      if (taken) showNewestRows();
+      return taken;
+    },
     copied: () => wiring.notice(translate("copy.done")),
     enhancedKey: (event) => encodeIntlYen(event, live().jisYenBackslash),
     sendEnhancedKey: (sequence) => {

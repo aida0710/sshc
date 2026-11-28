@@ -643,15 +643,21 @@ for (const chord of ["Control+v", "Control+Shift+V"]) {
   });
 }
 
+async function pasteWithKeyboard(page: Page) {
+  await page.evaluate(() => navigator.clipboard.writeText("echo pasted"));
+  await page.keyboard.press("Control+v");
+}
+
 // 貼り付けと JIS の ¥ のキーは、sshc が xterm.js より先に受け取って送る。xterm.js に打ったときと同じく、
-// スクロールバックを戻していれば一番下へ戻り、プロンプトの上の行が見える。
-const inputsTakenBeforeXterm: { name: string; press: (page: Page) => Promise<void> }[] = [
+// 上へスクロールしていれば一番下へ戻り、プロンプトの上の行が見える。modes は、出力の前にシェルが printf で
+// 有効にするモードである。
+const inputsTakenBeforeXterm: { name: string; modes?: string; press: (page: Page) => Promise<void> }[] = [
+  { name: "a paste", press: pasteWithKeyboard },
   {
-    name: "a paste",
-    press: async (page) => {
-      await page.evaluate(() => navigator.clipboard.writeText("echo pasted"));
-      await page.keyboard.press("Control+v");
-    },
+    name: "a paste handed to a program that turned on paste events",
+    // 5522 は kitty の貼り付けの知らせで、sshc は貼り付けをプログラムへの答えとして送る（kittyClipboard.ts）。
+    modes: "\\033[?5522h",
+    press: pasteWithKeyboard,
   },
   {
     name: "the yen key typed as a backslash",
@@ -669,7 +675,8 @@ for (const input of inputsTakenBeforeXterm) {
     await openApplication(page, installation);
     await openSessionList(page);
     await openLocalShell(page);
-    await typeIntoTerminal(page, "seq 1 200; echo end-$((40+2))");
+    const turnOnModes = input.modes === undefined ? "" : `printf '${input.modes}'; `;
+    await typeIntoTerminal(page, `${turnOnModes}seq 1 200; echo end-$((40+2))`);
     const rows = drawnRows(page).filter({ visible: true });
     await expect(rows).toContainText("end-42", { timeout: 20_000 });
 
