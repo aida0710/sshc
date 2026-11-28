@@ -17,8 +17,8 @@ import (
 // DACL には現在のユーザー SID を使用する。所有者は ownedByThisToken で別に判定する。
 // 所有者 SID を使用すると、昇格した環境で Administrators の ACE が重複する。
 func CurrentUserSID() (*windows.SID, error) {
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		return nil, err
 	}
 	defer token.Close()

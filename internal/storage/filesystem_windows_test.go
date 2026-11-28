@@ -297,8 +297,8 @@ func TestOSFileSystemReadFileTraversesParentWithoutReadAttributes(t *testing.T) 
 		restoreDACL(t, parent, parentDACL)
 	})
 
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		t.Fatal(err)
 	}
 	defer token.Close()
@@ -415,8 +415,8 @@ func installProtectedDACL(t *testing.T, path string, sid *windows.SID, permissio
 
 func installPermissiveInheritedDACL(t *testing.T, path string) {
 	t.Helper()
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		t.Fatal(err)
 	}
 	defer token.Close()
@@ -466,14 +466,14 @@ func assertWindowsPrivatePath(t *testing.T, path string) {
 // 親ディレクトリ」という状況そのものを作れない。
 func holdsBackupPrivilege(t *testing.T) bool {
 	t.Helper()
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		t.Fatal(err)
 	}
 	defer token.Close()
 
 	var size uint32
-	err = windows.GetTokenInformation(token, windows.TokenPrivileges, nil, 0, &size)
+	err := windows.GetTokenInformation(token, windows.TokenPrivileges, nil, 0, &size)
 	if err != nil && err != windows.ERROR_INSUFFICIENT_BUFFER {
 		t.Fatal(err)
 	}
