@@ -107,7 +107,7 @@ make integration
 make integration-down
 ```
 
-`make test`は、gofmt、go vet、Goのテスト（raceを含む）、Android向けのビルド、使われていない関数の検査、足したコメントの言語の検査、Oxlint、Webの単体テストと型検査を実行します。`make verify-generated`は、生成物がコミット済みの内容と一致するかを確かめます。CIはこの2つの検査に加えて、Android APK、VPNのコンテナイメージ、統合テスト、利用者向けサイトのビルド、依存の脆弱性、主要画面のアクセシビリティを確かめます。E2Eの全体はCIでは実行しないため、画面を変えたときは`make e2e`も実行してください。
+`make test`は、gofmt、go vet、Goのテスト（raceを含む）、Android向けのビルド、使われていない関数の検査、staticcheck（Linux・Windows・macOS・Androidのコードを解析）、足したコメントの言語の検査、Oxlint、Webの単体テストと型検査を実行します。`make verify-generated`は、生成物がコミット済みの内容と一致するかを確かめます。CIはこの2つの検査に加えて、Android APK、VPNのコンテナイメージ、統合テスト、利用者向けサイトのビルド、依存の脆弱性、主要画面のアクセシビリティを確かめます。E2Eの全体はCIでは実行しないため、画面を変えたときは`make e2e`も実行してください。
 
 コードのコメントは日本語で書きます。`make test`は、`origin/main`と分かれた所から作業ツリーまでの変更で足したコメントに、かなも漢字も含まず英単語が3つ以上並ぶ行があれば失敗します。比べる先は`make test COMMITS_BASE=<コミット>`で変えられます。CIの「Web checks」も、同じスクリプトで変更の差分を検査します。英語の仕様の引用のように英語のまま残す行は、前の行に`comment-language-exempt: 理由`と日本語で理由を書きます。
 

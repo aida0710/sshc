@@ -188,8 +188,8 @@ func ownedByThisToken(owner *windows.SID) (bool, error) {
 	if owner == nil {
 		return false, nil
 	}
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		return false, err
 	}
 	defer token.Close()

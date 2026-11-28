@@ -1,4 +1,4 @@
-.PHONY: generate test deadcode check-commits build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test deadcode staticcheck check-commits build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの実行時間。長時間試す場合は、たとえば
 # `make fuzz FUZZTIME=10m` のように上書きする。
@@ -31,8 +31,8 @@ generate:
 COMMITS_BASE ?= origin/main
 
 # push の前に走らせる検査。CI の Go native（Linux）のジョブ全体と、Web のジョブの
-# lint（Oxlint）・単体テスト・型検査・コメントの言語の検査と、Dead code のジョブに当たる。生成物の検査は
-# make verify-generated、主要画面の axe 検査は make e2e に含まれる。
+# lint（Oxlint）・単体テスト・型検査・コメントの言語の検査と、Dead code のジョブと、Dependency security の
+# ジョブの staticcheck に当たる。生成物の検査は make verify-generated、主要画面の axe 検査は make e2e に含まれる。
 #
 # Go のテストのうち2つ（CSP の trusted-types と、バイナリが埋め込んだ画面を配るかの検査）は、
 # 組み立てた画面を読む。画面はリポジトリに入っていないので、無ければ先に組み立てる。
@@ -51,6 +51,7 @@ test:
 	GOOS=freebsd GOARCH=amd64 CGO_ENABLED=0 go build ./...
 	GOOS=openbsd GOARCH=amd64 CGO_ENABLED=0 go build ./...
 	$(MAKE) deadcode
+	$(MAKE) staticcheck
 	@# 足したコメントが日本語かを検査する。CI は PR の差分を見るが、手元では COMMITS_BASE と分かれた所から
 	@# 作業ツリーまでを見る。
 	node --test scripts/ci/comment-language/*.test.mjs
@@ -63,6 +64,10 @@ test:
 # 製品の関数を検出する。実装は scripts/ci/deadcode.sh を参照。
 deadcode:
 	scripts/ci/deadcode.sh
+
+# Linux、Windows、macOS、Android の組み立てで staticcheck を流す。実装は scripts/ci/staticcheck.sh を参照。
+staticcheck:
+	scripts/ci/staticcheck.sh
 
 # ブランチのコミットメッセージに、帰属の行と社内の URL が無いか（コミットが1つなら件名の形も）を検査する。PR の CI
 # （.github/workflows/pull-request-text.yml）と同じスクリプトで、PR のタイトルと本文は CI が検査する。

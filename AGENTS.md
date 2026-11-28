@@ -13,7 +13,7 @@ sshcのコードを書く人とAIエージェントに向けた決まりです�
 
 pushの前に次を実行します。
 
-- `make test`: Goのテスト、`make deadcode`、足したコメントの言語の検査、Oxlint、Webの単体テストと型検査を実行します
+- `make test`: Goのテスト、`make deadcode`、`make staticcheck`（Linux・Windows・macOS・Androidのコードを解析）、足したコメントの言語の検査、Oxlint、Webの単体テストと型検査を実行します
 - `make verify-generated`: 生成物がコミット済みの内容と一致するかを検査します
 - `make check-commits`: ブランチのコミットメッセージを検査します。PRのタイトルと本文は、PRのCIの「Pull request text」が同じスクリプトで検査します
 - 画面を変えたときは`make e2e`も実行します。CIはアクセシビリティのe2eだけを実行します

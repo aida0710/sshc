@@ -144,8 +144,8 @@ func restoreSecretParentDACL(t *testing.T, path string, snapshot secretParentDAC
 
 func secretCurrentUserSID(t *testing.T) *windows.SID {
 	t.Helper()
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		t.Fatal(err)
 	}
 	defer token.Close()

@@ -177,8 +177,8 @@ func newWindowsTrashService(t *testing.T, fileSystem storage.FileSystem) (*Servi
 
 func installPermissiveKeyDACL(t *testing.T, path string) {
 	t.Helper()
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		t.Fatal(err)
 	}
 	defer token.Close()

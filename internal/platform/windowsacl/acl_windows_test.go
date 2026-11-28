@@ -413,8 +413,8 @@ func restoreDACL(t *testing.T, path string, snapshot daclSnapshot) {
 
 func testCurrentUserSID(t *testing.T) *windows.SID {
 	t.Helper()
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		t.Fatal(err)
 	}
 	defer token.Close()
@@ -431,8 +431,8 @@ func testCurrentUserSID(t *testing.T) *windows.SID {
 
 func testTokenOwnerSID(t *testing.T) *windows.SID {
 	t.Helper()
-	token, err := windows.OpenCurrentProcessToken()
-	if err != nil {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		t.Fatal(err)
 	}
 	defer token.Close()
