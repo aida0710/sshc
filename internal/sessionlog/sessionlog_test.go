@@ -327,31 +327,41 @@ func TestAFolderInsideTheSynchronizedFolderIsRefused(t *testing.T) {
 	}
 }
 
-// 画面より長い REP は、同じ行を何度も流す。ログはその行を1行ずつ書かず、続いた行の数を書く。
+// 画面より長い REP は、同じ行を何度も流す。ログはその行を1行ずつ書かず、そのすぐあとに続いた行の数を書く。
+// 伏せる値があると、行は、そのあとに値の長さの分の字が続くまで手元に留まる。留まっているあいだも、続いた行の数は
+// その行のあとに来る。長い値は、REP の前の "$ cat x" の行まで留める。
 func TestALineRepeatedPastTheScreenIsWrittenWithHowManyMoreFollowed(t *testing.T) {
-	got := readLog(t, func(log *Log) {
-		log.Write([]byte("$ cat x\r\na\x1b[65535b"))
-	})
-	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
-	if len(lines) > 20 {
-		t.Fatalf("log has %d lines for one REP, want the repeated line once with a count", len(lines))
-	}
-	// 40 字の行に 65536 字を打つと、40 字の行が 1638 行と、16 字の行が1行になる。
-	fullRow, fullRows := strings.Repeat("a", 40), 0
-	for _, line := range lines[1 : len(lines)-1] {
-		if line == fullRow {
-			fullRows++
-			continue
-		}
-		// 知らせの行は「[sshc] 日付 時刻 文」である。
-		fields := strings.SplitN(line, " ", 4)
-		var more int
-		if _, err := fmt.Sscanf(fields[len(fields)-1], repeatedLineNote, &more); len(fields) != 4 || err != nil {
-			t.Fatalf("line %q is neither the row nor how many more followed: %v", line, err)
-		}
-		fullRows += more
-	}
-	if lines[0] != "$ cat x" || fullRows != 1638 || lines[len(lines)-1] != strings.Repeat("a", 16) {
-		t.Fatalf("log has %d full rows (want 1638) in %q", fullRows, got)
+	for name, secrets := range map[string][]string{
+		"no secret": nil,
+		"a secret long enough to hold the rows before the repeat": {strings.Repeat("Zq7-hunter2-Kx9", 40)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := readLog(t, func(log *Log) {
+				log.Hide(secrets)
+				log.Write([]byte("$ cat x\r\na\x1b[65535b"))
+			})
+			lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+			if len(lines) > 20 {
+				t.Fatalf("log has %d lines for one REP, want the repeated line once with a count", len(lines))
+			}
+			// 40 字の行に 65536 字を打つと、40 字の行が 1638 行と、16 字の行が1行になる。
+			fullRow, fullRows := strings.Repeat("a", 40), 0
+			for _, line := range lines[1 : len(lines)-1] {
+				if line == fullRow {
+					fullRows++
+					continue
+				}
+				// 知らせの行は「[sshc] 日付 時刻 文」である。
+				fields := strings.SplitN(line, " ", 4)
+				var more int
+				if _, err := fmt.Sscanf(fields[len(fields)-1], repeatedLineNote, &more); len(fields) != 4 || err != nil {
+					t.Fatalf("line %q is neither the row nor how many more followed: %v", line, err)
+				}
+				fullRows += more
+			}
+			if lines[0] != "$ cat x" || fullRows != 1638 || lines[len(lines)-1] != strings.Repeat("a", 16) {
+				t.Fatalf("log has %d full rows (want 1638) in %q", fullRows, got)
+			}
+		})
 	}
 }
