@@ -431,7 +431,7 @@ async function splitRemoteSessionsInRow(page: Page, titles: readonly string[]): 
   return panes.all();
 }
 
-test("shrinks the remote session's name and the VPN route in a pane's header to keep them clear of its buttons", async ({ page, installation }) => {
+test("shows the VPN route and the engine's tag whole and clear of the buttons in a pane wide enough for them", async ({ page, installation }) => {
   const titles = ["web", "api"];
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
   await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
@@ -439,13 +439,33 @@ test("shrinks the remote session's name and the VPN route in a pane's header to 
   await openApplication(page, installation);
   for (const terminal of await splitRemoteSessionsInRow(page, titles)) {
     const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
-    // この幅では縮めれば入りきるので、札は隠れずに見え、札の箱そのものがボタンの手前で終わる。
-    for (const label of [remoteSessionTag, `VPN: ${vpnRoute}`]) {
-      const chip = terminal.getByText(label, { exact: true });
-      expect((await visibleBox(chip)).width).toBeGreaterThan(0);
+    // この幅では縮めれば入りきるので、札は隠れずに見え、札の箱そのものがボタンの手前で終わる。札の上下も切れない。
+    // 実行先の札の文字は札の地の内側の要素なので、札の地の箱（title に同じ文字を持つ）を見る。
+    for (const chip of [terminal.getByTitle(remoteSessionTag, { exact: true }), terminal.getByText(`VPN: ${vpnRoute}`, { exact: true })]) {
+      const visible = await visibleBox(chip);
+      expect(visible.width).toBeGreaterThan(0);
+      expect(visible.height).toBe(visible.wholeHeight);
       const box = (await chip.boundingBox())!;
       expect(box.x + box.width).toBeLessThanOrEqual(find.x);
     }
+  }
+});
+
+test("keeps a long connection name whole in a pane with room for it, hiding the address and the tags beside it instead", async ({ page, installation }) => {
+  const longTitle = "pelican-production-kubernetes-node-pool-a";
+  const titles = [longTitle, "mirage-api"];
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
+  await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const [terminal] = await splitRemoteSessionsInRow(page, titles);
+  // bastion の SSH の設定にこの接続先は無いので、名前の右の行き先も接続名と同じ文字になる。
+  const [name, address] = await terminal!.getByText(longTitle, { exact: true }).all();
+  expect(await isShortened(name!)).toBe(false);
+  const find = (await terminal!.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+  for (const detail of [address!, terminal!.getByText(remoteSessionTag, { exact: true }), terminal!.getByText(`VPN: ${vpnRoute}`, { exact: true })]) {
+    const visible = await visibleBox(detail);
+    if (visible.width > 0) expect(visible.right).toBeLessThanOrEqual(find.x);
   }
 });
 
@@ -465,7 +485,9 @@ test("keeps the connection names in narrow panes' headers whole, and hides the a
     const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
     for (const detail of details) {
       const visible = await visibleBox(detail);
-      if (visible.width > 0) expect(visible.right).toBeLessThanOrEqual(find.x);
+      if (visible.width === 0) continue;
+      expect(visible.right).toBeLessThanOrEqual(find.x);
+      expect(visible.height).toBe(visible.wholeHeight);
     }
     if (title !== longTitle) {
       expect(await isShortened(name!)).toBe(false);
@@ -477,18 +499,21 @@ test("keeps the connection names in narrow panes' headers whole, and hides the a
   }
 });
 
-// visibleBox は、要素の見えている部分の右端と幅（px）である。はみ出しを切る祖先の外は、横も縦も見えないものとする
-// （見出しは入りきらない札を次の行へ折り返して隠すので、縦にも切る）。見えている部分が無ければ幅は 0。
-async function visibleBox(element: Locator): Promise<{ right: number; width: number }> {
+// visibleBox は、要素の見えている部分の右端と幅・高さ（px）と、切られる前の要素の高さ（wholeHeight）である。はみ出しを
+// 切る祖先の外は、横も縦も見えないものとする（見出しは入りきらない札を次の行へ折り返して隠すので、縦にも切る）。
+// 見えている部分が無ければ幅と高さは 0。
+async function visibleBox(element: Locator): Promise<{ right: number; width: number; height: number; wholeHeight: number }> {
   return element.evaluate((node) => {
-    let { left, right, top, bottom } = node.getBoundingClientRect();
+    const whole = node.getBoundingClientRect();
+    let { left, right, top, bottom } = whole;
     for (let ancestor = node.parentElement; ancestor !== null; ancestor = ancestor.parentElement) {
       const style = getComputedStyle(ancestor);
       const clip = ancestor.getBoundingClientRect();
       if (style.overflowX !== "visible") [left, right] = [Math.max(left, clip.left), Math.min(right, clip.right)];
       if (style.overflowY !== "visible") [top, bottom] = [Math.max(top, clip.top), Math.min(bottom, clip.bottom)];
     }
-    return { right, width: right > left && bottom > top ? right - left : 0 };
+    const shown = right > left && bottom > top;
+    return { right, width: shown ? right - left : 0, height: shown ? bottom - top : 0, wholeHeight: whole.height };
   });
 }
 

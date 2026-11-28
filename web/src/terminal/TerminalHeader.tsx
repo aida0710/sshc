@@ -14,8 +14,13 @@ import type { PaneDragHandlers } from "./splitView/paneControls";
 // detailSize は、見出しの名前の後ろに並べる行き先と札の大きさである。残りの幅に全文が入らなければ「…」で縮むが、
 // 112px（basis-28）より狭くはしない。112px（それより短いものは全文の幅）も残らなければ、次の行へ折り返して隠れる。
 // 112px より狭いと、VPN の札は「VPN経由：」の後ろのルートの名前がほとんど見えず、出しても役に立たない（行き先なら
-// 約15字が見える幅）。
+// 約15字が見える幅）。並んだものは残りの幅を同じだけ分け合うので、次の札が並びに加わると、それまで広がっていた
+// 行き先や札は 112px まで縮む。折り返すかどうかは 112px で決まるので、行き先を全文にしてから札を出す形にはできない。
 const detailSize = "min-w-0 grow basis-28 max-w-max";
+
+// detailRowHeight は、行き先と札の行の高さである。いちばん高い VPN の札（10px の字の行 15px、上下の余白 4px、枠 2px）に
+// 合わせる。低いと札の下の枠が切れ、高いと折り返して隠したはずの次の行の上の端が見える。
+const detailRowHeight = "h-[21px] before:h-[21px]";
 
 // TerminalHeader は、ターミナルの上の見出しである。広い画面では40pxの行、スマホではアプリの見出しに代わる
 // 上のバーになる（ナビゲーションを開くボタン、名前と行き先、右側の操作）。右側の操作は children で受け取る。
@@ -63,12 +68,12 @@ export function TerminalHeader({ session, link, mobile, vpnProfile, runTarget, o
             }`}
           />
           {/* 名前は最後に縮める。行き先と札は、名前が幅を取った残りにだけ並べる。 */}
-          <p title={displayTitle} className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-base" : "max-w-48 text-ui"}`}>{displayTitle}</p>
+          <p title={displayTitle} className={`min-w-0 truncate font-semibold text-ink ${mobile ? "text-base" : "text-ui"}`}>{displayTitle}</p>
           {mobile ? stateText : (
             // 行き先と札は1行に入る分だけ出し、入りきらないものは次の行へ折り返して、この行の高さの外で隠す。
             // 行の先頭のものは折り返せないので、幅の無い ::before を先頭に置き、行き先も札と同じく隠れるようにする。
             // 名前との間は ::before の後ろの間なので、名前が幅を使い切ったときは、この間も取らない。
-            <div className="flex h-5 min-w-0 flex-1 flex-wrap items-center gap-x-[9px] overflow-hidden before:h-5 before:content-['']">
+            <div className={`flex min-w-0 flex-1 flex-wrap items-center gap-x-[9px] overflow-hidden before:content-[''] ${detailRowHeight}`}>
               <span title={destination} className={`truncate font-mono text-xs text-ink-faint ${detailSize}`}>{destination}</span>
               {stateText}
               <VPNProfileChip name={vpnProfile} className={detailSize} />
