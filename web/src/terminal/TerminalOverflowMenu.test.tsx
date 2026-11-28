@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useRef } from "react";
+import { useRef, type ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../i18n/context";
 import { presetInterfaceOf } from "../settings/presetInterface";
@@ -14,6 +14,20 @@ function renderMenu(onClose = () => undefined) {
   render(
     <LanguageProvider>
       <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={onClose} />
+    </LanguageProvider>,
+  );
+}
+
+type PaneActions = NonNullable<ComponentProps<typeof TerminalOverflowMenu>["splitPane"]>;
+
+// idlePane は、分割表示に並んだペインで、入れ替えるペインを選んでおらず、集中表示もしていないときの操作である。
+const idlePane: PaneActions = { moving: null, focusMode: false, onMove: () => undefined, onFocusMode: () => undefined };
+
+// renderPaneMenu は、分割表示に並んだペインの［…］を描く。
+function renderPaneMenu(splitPane: PaneActions, onClose = () => undefined) {
+  return render(
+    <LanguageProvider>
+      <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} splitPane={splitPane} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={onClose} />
     </LanguageProvider>,
   );
 }
@@ -67,11 +81,7 @@ describe("TerminalOverflowMenu", () => {
     const move = vi.fn();
     const focus = vi.fn();
     const close = vi.fn();
-    const { unmount } = render(
-      <LanguageProvider>
-        <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} splitPane={{ moving: null, focusMode: false, onMove: move, onFocusMode: focus }} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={close} />
-      </LanguageProvider>,
-    );
+    const { unmount } = renderPaneMenu({ ...idlePane, onMove: move, onFocusMode: focus }, close);
     await userEvent.click(screen.getByRole("menuitem", { name: "Move pane" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Focus pane" }));
     expect(move).toHaveBeenCalledOnce();
@@ -85,27 +95,16 @@ describe("TerminalOverflowMenu", () => {
   });
 
   it("names the move by which pane was chosen to swap", () => {
-    const { rerender } = render(
-      <LanguageProvider>
-        <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} splitPane={{ moving: "this", focusMode: false, onMove: () => undefined, onFocusMode: () => undefined }} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={() => undefined} />
-      </LanguageProvider>,
-    );
+    const { unmount } = renderPaneMenu({ ...idlePane, moving: "this" });
     expect(screen.getByRole("menuitem", { name: "Cancel move" })).toBeVisible();
+    unmount();
 
-    rerender(
-      <LanguageProvider>
-        <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} splitPane={{ moving: "other", focusMode: false, onMove: () => undefined, onFocusMode: () => undefined }} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={() => undefined} />
-      </LanguageProvider>,
-    );
+    renderPaneMenu({ ...idlePane, moving: "other" });
     expect(screen.getByRole("menuitem", { name: "Swap with this pane" })).toBeVisible();
   });
 
   it("offers ending focus, and no move, while the pane is focused", () => {
-    render(
-      <LanguageProvider>
-        <TerminalOverflowMenu triggerRef={noTrigger} osc52Enabled={false} splitPane={{ moving: null, focusMode: true, onMove: () => undefined, onFocusMode: () => undefined }} onCopyContext={() => undefined} onCopyWithColors={() => undefined} onSaveScrollback={() => undefined} onToggleOsc52={() => undefined} onClose={() => undefined} />
-      </LanguageProvider>,
-    );
+    renderPaneMenu({ ...idlePane, focusMode: true });
     expect(screen.getByRole("menuitem", { name: "Exit focus" })).toBeVisible();
     expect(screen.queryByRole("menuitem", { name: "Move pane" })).toBeNull();
   });
