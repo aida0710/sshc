@@ -207,7 +207,7 @@ func readL2TPProfile(
 	if err != nil {
 		return nil, nil, err
 	}
-	// 暗号スイートは、古いVPN機器と合わないときだけ書く。空なら、L2TPのVPNサーバーとの互換性を
+	// 暗号スイートは、古いVPNサーバーと合わないときだけ書く。空なら、L2TPのVPNサーバーとの互換性を
 	// 持たせた既定の候補を使う（internal/vpn の l2tpDocuments）。
 	ike, err := p.optional("IKE proposals", previous.IKE)
 	if err != nil {

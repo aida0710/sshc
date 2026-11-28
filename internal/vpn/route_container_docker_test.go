@@ -339,7 +339,7 @@ func TestTheTargetIsUnreachableWhileTheTunnelIsNotUp(t *testing.T) {
 	}
 	clientPrivate, clientPublic := keyPair(t)
 	_, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
-	// 相手の公開鍵として、相手が持っていない鍵を渡す。ハンドシェイクは成立しない。
+	// ピアの公開鍵として、ピアが持っていない鍵を渡す。ハンドシェイクは成立しない。
 	_, strangerPublic := keyPair(t)
 
 	profile, secrets := testTunnel{
@@ -355,7 +355,7 @@ func TestTheTargetIsUnreachableWhileTheTunnelIsNotUp(t *testing.T) {
 	})
 	if err == nil {
 		_ = connection.Close()
-		t.Fatal("相手とハンドシェイクできないまま、経路が用意できたことになった")
+		t.Fatal("ピアとハンドシェイクできないまま、経路が用意できたことになった")
 	}
 	// ハンドシェイクできないことを、理由として返す。鍵かサーバーの誤りを利用者が疑える。
 	var failure *RouteFailure
