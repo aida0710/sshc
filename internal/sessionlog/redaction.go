@@ -45,7 +45,7 @@ type heldLine struct {
 	notes []string
 }
 
-// addSecrets は、これから書く行で伏せる値を足す。
+// addSecrets は、これから書く行で伏せる値を足す。手元に留まっている行も、まだ書いていないので伏せる。
 func (r *lineRedactor) addSecrets(values []string) {
 	for _, value := range values {
 		for _, shown := range secretForms(value) {
@@ -53,6 +53,7 @@ func (r *lineRedactor) addSecrets(values []string) {
 			r.longest = max(r.longest, len(shown))
 		}
 	}
+	r.hideInHeldLines(0)
 }
 
 // secretForms は、value がログに映りうる形を返す。改行を含まない値は、そのまま返す。画面の行は改行を
@@ -93,6 +94,7 @@ func (r *lineRedactor) add(text string, width int) []string {
 		return []string{text}
 	}
 	r.held = append(r.held, heldLine{text: text, blanks: max(width-ansi.StringWidth(text), 0)})
+	r.hideInHeldLines(len(r.held) - 1)
 	if text == "" {
 		// 折り返した行は右端まで埋まり、続きの行には文字がある。空の行をまたいで続く値は無い。
 		return r.releaseAll()
@@ -113,7 +115,6 @@ func (r *lineRedactor) addNote(note string) []string {
 // releaseReady は、あとに続く文字が、最も長い値より1バイト少ない長さに届いた行を伏せて返す。そこまで続けば、
 // その行で始まる値は、どれも手元の行の中で終わっている。
 func (r *lineRedactor) releaseReady() []string {
-	r.hideInHeldLines()
 	following := 0
 	for _, line := range r.held {
 		following += len(line.text)
@@ -131,7 +132,6 @@ func (r *lineRedactor) releaseReady() []string {
 
 // releaseAll は、手元の行をすべて伏せて返す。ログを閉じるときと、空の行が来たときに使う。
 func (r *lineRedactor) releaseAll() []string {
-	r.hideInHeldLines()
 	return r.release(len(r.held))
 }
 
@@ -146,19 +146,29 @@ func (r *lineRedactor) release(count int) []string {
 	return lines
 }
 
-// hideInHeldLines は、手元の行をつないだ文字列で値を探し、見つけた範囲を行ごとに印す。行の間に右端までの
-// 空白を入れてつなぐ形と、入れずにつなぐ形の両方で探す。前者は右端に来た値の空白を戻す。後者は、幅が広がった
-// 画面の行や、右端に入らなかった全角の文字で折り返した行に当たる。
-func (r *lineRedactor) hideInHeldLines() {
-	r.hideInJoinedLines(false)
-	r.hideInJoinedLines(true)
+// hideInHeldLines は、手元の行をつないだ文字列で、from 番目から後ろの行にかかる値を探し、見つけた範囲を行ごとに
+// 印す。それより前の行の中で終わる値は、その行を受け取ったときに探してある。行の間に右端までの空白を入れて
+// つなぐ形と、入れずにつなぐ形の両方で探す。前者は右端に来た値の空白を戻す。後者は、幅が広がった画面の行や、
+// 右端に入らなかった全角の文字で折り返した行に当たる。
+func (r *lineRedactor) hideInHeldLines(from int) {
+	r.hideInJoinedLines(from, false)
+	r.hideInJoinedLines(from, true)
 }
 
-func (r *lineRedactor) hideInJoinedLines(withBlanks bool) {
+func (r *lineRedactor) hideInJoinedLines(from int, withBlanks bool) {
+	if from >= len(r.held) {
+		return
+	}
+	// from 番目の行にかかる値は、その行の前の longest-1 バイトより前からは始まらない。
+	first := from
+	for reach := 0; first > 0 && reach < r.longest-1; {
+		first--
+		reach += r.held[first].joinedLength(withBlanks)
+	}
 	joined := r.joined[:0]
-	starts := make([]int, len(r.held))
-	for index, line := range r.held {
-		starts[index] = len(joined)
+	starts := make([]int, 0, len(r.held)-first)
+	for _, line := range r.held[first:] {
+		starts = append(starts, len(joined))
 		joined = append(joined, line.text...)
 		if withBlanks {
 			for range line.blanks {
@@ -168,10 +178,18 @@ func (r *lineRedactor) hideInJoinedLines(withBlanks bool) {
 	}
 	r.joined = joined
 	for _, span := range redact.Spans(joined, r.secrets) {
-		for index := range r.held {
-			r.held[index].hide(span.Start-starts[index], span.End-starts[index])
+		for index, start := range starts {
+			r.held[first+index].hide(span.Start-start, span.End-start)
 		}
 	}
+}
+
+// joinedLength は、手元の行をつないだ文字列の中で、この行が占めるバイト数である（hideInJoinedLines）。
+func (line heldLine) joinedLength(withBlanks bool) int {
+	if withBlanks {
+		return len(line.text) + line.blanks
+	}
+	return len(line.text)
 }
 
 // hide は、行の頭から数えた [start, end) のうち、text に入る部分を伏せる。

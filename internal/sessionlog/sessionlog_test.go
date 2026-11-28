@@ -191,13 +191,18 @@ func TestASecretWrappedBeforeTheTerminalGrewWiderIsStillHidden(t *testing.T) {
 }
 
 func TestASecretLongerThanARowIsHiddenOnEveryRowItCovers(t *testing.T) {
-	secret := strings.Repeat("Tail9", 18)
+	// 値は、頭の1字が1行目の右端に、最後の1字が3行目の左端に来る。3行目を受け取ったとき、値の頭はいちばん遠い。
+	const prefix = "$ unlock --vault r100 --phrase=pelican "
+	secret := strings.Repeat("Tail9", 8) + "Kx"
+	if len(prefix) != 39 || len(secret) != 42 {
+		t.Fatal("the example must start the secret on the last of the 40 columns and end it on the first of the third row")
+	}
 	got := readLog(t, func(log *Log) {
 		log.Hide([]string{secret})
-		log.Write([]byte("$ login " + secret + "\r\n"))
+		log.Write([]byte(prefix + secret + "\r\n"))
 		log.Write([]byte("done\r\n$ \r\n$ \r\n$ \r\n"))
 	})
-	want := []string{"$ login [secret]", "[secret]", "[secret]", "done", "$", "$", "$"}
+	want := []string{prefix + "[secret]", "[secret]", "[secret]", "done", "$", "$", "$"}
 	if lines := logLines(got); strings.Join(lines, "|") != strings.Join(want, "|") {
 		t.Fatalf("lines = %q, want %q", lines, want)
 	}
@@ -224,6 +229,19 @@ func TestSecretsThatStartAlikeAreHiddenWhole(t *testing.T) {
 		log.Write([]byte("$ login pelican-Tail9secret\r\n"))
 	})
 	if lines := logLines(got); len(lines) != 1 || lines[0] != "$ login [secret]" {
+		t.Fatalf("lines = %q", lines)
+	}
+}
+
+func TestASecretHiddenWhileLinesWaitToBeWrittenIsHiddenInThem(t *testing.T) {
+	// 長い値があると、消した画面の行は、続きの行が来るまで書かずに留まる。そのあとで伏せる値が増えても、
+	// まだ書いていない行には効く。
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{strings.Repeat("Zq7-hunter2-Kx9", 40)})
+		log.Write([]byte("$ echo pelican-tail-77\r\n\x1b[2J"))
+		log.Hide([]string{"pelican-tail-77"})
+	})
+	if lines := logLines(got); len(lines) != 1 || lines[0] != "$ echo [secret]" {
 		t.Fatalf("lines = %q", lines)
 	}
 }
