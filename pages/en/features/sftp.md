@@ -87,7 +87,7 @@ Tabs share one width whatever the host name. They scroll horizontally when they 
 
 ### Two panes
 
-On desktop, drag a tab onto the file list to split the view into two panes. There are at most two panes, and the handle between them resizes the split. Neither pane gets narrower than its toolbar and filter field need. Both panes have their own tab strip and `+` action, with up to eight independent tabs per side.
+On desktop, drag a tab onto the file list to split the view into two panes. There are at most two panes, and the handle between them resizes the split. Neither pane gets narrower than 300px, whether you move the handle or narrow the window. Both panes have their own tab strip and `+` action, with up to eight independent tabs per side.
 
 | Where you drop | Result |
 | --- | --- |
@@ -155,7 +155,7 @@ The action menu can invert the displayed selection or copy selected names or ful
 
 ### Phones and narrow lists
 
-Narrow desktop panes prioritize the name, modification time, size and type columns. Permissions and owner/group IDs remain available in Details, and wide panes also show them as columns. When a pane is too narrow to leave the names readable, the list scrolls sideways instead of dropping columns.
+Narrow desktop panes prioritize the name, modification time, size and type columns. Permissions and owner/group IDs remain available in Details, and wide panes also show them as columns. When a pane is too narrow to leave the names readable, the list keeps these four columns and scrolls sideways.
 
 On phones:
 
