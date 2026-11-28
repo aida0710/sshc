@@ -53,8 +53,9 @@ export function repositoryComments(): SourceText[] {
 
 // sshcエンジンのGoのコード。テストは除く。
 const engineSource = /^(?:internal|cmd|mobile)\/.*(?<!_test)\.go$/;
-// TypeScriptを書き出す生成器。文字列は、書き出すコードのコメントとテストケースの説明で、sshcエンジンが書く文
-// ではない。書き出したコメントは、書き出した先（web/src/rules/generated.tsなど）をrepositoryCommentsが読む。
+// TypeScriptのコードを書き出すコマンド。文字列は、書き出すコードのコメントとテストケースの説明で、
+// sshcエンジンが書く文ではない。書き出したコメントは、書き出した先（web/src/rules/generated.tsなど）を
+// repositoryCommentsが読む。
 const typeScriptGenerator = /^internal\/(?:validate\/cmd\/rulegen|api\/cmd\/runtimegen)\//;
 
 // engineCodeOutsideComments は、sshcエンジンのGoのコードを、コメントを除いた行にして返す。Goの識別子は
