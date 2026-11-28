@@ -57,7 +57,7 @@ remaining_seconds
 }
 
 // 相手を待っている最中（承認待ちや、応えない相手への再送）に止める合図を受けても、
-// 待ちが終わるのを待たずに、待っているコマンドへ SIGINT を送り（openconnect は装置から
+// 待ちが終わるのを待たずに、待っているコマンドへ SIGINT を送り（openconnect はVPNサーバーから
 // ログオフする）、終わってから相手へ切断を伝えて終わる。
 func TestStoppingWhileWaitingForTheServerDoesNotWaitForTheStep(t *testing.T) {
 	if _, err := os.Stat("/proc/uptime"); err != nil {

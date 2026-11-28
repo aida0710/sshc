@@ -81,7 +81,7 @@ func TestAnAnnouncementAfterReadyIsShownEvenWhenTheConnectionLogIsQuiet(t *testi
 }
 
 // 鍵が複数あるとき、読めない鍵は他の鍵で通れば誰にも報告されない。深さ 2 は
-// 鍵ごとに指紋と復号の仕方を言い、使えなかった鍵も言う。パスフレーズは言わない。
+// 鍵ごとにフィンガープリントと復号の仕方を言い、使えなかった鍵も言う。パスフレーズは言わない。
 func TestTheDetailedLogNamesEachKeyByFingerprintAndHowItWasUnlocked(t *testing.T) {
 	contents, public := passphraseKeyPair(t, "correct horse")
 	server := newTestServer(t, serverOptions{
@@ -201,7 +201,7 @@ func TestTheDetailedLogListsWhatTheSessionAskedFor(t *testing.T) {
 	}
 }
 
-// 深さ 3 は agent の鍵を指紋で一覧する。どの鍵が agent から来たかは、
+// 深さ 3 は agent の鍵をフィンガープリントで一覧する。どの鍵が agent から来たかは、
 // 他に確かめる場所が無い。
 func TestTheFullLogListsAgentKeysByFingerprint(t *testing.T) {
 	socket, agentKey := runTestAgent(t, t.TempDir())

@@ -96,7 +96,7 @@ func requestStatus(ctx context.Context, found handoff.Handoff, client *http.Clie
 
 // verifiedHandoff は handoff を読み、その URL にいる process が handoff の秘密を持つ
 // engine であることを確かめてから返す。engine が終了処理を経ずに消えると handoff
-// だけが残り、同じ port を別の process が取れる。確かめる前は秘密も資格情報も送らない。
+// だけが残り、同じ port を別の process が取れる。確かめる前は秘密も認証情報も送らない。
 func verifiedHandoff(ctx context.Context, stateDir string, client *http.Client) (handoff.Handoff, error) {
 	found, err := readHandoff(stateDir)
 	if err != nil {

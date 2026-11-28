@@ -90,7 +90,7 @@ func TestTheLogOfAnSSHSessionKeepsOnlyTheShellsOutputOnceItIsReady(t *testing.T)
 	}
 	shell.exit(terminal.ExitInfo{Code: 0})
 	testwait.Until(t, func() bool { return !session.Live() && log.isClosed() })
-	if got := log.noted(); strings.Join(got, "|") != "接続しました。|接続が切れました。|セッションが終わりました。" {
+	if got := log.noted(); strings.Join(got, "|") != "接続しました。|接続が切れました。|セッションが終了しました。" {
 		t.Fatalf("notes = %q", got)
 	}
 }
@@ -130,7 +130,7 @@ func TestTheLogOfALocalShellKeepsWhatItPrints(t *testing.T) {
 	}
 	process.exit(terminal.ExitInfo{Code: 0})
 	testwait.Until(t, log.isClosed)
-	if got := log.noted(); strings.Join(got, "|") != "ローカルシェルを開きました。|セッションが終わりました。" {
+	if got := log.noted(); strings.Join(got, "|") != "ローカルシェルを開きました。|セッションが終了しました。" {
 		t.Fatalf("notes = %q", got)
 	}
 	if len(log.sizes) != 1 || log.sizes[0] != (terminal.Size{Cols: 100, Rows: 30}) {

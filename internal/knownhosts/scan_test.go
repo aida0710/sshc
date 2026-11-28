@@ -16,7 +16,7 @@ import (
 
 // recordingCollector は、鍵を集めるインターフェースを差し替える。
 //
-// 本物の握手を見るのは internal/sshclient の側である。ここが確かめるのは、
+// 本物のハンドシェイクを見るのは internal/sshclient の側である。ここが確かめるのは、
 // 安全でない宛先をインターフェースより前で拒むことと、集めた鍵が候補の形になることである。
 type recordingCollector struct {
 	addresses []string

@@ -37,7 +37,7 @@ const (
 	forwardDestVariable = "SSHC_TEST_FORWARD_DEST_ADDR"
 )
 
-// server は、コンテナの sshd の住所と、そこへ入るための資格情報である。
+// server は、コンテナの sshd の住所と、そこへ入るための認証情報である。
 type server struct {
 	host       string
 	port       string

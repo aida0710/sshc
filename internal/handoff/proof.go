@@ -11,7 +11,7 @@ import (
 
 // CLI は最初の要求で handoff の秘密を送る前に、相手が本当にその秘密を持つ engine か
 // を確かめる。engine が止まったあとに handoff だけが残り、同じ port を別の process
-// が取っていると、CLI は master password や S3 の資格情報を偽の engine へ渡して
+// が取っていると、CLI は master password や S3 の認証情報を偽の engine へ渡して
 // しまう。challenge は CLI が毎回作る乱数で、engine は秘密で HMAC した proof を返す。
 // 秘密を知らない process は proof を作れず、proof から秘密を逆算することもできない。
 const (

@@ -35,7 +35,7 @@ var (
 // vaultTransaction は、vault の写しへの変更を、呼び手の storage トランザクションと
 // 同じ書き込みに載せるための指定である。
 //
-// vault の書き手（接続の保存、VPN プロファイルの保存、資格情報の追加・更新・削除、
+// vault の書き手（接続の保存、VPN プロファイルの保存、認証情報の追加・更新・削除、
 // 鍵のパスフレーズの付け替え）は、どれも「写しを封じて書き、成功したときだけ
 // メモリ上の vault を差し替える」手順を踏む。手順そのものはここに 1 か所だけ置き、
 // 変更の中身と書き方だけを呼び手が渡す。
@@ -132,7 +132,7 @@ func (s *Service) commitVaultTransaction(transaction vaultTransaction) (storage.
 // commitVaultTransaction に載せる。apply は写しへ変更を加え、変わったかを返す。
 //
 // CommitAtomic で書くので、rename や SyncDir が失敗したときはその場で巻き戻る。
-// 履歴の画面から「完了させる」ことのできる保留記録を残さず、ディスクだけが新しい
+// History の［完了する］で完了できる保留記録を残さず、ディスクだけが新しい
 // vault になってメモリ上の vault が古いまま残ることがない。
 func (s *Service) commitVaultOnlyTransaction(operation string, apply func(clone *Vault) (bool, error)) error {
 	_, err := s.commitVaultTransaction(vaultTransaction{

@@ -21,7 +21,7 @@ import (
 // streamSetup は、この検査が繰り返す組み立てをひとつにまとめる。
 //
 // 鍵はサーバーより先に作る。受け付ける鍵は ssh.ServerConfig を組んだ時点で
-// 決まるので、あとから足しても認証は通らない。握手そのものが失敗する。
+// 決まるので、あとから足しても認証は通らない。ハンドシェイクそのものが失敗する。
 func streamSetup(
 	t *testing.T, options serverOptions,
 ) (*testServer, sshclient.Dialer, sshclient.Target) {
@@ -297,7 +297,7 @@ func TestStreamForwardsStandardInputToTheCommand(t *testing.T) {
 	}
 }
 
-// 非対話であることは、vault に保存済みの資格情報まで使わないという意味では
+// 非対話であることは、vault に保存済みの認証情報まで使わないという意味では
 // ない。追加質問は拒否しつつ、対話接続と同じ password 認証を通す。
 func TestStreamUsesAStoredPasswordWithoutConsumingCommandInput(t *testing.T) {
 	received := make(chan string, 1)

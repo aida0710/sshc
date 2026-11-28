@@ -153,7 +153,7 @@ func (m *TransferManager) CompleteOwned(ctx context.Context, completion UploadCo
 	return transfer, nil
 }
 
-// recordSourceFingerprintLocked は、送り元のファイルの指紋を、まだ無い記録に書く。
+// recordSourceFingerprintLocked は、送り元のファイルのフィンガープリントを、まだ無い記録に書く。
 func (m *TransferManager) recordSourceFingerprintLocked(record *transferJobRecord, fingerprint string) error {
 	return m.rewriteJobLocked(record, true, func(time.Time) error {
 		record.job.SourceFingerprint = fingerprint

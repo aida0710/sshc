@@ -324,7 +324,7 @@ describe("VPNPanel", () => {
     await user.type(within(form).getByLabelText("VPN username"), "tester");
     await user.type(within(form).getByLabelText("VPN password"), "a password");
     await user.selectOptions(within(form).getByLabelText("Second factor"), "totp");
-    // 種を入れるまでは保存できない。
+    // TOTPのシークレットを入力するまでは保存できない。
     expect(within(form).getByRole("button", { name: "Save" })).toBeDisabled();
     await user.type(within(form).getByLabelText("Second factor TOTP seed"), "GEZDGNBVGY3TQOJQ");
     await user.click(within(form).getByRole("button", { name: "Save" }));

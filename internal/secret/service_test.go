@@ -913,7 +913,7 @@ func TestTheVaultKeepsGenerationsAndNoneOfThemIsReadable(t *testing.T) {
 	}
 }
 
-// サービスの資格情報まわりの面。すべての画面とすべてのルートが通る場所である。
+// サービスの認証情報まわりの面。すべての画面とすべてのルートが通る場所である。
 // ロックされた vault は空リストではなく ErrLocked を返す。「見えない」と
 // 「存在しない」は別の事実だからだ。
 func TestCredentialsThroughTheService(t *testing.T) {

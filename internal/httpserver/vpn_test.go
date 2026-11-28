@@ -352,7 +352,7 @@ func TestAnOpenConnectProfileKeepsItsPasswordOutOfEveryResponse(t *testing.T) {
 	}
 }
 
-// 二段目のTOTPの種も、応答には現れない。
+// TOTPのシークレットも、応答には現れない。
 func TestTheSecondFactorSeedNeverLeavesTheVault(t *testing.T) {
 	engine, secrets, _ := vpnEngine(t)
 	const seed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
@@ -368,7 +368,7 @@ func TestTheSecondFactorSeedNeverLeavesTheVault(t *testing.T) {
 	}
 	for _, answer := range []string{saved.Body.String(), listed.Body.String()} {
 		if strings.Contains(answer, seed) {
-			t.Fatalf("応答に二段目の種が現れた: %s", answer)
+			t.Fatalf("応答にTOTPのシークレットが現れた: %s", answer)
 		}
 	}
 	stored, err := secrets.VPNSecrets("office")

@@ -20,7 +20,7 @@ const (
 	MaxAliasLength = 64
 	// MaxHostnameLength は、ssh の HostName と ssh-keyscan の対象として受け付ける長さの
 	// 上限である。DNS の名前の上限（wire 形式で 255 オクテット）に合わせている。
-	// VPN の中で引く名前は、テキスト形式の上限 253 で別に確かめる（internal/vpn の
+	// VPN の中で名前解決するホスト名は、テキスト形式の上限 253 で別に確かめる（internal/vpn の
 	// maxHostNameLength）。そちらはコンテナの中でそのまま名前解決に渡す名前だからである。
 	MaxHostnameLength = 255
 )

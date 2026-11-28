@@ -289,7 +289,7 @@ func TestANoteComesAfterTheLinesShownBeforeIt(t *testing.T) {
 				log.Write([]byte("one\r\ntwo\r\n$ "))
 				log.Note("接続が切れました。")
 				log.Write([]byte("\r\nthree\r\nfour\r\n"))
-				log.Note("セッションが終わりました。")
+				log.Note("セッションが終了しました。")
 			})
 			var order []string
 			for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
@@ -298,7 +298,7 @@ func TestANoteComesAfterTheLinesShownBeforeIt(t *testing.T) {
 				}
 				order = append(order, line)
 			}
-			want := []string{"one", "two", "$", "接続が切れました。", "three", "four", "セッションが終わりました。"}
+			want := []string{"one", "two", "$", "接続が切れました。", "three", "four", "セッションが終了しました。"}
 			if strings.Join(order, "|") != strings.Join(want, "|") {
 				t.Fatalf("log = %q, want the lines in %q's order", got, want)
 			}

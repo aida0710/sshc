@@ -140,7 +140,7 @@ func TestEveryAPIRouteThatChangesSomethingRequiresTheCSRFHeader(t *testing.T) {
 	// middleware の条件式の中だけに置くと、増えたことは誰にも見えない。
 	exempt := map[string]string{
 		"/api/v1/session/bootstrap": "セッションを作る要求である。作る前にトークンは無い",
-		"/api/v1/session/recover":   "登録済みブラウザーがengine再起動後のセッションを作る要求である",
+		"/api/v1/session/recover":   "登録済みのブラウザがengine再起動後のセッションを作る要求である",
 		"/api/v1/session/renew":     "トークンを失ったページがそれを得る手段である。reload には cookie しか無い",
 	}
 	f := newFixture(t)

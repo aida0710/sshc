@@ -13,7 +13,7 @@ import (
 var ErrPromptAborted = errors.New("the prompt was cancelled")
 
 // ErrPromptUnavailable は、利用者へ質問できない接続で追加の入力が必要になった
-// ことを報告する。保存済み資格情報はこのエラーより先に試される。
+// ことを報告する。保存済みの認証情報はこのエラーより先に試される。
 var ErrPromptUnavailable = errors.New("authentication requires user input, but this operation is non-interactive")
 
 // Prompter は、接続の途中でユーザーに尋ねる手段である。
@@ -30,7 +30,7 @@ type Prompter interface {
 	Confirm(prompt string) (bool, error)
 }
 
-// nonInteractivePrompter は、保存済み資格情報を対話接続と同じ認証経路へ
+// nonInteractivePrompter は、保存済みの認証情報を対話接続と同じ認証経路へ
 // 通しつつ、追加質問だけを拒否する。nil を渡すと Auth.Methods が password と
 // keyboard-interactive 自体を除外し、vault に保存済みの結果まで使えなくなる。
 type nonInteractivePrompter struct{}
@@ -51,7 +51,7 @@ var noPrompt Prompter = nonInteractivePrompter{}
 
 // hostKeyQuestionPrompter は、known_hosts に無いホスト鍵を受け入れるかだけを尋ね、認証の
 // 入力は尋ねない。端末の無い接続（SFTP のタブ）で、接続を見ている人が画面のボタンで鍵に
-// 答えられるときに使う。認証は nonInteractivePrompter と同じく保存済みの資格情報だけで行う。
+// 答えられるときに使う。認証は nonInteractivePrompter と同じく保存済みの認証情報だけで行う。
 type hostKeyQuestionPrompter struct {
 	confirm func(question string) (bool, error)
 }
@@ -68,7 +68,7 @@ func (p hostKeyQuestionPrompter) Confirm(question string) (bool, error) {
 	return p.confirm(question)
 }
 
-// isNonInteractive は、保存済み資格情報だけを使い、利用者へは尋ねない接続かを返す。
+// isNonInteractive は、保存済みの認証情報だけを使い、利用者へは尋ねない接続かを返す。
 // ホスト鍵だけを尋ねる接続も、認証については尋ねない。
 func isNonInteractive(prompt Prompter) bool {
 	switch prompt.(type) {
@@ -258,7 +258,7 @@ func writeMaskedPromptFeedback(output io.Writer, answer []byte, displayedRunes *
 	return nil
 }
 
-// InputBuffer は、握手のあいだに打たれたバイト列を溜める。
+// InputBuffer は、ハンドシェイクのあいだに打たれたバイト列を溜める。
 //
 // io.Pipe ではない。あれは書き込みが読み取りを待つ。問いが出ていない間に
 // 打たれた文字で WebSocket の読み手が止まり、その接続全体が固まる。ここは

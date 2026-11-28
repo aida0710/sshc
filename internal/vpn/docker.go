@@ -28,7 +28,7 @@ var (
 	ErrDockerNotRunning = errors.New("docker is not running")
 	// ErrImageBuild は、VPNコンテナのイメージを作れなかったことを表す。
 	ErrImageBuild = errors.New("the vpn container image could not be built")
-	// ErrTunnelDevice は、backendが要るデバイスがこの機械に無いことを表す。
+	// ErrTunnelDevice は、backendが要るデバイスがこのマシンに無いことを表す。
 	ErrTunnelDevice = errors.New("the tunnel device is not available")
 )
 

@@ -76,8 +76,8 @@ func (wireGuardBackend) validateSettings(profile Profile) error {
 // validateSecrets は、設定ファイルを確かめ、プロファイルの設定と合っているかを見る。
 //
 // 設定ファイルは Vault にしか無いので、サーバーと DNS が合うことはここでしか確かめられない。
-// サーバーが合わないまま保存すると、一覧に出るサーバーと実際に繋ぐサーバーが食い違う。DNS が
-// 合わないと、接続先の名前を引けるかの確かめ（Profile.Destination）と、実際に名前解決に使う
+// サーバーが合わないまま保存すると、一覧に出るサーバーと実際に接続するサーバーが食い違う。DNS が
+// 合わないと、接続先を名前解決できるかの確認（Profile.Destination）と、実際に名前解決に使う
 // DNS が別になる。
 func (wireGuardBackend) validateSecrets(profile Profile, secrets Secrets) error {
 	config, err := wireGuardConfigOf(secrets)

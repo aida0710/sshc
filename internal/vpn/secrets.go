@@ -35,7 +35,7 @@ type L2TPSecrets struct {
 // OpenConnectSecrets は、openconnect backend の秘密である。
 type OpenConnectSecrets struct {
 	Password string
-	// TOTPSecret は、二段目のコードを作る種である（base32 または otpauth URI）。
+	// TOTPSecret は、二要素認証のコードを作るシークレットである（base32 または otpauth URI）。
 	// SecondFactor が totp のときだけ使う。
 	TOTPSecret string
 }

@@ -69,7 +69,7 @@ func (s *Session) StopReconnecting() error {
 	s.publish([]byte("\r\n[sshc] 再接続を停止しました。\r\n"))
 	s.stopReconnecting()
 	if handshaking != nil {
-		// reopen は握手前に Process を返す。Ready を待つ側は stopping を見て
+		// reopen はハンドシェイク前に Process を返す。Ready を待つ側は stopping を見て
 		// connected にしないだけで、process 自体は生きて入力を捨て続ける。
 		// 閉じて pump に exited まで進ませ、手動の再接続を使える状態にする。
 		abandonProcess(handshaking)
@@ -108,7 +108,7 @@ func (s *Session) stopReconnecting() {
 // reconnect は、落ちた輸送を繋ぎ直せたなら真を返す。
 func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.Time) bool {
 	lostToNetworkChange := s.takeTransportCheckPending() && connectionErr == nil
-	// Dialer.Open は握手前に Process を返す。したがって終了コードが通常の
+	// Dialer.Open はハンドシェイク前に Process を返す。したがって終了コードが通常の
 	// transport loss でなくても、Ready の失敗は接続失敗として扱う。
 	if !info.TransportLost && connectionErr == nil {
 		return false
@@ -379,7 +379,7 @@ func (s *Session) prepareManualReconnect() (func(context.Context, Size) (Process
 }
 
 // defaultReconnectStopNotice は、再接続を止めた理由に専用の文が無いときに書く文である。
-const defaultReconnectStopNotice = "設定を直さない限り同じ理由で失敗するため、自動再接続を停止しました。"
+const defaultReconnectStopNotice = "設定を修正しない限り同じ理由で失敗するため、自動再接続を停止しました。"
 
 // reconnectStopNotice は、再接続を止めたときにターミナルへ書く文を返す。
 func (s *Session) reconnectStopNotice(problem string) string {

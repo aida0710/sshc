@@ -20,7 +20,7 @@ import (
 
 // scriptedProbe は、認証テストの継ぎ目を差し替える。
 //
-// 本物の握手を見るのは internal/sshclient の側である。ここが確かめるのは、
+// 本物のハンドシェイクを見るのは internal/sshclient の側である。ここが確かめるのは、
 // 継ぎ目に届くまでの関門と、結果の符号への移し方である。
 type scriptedProbe struct {
 	calls  []string

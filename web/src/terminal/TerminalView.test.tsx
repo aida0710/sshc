@@ -869,7 +869,7 @@ describe("TerminalView", () => {
     await userEvent.click(screen.getByRole("button", { name: "Japanese" }));
     act(() => streams[0]!.handlers.onSkipped(0));
 
-    expect(await screen.findByText(/再生バッファに残っていない部分を飛ばしました/)).toBeVisible();
+    expect(await screen.findByText(/再生バッファに残っていない部分をスキップしました/)).toBeVisible();
   });
 
   it("reports the exit to the handler it has when the program exits", async () => {

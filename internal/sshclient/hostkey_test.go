@@ -324,7 +324,7 @@ func TestTheKnownKeyTypeIsPreferredWhenTheHostOffersSeveral(t *testing.T) {
 	go func() { _, _ = io.Copy(io.Discard, process) }()
 
 	// 繋がったことは、向こうのシェルが終了コードを返したことで分かる。
-	// 握手がホスト鍵で終わっていれば、ここに来るのは別の数字である。
+	// ハンドシェイクがホスト鍵で終わっていれば、ここに来るのは別の数字である。
 	if info := process.Wait(); info.Code != 42 {
 		t.Fatalf("exit = %+v, want the shell on the other side to have run at all", info)
 	}

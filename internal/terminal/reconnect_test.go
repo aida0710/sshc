@@ -907,7 +907,7 @@ func TestStopReconnectingDuringTheHandshakeEndsTheSessionInsteadOfDroppingInput(
 	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
 
 	spy.at(0).exit(transportLost)
-	// reopen は代わりの process を返した。利用者が止めるよう求めた時点で、その握手（Ready）はまだ終わって
+	// reopen は代わりの process を返した。利用者が止めるよう求めた時点で、そのハンドシェイク（Ready）はまだ終わって
 	// いない。
 	testwait.Until(t, func() bool { return spy.count() >= 2 })
 	testwait.Until(t, func() bool { return session.View().State == terminal.StateReconnecting })
@@ -964,7 +964,7 @@ func TestTheReconnectStopNoticeFollowsTheReason(t *testing.T) {
 		want    string
 	}{
 		{"vpn_route_disconnected", "VPNルートが切断されたため"},
-		{"host_key_changed", "設定を直さない限り同じ理由で失敗するため"},
+		{"host_key_changed", "設定を修正しない限り同じ理由で失敗するため"},
 	} {
 		t.Run(test.problem, func(t *testing.T) {
 			spy := &readyOpenSpy{}

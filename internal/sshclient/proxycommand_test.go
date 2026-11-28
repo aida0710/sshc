@@ -157,7 +157,7 @@ func TestTheProxyCommandIsAnnouncedEvenWhenQuiet(t *testing.T) {
 
 // 繋がらなかった理由は、たいていプログラムの標準エラーにしかない。
 //
-// `ssh -W` は "Connection refused" をそこへ書く。握手の失敗としてだけ見せると、
+// `ssh -W` は "Connection refused" をそこへ書く。ハンドシェイクの失敗としてだけ見せると、
 // 読むユーザーには何が起きたのか分からない。
 func TestAFailingProxyCommandSaysWhatItComplainedAbout(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -189,7 +189,7 @@ func TestAFailingProxyCommandSaysWhatItComplainedAbout(t *testing.T) {
 
 // 踏み台の向こうのホップは ProxyCommand を使えない。
 //
-// そのプログラムはこの機械で走る。手前のホップの中ではない。走らせても、
+// そのプログラムはこのマシンで走る。手前のホップの中ではない。走らせても、
 // 設定が言っている場所には届かない。
 func TestAHopReachedThroughAnotherRefusesItsProxyCommand(t *testing.T) {
 	path, contents, public := keyPair(t)

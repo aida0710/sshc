@@ -32,7 +32,7 @@ type agentDocument struct {
 
 // newAgentDocument は、プロファイルと秘密から、コンテナへ渡す設定を作る。
 //
-// now は、二段目のコードを作る時刻である。コードは 30 秒で変わるので、この文書は
+// now は、二要素認証のコードを作る時刻である。コードは 30 秒で変わるので、この文書は
 // コンテナへ渡す直前に作る。
 func newAgentDocument(profile Profile, secrets Secrets, now time.Time) (string, error) {
 	if err := profile.Validate(); err != nil {

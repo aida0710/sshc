@@ -108,7 +108,7 @@ Vaultに同じ名前のシークレットが残っていても、作成時に入
 
 方式を変えた場合は、前の方式のシークレットを削除し、新しい方式のシークレットの入力を求めます。設定とシークレットは1回の書き込みで保存するため、どちらか一方だけが書き換わることはありません。
 
-接続中のルートには、次に接続するときから反映します。設定かシークレットが変わっていれば、そのときにコンテナを作り直します。作り直すと、それまでのルートを通っていた接続はいったん切れます。利用者が切断したのではないため、Terminalは自動で再接続します。
+接続中のルートには、次に接続するときから反映します。設定かシークレットが変わっていれば、そのときにコンテナを作り直します。作り直すと、それまでのルートを通っていた接続はいったん切れます。ユーザーが切断したのではないため、Terminalは自動で再接続します。
 
 使用できない値がある場合は、どの項目のどこが問題か（未入力、形式の誤り、件数の上限など）を画面と`sshc vpn add`に表示します。
 
@@ -151,7 +151,7 @@ Duoのサーバーには2種類の動き方があります。
 - パスワードを受け取った時点でスマートフォンへ通知を送り、承認されるまで応答を返さない
 - `push`のような文字列の入力を追加で求める
 
-前者では「二要素認証で送る文字列」を空欄にします。後者の場合だけ、その文字列を入力します。
+前者では「二要素認証で送信する文字列」を空欄にします。後者の場合だけ、その文字列を入力します。
 
 どちらの場合も、待ち時間の上限は2分になります。通知に気付いてスマートフォンを開き、承認するまでの時間を見込んでいます。
 
@@ -243,7 +243,7 @@ OpenVPNでは、プロバイダや組織が配るクライアント用の設定�
 | コマンドやプログラムを実行する | `up`、`down`、`route-up`、`route-pre-down`、`ipchange`、`tls-verify`、`client-connect`、`client-disconnect`、`client-crresponse`、`learn-address`、`auth-user-pass-verify`、`tls-crypt-v2-verify`、`iproute`、`plugin`、`engine`、`pkcs11-providers`、`providers`、`script-security`、`dns-updown` | コンテナの中で任意のコマンドが動き、接続先への通信だけをトンネルへ通す仕組みを壊せるため |
 | ルートやDNSを変更する | `route`、`route-ipv6`、`redirect-gateway`、`redirect-private`、`client-nat`、`dns` | ルートはsshcが接続先ごとに追加するため |
 | sshcが決める設定 | `dev`と`dev-type`（`tun`以外）、`dev-node`、`lladdr`、`mktun`、`rmtun`、`daemon`、`log`、`log-append`、`syslog`、`status`、`writepid`、`tmp-dir`、`chroot`、`cd`、`user`、`group`、`setcon`、`askpass`、`management`で始まる指示 | トンネルのインターフェース、ログの出力先、OpenVPNを動かす環境はsshcが決めるため |
-| ファイルを指定する | `ca`、`cert`、`key`、`tls-auth`、`tls-crypt`、`pkcs12`、`auth-user-pass`などのファイル名の指定、`config`、`capath`、`tls-export-cert`、`replay-persist`、`genkey` | コンテナの中にそのファイルは無いため。中身を`<ca>`〜`</ca>`の形で埋め込めば使用できます |
+| ファイルを指定する | `ca`、`cert`、`key`、`tls-auth`、`tls-crypt`、`pkcs12`、`auth-user-pass`などのファイル名の指定、`config`、`capath`、`tls-export-cert`、`replay-persist`、`genkey` | コンテナの中にそのファイルは無いため。ファイルの内容を`<ca>`〜`</ca>`の形で埋め込めば使用できます |
 | VPNサーバー用 | `mode`、`server`、`server-ipv6`、`server-bridge`、`tls-server` | sshcはクライアントとしてだけ接続するため |
 
 表に無い指示も、sshcがクライアントの設定として確認した指示（`remote`、`proto`、`cipher`、`verb`など）でなければ保存できません。OpenVPNのバージョンが上がって増えた指示は、確認するまで使用できません。
@@ -325,7 +325,7 @@ VPN画面では、そのプロファイルを使っている接続の一覧を�
 
 付けた接続は、Terminal、SFTP、`sshc ssh <接続先>`のどれから開いても同じルートを使います。接続先はその接続の`HostName`と`Port`です。ルートを用意できないときは、通常のネットワークへ切り替えずに接続を中止します。
 
-どの接続がどのルートを使うかは、接続の前にも後にも確認できます。TerminalとSFTPの見出しには「VPN経由：<名前>」が表示されます。`sshc info <alias>`の`vpn`行にも同じ名前が表示されます。
+どの接続がどのルートを使うかは、接続の前にも後にも確認できます。TerminalとSFTPのヘッダーには「VPN経由：<名前>」が表示されます。`sshc info <alias>`の`vpn`行にも同じ名前が表示されます。
 
 ### 付け替えたときの割り当て
 
@@ -452,7 +452,7 @@ VPNの接続に失敗した場合は、分かる範囲で原因（ハンドシ�
 
 CLIの`sshc vpn up`と`sshc ssh <接続先>`は、上の2つの表の原因を英語で表示します。
 
-VPNのシークレットが無い、Dockerが起動していないなど、設定を直さない限り同じ理由で失敗する場合、Terminalは再接続を繰り返しません。
+VPNのシークレットが無い、Dockerが起動していないなど、設定を修正しない限り同じ理由で失敗する場合、Terminalは再接続を繰り返しません。
 
 ### ログを確認する
 

@@ -318,7 +318,7 @@ func TestAJumpListOverrideAlsoReachesTheHopProxyCommandTokens(t *testing.T) {
 // `ssh -G` は生のまま報告する。OpenSSH がこれを展開するのは繋ぐ瞬間だから
 // であり、解決器もそれに倣っている。だから展開はここでしか起きない。展開しないと
 // `%r@gateway` は「%r という名前の利用者」への認証になり、publickey は通らず、
-// 残る方式も無いまま握手が終わる。実際そうなっていた。
+// 残る方式も無いままハンドシェイクが終わる。実際そうなっていた。
 //
 // %r が指すのは最終的な行き先の利用者であって、手前のホップのそれではない。
 func TestProxyJumpTokensAreExpandedAgainstTheFinalDestination(t *testing.T) {

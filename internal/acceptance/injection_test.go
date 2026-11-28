@@ -242,7 +242,7 @@ func TestRemoteRegistrationNeverInterpolatesInputIntoTheRemoteShell(t *testing.T
 	}
 
 	// 2 つ以上の authorized_keys entry になりうる public key line、
-	// あるいはそもそも key ではない行は、何かがリモートホストに
+	// あるいはそもそも key ではない行は、何かがリモートのホストに
 	// 届くより前に parser によって拒否される。
 	for _, line := range []string{
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl a\nssh-ed25519 AAAA b",

@@ -47,8 +47,8 @@ const (
 	// readyTimeout は、トンネルが成立するまで待つ上限である。IKEやDNSの
 	// 遅い相手でも、この時間を超えるなら利用者へ理由を見せた方がよい。
 	readyTimeout = 45 * time.Second
-	// approvalReadyTimeout は、二段目の承認を電話で操作する経路で待つ上限で
-	// ある。通知に気づいて、電話を開いて、承認するまでを見込む。
+	// approvalReadyTimeout は、二要素認証をスマートフォンで承認する経路で待つ上限で
+	// ある。通知に気づいて、スマートフォンを開いて、承認するまでを見込む。
 	approvalReadyTimeout = 2 * time.Minute
 	// connectAttemptMargin は、engine が待つのをやめるより先に、コンテナが
 	// 自分で諦めるための余裕である。
@@ -113,7 +113,7 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 		manager.stopContainer(ctx, name)
 		return runFailure(chosen.device(), err)
 	}
-	// 二段目のコードは 30 秒で変わる。イメージを作る時間を挟まないよう、渡す
+	// 二要素認証のコードは 30 秒で変わる。イメージを作る時間を挟まないよう、渡す
 	// 直前にこの文書を作る。
 	if err := manager.configureContainer(ctx, name, profile, secrets, report); err != nil {
 		// 片付けるとコンテナのログも消える。失敗の理由を読めるよう、先に
@@ -218,7 +218,7 @@ func runArguments(run containerRun) []string {
 		"--pull", "never",
 		// PID 1 を tini にする。sh を PID 1 にすると SIGTERM が既定で無視され、
 		// docker stop は猶予を待ち切ってから SIGKILL で終わらせる。agent が
-		// 合図を受けて、装置へ切断を伝えられない。
+		// 合図を受けて、VPNサーバーへ切断を伝えられない。
 		"--init",
 		// 設定と秘密が触れるのはこのtmpfsだけである。コンテナを止めれば消える。
 		"--tmpfs", agentRuntimeDirectory + ":rw,nosuid,nodev,size=8m,mode=700",
@@ -299,8 +299,8 @@ func (manager *Manager) routeFailure(profileName string, fallback FailureReason)
 
 // tunnelPhase は、トンネルを待っているあいだ、何を待っているかを表す。
 //
-// 承認を待つ経路では、待っている相手は装置ではなく人である。「トンネルを
-// 待っています」とだけ出ていると、利用者は電話を見に行かない。
+// 承認を待つ経路では、待っている相手はVPNサーバーではなく人である。「トンネルを
+// 待っています」とだけ出ていると、ユーザーはスマートフォンを確認しない。
 func tunnelPhase(profile Profile) StartPhase {
 	if profile.WaitsForApproval() {
 		return PhaseApproval
@@ -318,7 +318,7 @@ func agentAttempt(profile Profile) time.Duration {
 
 // tunnelReadyTimeout は、この経路が立つのを待つ長さである。
 //
-// 人が電話で承認する経路は、機械だけで進む経路より長くかかる。同じ長さで打ち
+// 人がスマートフォンで承認する経路は、自動で進む経路より長くかかる。同じ長さで打ち
 // 切ると、承認する前に畳んでしまう。
 func tunnelReadyTimeout(profile Profile) time.Duration {
 	if profile.WaitsForApproval() {

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// testClock は、二段目のコードを固定するための時刻である。
+// testClock は、二要素認証のコードを固定するための時刻である。
 var testClock = time.Date(2026, 9, 23, 14, 0, 0, 0, time.UTC)
 
 func validOpenConnectProfile() Profile {
@@ -32,7 +32,7 @@ func TestAnOpenConnectProfileWithoutAProtocolSpeaksAnyConnect(t *testing.T) {
 	}
 }
 
-// 装置が配る既定経路もDNSも入れない。経路は接続先ひとつぶんだけにする。
+// VPNサーバーが配る既定経路もDNSも入れない。経路は接続先ひとつぶんだけにする。
 //
 // openconnect が呼ぶ script はイメージに焼いてある。設定を置く tmpfs は noexec
 // なので、そこへ書いたものは実行できない。
@@ -64,9 +64,9 @@ func TestTheOpenConnectServerIsPassedAfterTheEndOfOptions(t *testing.T) {
 	}
 }
 
-// 二段目を聞いてくる装置には、決めた語をそのまま送る。
+// 二要素認証の入力を求めるVPNサーバーには、決めた語をそのまま送る。
 //
-// openconnect は、パスワードの次の質問にも標準入力の次の行を使う。装置ごとに
+// openconnect は、パスワードの次の質問にも標準入力の次の行を使う。VPNサーバーごとに
 // 違うフォームの名前を当てにしない。
 func TestTheApprovalWordIsSentAsTheSecondAnswer(t *testing.T) {
 	profile := validOpenConnectProfile()
@@ -80,10 +80,10 @@ func TestTheApprovalWordIsSentAsTheSecondAnswer(t *testing.T) {
 	}
 }
 
-// 何も聞かずに通知だけ出す装置へは、何も送らない。
+// 何も求めずに通知だけ出すVPNサーバーへは、何も送らない。
 //
-// パスワードを受け取った時点で装置が Duo を鳴らし、承認されるまで応答を返さない
-// 構成がある。ここで空の行を送ると、二段目を聞く装置に「空の答え」を渡すことに
+// パスワードを受け取った時点でVPNサーバーが Duo を鳴らし、承認されるまで応答を返さない
+// 構成がある。ここで空の行を送ると、二要素認証の入力を求めるVPNサーバーに「空の答え」を渡すことに
 // なり、認証が失敗した理由が分からなくなる。
 func TestNothingIsSentWhenTheDeviceOnlyWaitsForApproval(t *testing.T) {
 	profile := validOpenConnectProfile()
@@ -98,7 +98,7 @@ func TestNothingIsSentWhenTheDeviceOnlyWaitsForApproval(t *testing.T) {
 
 // 承認を待つことは、コンテナのログにも書く。
 //
-// 何も聞いてこない装置では、承認するまで出力が止まる。理由が書いていないと、
+// 何も求めてこないVPNサーバーでは、承認するまで出力が止まる。理由が書いていないと、
 // 止まったのか待っているのかを利用者が区別できない。
 func TestTheContainerIsToldThatItWaitsForApproval(t *testing.T) {
 	profile := validOpenConnectProfile()
@@ -113,7 +113,7 @@ func TestTheContainerIsToldThatItWaitsForApproval(t *testing.T) {
 
 // 承認を待つ経路は、普通の経路より長く待つ。
 //
-// 通知に気づいて、電話を開いて、承認するまでを見込む。同じ長さで打ち切ると、
+// 通知に気づいて、スマートフォンを開いて、承認するまでを見込む。同じ長さで打ち切ると、
 // 押す前に畳んでしまう。
 func TestAnApprovedRouteIsGivenLongerToComeUp(t *testing.T) {
 	profile := validOpenConnectProfile()
@@ -158,19 +158,19 @@ func TestTheTOTPCodeIsMadeForTheMomentItIsHandedOver(t *testing.T) {
 	}
 }
 
-// TOTP を選んだのに種が無ければ、繋ぎに行かない。
+// TOTP を選んだのにシークレットが無ければ、接続しない。
 func TestTOTPAsTheSecondFactorNeedsItsSeed(t *testing.T) {
 	profile := validOpenConnectProfile()
 	profile.OpenConnect.SecondFactor = SecondFactorTOTP
 
 	if err := profile.ValidateSecrets(Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}}); err == nil {
-		t.Fatal("種が無いまま繋ごうとした")
+		t.Fatal("シークレットが無いまま接続しようとした")
 	}
 }
 
-// 二段目が無い装置へは、空の行を送らない。
+// 二要素認証の入力を求めないVPNサーバーへは、空の行を送らない。
 //
-// 空行を送ると、二段目を聞く装置に「空の答え」を渡すことになり、失敗の理由が
+// 空行を送ると、二要素認証の入力を求めるVPNサーバーに「空の答え」を渡すことになり、失敗の理由が
 // 分からなくなる。
 func TestNoSecondAnswerIsSentWhenTheDeviceAsksOnlyOnce(t *testing.T) {
 	document := decodeAgentDocument(t, validOpenConnectProfile(), Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}})
@@ -186,18 +186,18 @@ func TestAnOpenConnectProfileIsRefusedWhenItCannotBecomeARoute(t *testing.T) {
 		name   string
 		change func(*OpenConnectSettings)
 	}{
-		{"装置が空", func(settings *OpenConnectSettings) { settings.Server = "" }},
-		{"装置に空白", func(settings *OpenConnectSettings) { settings.Server = "vpn example jp" }},
+		{"サーバーが空", func(settings *OpenConnectSettings) { settings.Server = "" }},
+		{"サーバーに空白", func(settings *OpenConnectSettings) { settings.Server = "vpn example jp" }},
 		// 先頭が - の値は、openconnect がオプションとして読む。
-		{"装置が --script= で始まる", func(settings *OpenConnectSettings) { settings.Server = "--script=id>/tmp/x" }},
-		{"装置が -s で始まる", func(settings *OpenConnectSettings) { settings.Server = "-s/bin/true" }},
-		{"装置が --config= で始まる", func(settings *OpenConnectSettings) { settings.Server = "--config=/dev/stdin" }},
-		{"利用者名が空", func(settings *OpenConnectSettings) { settings.Username = "" }},
+		{"サーバーが --script= で始まる", func(settings *OpenConnectSettings) { settings.Server = "--script=id>/tmp/x" }},
+		{"サーバーが -s で始まる", func(settings *OpenConnectSettings) { settings.Server = "-s/bin/true" }},
+		{"サーバーが --config= で始まる", func(settings *OpenConnectSettings) { settings.Server = "--config=/dev/stdin" }},
+		{"ユーザー名が空", func(settings *OpenConnectSettings) { settings.Username = "" }},
 		{"知らない方式", func(settings *OpenConnectSettings) { settings.Protocol = "openvpn" }},
-		{"指紋の形が違う", func(settings *OpenConnectSettings) { settings.ServerCertificate = "abc123" }},
-		{"指紋がsha1", func(settings *OpenConnectSettings) { settings.ServerCertificate = "sha1:abc123" }},
-		{"指紋に空白", func(settings *OpenConnectSettings) { settings.ServerCertificate = "sha256:a b" }},
-		{"知らない二段目", func(settings *OpenConnectSettings) { settings.SecondFactor = "sms-maybe" }},
+		{"フィンガープリントの形式が違う", func(settings *OpenConnectSettings) { settings.ServerCertificate = "abc123" }},
+		{"フィンガープリントがsha1", func(settings *OpenConnectSettings) { settings.ServerCertificate = "sha1:abc123" }},
+		{"フィンガープリントに空白", func(settings *OpenConnectSettings) { settings.ServerCertificate = "sha256:a b" }},
+		{"未対応の二要素認証の方法", func(settings *OpenConnectSettings) { settings.SecondFactor = "sms-maybe" }},
 		{"合図の語に空白", func(settings *OpenConnectSettings) {
 			settings.SecondFactor = SecondFactorApprove
 			settings.ApprovalWord = "push now"
@@ -245,7 +245,7 @@ func TestOpenConnectNeedsItsPasswordBeforeConnecting(t *testing.T) {
 	}
 }
 
-// 見せるログには、openconnect のパスワードも二段目の種も現れない。
+// 見せるログには、openconnect のパスワードもTOTPのシークレットも現れない。
 func TestShownLogsHideTheOpenConnectPassword(t *testing.T) {
 	secrets := Secrets{OpenConnect: &OpenConnectSecrets{
 		Password:   "fixture-password",

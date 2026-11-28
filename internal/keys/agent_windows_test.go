@@ -48,7 +48,7 @@ func TestTheWindowsAgentReadsNoEnvironmentToFindItsPipe(t *testing.T) {
 	}
 }
 
-// 宛先に資格情報は現れない。エラーもログもこの文字列を含むので、そこに秘密が
+// 宛先に認証情報は現れない。エラーもログもこの文字列を含むので、そこに秘密が
 // 混ざる余地を残さない。
 func TestTheWindowsAgentPipeNameCarriesNothingPrivate(t *testing.T) {
 	t.Parallel()

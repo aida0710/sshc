@@ -30,7 +30,7 @@ func TestOpeningAnSSHSessionStartsNoProcess(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &opened); err != nil {
 		t.Fatal(err)
 	}
-	// 開いたものは閉じる。閉じれば、まだ握手の途中の接続もそこで止まる。
+	// 開いたものは閉じる。閉じれば、まだハンドシェイクの途中の接続もそこで止まる。
 	defer readBody(t, f.do(http.MethodDelete, "/api/v1/terminal/sessions/"+opened.Session.ID, nil))
 
 	if launched := f.terminal.launched(); len(launched) != 0 {

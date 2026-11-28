@@ -195,7 +195,7 @@ func (openVPNBackend) waitsForApproval(Profile) bool { return false }
 // そのパスを OpenVPN へ渡す。引数にも環境変数にも置かない。
 type openVPNDocument struct {
 	Config string `json:"config"`
-	// Servers は、agent が先に名前解決を確かめるサーバーである。どれも引けなければ、
+	// Servers は、agent が先に名前解決を確かめるサーバーである。どれも名前解決できなければ、
 	// OpenVPN を起動せずに理由を返す。
 	Servers  []string `json:"servers"`
 	Username string   `json:"username,omitempty"`

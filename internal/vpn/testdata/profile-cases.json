@@ -522,7 +522,7 @@
       "reason": "format"
     },
     {
-      "name": "l2tp の利用者名が空",
+      "name": "l2tp のユーザー名が空",
       "profile": {
         "name": "office",
         "backend": "l2tp_ipsec",
@@ -535,7 +535,7 @@
       "reason": "required"
     },
     {
-      "name": "l2tp の利用者名に引用符がある",
+      "name": "l2tp のユーザー名に引用符がある",
       "profile": {
         "name": "office",
         "backend": "l2tp_ipsec",
@@ -637,7 +637,7 @@
       "reason": "format"
     },
     {
-      "name": "openconnect の利用者名が空",
+      "name": "openconnect のユーザー名が空",
       "profile": {
         "name": "campus",
         "backend": "openconnect",
@@ -650,7 +650,7 @@
       "reason": "required"
     },
     {
-      "name": "openconnect の利用者名に改行がある",
+      "name": "openconnect のユーザー名に改行がある",
       "profile": {
         "name": "campus",
         "backend": "openconnect",
@@ -677,7 +677,7 @@
       "reason": "unsupported"
     },
     {
-      "name": "openconnect の証明書の指紋に接頭辞が無い",
+      "name": "openconnect の証明書のフィンガープリントに接頭辞が無い",
       "profile": {
         "name": "campus",
         "backend": "openconnect",
@@ -691,7 +691,7 @@
       "reason": "format"
     },
     {
-      "name": "openconnect の証明書の指紋に空白がある",
+      "name": "openconnect の証明書のフィンガープリントに空白がある",
       "profile": {
         "name": "campus",
         "backend": "openconnect",
@@ -705,7 +705,7 @@
       "reason": "format"
     },
     {
-      "name": "openconnect の二段目の答え方を知らない",
+      "name": "openconnect の二要素認証の方法が未対応",
       "profile": {
         "name": "campus",
         "backend": "openconnect",

@@ -22,17 +22,17 @@ import (
 type Session struct {
 	// input は、端末から打たれたバイト列である。
 	//
-	// 握手のあいだは問いの結果として読まれ、シェルが始まったあとは
+	// ハンドシェイクのあいだは問いの結果として読まれ、シェルが始まったあとは
 	// リモートの stdin へ流れる。切り替えは要らない。順番に起きるからである。
 	input *InputBuffer
-	// reader と writer は、端末へ出ていくバイト列である。握手のあいだの
+	// reader と writer は、端末へ出ていくバイト列である。ハンドシェイクのあいだの
 	// 問いも、シェルの出力も、同じ道を通る。
 	reader *io.PipeReader
 	writer *io.PipeWriter
 	// shellOutput は、writer へ流れるもののうち、リモートのシェルが書いたものだけを見張りへ渡す。
 	shellOutput shellOutput
 
-	// cancel は、まだ握手の途中なら、それごと止める。
+	// cancel は、まだハンドシェイクの途中なら、それごと止める。
 	//
 	// 閉じたセッションが繋ぎ続けてはならない。届かないアドレスへの接続は
 	// タイムアウトまで goroutine とソケットを保持する。
@@ -222,7 +222,7 @@ func (s *Session) Announce(message string) { s.trace.announce("%s", message) }
 
 // Write は、打たれたバイト列を受け取る。
 //
-// 握手のあいだは問いの結果になり、シェルが始まったあとはリモートへ流れる。
+// ハンドシェイクのあいだは問いの結果になり、シェルが始まったあとはリモートへ流れる。
 // 決して待たない。問いが出ていない間に打たれた文字で WebSocket の
 // 読み手が止まると、その接続全体が固まる。
 func (s *Session) Write(b []byte) (int, error) { return s.input.Write(b) }
@@ -291,7 +291,7 @@ func (s *Session) CheckTransport(limit time.Duration) (answered bool) {
 	if errors.Is(err, context.Canceled) {
 		return false
 	}
-	s.closingTrace.say(connectionlog.Detailed, "回線が変わったあと、SSH接続が応答しないので切断します：%v", err)
+	s.closingTrace.say(connectionlog.Detailed, "ネットワークの切り替え後にSSH接続が応答しないため、切断します：%v", err)
 	_ = client.Close()
 	return false
 }

@@ -89,7 +89,7 @@ func (s *Service) configuredBindingVersion() (remoteBinding, uint64, error) {
 	return s.binding, s.bindingVersion, nil
 }
 
-// Configured は、バケットと資格情報が設定されているかを報告する。
+// Configured は、バケットと認証情報が設定されているかを報告する。
 func (s *Service) Configured() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

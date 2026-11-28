@@ -312,7 +312,7 @@ integration-sshd-relax:
 	done
 	@echo "sshd accepts repeated connections from one address"
 
-# 統合テスト用の資格情報と鍵は実行時に生成し、終了時に削除する。
+# 統合テスト用の認証情報と鍵は実行時に生成し、終了時に削除する。
 integration-down:
 	docker rm -f sshc-s3 sshc-sshd sshc-sshd-destination sshc-sshd-totp >/dev/null 2>&1 || true
 	docker network rm $(INTEGRATION_NETWORK) >/dev/null 2>&1 || true

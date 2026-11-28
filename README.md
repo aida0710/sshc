@@ -87,10 +87,10 @@ sshc help                    # すべてのコマンド
 - パスワード、鍵のパスフレーズ、TOTPのセットアップキーをVaultに保存し、Terminal、SFTP、CLIで再利用する認証情報の管理
 - 選んだSSH接続だけを専用のVPN経由で接続する、接続ごとのVPN（WireGuard、L2TP/IPsec、OpenConnect、OpenVPN、IKEv2/IPsec。Dockerを使用）
 - セッション、ホスト、ファイル、スニペット、設定を横断するコマンド検索（Search）
-- S3互換ストレージを使った、エンドツーエンド暗号化（E2EE）のスナップショット同期。復号できるのは同じ同期キーを設定したマシンだけ
+- S3互換ストレージを使った、エンドツーエンド暗号化（E2EE）のスナップショット同期。復号できるのは同じ暗号化キーを設定したマシンだけ
 - SSH、SFTP、Serial、Telnet、同期、VPN、OTP、Terminal操作のCLI
 
-機能とセキュリティ上の制限は[利用者向けドキュメント](https://aida0710.github.io/sshc/)にまとめています。内部設計は[docs/design.md](docs/design.md)を参照してください。
+機能とセキュリティ上の制限は[ユーザー向けドキュメント](https://aida0710.github.io/sshc/)にまとめています。内部設計は[docs/design.md](docs/design.md)を参照してください。
 
 ## 開発
 
@@ -107,13 +107,13 @@ make integration
 make integration-down
 ```
 
-`make test`は、gofmt、go vet、Goのテスト（raceを含む）、Android向けのビルド、使われていない関数の検査、staticcheck（Linux・Windows・macOS・Androidのコードを解析）、足したコメントの言語の検査、Oxlint、Webの単体テストと型検査を実行します。`make verify-generated`は、生成物がコミット済みの内容と一致するかを確かめます。CIはこの2つの検査に加えて、Android APK、VPNのコンテナイメージ、統合テスト、利用者向けサイトのビルド、依存の脆弱性、主要画面のアクセシビリティを確かめます。E2Eの全体はCIでは実行しないため、画面を変えたときは`make e2e`も実行してください。
+`make test`は、gofmt、go vet、Goのテスト（raceを含む）、Android向けのビルド、使われていない関数の検査、staticcheck（Linux・Windows・macOS・Androidのコードを解析）、足したコメントの言語の検査、Oxlint、Webの単体テストと型検査を実行します。`make verify-generated`は、生成物がコミット済みの内容と一致するかを確かめます。CIはこの2つの検査に加えて、Android APK、VPNのコンテナイメージ、統合テスト、ユーザー向けサイトのビルド、依存の脆弱性、主要画面のアクセシビリティを確かめます。E2Eの全体はCIでは実行しないため、画面を変えたときは`make e2e`も実行してください。
 
 コードのコメントは日本語で書きます。`make test`は、`origin/main`と分かれた所から作業ツリーまでの変更で足したコメントに、かなも漢字も含まず英単語が3つ以上並ぶ行があれば失敗します。比べる先は`make test COMMITS_BASE=<コミット>`で変えられます。CIの「Web checks」も、同じスクリプトで変更の差分を検査します。英語の仕様の引用のように英語のまま残す行は、前の行に`comment-language-exempt: 理由`と日本語で理由を書きます。
 
 `make check-commits`は、ブランチのコミットメッセージに、AIツールが追加する帰属の行（`Co-Authored-By`など）や社内のURLが無いかを検査します。コミットが1つのときは、squashでその件名がmainのコミットの件名になるので、件名の形も検査します。PRのタイトル（`<type>(<scope>): <日本語の要約>`）と本文は、PRのCIの「Pull request text」が同じスクリプトで検査します。本文を編集したときは、この検査だけを実行し直します。
 
-組み立てたWeb UI（`internal/ui/dist/app`）はリポジトリに入れていません。`make build`が組み立ててからバイナリに埋め込みます（画面だけなら`npm run build --prefix web`）。画面を組み立てずに作ったバイナリ（`go install`など）は、画面の代わりにそのことを知らせるだけなので、利用者にはリリースの成果物かHomebrewを案内してください。利用者向けサイトは`pages/`にあり、`npm run build`で検証できます。
+組み立てたWeb UI（`internal/ui/dist/app`）はリポジトリに入れていません。`make build`が組み立ててからバイナリに埋め込みます（画面だけなら`npm run build --prefix web`）。画面を組み立てずに作ったバイナリ（`go install`など）は、画面の代わりにそのことを知らせるだけなので、ユーザーにはリリースの成果物かHomebrewを案内してください。ユーザー向けサイトは`pages/`にあり、`npm run build`で検証できます。
 
 ## License
 

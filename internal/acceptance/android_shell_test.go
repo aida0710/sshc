@@ -287,7 +287,7 @@ func TestTheAndroidShellBridgesDeviceSpecificWebFeatures(t *testing.T) {
 		}
 	}
 	if strings.Contains(activity, "Log.e(TAG, entrance") {
-		t.Error("資格情報を含み得るentrance URLをlogcatへ出している")
+		t.Error("認証情報を含み得るentrance URLをlogcatへ出している")
 	}
 }
 

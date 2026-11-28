@@ -121,7 +121,7 @@ var ManualSteps = []string{
 	"Confirm the file still contains one key per line and that no key was split or duplicated.",
 }
 
-// Plan は、リモートホスト上で何かが走る前にユーザーが確認する内容。
+// Plan は、接続先で何かが走る前にユーザーが確認する内容。
 type Plan struct {
 	Alias       string
 	User        string

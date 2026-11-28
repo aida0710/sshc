@@ -77,7 +77,7 @@ func NewManager(workspace *Workspace, now func() time.Time, random io.Reader) *M
 // 永続的にステージし、そのうえでエントリをひとつずつ適用する。
 //
 // Commit は自動では巻き戻さない。失敗すると保留中のジャーナルが残るので、ユーザー
-// は「完了させる」か「復元する」かを選べる。複数のファイルが関わるとき、それが
+// は History の［完了する］か［取り消す］かを選べる。複数のファイルが関わるとき、それが
 // 唯一の誠実な選択肢である。
 func (m *Manager) Commit(request Request) (Result, error) {
 	result, err := m.commit(request, commitMode{})

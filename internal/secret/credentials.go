@@ -17,7 +17,7 @@ func (s *Service) mutateVault(mutate func(*Vault) error) error {
 	})
 }
 
-// Credentials は、両方の種別のすべての資格情報名と、その使用先を列挙する。
+// Credentials は、両方の種別のすべての認証情報の名前と、その使用先を列挙する。
 //
 // 名前と使用先だけで、値は決して返さない。これは各画面が読むものであり、秘密を
 // 読める画面があれば、それは侵害されたブラウザがそこから秘密を読める画面だという
@@ -43,7 +43,7 @@ func (s *Service) Credentials() (map[Kind]map[string][]string, error) {
 	return listed, nil
 }
 
-// SetCredential は、資格情報を作るか、その値を置き換える。
+// SetCredential は、認証情報を作るか、その値を置き換える。
 //
 // 置き換えは、共有された秘密をローテーションする方法である。その名前を指している
 // すべての subject が新しい値を読む。名前が存在する理由そのものだ。
@@ -51,7 +51,7 @@ func (s *Service) SetCredential(kind Kind, name, value string) error {
 	return s.mutateVault(func(vault *Vault) error { return vault.Set(kind, name, value) })
 }
 
-// Credential は、明示的な表示・編集操作に限って名前付き資格情報の値を返す。
+// Credential は、明示的な表示・編集操作に限って名前付きの認証情報の値を返す。
 // 一覧や割り当て確認は Credentials を使い、この境界を通らない。
 func (s *Service) Credential(kind Kind, name string) (string, error) {
 	s.mutex.Lock()
@@ -70,7 +70,7 @@ func (s *Service) Credential(kind Kind, name string) (string, error) {
 	return value, nil
 }
 
-// CredentialEvidence は、一度限りの表示確認を現在の資格情報へ結び付ける。
+// CredentialEvidence は、一度限りの表示確認を現在の認証情報へ結び付ける。
 // 値そのものを session manager に保持せず、名前・種別・現在値のダイジェストだけを渡す。
 func (s *Service) CredentialEvidence(kind Kind, name string) (string, error) {
 	value, err := s.Credential(kind, name)
@@ -133,12 +133,12 @@ func (s *Service) UpdateCredential(kind Kind, currentName, nextName, value strin
 	})
 }
 
-// DeleteCredential は資格情報を忘れる。何かがそれを指しているあいだは拒否する。
+// DeleteCredential は認証情報を忘れる。何かがそれを指しているあいだは拒否する。
 func (s *Service) DeleteCredential(kind Kind, name string) error {
 	return s.mutateVault(func(vault *Vault) error { return vault.Delete(kind, name) })
 }
 
-// AssignCredential は、subject を同じ種別の資格情報に向ける。種別が防護である。
+// AssignCredential は、subject を同じ種別の認証情報に向ける。種別が防護である。
 // 他方の種別の名前が現れるマップは存在しない。
 func (s *Service) AssignCredential(kind Kind, subject, name string) error {
 	if kind == KindPassword || kind == KindTOTP {
@@ -147,7 +147,7 @@ func (s *Service) AssignCredential(kind Kind, subject, name string) error {
 	return s.mutateVault(func(vault *Vault) error { return vault.Assign(kind, subject, name) })
 }
 
-// BoundAssignment は、経路に束縛される資格情報（パスワード・TOTP）を alias に
+// BoundAssignment は、経路に束縛される認証情報（パスワード・TOTP）を alias に
 // 割り当てる要求。Binding は割り当てを確認したときの解決済み接続先。
 type BoundAssignment struct {
 	Kind    Kind
@@ -156,7 +156,7 @@ type BoundAssignment struct {
 	Binding string
 }
 
-// AssignBoundCredential は名前付きの資格情報を、alias の現在の解決済み接続先に
+// AssignBoundCredential は名前付きの認証情報を、alias の現在の解決済み接続先に
 // 束縛して割り当てる。パスワードと TOTP は同じ境界を共有する。
 func (s *Service) AssignBoundCredential(assignment BoundAssignment) error {
 	if !validAuthenticationBinding(assignment.Binding) {
@@ -170,7 +170,7 @@ func (s *Service) AssignBoundCredential(assignment BoundAssignment) error {
 	})
 }
 
-// UnassignCredential は subject の参照を忘れ、資格情報自体は残す。
+// UnassignCredential は subject の参照を忘れ、認証情報自体は残す。
 func (s *Service) UnassignCredential(kind Kind, subject string) error {
 	return s.mutateVault(func(vault *Vault) error {
 		vault.Unassign(kind, subject)

@@ -13,7 +13,7 @@ import (
 type (
 	// Client は、スナップショットを置きに行く相手である。
 	Client = objectstore.Client
-	// Credentials は、その相手に名乗る資格情報である。ワークスペースへは書かれない。
+	// Credentials は、その相手に名乗る認証情報である。ワークスペースへは書かれない。
 	Credentials = objectstore.Credentials
 )
 
@@ -29,7 +29,7 @@ var (
 	// ErrRefused は、相手が受け付けなかったことのうち、下の4つの個別の拒否に
 	// 当たらないものを報告する。4つはこれに一致しない。
 	ErrRefused = objectstore.ErrRefused
-	// ErrAuthenticationFailed は、object storeが資格情報を認証できなかったことを報告する。
+	// ErrAuthenticationFailed は、object storeが認証情報を受け付けなかったことを報告する。
 	ErrAuthenticationFailed = objectstore.ErrAuthenticationFailed
 	// ErrAccessDenied は、object storeが同期先へのアクセスを許可しなかったことを報告する。
 	ErrAccessDenied = objectstore.ErrAccessDenied

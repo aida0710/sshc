@@ -6,8 +6,8 @@ import (
 )
 
 // networkRetryInterval は、OS が回線について何も言わないマシン（PC）で、回線が戻ったかを確かめる
-// 間隔である。ルートの無い接続はパケットを出さずにすぐ失敗するので、短くても負担にならない。これが
-// PC の「戻ったらすぐ」の遅れの上限になる。
+// 間隔である。ルートの無い接続はパケットを出さずにすぐ失敗するので、短くても負担にならない。これが、
+// PC でネットワークが復旧してから再接続するまでの遅れの上限になる。
 const networkRetryInterval = 5 * time.Second
 
 // transportCheckLimit は、回線が変わったあと、接続が応答するのを待つ上限である。応答が無ければ
@@ -77,7 +77,7 @@ func (s *Session) skipWaitAfterNetworkChange(attempt, limit int, now func() time
 	s.mutex.Lock()
 	s.showReconnectingLocked(ReconnectView{Attempt: attempt + 1, Limit: limit, RetryAt: now()})
 	s.mutex.Unlock()
-	s.publish([]byte("\r\n[sshc] 回線が変わったので、すぐ再接続します。\r\n"))
+	s.publish([]byte("\r\n[sshc] ネットワークが切り替わったため、再接続します。\r\n"))
 	return true
 }
 
@@ -134,5 +134,5 @@ func (s *Session) announceNetworkWait(attempt, limit int, now func() time.Time) 
 	if !reasonWritten {
 		lead = reconnectLead(attempt)
 	}
-	s.publish(fmt.Appendf(nil, "\r\n[sshc] %sネットワークが戻ったらすぐ再接続します。\r\n", lead))
+	s.publish(fmt.Appendf(nil, "\r\n[sshc] %sネットワークが復旧したら再接続します。\r\n", lead))
 }

@@ -134,7 +134,7 @@ func isTimeout(err error) bool {
 	return errors.As(err, &timeout) && timeout.Timeout()
 }
 
-// describe は、秘密情報を含まないユーザー向け説明を組み立てる。
+// describe は、シークレットを含まないユーザー向けの説明を組み立てる。
 func describe(err error, probe sshclient.Probe) string {
 	var builder strings.Builder
 	builder.WriteString(err.Error())

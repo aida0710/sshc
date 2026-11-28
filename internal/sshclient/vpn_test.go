@@ -56,7 +56,7 @@ func TestAVPNTargetIsRefusedWhenTheEngineHasNoVPNTransport(t *testing.T) {
 	}
 }
 
-// ProxyCommand はこの機械で走る。VPN の中には居ないので、両方は指定できない。
+// ProxyCommand はこのマシンで走る。VPN の中には居ないので、両方は指定できない。
 func TestAVPNTargetWithAProxyCommandIsRefused(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})
@@ -80,7 +80,7 @@ func TestAVPNTargetWithAProxyCommandIsRefused(t *testing.T) {
 	}
 }
 
-// 踏み台の向こうのホップは、手前の SSH 接続の中を通る。この機械の VPN は効かない。
+// 踏み台の向こうのホップは、手前の SSH 接続の中を通る。このマシンの VPN は効かない。
 func TestAVPNOnAHopBeyondAJumpIsRefused(t *testing.T) {
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}})

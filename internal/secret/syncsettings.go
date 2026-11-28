@@ -10,7 +10,7 @@ import (
 )
 
 // SettingsPath は、マスターパスワードで暗号化したオブジェクトストア設定の保存先。
-// 同期先への資格情報がスナップショットに含まれないよう、vault とは別に保存する。
+// 同期先への認証情報がスナップショットに含まれないよう、vault とは別に保存する。
 const SettingsPath = "sshc/sync-settings"
 
 // SyncSettings は、オブジェクトストアが必要とするもの。
@@ -27,7 +27,7 @@ type SyncSettings struct {
 	Direction       string `json:"direction,omitempty"`
 	// Auto は、この設置で自動同期を入れてあるか。
 	//
-	// 他の同期の設定と同じ場所に住む。巡回に必要なものは、鍵も資格情報も
+	// 他の同期の設定と同じ場所に住む。巡回に必要なものは、鍵も認証情報も
 	// この入切も、すべて保管庫が開いてから読める。閉じている間は何も読めず、
 	// 何も起きない。それがこの機能の唯一の条件である。
 	Auto bool `json:"auto,omitempty"`

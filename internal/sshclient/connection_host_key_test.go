@@ -155,7 +155,7 @@ func TestSubsystemConnectionFollowsStrictHostKeyCheckingLikeTheTerminal(t *testi
 	}
 }
 
-// ホスト鍵に答えられる人がいても、認証の入力は尋ねない。SFTP は保存済みの資格情報だけで繋ぐ。
+// ホスト鍵に答えられる人がいても、認証の入力は尋ねない。SFTP は保存済みの認証情報だけで繋ぐ。
 func TestSubsystemConnectionThatCanAskAboutAHostKeyStillAsksForNoPassword(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "hunter2"})
 	dialer := dialerFor(t, server, sshclient.Auth{})

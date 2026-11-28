@@ -53,7 +53,7 @@ var settingsSectionsSchema9 = []string{"embeddedTerminal", "fileTransfers", "bac
 //
 //   - 再接続・接続のログ・OSC 52、転送の自動再接続と完了した転送を消すまで、背景画像の容量は全体の設定へ。
 //   - それ以外の設定とさし色は標準のプリセットへ。
-//   - schema 9 の設定の組はプリセットへ。組に無かったエンジンの設定（上限・開始ディレクトリ・シェル）と
+//   - schema 9 の terminalPresets はプリセットへ。terminalPresets に無かったエンジンの設定（上限・開始ディレクトリ・シェル）と
 //     転送の設定とさし色は、標準のプリセットの値で埋める（schema 9 ではそれが効いていたので）。
 //   - 転送の処理を止めていたか（processingStopped）は捨てる。マシンの今の状態で、schema 9 からは
 //     どのマシンのものか分からない。

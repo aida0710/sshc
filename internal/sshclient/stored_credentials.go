@@ -72,7 +72,7 @@ func (offer *totpOffer) take(question string) (string, bool) {
 
 func (offer *totpOffer) wasOffered() bool { return offer.offered }
 
-// storedCredentials は、ひとつの接続で自動入力に使う保存済みの資格情報である。
+// storedCredentials は、ひとつの接続で自動入力に使う保存済みの認証情報である。
 type storedCredentials struct {
 	password *passwordOffer
 	totp     *totpOffer

@@ -483,7 +483,7 @@ func holdsBackupPrivilege(t *testing.T) bool {
 		t.Fatal(err)
 	}
 	// 名前ではなく LUID で照合する。特権の表示名は環境で翻訳されうるが、
-	// LUID はこの機械の中で一意である。名前から LUID を引いて、持っている
+	// LUID はこのマシンの中で一意である。名前から LUID を引いて、持っている
 	// ものと突き合わせる。
 	bypassing := make(map[windows.LUID]bool, 2)
 	for _, name := range []string{"SeBackupPrivilege", "SeRestorePrivilege"} {

@@ -8,7 +8,7 @@ import (
 )
 
 // PasswordMutationKind は、接続作成が vault に行う変更を表す。専用パスワードと
-// 名前付き資格情報は保存構造が異なるため、単なるオプションフィールドの組ではなく
+// 名前付きの認証情報は保存構造が異なるため、単なるオプションフィールドの組ではなく
 // 判別可能な種類として運ぶ。
 type PasswordMutationKind string
 

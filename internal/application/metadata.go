@@ -367,7 +367,7 @@ func ValidateMetadata(metadata Metadata) error {
 }
 
 // validateEmbeddedTerminal は、埋め込みターミナルの設定が範囲の中かを確かめる。nil は
-// 何も設定していないこととして通す。設定の組の中身にも同じ決まりを使う。
+// 何も設定していないこととして通す。プリセットの中身にも同じ決まりを使う。
 func validateEmbeddedTerminal(settings *EmbeddedTerminal) error {
 	if settings == nil {
 		return nil

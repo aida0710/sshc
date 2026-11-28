@@ -55,6 +55,19 @@ describe("commentLinesOf", () => {
     );
   });
 
+  it("コメントのある行の、コメントを除いた残りを返す。文字列の中の // は残りに入る", () => {
+    const source = ['reason := "// 接続に失敗しました" // 理由', "/* 一行目", "二行目 */ port := 22"].join("\n");
+    const lines = commentLinesOf(source, "go");
+    assert.deepEqual(
+      [...lines].map(([number, { code }]) => [number, code]),
+      [
+        [1, 'reason := "// 接続に失敗しました" '],
+        [2, ""],
+        [3, " port := 22"],
+      ],
+    );
+  });
+
   it("Go の文字列・rune・raw string の中の // をコメントにしない", () => {
     const source = [
       'url := "https://pelican.example/" // 文字列の後',

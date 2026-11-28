@@ -60,7 +60,7 @@ func TestSchema9SettingsMoveToTheGlobalSettingsAndTheStandardPreset(t *testing.T
 	}
 }
 
-// schema 9 の組には、組に入れられなかったエンジンの設定が無い。schema 9 では標準の値が効いていた
+// schema 9 の terminalPresets には、エンジンの設定を入れられなかった。schema 9 では標準の値が効いていた
 // ので、プリセットへ移すときに標準の値で埋める。
 func TestSchema9SetsBecomePresetsFilledFromTheStandardOne(t *testing.T) {
 	migrated, err := migrateMetadataFromSchema9([]byte(metadataSchema9))

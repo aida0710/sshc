@@ -428,7 +428,7 @@ func (s *Service) RecoverCompatibleBackup(passphrase string) error {
 }
 
 // ResetUnsupported は、正しいmaster passwordで復号できるがschemaだけが扱えない
-// vaultを空の現行vaultへ置き換える。SSH設定と鍵は変更せず、同期資格情報は古いvault
+// vaultを空の現行vaultへ置き換える。SSH設定と鍵は変更せず、同期の認証情報は古いvault
 // 鍵へ結び付いているため同じtransactionで外す。同期設定は明示的なreset契約に従い、
 // 開けない旧世代の内側暗号文をbackupにも残さない。
 func (s *Service) ResetUnsupported(passphrase string) error {

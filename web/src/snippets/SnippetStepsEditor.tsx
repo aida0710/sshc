@@ -13,7 +13,7 @@ const stepColumns = "@xl/steps:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] @x
 // fieldCaption names a field above it while the steps take three lines; on one line the column heads name them.
 const fieldCaption = "text-xs text-ink-faint @xl/steps:sr-only";
 
-// SnippetStepsEditor は、手順のスニペットの手順を並べて編集する。1行が1つの手順で、待つ文字列・送る文字列・
+// SnippetStepsEditor は、手順のスニペットの手順を並べて編集する。1行が1つの手順で、待機する文字列・送信する文字列・
 // Enter・省略可と、並べ替えと削除の「…」を持つ。
 export function SnippetStepsEditor({ steps, onChange }: { steps: SnippetStep[]; onChange: (next: SnippetStep[]) => void }) {
   const t = useTranslate();

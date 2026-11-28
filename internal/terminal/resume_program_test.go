@@ -62,7 +62,7 @@ func TestAShellWithNoKnownDirectoryOffersNoTapAndSaysWhereToRunTheCommand(t *tes
 
 	first.exit(transportLost)
 	testwait.Until(t, func() bool { return len(spy.seen()) == 2 && session.View().State == terminal.StateConnected })
-	said := "動かしていたフォルダで claude --continue を実行してください"
+	said := "実行していたフォルダで claude --continue を実行してください"
 	testwait.Until(t, func() bool { return strings.Contains(string(snapshotOf(session)), said) })
 	if hint := session.View().Resume; hint != nil {
 		t.Errorf("Resume = %+v, but running it here would miss the conversation", hint)
@@ -79,7 +79,7 @@ func TestAShellThatNeverMovedDoesNotTellWhereTheProgramRan(t *testing.T) {
 	first.exit(transportLost)
 	testwait.Until(t, func() bool { return len(spy.seen()) == 2 && session.View().State == terminal.StateConnected })
 	testwait.Until(t, func() bool {
-		return strings.Contains(string(snapshotOf(session)), "動かしていたフォルダで claude --continue")
+		return strings.Contains(string(snapshotOf(session)), "実行していたフォルダで claude --continue")
 	})
 	if hint := session.View().Resume; hint != nil {
 		t.Errorf("Resume = %+v", hint)

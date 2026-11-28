@@ -37,7 +37,7 @@ const (
 	logShellOpenedNote  = "ローカルシェルを開きました。"
 	logReconnectedNote  = "再接続しました。"
 	logDisconnectedNote = "接続が切れました。"
-	logEndedNote        = "セッションが終わりました。"
+	logEndedNote        = "セッションが終了しました。"
 )
 
 // logOpenFailedNotice は、ファイルを作れなかったので、このセッションのログを残さないことを、ターミナルで伝える。

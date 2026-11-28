@@ -129,7 +129,7 @@ func realInstallationAt(t *testing.T, objectPath string, files map[string]string
 }
 
 // connectionGate は、実際のS3 clientのtransportだけを切断する。復帰時は同じclient、
-// 同じ資格情報、同じSeaweedFS endpointを通るので、再設定で状態を作り直してはいない。
+// 同じ認証情報、同じSeaweedFS endpointを通るので、再設定で状態を作り直してはいない。
 type connectionGate struct {
 	offline atomic.Bool
 	base    http.RoundTripper

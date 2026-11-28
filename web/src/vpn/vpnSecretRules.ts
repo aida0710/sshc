@@ -16,7 +16,7 @@ import { wireGuardSecretsFieldError } from "./wireGuardSecretRules";
 // バイト数で数えるので、ここもバイト数で数える。API の maxLength（文字数で数える）より厳しいか
 // 同じなので、ここを通った値は送る前の検査でも断られない。
 //
-// OpenConnect の TOTP の種の形（base32 または otpauth の URI）は、engine（internal/totp）だけが
+// OpenConnect の TOTP のシークレットの形式（base32 または otpauth の URI）は、engine（internal/totp）だけが
 // 確かめる。engine の断りは、ほかの項目と同じく欄ごとの理由として出る。
 
 // VPNSecretKey は、フォームの欄ひとつに入力するシークレットである。

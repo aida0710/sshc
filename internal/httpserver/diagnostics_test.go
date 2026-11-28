@@ -49,7 +49,7 @@ func newDiagnosticsServer(t *testing.T) (*echo.Echo, session.Credentials, *recor
 	}
 
 	// 認証の継ぎ目を記録係で置き換える。この検査はネットワークへ出ない。
-	// 本物の握手を見るのは internal/sshclient の側である。
+	// 本物のハンドシェイクを見るのは internal/sshclient の側である。
 	probe := &recordingProbe{}
 	service := diagnostics.NewService(workspace, probe.dial, effective.LocalFacts{})
 	service.Reachability = diagnostics.Reachability{

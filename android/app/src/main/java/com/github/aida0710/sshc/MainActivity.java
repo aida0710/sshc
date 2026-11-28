@@ -382,7 +382,7 @@ public final class MainActivity extends ComponentActivity {
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                // fragment に資格情報を含む可能性があるため、URL はログへ出さない。
+                // fragment に認証情報を含む可能性があるため、URL はログへ出さない。
                 Log.e(TAG, "web resource failed: mainFrame=" + request.isForMainFrame()
                         + " code=" + error.getErrorCode());
             }
