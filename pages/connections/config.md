@@ -5,7 +5,7 @@ description: ~/.ssh/config、Include、Matchの構造を保ちながら表示・
 
 # SSH Config
 
-接続設定の基準となるデータは`~/.ssh/config`です。sshcは`Include`の階層をたどり、ワイルドカードを含まない個別の`Host`エイリアスを接続先として表示しています。
+接続設定の基準となるデータは`~/.ssh/config`です。sshcは`Include`の階層をたどり、ワイルドカードを含まない`Host`を接続先として表示しています。
 
 ## 設定ファイルを編集する
 

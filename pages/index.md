@@ -48,7 +48,7 @@ docsHome:
           image: /images/connections-desktop.png
           alt: OpenSSH接続を整理するConnections画面
           body: >-
-            <code>~/.ssh/config</code>の<code>Include</code>や<code>Match</code>をそのまま扱っています。通常の<code>ssh</code>やVS Codeでも、同じエイリアスを使えます。
+            <code>~/.ssh/config</code>の<code>Include</code>や<code>Match</code>をそのまま扱っています。通常の<code>ssh</code>やVS Codeでも、同じ接続名を使えます。
         - title: 認証情報は一度保存
           image: /images/credentials-desktop.png
           alt: 保存済みパスワードを複数ホストへ割り当てたVault画面
