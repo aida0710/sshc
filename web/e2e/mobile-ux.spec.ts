@@ -247,6 +247,13 @@ async function mockTerminalSession(page: Page, output: string, redraw = ""): Pro
   return messages;
 }
 
+// openMockedTerminal は、mockTerminalSession のセッションのターミナルを開き、見えている行を返す。
+async function openMockedTerminal(page: Page, installation: Installation): Promise<Locator> {
+  await openApplication(page, installation);
+  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  return drawnRows(page).filter({ visible: true });
+}
+
 test("quick navigation and terminal keys remain available in portrait and touch landscape", async ({ page, installation }) => {
   const messages = await mockTerminalSession(page, "Mobile terminal demo\r\nFiles: projects/  archives/  report.txt\r\n$ ");
   await page.setViewportSize({ width: 390, height: 640 });
@@ -1365,8 +1372,7 @@ const keyBarKeyMinimumWidth = 39;
 test("all the keys of the key bar show on a phone 412px wide, each as tall as a finger", async ({ page, installation }) => {
   await mockTerminalSession(page, "$ ");
   await page.setViewportSize({ width: 412, height: 800 });
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  await openMockedTerminal(page, installation);
   const keys = page.getByLabel("On-screen keys", { exact: true });
   await expect(keys).toBeVisible();
   const buttons = await keys.getByRole("button").all();
@@ -1386,8 +1392,7 @@ test("all the keys of the key bar show on a phone 412px wide, each as tall as a 
 test("on a narrower phone the row of keys scrolls sideways and 「…」 stays in sight", async ({ page, installation }) => {
   const messages = await mockTerminalSession(page, "Mobile terminal demo\r\n$ ");
   await page.setViewportSize({ width: 360, height: 640 });
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  await openMockedTerminal(page, installation);
   const keys = page.getByLabel("On-screen keys", { exact: true });
   await expect(keys).toBeVisible();
   for (const button of await keys.getByRole("button").all()) {
@@ -1608,8 +1613,7 @@ for (const program of fullScreenPrograms) {
     const messages = await mockTerminalSession(page, `${longOutput}\r\n`, `${program.modes}\x1b[2J\x1b[HFull-screen program`);
     // A flick coasts on after the finger lifts. With reduced motion it does not, so each swipe sends only its own turns.
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await openApplication(page, installation);
-    await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+    await openMockedTerminal(page, installation);
     const screen = page.getByRole("region", { name: "Terminal for Demo shell" });
     await expect(screen).toContainText("Full-screen program");
     const box = await screen.boundingBox();
@@ -1655,9 +1659,7 @@ test("a swipe across the page opens the navigation and a swipe back closes it", 
 
 test("a sideways swipe over the terminal opens the navigation, and one up and down scrolls the terminal", async ({ page, installation }) => {
   await mockTerminalSession(page, longOutput);
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
-  const rows = drawnRows(page).filter({ visible: true });
+  const rows = await openMockedTerminal(page, installation);
   await expect(rows).toContainText("line 80");
   const box = (await rows.boundingBox())!;
   const navigation = page.locator("[data-app-navigation]");
@@ -1675,9 +1677,7 @@ test("a sideways swipe over the terminal opens the navigation, and one up and do
 // 自分でスクロールするプログラムも動かさない。
 test("a slanted swipe that opens the navigation leaves the terminal's scrollback where it was", async ({ page, installation }) => {
   await mockTerminalSession(page, longOutput);
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
-  const rows = drawnRows(page).filter({ visible: true });
+  const rows = await openMockedTerminal(page, installation);
   await expect(rows).toContainText("line 80");
   const box = (await rows.boundingBox())!;
   const shownBefore = await rows.innerText();
@@ -1690,8 +1690,7 @@ test("a slanted swipe that opens the navigation leaves the terminal's scrollback
 test("a slanted swipe that opens the navigation sends no wheel turns to a full-screen program", async ({ page, installation }) => {
   const program = fullScreenPrograms[0]!;
   const messages = await mockTerminalSession(page, `${longOutput}\r\n`, `${program.modes}\x1b[2J\x1b[HFull-screen program`);
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
+  await openMockedTerminal(page, installation);
   const screen = page.getByRole("region", { name: "Terminal for Demo shell" });
   await expect(screen).toContainText("Full-screen program");
   const box = (await screen.boundingBox())!;
@@ -1700,13 +1699,6 @@ test("a slanted swipe that opens the navigation sends no wheel turns to a full-s
   await expect(page.locator("[data-app-navigation]")).toHaveAttribute("data-navigation-open", "true");
   expect(countSent(messages, program.forward) + countSent(messages, program.back)).toBe(0);
 });
-
-// openMockedTerminal は、mockTerminalSession のセッションのターミナルを開き、見えている行を返す。
-async function openMockedTerminal(page: Page, installation: Installation): Promise<Locator> {
-  await openApplication(page, installation);
-  await page.getByRole("navigation", { name: "Quick navigation" }).getByRole("link", { name: "Terminal", exact: true }).tap();
-  return drawnRows(page).filter({ visible: true });
-}
 
 // 入力欄・キーバー・貼り付けの確認から送ったものは、xterm.js の入力を通らない。それでも xterm.js に打ったときと
 // 同じく、上へスクロールしていれば一番下へ戻り、返事の出る最後の行が見える。
