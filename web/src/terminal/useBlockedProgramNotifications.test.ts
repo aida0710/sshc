@@ -6,6 +6,7 @@ import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import { en } from "../i18n/messages";
 import { installFakeBrowserNotification } from "../ui/fakeBrowserNotification";
+import { playNotificationSound } from "./notificationSound";
 import { useBlockedProgramNotifications } from "./useBlockedProgramNotifications";
 
 vi.mock("./notificationSound", () => ({ playNotificationSound: vi.fn() }));
@@ -35,6 +36,7 @@ describe("useBlockedProgramNotifications", () => {
     bridge = fakeAndroidBridge();
     window.sshcAndroid = bridge;
     vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    vi.mocked(playNotificationSound).mockClear();
   });
 
   afterEach(() => {
@@ -42,52 +44,70 @@ describe("useBlockedProgramNotifications", () => {
     vi.restoreAllMocks();
   });
 
-  it("notifies a person who is away when a program starts waiting, as the session's row says it", () => {
-    const { rerender } = renderWith(working);
+  // Android のアプリでこの hook が動くのは、リモートセッションを選んでいるときだけ（App.tsx）。
+  describe("in the Android app on a remote session", () => {
+    // 許可待ちとターミナルのどちらのチャンネルにも出していない。
+    function expectNoNotification() {
+      expect(bridge.showBlockedProgramNotification).not.toHaveBeenCalled();
+      expect(bridge.showNotification).not.toHaveBeenCalled();
+    }
 
-    rerender({ session: waiting, on: true });
+    it("notifies a person who is away on the channel for waiting programs, as the session's row says it", () => {
+      const { rerender } = renderWith(working);
 
-    expect(bridge.showNotification).toHaveBeenCalledExactlyOnceWith("sshc-terminal-one", "orchid（Claude Code）", "Needs permission · approve Bash");
-  });
+      rerender({ session: waiting, on: true });
 
-  it("says nothing new while the program goes on waiting", () => {
-    const { rerender } = renderWith(working);
-    rerender({ session: waiting, on: true });
-    rerender({ session: { ...waiting, programStatus: { state: "blocked", message: "other words", version: 3 } }, on: true });
+      expect(bridge.showBlockedProgramNotification).toHaveBeenCalledExactlyOnceWith("sshc-terminal-one", "orchid（Claude Code）", "Needs permission · approve Bash");
+      expect(bridge.showNotification).not.toHaveBeenCalled();
+    });
 
-    expect(bridge.showNotification).toHaveBeenCalledOnce();
-  });
+    it("leaves the sound to that channel's Android settings", () => {
+      const { rerender } = renderWith(working);
 
-  it("takes the notification back once the program stops waiting", () => {
-    const { rerender } = renderWith(working);
-    rerender({ session: waiting, on: true });
-    expect(bridge.cancelNotification).not.toHaveBeenCalled();
+      rerender({ session: waiting, on: true });
 
-    rerender({ session: working, on: true });
+      expect(playNotificationSound).not.toHaveBeenCalled();
+    });
 
-    expect(bridge.cancelNotification).toHaveBeenCalledExactlyOnceWith("sshc-terminal-one");
-  });
+    it("says nothing new while the program goes on waiting", () => {
+      const { rerender } = renderWith(working);
+      rerender({ session: waiting, on: true });
+      rerender({ session: { ...waiting, programStatus: { state: "blocked", message: "other words", version: 3 } }, on: true });
 
-  it("takes a program already waiting at first sight as history", () => {
-    renderWith(waiting);
-    expect(bridge.showNotification).not.toHaveBeenCalled();
-  });
+      expect(bridge.showBlockedProgramNotification).toHaveBeenCalledOnce();
+    });
 
-  it("leaves a person looking at sshc to the session's row", () => {
-    vi.spyOn(document, "hasFocus").mockReturnValue(true);
-    const { rerender } = renderWith(working);
+    it("takes the notification back once the program stops waiting", () => {
+      const { rerender } = renderWith(working);
+      rerender({ session: waiting, on: true });
+      expect(bridge.cancelNotification).not.toHaveBeenCalled();
 
-    rerender({ session: waiting, on: true });
+      rerender({ session: working, on: true });
 
-    expect(bridge.showNotification).not.toHaveBeenCalled();
-  });
+      expect(bridge.cancelNotification).toHaveBeenCalledExactlyOnceWith("sshc-terminal-one");
+    });
 
-  it("does nothing when another part of the app notifies", () => {
-    const { rerender } = renderWith(working, false);
+    it("takes a program already waiting at first sight as history", () => {
+      renderWith(waiting);
+      expectNoNotification();
+    });
 
-    rerender({ session: waiting, on: false });
+    it("leaves a person looking at sshc to the session's row", () => {
+      vi.spyOn(document, "hasFocus").mockReturnValue(true);
+      const { rerender } = renderWith(working);
 
-    expect(bridge.showNotification).not.toHaveBeenCalled();
+      rerender({ session: waiting, on: true });
+
+      expectNoNotification();
+    });
+
+    it("does nothing when another part of the app notifies", () => {
+      const { rerender } = renderWith(working, false);
+
+      rerender({ session: waiting, on: false });
+
+      expectNoNotification();
+    });
   });
 
   describe("in a browser", () => {
@@ -99,13 +119,14 @@ describe("useBlockedProgramNotifications", () => {
       vi.unstubAllGlobals();
     });
 
-    it("shows a browser notification that opens the session", () => {
+    it("shows a browser notification with the notification sound, and the notification opens the session", () => {
       const { shown } = installFakeBrowserNotification();
       const open = vi.fn();
       const { rerender } = renderWith(working, true, open);
 
       rerender({ session: waiting, on: true });
 
+      expect(playNotificationSound).toHaveBeenCalledOnce();
       expect(shown).toHaveLength(1);
       expect(shown[0]?.title).toBe("orchid（Claude Code）");
       expect(shown[0]?.options.body).toContain("approve Bash");

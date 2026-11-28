@@ -1,17 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
-import { closeBrowserNotification, showBrowserNotification } from "../ui/browserNotifications";
 import { isUserAway } from "../ui/userAway";
 import { subscribeAndroidNotificationOpened } from "../android/native";
-import { sessionIdFromNotificationTag, terminalNotificationTag } from "./notificationTags";
-import { playNotificationSound, primeNotificationSound } from "./notificationSound";
+import { sessionIdFromNotificationTag } from "./notificationTags";
+import { primeNotificationSound } from "./notificationSound";
+import { announceSessionNotification, closeSessionNotification } from "./sessionNotificationAnnouncement";
 import { nextTerminalNotification, type UnreadSessions } from "./terminalNotifications";
 import { useOpenNotifiedSession } from "./useOpenNotifiedSession";
-
-function closeSessionNotifications(sessionId: string): void {
-  closeBrowserNotification(terminalNotificationTag(sessionId));
-}
 
 // useTerminalNotifications turns notificationVersion changes into unread marks,
 // sounds and browser notifications. A pane the user is looking at never
@@ -59,7 +55,7 @@ export function useTerminalNotifications(
     const id = activeSession.current;
     if (id === null || isUserAway()) return;
     // Seen in the terminal, so the system's notification centre need not keep it.
-    closeSessionNotifications(id);
+    closeSessionNotification(id);
     setUnread((current) => {
       if (!current.has(id)) return current;
       const next = new Set(current);
@@ -83,7 +79,7 @@ export function useTerminalNotifications(
     for (const id of seen.current.keys()) {
       if (currentIds.has(id)) continue;
       seen.current.delete(id);
-      closeSessionNotifications(id);
+      closeSessionNotification(id);
     }
     for (const session of sessions) {
       const previous = seen.current.get(session.id);
@@ -103,13 +99,7 @@ export function useTerminalNotifications(
       // Sounds and browser notifications only reach a user who is away;
       // a visible app already shows the unread mark.
       if (!away) continue;
-      playNotificationSound();
-      showBrowserNotification({
-        title: notification.title,
-        body: notification.body,
-        tag: terminalNotificationTag(session.id),
-        onClick: () => openNotifiedSession(session.id),
-      });
+      announceSessionNotification({ sessionId: session.id, notification, openNotifiedSession });
     }
     setUnread((current) => {
       if ([...current].every((id) => currentIds.has(id))) return current;

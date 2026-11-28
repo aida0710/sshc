@@ -47,8 +47,9 @@ final class TerminalNotifications {
 
     /**
      * プログラムが利用者を待っていることの通知。待たせている間は作業が進まないので、音を鳴らして
-     * 画面の上にも出す。エンジンが出すので Web 画面は音を鳴らさず、重要度はチャンネルで決まる
-     * （Android の設定から利用者が変えられる）。
+     * 画面の上にも出す。このマシンのエンジンのセッションの待ちは BlockedProgramWatcher が、リモートセッションの
+     * 待ちと、見ないまま sshc を離れた待ちは Web 画面が出す。音と重要度はチャンネルで決まり（Android の設定から
+     * 利用者が変えられる）、Web 画面は音を鳴らさない。
      */
     void showBlockedProgram(String tag, String title, String body) {
         NotificationManager manager = AppNotifications.channel(

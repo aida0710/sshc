@@ -1,10 +1,8 @@
 import { useEffect, useRef } from "react";
 import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
-import { closeBrowserNotification, showBrowserNotification } from "../ui/browserNotifications";
 import { isUserAway } from "../ui/userAway";
-import { terminalNotificationTag } from "./notificationTags";
-import { playNotificationSound } from "./notificationSound";
+import { announceBlockedProgram, closeSessionNotification } from "./sessionNotificationAnnouncement";
 import { blockedProgramNotification } from "./terminalNotifications";
 import { useOpenNotifiedSession } from "./useOpenNotifiedSession";
 
@@ -33,12 +31,10 @@ export function useBlockedProgramNotifications(
       const wasBlocked = blocked.current.get(session.id);
       blocked.current.set(session.id, notification !== null);
       if (wasBlocked === undefined || wasBlocked === (notification !== null)) continue;
-      const tag = terminalNotificationTag(session.id);
       if (notification === null) {
-        closeBrowserNotification(tag);
+        closeSessionNotification(session.id);
       } else if (isUserAway()) {
-        playNotificationSound();
-        showBrowserNotification({ ...notification, tag, onClick: () => openNotifiedSession(session.id) });
+        announceBlockedProgram({ sessionId: session.id, notification, openNotifiedSession });
       }
     }
   }, [enabled, sessions, t, openNotifiedSession]);
