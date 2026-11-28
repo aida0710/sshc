@@ -785,8 +785,8 @@ export const ja = {
   "splitView.resize": "分割表示の比率を変更",
   "splitView.drop": "ここに分割して表示",
   "splitView.maxPanes": "最大{count}ペイン",
-  "splitView.tooNarrow": "横に分割する幅がありません",
-  "splitView.tooShort": "縦に分割する高さがありません",
+  "splitView.tooNarrow": "左右に並べる幅が足りません",
+  "splitView.tooShort": "上下に並べる高さが足りません",
 
   "workspace.heading": "Workspaces",
   "workspace.headingActions": "ワークスペースの一覧の操作",
