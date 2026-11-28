@@ -7,7 +7,7 @@ outline: false
 docsHome:
   name: sshc
   lead: >-
-    sshcは、SSHとローカルシェルを扱うターミナルアプリです。<br>今あるOpenSSH設定をそのまま使えます。リモートセッション、Claude Codeの状態の表示、SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPNに加え、利用者が用意したS3互換ストレージを介した、エンドツーエンド暗号化（E2EE）の同期にも対応しています。
+    sshcは、SSHとローカルシェルを扱うターミナルアプリです。<br>今あるOpenSSH設定をそのまま使えます。リモートセッション、Claude Codeの状態の表示、SFTP、認証情報の再利用、AIエージェント向けCLI、接続ごとのVPNに加え、ユーザーが用意したS3互換ストレージを介した、エンドツーエンド暗号化（E2EE）の同期にも対応しています。
   platforms:
     label: 対応OS
     text: macOS / Windows / Linux / Android
@@ -73,7 +73,7 @@ docsHome:
           image: /images/sync-desktop-ja.png
           alt: 暗号化スナップショットを管理するSync画面
           body: >-
-            接続設定、認証情報、スニペット、同期対象のSSH鍵をこのマシン上で暗号化し、利用者が用意したS3互換ストレージを介して同期できます。復号できるのは、同じ暗号化キーを設定したマシンだけです。ストレージ事業者もsshcの開発者も、内容を平文では取得できません。
+            接続設定、認証情報、スニペット、同期対象のSSH鍵をこのマシン上で暗号化し、ユーザーが用意したS3互換ストレージを介して同期できます。復号できるのは、同じ暗号化キーを設定したマシンだけです。ストレージ事業者もsshcの開発者も、内容を平文では取得できません。
         - title: 接続ごとのVPN
           image: /images/vpn-desktop-ja.png
           alt: VPNプロファイルと使用する接続を並べたVPN画面
