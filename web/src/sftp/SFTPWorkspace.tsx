@@ -2,6 +2,7 @@ import { useEngineApis } from "../shell/engineApis";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../ui/icons";
 import type { HostEntry } from "../api/config";
+import type { HostLook } from "../shell/useDeclaredConfig";
 import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -72,6 +73,7 @@ export function SFTPWorkspace({
   aliases,
   hostVPN,
   hosts,
+  hostLook,
   target = null,
   onTargetHandled = () => undefined,
   onNavigationBlockerChange,
@@ -84,6 +86,8 @@ export function SFTPWorkspace({
   // hostVPN は、alias ごとに通るVPN経路の名前である。
   hostVPN?: Map<string, string>;
   hosts?: HostEntry[];
+  // hostLook は、何も開いていないペインのカードに出す、接続先の OS と色。
+  hostLook?: Map<string, HostLook>;
   target?: SFTPTarget | null;
   onTargetHandled?: (request: number) => void;
   onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
@@ -443,6 +447,7 @@ export function SFTPWorkspace({
                     onChooseHost={() => requestHostChange(tab)}
                     {...(hosts === undefined ? {} : { hosts })}
                     {...(hostVPN === undefined ? {} : { hostVPN })}
+                    {...(hostLook === undefined ? {} : { hostLook })}
                     target={ownsTarget ? target : null}
                     initialLocation={restored === undefined || restored.alias === "" ? null : restored}
                     initialSort={tab.sort}

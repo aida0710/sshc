@@ -3,12 +3,12 @@ import { useSftpTransferManager } from "./useSftpTransferManager";
 import { sourceFor } from "./sftpSource";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import type { HostEntry } from "../api/config";
+import type { HostLook } from "../shell/useDeclaredConfig";
 import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { useAndroidBackStop } from "../ui/useAndroidBackStop";
-import { EmptyState } from "../ui/EmptyState";
 import { PanelState } from "../ui/PanelState";
 import { Button, Notice } from "../ui/surface";
 import { nextSort } from "../ui/tableSort";
@@ -53,12 +53,13 @@ import { SFTPWaitingOverlay } from "./SFTPWaitingOverlay";
 import { isImeComposing } from "../ui/imeComposition";
 import { MenuItem } from "../ui/MenuItems";
 import { MenuPanel } from "../ui/MenuPanel";
-import { SFTPQuickHosts } from "./SFTPQuickHosts";
+import { SFTPNoHostChosen } from "./SFTPNoHostChosen";
 import { literalTextEntry } from "../ui/softKeyboard";
 import { IconButton } from "../ui/IconButton";
 import { ActionArea } from "../ui/ActionArea";
 
 const noHosts: HostEntry[] = [];
+const noHostLook: ReadonlyMap<string, HostLook> = new Map();
 
 export type { SFTPSort, SFTPSortState } from "./sftpEntrySort";
 
@@ -91,6 +92,7 @@ export function SFTPPanel({
   aliases,
   hosts = noHosts,
   hostVPN,
+  hostLook = noHostLook,
   target = null,
   initialLocation = null,
   initialSort = { key: "name", direction: "ascending" },
@@ -116,6 +118,8 @@ export function SFTPPanel({
   hosts?: HostEntry[];
   // hostVPN は、alias ごとに通るVPN経路の名前である。
   hostVPN?: Map<string, string>;
+  // hostLook は、何も開いていないペインのカードに出す、接続先の OS と色。
+  hostLook?: ReadonlyMap<string, HostLook>;
   target?: SFTPTarget | null;
   // Where a restored tab should reopen. Applied once, when the declared
   // aliases have arrived and can vouch for the host.
@@ -181,6 +185,8 @@ export function SFTPPanel({
   });
   const { alias, path, connected, entries, problem, setProblem, pendingPath, listingFailed, source } = browser;
   const can = source?.can;
+  // noHostChosen は、まだ接続先を選んでいないペイン。すぐ開ける接続先のカードを並べる（SFTPNoHostChosen）。
+  const noHostChosen = alias === "" || can === undefined;
   const local = source?.local === true;
   const holdsConnection = connected && !local;
   useEffect(() => {
@@ -561,7 +567,8 @@ export function SFTPPanel({
         <div
           aria-label={t(local ? "sftp.local.dropZone" : "sftp.dropZone")}
           aria-busy={busy}
-          className={`relative flex min-h-0 min-w-0 flex-col transition-shadow ${mobileInteraction ? "bg-card" : ""} ${transfers.dragging ? "ring-2 ring-inset ring-accent" : ""}`}
+          // スマホではファイルの一覧を card の地に置く。接続先のカードは、Home と同じくページの地の上に並べるので地を付けない。
+          className={`relative flex min-h-0 min-w-0 flex-col transition-shadow ${mobileInteraction && !noHostChosen ? "bg-card" : ""} ${transfers.dragging ? "ring-2 ring-inset ring-accent" : ""}`}
           onDragEnter={transfers.dragEnter}
           onDragOver={transfers.dragOver}
           onDragLeave={transfers.dragLeave}
@@ -671,14 +678,10 @@ export function SFTPPanel({
           ) : null}
           {waitingFor === null ? null : <SFTPWaitingOverlay label={waitingFor.label} detail={waitingFor.detail} />}
           <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={list.handleListKeys}>
-            {alias === "" || can === undefined ? (
-              <div className="flex h-full p-4"><EmptyState icon="files" title={t("sftp.noHostChosen")}
-                action={(
-                  <div className="flex flex-col items-center">
-                    {onChooseHost === undefined ? null : <Button kind="primary" onClick={onChooseHost}>{t("sftp.chooseHostAction")}</Button>}
-                    <SFTPQuickHosts aliases={aliases} onChoose={browser.selectHost} />
-                  </div>
-                )} /></div>
+            {noHostChosen ? (
+              <div className="flex h-full p-4">
+                <SFTPNoHostChosen aliases={aliases} hosts={hosts} hostLook={hostLook} onChooseHost={onChooseHost} onChoose={browser.selectHost} />
+              </div>
             ) : !connected && busy ? (
               <SFTPConnectionStatus
                 tone="loading"

@@ -233,6 +233,7 @@ function SectionPage({
         aliases={declared.knownAliases}
         hosts={declared.hosts}
         hostVPN={declared.hostVPN}
+        hostLook={declared.hostLook}
         target={sftpTarget}
         onTargetHandled={onSftpTargetHandled}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}

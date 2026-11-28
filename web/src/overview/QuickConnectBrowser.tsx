@@ -10,12 +10,12 @@ import {
 import { useLanguage } from "../i18n/context";
 import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
-import { tagClass } from "../ui/Tag";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { localStorageKeys } from "../ui/browserStorageKeys";
 import { useStoredValue, type StoredValue } from "../ui/useStoredValue";
 import { ConnectionActions } from "./ConnectionActions";
+import { ConnectionCardBody, connectionCardButton, connectionCardClass, connectionCardGrid, connectionCardGroup } from "../connections/ConnectionCard";
 import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
 import { connectionAddress } from "../connections/connectionAddress";
 import { revealOnHover } from "../ui/ActionMenu";
@@ -132,9 +132,7 @@ export function QuickConnectBrowser({
     const alias = server.identity.alias;
     const recentConnection = recentByAlias.get(alias)?.connection;
     const target = connectionDestination(server);
-    // The last connection is a badge beside the name, so a card that has one is as tall as one that has not.
     const lastConnectedAt = recentConnection === undefined ? null : formatDateTime(recentConnection.lastConnectedAt, locale);
-    const lastConnectedLabel = lastConnectedAt === null ? undefined : t("connection.lastConnected", { at: lastConnectedAt });
     const selected = selectedAlias === alias;
     const opening = launching === alias;
     const connect = () => {
@@ -155,9 +153,7 @@ export function QuickConnectBrowser({
           event.preventDefault();
           trigger.click();
         }}
-        className={`group/row relative min-w-0 rounded-lg border transition-colors ${
-          selected || opening ? "border-accent bg-select-fill" : "border-transparent bg-well hover:border-accent/45"
-        }`}
+        className={connectionCardClass(selected || opening)}
       >
         {/* busy-label-exempt: カードの名前（接続名）は変えず、その下に状態の行として回る印と「接続中…」を足している。 */}
         <button
@@ -183,40 +179,37 @@ export function QuickConnectBrowser({
             event.preventDefault();
             connect();
           }}
-          className="flex w-full min-w-0 items-center gap-3 rounded-lg p-3.5 pr-12 text-left disabled:cursor-wait hover-reveal:pr-3.5"
+          className={`${connectionCardButton} pr-12 disabled:cursor-wait hover-reveal:pr-3.5`}
         >
-          <OperatingSystemIcon os={server.os} colour={server.colour} look="accentTile" />
-          <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-semibold text-ink" title={alias}>{alias}</span>
-              {lastConnectedAt === null || opening ? null : (
-                <span title={lastConnectedLabel} aria-label={lastConnectedLabel}
-                  className={tagClass("accent")}>{lastConnectedAt}</span>
-              )}
-              {server.duplicateAlias ? <span role="img" aria-label={t("browser.duplicateAlias")} className="text-notice-ink"><Icon name="warning" className="size-3.5" /></span> : null}
-            </span>
-            <span className="mt-0.5 block truncate font-mono text-xs text-ink-faint" title={target}>{target}</span>
-            {/* loading-line-exempt: 接続先のカードの状態の行（下の「接続中…」）を読み上げる枠。 */}
-            <span aria-live="polite">
-              {opening ? (
-                // loading-line-exempt: 接続先のカードの状態の行。読み込みではなく、接続していることをカードの中で言う。
-                <span className="mt-1 flex items-center gap-1.5 text-2xs text-ink-muted">
-                  <Spinner className="size-3" />
-                  {t("home.opening")}
-                </span>
-              ) : null}
-            </span>
-          </span>
-          {/* Where the "…" shows only under the pointer (hover-reveal), it appears over the group name; elsewhere the
-              card keeps room for it. A connection in no group shows no name: "no group" would only fill the room. */}
-          {server.group === "" ? null : (
-            <span
-              className="max-w-[30%] shrink-0 truncate text-2xs text-ink-faint transition-opacity duration-150 hover-reveal:group-hover/row:opacity-0 hover-reveal:group-focus-within/row:opacity-0"
-              title={server.group}
-            >
-              {server.group}
-            </span>
-          )}
+          <ConnectionCardBody
+            icon={<OperatingSystemIcon os={server.os} colour={server.colour} look="accentTile" />}
+            name={alias}
+            lastConnected={lastConnectedAt === null || opening ? null : { at: lastConnectedAt, label: t("connection.lastConnected", { at: lastConnectedAt }) }}
+            duplicateAlias={server.duplicateAlias}
+            address={target}
+            status={(
+              // loading-line-exempt: 接続先のカードの状態の行（下の「接続中…」）を読み上げる枠。
+              <span aria-live="polite">
+                {opening ? (
+                  // loading-line-exempt: 接続先のカードの状態の行。読み込みではなく、接続していることをカードの中で言う。
+                  <span className="mt-1 flex items-center gap-1.5 text-2xs text-ink-muted">
+                    <Spinner className="size-3" />
+                    {t("home.opening")}
+                  </span>
+                ) : null}
+              </span>
+            )}
+            // Where the "…" shows only under the pointer (hover-reveal), it appears over the group name; elsewhere the
+            // card keeps room for it. A connection in no group shows no name: "no group" would only fill the room.
+            end={server.group === "" ? null : (
+              <span
+                className={`${connectionCardGroup} transition-opacity duration-150 hover-reveal:group-hover/row:opacity-0 hover-reveal:group-focus-within/row:opacity-0`}
+                title={server.group}
+              >
+                {server.group}
+              </span>
+            )}
+          />
         </button>
         <div className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 ${revealOnHover}`}>
           <ConnectionActions
@@ -344,7 +337,7 @@ export function QuickConnectBrowser({
           aria-label={t("home.connectionList")}
           className={view === "panel"
             // As many 330px cards as the row holds: Home has no width limit (PageBoard wide), so a wide screen adds columns.
-            ? "grid grid-cols-[repeat(auto-fill,minmax(min(100%,330px),1fr))] gap-2.5"
+            ? connectionCardGrid
             : "flex flex-col gap-1"}
         >
           {servers.map(renderServer)}

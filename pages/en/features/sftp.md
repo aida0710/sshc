@@ -44,6 +44,7 @@ The CLI's `get` and `put` use the same HTTP API of the engine as the browser. [H
 
 - Opening the SFTP screen does not connect to a saved server.
 - Choosing a host in the host picker connects right away.
+- A tab with no host chosen shows Local and the four most recently connected hosts as cards, as on Home. Pressing a card connects right away.
 - Restored tabs show their saved host and path without reconnecting in the background, and connect when you press **Connect**.
 - A first connection opens the login user's home directory reported by the SFTP server.
 - It reuses the saved SSH configuration, host keys and credentials, as Terminal does.
