@@ -47,6 +47,10 @@ export function japaneseReadme(): JapanesePage {
   return readJapanesePage(readme);
 }
 
+export function japaneseAgentInstructions(): JapanesePage {
+  return readJapanesePage(agentInstructions);
+}
+
 // READMEと、AGENTS.md（開発の決まり）と、docs/直下の文書。docs/releases（公開済みのリリースノート）と
 // docs/superpowers（作業の計画）は書いた時点の記録なので入れない。
 export function japaneseRepositoryDocuments(): JapanesePage[] {
@@ -54,7 +58,7 @@ export function japaneseRepositoryDocuments(): JapanesePage[] {
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
     .filter((entry) => !datedRecordName.test(entry.name) && entry.name !== termTableDocument)
     .map((entry) => readJapanesePage(join(docsRoot, entry.name)));
-  return [japaneseReadme(), readJapanesePage(agentInstructions), ...docs];
+  return [japaneseReadme(), japaneseAgentInstructions(), ...docs];
 }
 
 export function androidJapaneseLabels(): string[] {

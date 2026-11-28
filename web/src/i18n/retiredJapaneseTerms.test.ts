@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   androidJapaneseLabels,
+  japaneseAgentInstructions,
   japanesePages,
   japaneseReadme,
   japaneseRepositoryDocuments,
@@ -92,8 +93,8 @@ function bareEngineNamesIn(wordings: Wording[]): string[] {
 }
 
 describe("sshcエンジンの呼び方", () => {
-  it("画面、pages、READMEの本文では「sshcエンジン」と書く", () => {
-    const wordings = [...userFacingJapanese(), ...linesOf([japaneseReadme()])];
+  it("画面、pages、README、AGENTS.mdの本文では「sshcエンジン」と書く", () => {
+    const wordings = [...userFacingJapanese(), ...linesOf([japaneseReadme(), japaneseAgentInstructions()])];
     expect(bareEngineNamesIn(wordings)).toEqual([]);
   });
 });
