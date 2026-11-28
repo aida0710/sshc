@@ -4,6 +4,7 @@ import type { TerminalSession } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { MenuGroup, MenuItem } from "../ui/MenuItems";
 import { MenuPanel } from "../ui/MenuPanel";
+import { splitRoomRefusalKey } from "./splitView/splitRoomRefusal";
 
 // A workspace the session can be moved to, already named for this screen.
 export type WorkspaceMoveTarget = { id: string; label: string };
@@ -14,7 +15,8 @@ export function SessionRowMenu({
   session,
   anchorRef,
   canDuplicate,
-  canSplit = false,
+  canSplit = () => false,
+  splitLacksRoom = () => false,
   onSplit,
   onRemoveFromSplit,
   canMoveUp,
@@ -31,7 +33,10 @@ export function SessionRowMenu({
   session: TerminalSession;
   anchorRef: RefObject<HTMLButtonElement | null>;
   canDuplicate: boolean;
-  canSplit?: boolean;
+  // canSplit は、edge の側（右か下）に分割して表示できるかである。
+  canSplit?: (edge: PaneEdge) => boolean;
+  // splitLacksRoom は、分割できない理由が分割表示の広さかどうかである。そのときは項目に理由を出す。
+  splitLacksRoom?: (edge: PaneEdge) => boolean;
   onSplit?: (edge: PaneEdge) => void;
   // onRemoveFromSplit is offered while the session is in a split. The session goes on outside it.
   onRemoveFromSplit?: () => void;
@@ -62,8 +67,10 @@ export function SessionRowMenu({
       </MenuItem>
       {onSplit === undefined ? null : (
         <>
-          <MenuItem disabled={!canSplit} onSelect={choose(() => onSplit("right"))}>{t("splitView.right")}</MenuItem>
-          <MenuItem disabled={!canSplit} onSelect={choose(() => onSplit("bottom"))}>{t("splitView.below")}</MenuItem>
+          {(["right", "bottom"] as const).map((edge) => (
+            <MenuItem key={edge} disabled={!canSplit(edge)} title={!canSplit(edge) && splitLacksRoom(edge) ? t(splitRoomRefusalKey(edge)) : undefined}
+              onSelect={choose(() => onSplit(edge))}>{t(edge === "right" ? "splitView.right" : "splitView.below")}</MenuItem>
+          ))}
         </>
       )}
       {onRemoveFromSplit === undefined ? null : (

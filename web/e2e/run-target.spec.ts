@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, openSettingsPage, test } from "./support/environment";
 import { drawnRowFont, markTerminal, terminalKeyboard } from "./support/terminal";
 
@@ -206,6 +206,25 @@ function terminalSession(id: string, title: string, workspaceId = "default") {
   return { id, kind: "shell", workspaceId, title, startedAt: "2026-10-29T00:00:00Z", state: "connected", problem: "", forwards: [] };
 }
 
+// sshSession は、bastion から接続先 alias へ SSH で接続したセッションである。
+function sshSession(alias: string) {
+  return { ...terminalSession(alias, alias), kind: "ssh", alias };
+}
+
+// answerVPNRouteOnBastion は、bastion の SSH の設定が、aliases の接続先に VPN ルート vpnRoute を付けていると答える。
+// 設定のほかの部分は、このマシンの答えのままにする。stubRunTarget のあとに呼ぶと、こちらの答えが先に使われる。
+async function answerVPNRouteOnBastion(page: Page, { aliases, vpnRoute }: { aliases: readonly string[]; vpnRoute: string }) {
+  await page.route(`**${bastionBase}/config/overview`, async (route) => {
+    const response = await route.fetch({
+      url: new URL("/api/v1/config/overview", route.request().url()).href,
+      headers: { ...route.request().headers(), "sec-fetch-site": "same-origin" },
+    });
+    const overview = await response.json() as { metadata: { hosts?: unknown[] } };
+    overview.metadata.hosts = aliases.map((alias) => ({ identity: { path: "~/.ssh/config", alias }, vpn: vpnRoute }));
+    await route.fulfill({ response, json: overview });
+  });
+}
+
 // stubLocalSessions makes this machine's engine list the sessions given, and add what Home opens to them.
 async function stubLocalSessions(page: Page, sessions: ReturnType<typeof terminalSession>[]) {
   await page.route("**/api/v1/terminal/sessions**", async (route) => {
@@ -392,6 +411,113 @@ test("keeps this machine's split view while a remote session engine is shown", a
   await expect(panes).toHaveCount(2);
   expect(await panes.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-split-view-pane")))).toEqual(splitSessions);
 });
+
+// 札は、縮まないと狭いペインで見出しのボタンに重なる長さにする（VPN プロファイルの名前は48字まで）。
+const vpnRoute = "pelican-office-ikev2-primary-route-build-farm";
+
+// splitRemoteSessionsInRow は、bastion のセッション titles を、左から順に右へ足して分割表示に並べ、そのペインを返す。
+async function splitRemoteSessionsInRow(page: Page, titles: readonly string[]): Promise<Locator[]> {
+  await chooseBastion(page);
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: titles[0]!, exact: true }).click();
+  // 足したセッションが表示中になるので、毎回その右に足す。
+  for (const title of titles.slice(1)) {
+    await navigation.getByRole("button", { name: `Actions for ${title}`, exact: true }).click();
+    await page.getByRole("menuitem", { name: "Show in split view on the right", exact: true }).click();
+  }
+  const panes = page.locator("[data-split-view-pane]");
+  await expect(panes).toHaveCount(titles.length);
+  return panes.all();
+}
+
+test("shows the VPN route whole and clear of the buttons in a pane wide enough for it", async ({ page, installation }) => {
+  const titles = ["web", "api"];
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
+  await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  for (const terminal of await splitRemoteSessionsInRow(page, titles)) {
+    const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+    // この幅では縮めれば入りきるので、札は隠れずに見え、札の箱そのものがボタンの手前で終わる。札の上下も切れない。
+    const chip = terminal.getByText(`VPN: ${vpnRoute}`, { exact: true });
+    const visible = await visibleBox(chip);
+    expect(visible.width).toBeGreaterThan(0);
+    expect(visible.height).toBe(visible.wholeHeight);
+    const box = (await chip.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(find.x);
+  }
+});
+
+test("keeps a long connection name whole in a pane with room for it, hiding the address and the tags beside it instead", async ({ page, installation }) => {
+  const longTitle = "pelican-production-kubernetes-node-pool-a";
+  const titles = [longTitle, "mirage-api"];
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
+  await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const [terminal] = await splitRemoteSessionsInRow(page, titles);
+  // bastion の SSH の設定にこの接続先は無いので、名前の右の行き先も接続名と同じ文字になる。
+  const [name, address] = await terminal!.getByText(longTitle, { exact: true }).all();
+  expect(await isShortened(name!)).toBe(false);
+  const find = (await terminal!.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+  for (const detail of [address!, terminal!.getByText(`VPN: ${vpnRoute}`, { exact: true })]) {
+    const visible = await visibleBox(detail);
+    if (visible.width > 0) expect(visible.right).toBeLessThanOrEqual(find.x);
+  }
+});
+
+test("keeps the connection names in narrow panes' headers whole, and hides the address and the tags before shortening a name", async ({ page, installation }) => {
+  const longTitle = "pelican-production-kubernetes-node-pool-a";
+  const titles = ["mirage-api", "dunlin-db", longTitle];
+  await stubRunTarget(page, { compatibleVersion: localVersion, sessions: titles.map(sshSession) });
+  await answerVPNRouteOnBastion(page, { aliases: titles, vpnRoute });
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await openApplication(page, installation);
+  for (const [index, terminal] of (await splitRemoteSessionsInRow(page, titles)).entries()) {
+    const title = titles[index]!;
+    // bastion の SSH の設定にこの接続先は無いので、名前の右の行き先も接続名と同じ文字になる。
+    await expect(terminal.getByText(title, { exact: true })).toHaveCount(2);
+    const [name, address] = await terminal.getByText(title, { exact: true }).all();
+    const details = [address!, terminal.getByText(`VPN: ${vpnRoute}`, { exact: true })];
+    const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+    for (const detail of details) {
+      const visible = await visibleBox(detail);
+      if (visible.width === 0) continue;
+      expect(visible.right).toBeLessThanOrEqual(find.x);
+      expect(visible.height).toBe(visible.wholeHeight);
+    }
+    if (title !== longTitle) {
+      expect(await isShortened(name!)).toBe(false);
+      continue;
+    }
+    // 名前が入りきらないペインでは、行き先と札は1文字も見えない。
+    expect(await isShortened(name!)).toBe(true);
+    for (const detail of details) expect((await visibleBox(detail)).width).toBe(0);
+  }
+});
+
+// visibleBox は、要素の見えている部分の右端と幅・高さ（px）と、切られる前の要素の高さ（wholeHeight）である。はみ出しを
+// 切る祖先の外は、横も縦も見えないものとする（見出しは入りきらない札を次の行へ折り返して隠すので、縦にも切る）。
+// 見えている部分が無ければ幅と高さは 0。
+async function visibleBox(element: Locator): Promise<{ right: number; width: number; height: number; wholeHeight: number }> {
+  return element.evaluate((node) => {
+    const whole = node.getBoundingClientRect();
+    let { left, right, top, bottom } = whole;
+    for (let ancestor = node.parentElement; ancestor !== null; ancestor = ancestor.parentElement) {
+      const style = getComputedStyle(ancestor);
+      const clip = ancestor.getBoundingClientRect();
+      if (style.overflowX !== "visible") [left, right] = [Math.max(left, clip.left), Math.min(right, clip.right)];
+      if (style.overflowY !== "visible") [top, bottom] = [Math.max(top, clip.top), Math.min(bottom, clip.bottom)];
+    }
+    const shown = right > left && bottom > top;
+    return { right, width: shown ? right - left : 0, height: shown ? bottom - top : 0, wholeHeight: whole.height };
+  });
+}
+
+// isShortened は、文字が入りきらず「…」で切られているか。
+async function isShortened(element: Locator): Promise<boolean> {
+  return element.evaluate((node) => node.scrollWidth > node.clientWidth);
+}
 
 test("frames the whole window and names the engine while a remote session is chosen, on every screen", async ({ page, installation }) => {
   await stubRunTarget(page, { compatibleVersion: localVersion, sessions: [terminalSession("web", "web")] });

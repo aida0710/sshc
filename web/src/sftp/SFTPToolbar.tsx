@@ -151,7 +151,7 @@ export function SFTPToolbar({
           {mobile ? null : <IconButton label={t("sftp.forward")} size="toolbar"
             disabled={busy || locked || !browser.canForward} onClick={() => void browser.forward()}><Icon name="arrowRight" className="size-[15px]" /></IconButton>}
           {pathField}
-          <VPNProfileChip name={vpnProfile} className="max-w-24 truncate" />
+          <VPNProfileChip name={vpnProfile} className="max-w-24" />
           {mobile || pathEditing ? null : <IconButton label={t("sftp.refreshDirectory")} size="toolbar"
             disabled={navigationDisabled} onClick={refresh}><Icon name="sync" className="size-[15px]" /></IconButton>}
           {pathEditing ? null : <>{leading}<div className="flex shrink-0 items-center gap-1">{actions}</div></>}

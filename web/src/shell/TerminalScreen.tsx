@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useRef } from "react";
 import type { TerminalAppearance, TerminalSettings } from "../api/settings";
 import type { TerminalSession, TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
@@ -6,6 +6,7 @@ import { resolveAppearance } from "../terminal/appearance";
 import { TerminalSplitView } from "../terminal/splitView/TerminalSplitView";
 import { defaultRetainedTerminals } from "../terminal/splitView/retainedSessions";
 import type { SplitViewController } from "../terminal/splitView/useSplitView";
+import type { SplitPaneControls } from "../terminal/splitView/paneControls";
 import type { RemotePathAction } from "../sftp/SFTPPanel";
 import { hostSettingsToDrawWith, type HostSettings } from "../terminal/hostSettings";
 import { SessionEngineContext } from "../terminal/sessionDestination";
@@ -14,6 +15,7 @@ import type { ExitReport } from "../terminal/stream";
 import { RouteSkeleton } from "../ui/RouteSkeleton";
 import type { PaneEdge } from "../terminal/splitView/layout";
 import { maximumSplitGroups } from "../terminal/splitView/splitGroups";
+import { splitRoomRefusalKey } from "../terminal/splitView/splitRoomRefusal";
 import { RunTargetConnectingPanel } from "../terminal/RunTargetConnectingPanel";
 import { RunTargetRefusalPanel } from "../terminal/RunTargetRefusalPanel";
 import type { RunTargetLink } from "../terminal/useRunTargetLink";
@@ -97,19 +99,21 @@ export function TerminalScreen({
     document.title = session === null ? "sshc" : `${session.presentation?.displayTitle ?? session.title} · sshc`;
     return () => { document.title = "sshc"; };
   }, [session]);
-  // Why the terminal's 「…」 cannot split beside a session, for its disabled items; undefined when it can.
-  function splitRefusalText(view: SplitViewController, sessionId: string): string | undefined {
-    switch (view.splitRefusal(sessionId)) {
+  // splitRefusalText は、ターミナルの［…］で、セッションの edge の側に分割できない理由（押せない項目に出す）。
+  // 分割できるときは undefined。
+  function splitRefusalText(view: SplitViewController, sessionId: string, edge: PaneEdge): string | undefined {
+    switch (view.splitRefusal(sessionId, edge)) {
       case "ended": return t("splitView.refusedEnded");
       case "groups": return t("splitView.maxGroups", { count: maximumSplitGroups });
       case "sessions": return t("terminal.limitReached", { max: terminalSessions.maxSessions });
+      case "room": return t(splitRoomRefusalKey(edge));
       case null: return undefined;
     }
   }
   // terminalRenderer draws the terminals of one run target: the one shown, or one kept behind it (shownTerminals).
   // A kept terminal is not on the screen whatever the section, and what its stream says about its session is left for
   // the list to say when its run target is shown again: the list this screen holds is another engine's.
-  const terminalRenderer = (shown: ShownTerminals, onScreen: boolean) => function renderTerminal(session: TerminalSession, headerActions: ReactNode, inPane: boolean) {
+  const terminalRenderer = (shown: ShownTerminals, onScreen: boolean) => function renderTerminal(session: TerminalSession, splitPane: SplitPaneControls | undefined, inPane: boolean) {
     const appearance = resolveAppearance(
       session.alias === undefined
         ? undefined
@@ -126,9 +130,9 @@ export function TerminalScreen({
           active={onScreen && visible && activeSessionId === session.id}
           inPane={inPane}
           focusRequest={shown.splitView.state.focusRevision}
-          headerActions={headerActions}
+          splitPane={splitPane}
           {...(shown.splitView.compact ? {} : { onSplit: (edge: PaneEdge) => shown.splitView.requestSplit({ targetSessionId: session.id, edge }) })}
-          splitRefusal={splitRefusalText(shown.splitView, session.id)}
+          splitRefusal={(edge: PaneEdge) => splitRefusalText(shown.splitView, session.id, edge)}
           {...(shown.splitView.groupBySession.has(session.id) ? { onRemoveFromSplit: () => shown.splitView.removeFromSplit(session.id) } : {})}
           api={shown.api}
           {...(shown.runTarget === null ? {} : { runTarget: shown.runTarget })}

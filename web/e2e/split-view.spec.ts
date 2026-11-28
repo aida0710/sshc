@@ -1,7 +1,9 @@
 import type { Locator, Page } from "@playwright/test";
+import { minimumPanePx } from "../src/terminal/splitView/geometry";
 import { changeDisplayLanguage, expect, openApplication, openLocalShell, openSection, test } from "./support/environment";
 import { saveEverything } from "./support/saveBar";
 import { drawnRowsIn, hideTerminalScrollbars, terminalHostBottomOverflow, terminalKeyboard, waitForTerminalLayout } from "./support/terminal";
+import { fixTouchMode } from "./support/touchMode";
 
 function pane(page: Page, sessionId: string): Locator {
   return page.locator(`[data-split-view-pane="${sessionId}"]`);
@@ -32,6 +34,18 @@ async function splitWithMenu(page: Page, title: string, edge: "right" | "below" 
   const action = page.getByRole("menuitem", { name: edge === "right" ? "Show in split view on the right" : "Show in split view below", exact: true });
   await action.focus();
   await action.press("Enter");
+}
+
+// headerButtonNames は、ペインの見出しに並ぶボタンの名前を、左から順に返す。
+async function headerButtonNames(terminal: Locator): Promise<string[]> {
+  const header = terminal.getByRole("button", { name: "Find", exact: true }).locator("xpath=..");
+  return header.getByRole("button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label") ?? ""));
+}
+
+// choosePaneMenuItem は、ペインの見出しの［…］を開き、item を選ぶ。
+async function choosePaneMenuItem(terminal: Locator, item: string) {
+  await terminal.getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await terminal.page().getByRole("menuitem", { name: item, exact: true }).click();
 }
 
 async function runCommand(terminal: Locator, command: string) {
@@ -163,6 +177,105 @@ test("keeps the header's buttons inside a pane of a nested split, however narrow
   expect(close.x + close.width).toBeLessThanOrEqual(bounds.x + bounds.width);
 });
 
+// 長い名前は、見出しで縮まないと右のボタンに重なる。
+const longTitles = [
+  "pelican-production-kubernetes-node-pool-a",
+  "mirage-staging-database-migration-watch",
+  "dunlin-build-runner-for-the-nightly-images",
+  "r100-log-collector-for-the-whole-cluster",
+];
+
+// expectPaneKeepsItsHeader は、ペインが最小幅を保ち、見出しの名前が［Find］に重ならず、
+// ［… を分割表示から外す］がペインの中にあることを確かめる。
+async function expectPaneKeepsItsHeader(terminal: Locator, title: string) {
+  const bounds = (await terminal.boundingBox())!;
+  expect(bounds.width).toBeGreaterThanOrEqual(minimumPanePx.width);
+  const name = (await terminal.getByText(title, { exact: true }).boundingBox())!;
+  const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+  expect(name.x + name.width).toBeLessThanOrEqual(find.x);
+  const close = (await terminal.getByRole("button", { name: `Remove ${title} from split view`, exact: true }).boundingBox())!;
+  expect(close.x + close.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+}
+
+test("keeps each pane its minimum width, its name clear of its buttons and its close button inside, as panes are added on the right", async ({ page, installation }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const ids: string[] = [];
+  for (const title of longTitles) ids.push(await openNamedShell(page, title));
+  await page.getByRole("button", { name: longTitles[0]!, exact: true }).click();
+  // 足したセッションが表示中になるので、毎回その右に足す。
+  for (const title of longTitles.slice(1)) await splitWithMenu(page, title);
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(4);
+  await waitForTerminalLayout(page);
+  for (const [index, id] of ids.entries()) await expectPaneKeepsItsHeader(pane(page, id), longTitles[index]!);
+});
+
+test("keeps each pane its minimum width when the window is narrowed after a divider was dragged", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const [leftTitle, rightTitle] = longTitles as [string, string];
+  const left = await openNamedShell(page, leftTitle);
+  const right = await openNamedShell(page, rightTitle);
+  await page.getByRole("button", { name: leftTitle, exact: true }).click();
+  await splitWithMenu(page, rightTitle);
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
+
+  // 仕切りを右の端まで動かし、右のペインを最小幅にしてから、窓を狭める。
+  const separator = page.getByRole("separator", { name: "Resize split view" });
+  const box = (await separator.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(1270, box.y + box.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await page.setViewportSize({ width: 1000, height: 800 });
+
+  await waitForTerminalLayout(page);
+  await expectPaneKeepsItsHeader(pane(page, left), leftTitle);
+  await expectPaneKeepsItsHeader(pane(page, right), rightTitle);
+});
+
+test("keeps a long name in a pane's header clear of its buttons", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await openApplication(page, installation);
+  const [leftTitle, rightTitle] = longTitles as [string, string];
+  const left = await openNamedShell(page, leftTitle);
+  const right = await openNamedShell(page, rightTitle);
+  await page.getByRole("button", { name: leftTitle, exact: true }).click();
+  await splitWithMenu(page, rightTitle);
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(2);
+  await waitForTerminalLayout(page);
+  await expectPaneKeepsItsHeader(pane(page, left), leftTitle);
+  await expectPaneKeepsItsHeader(pane(page, right), rightTitle);
+});
+
+test("adds a session beside a full row only on the side that has room", async ({ page, installation }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await openApplication(page, installation);
+  const ids: string[] = [];
+  for (const title of longTitles) ids.push(await openNamedShell(page, title));
+  await page.getByRole("button", { name: longTitles[0]!, exact: true }).click();
+  for (const title of longTitles.slice(1, 3)) await splitWithMenu(page, title);
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(3);
+
+  // 3つ並ぶとこの幅は埋まるので、4つ目は右には足せず、下には足せる。
+  const fourth = longTitles[3]!;
+  await page.getByRole("button", { name: `Actions for ${fourth}`, exact: true }).click();
+  const right = page.getByRole("menuitem", { name: "Show in split view on the right", exact: true });
+  await expect(right).toBeDisabled();
+  await expect(right).toHaveAttribute("title", "Not wide enough to split side by side");
+  await expect(page.getByRole("menuitem", { name: "Show in split view below", exact: true })).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await dragSession(page, { title: fourth, target: pane(page, ids[2]!), edge: "right" });
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(3);
+
+  await splitWithMenu(page, fourth, "below");
+  await expect(page.locator("[data-split-view-pane]")).toHaveCount(4);
+  await waitForTerminalLayout(page);
+  for (const [index, id] of ids.entries()) await expectPaneKeepsItsHeader(pane(page, id), longTitles[index]!);
+});
+
 test("takes one session out of a split from the terminal's menu on a phone, and keeps the session", async ({ page, installation }) => {
   await openApplication(page, installation);
   const one = await openNamedShell(page, "Build");
@@ -187,7 +300,7 @@ test("takes one session out of a split from the terminal's menu on a phone, and 
   await expect(sessionRow(page, "Logs")).toHaveCount(1);
 });
 
-test("moves a pane beside another pane's edge by its handle or its row under Split views", async ({ page, installation }) => {
+test("moves a pane beside another pane's edge by its header or its row under Split views", async ({ page, installation }) => {
   await openApplication(page, installation);
   const one = await openNamedShell(page, "Build");
   const two = await openNamedShell(page, "Logs");
@@ -197,9 +310,9 @@ test("moves a pane beside another pane's edge by its handle or its row under Spl
   // Build was added to the right of Logs, the session shown last.
   expect((await build.boundingBox())!.x).toBeGreaterThan((await logs.boundingBox())!.x);
 
-  // Near the bottom edge of Logs, Build's handle moves Build below Logs instead of swapping.
+  // Logs の下の端の近くへ Build の見出し（名前の部分）を落とすと、入れ替えずに Build を Logs の下へ移す。
   const below = (await logs.boundingBox())!;
-  await build.getByRole("button", { name: "Swap Build pane" }).dragTo(logs, { targetPosition: { x: below.width / 2, y: below.height - 12 } });
+  await build.getByText("Build", { exact: true }).dragTo(logs, { targetPosition: { x: below.width / 2, y: below.height - 12 } });
   await expect.poll(async () => (await build.boundingBox())!.y).toBeGreaterThan((await logs.boundingBox())!.y);
   expect((await build.boundingBox())!.x).toBe((await logs.boundingBox())!.x);
 
@@ -209,6 +322,146 @@ test("moves a pane beside another pane's edge by its handle or its row under Spl
   await group.getByRole("listitem").filter({ hasText: "Logs" }).dragTo(build, { targetPosition: { x: right.width - 12, y: right.height / 2 } });
   await expect.poll(async () => (await logs.boundingBox())!.x).toBeGreaterThan((await build.boundingBox())!.x);
   expect((await logs.boundingBox())!.y).toBe((await build.boundingBox())!.y);
+});
+
+test("shows only Find, the menu and the remove button in a pane's header, the last two side by side", async ({ page, installation }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  for (const [id, title] of [[one, "Build"], [two, "Logs"]] as const) {
+    const terminal = pane(page, id);
+    const remove = `Remove ${title} from split view`;
+    expect(await headerButtonNames(terminal)).toEqual(["Find", "More terminal actions", remove]);
+    const find = (await terminal.getByRole("button", { name: "Find", exact: true }).boundingBox())!;
+    const menu = (await terminal.getByRole("button", { name: "More terminal actions", exact: true }).boundingBox())!;
+    const close = (await terminal.getByRole("button", { name: remove, exact: true }).boundingBox())!;
+    // ［…］と［×］の間は、検索と［…］の間と同じだけ空く。見えないボタンが挟まると広がる。
+    expect(close.x - (menu.x + menu.width)).toBeCloseTo(menu.x - (find.x + find.width), 0);
+  }
+});
+
+test("swaps two panes and focuses one from their menus, and keeps the way out of focus in the header", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  const build = pane(page, one);
+  const logs = pane(page, two);
+  expect((await build.boundingBox())!.x).toBeGreaterThan((await logs.boundingBox())!.x);
+
+  const hint = page.getByRole("status").filter({ hasText: "Swap with this pane" });
+  await choosePaneMenuItem(build, "Move pane");
+  await expect(hint).toBeVisible();
+  await choosePaneMenuItem(build, "Cancel move");
+  await expect(hint).toHaveCount(0);
+  await choosePaneMenuItem(build, "Move pane");
+  await choosePaneMenuItem(logs, "Swap with this pane");
+  await expect.poll(async () => (await build.boundingBox())!.x).toBeLessThan((await logs.boundingBox())!.x);
+  await expect(hint).toHaveCount(0);
+
+  await choosePaneMenuItem(build, "Focus pane");
+  await expect(logs).toBeHidden();
+  // 集中表示の間は、戻すボタンを見出しに見えるまま出す。ポインターが見出しの外にあり、フォーカスがターミナルにあっても。
+  await terminalKeyboard(build).focus();
+  const center = (await build.locator("[data-terminal-host]").boundingBox())!;
+  await page.mouse.move(center.x + center.width / 2, center.y + center.height / 2);
+  const exit = build.getByRole("button", { name: "Exit focus", exact: true });
+  expect(await exit.evaluate((button) => getComputedStyle(button).opacity)).toBe("1");
+  expect(await headerButtonNames(build)).toEqual(["Find", "More terminal actions", "Exit focus", "Remove Build from split view"]);
+  // 集中表示の間は入れ替える相手が見えないので、［…］に移動は出さない。
+  await build.getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Move pane", exact: true })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Exit focus", exact: true }).click();
+  await expect(logs).toBeVisible();
+
+  await choosePaneMenuItem(build, "Focus pane");
+  await expect(logs).toBeHidden();
+  await exit.click();
+  await expect(logs).toBeVisible();
+});
+
+test("says how to finish a swap only while a pane chosen from its menu waits, not while a header is dragged", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  const build = pane(page, one);
+  const logs = pane(page, two);
+  const hint = page.getByRole("status").filter({ hasText: "Swap with this pane" });
+
+  // ドラッグの間は、落とす先のペインの上の表示が、どうなるかを言う。メニューで選ぶ案内は合わない。
+  const name = (await build.getByText("Build", { exact: true }).boundingBox())!;
+  const target = (await logs.boundingBox())!;
+  await page.mouse.move(name.x + 4, name.y + name.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 });
+  await expect(logs.getByRole("status").filter({ hasText: "Swap panes" })).toBeVisible();
+  await expect(hint).toHaveCount(0);
+  await page.mouse.up();
+
+  // 選んだあとで別のペインを集中表示すると、選んだペインは見えず、［…］にも取り消しが無いので、選ぶのをやめる。
+  await choosePaneMenuItem(build, "Move pane");
+  await expect(hint).toBeVisible();
+  await choosePaneMenuItem(logs, "Focus pane");
+  await expect(build).toBeHidden();
+  await expect(hint).toHaveCount(0);
+  await choosePaneMenuItem(logs, "Exit focus");
+  await expect(build).toBeVisible();
+  await build.getByRole("button", { name: "More terminal actions", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Move pane", exact: true })).toBeVisible();
+});
+
+test("gives the keyboard to the pane whose header was dragged, whether or not the drop moved it", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  const build = pane(page, one);
+  const logs = pane(page, two);
+
+  // ドラッグは離してもクリックにならないので、見出しのクリックと同じくキーボードを渡さないと、どこにも無くなる。
+  await terminalKeyboard(logs).focus();
+  const own = (await build.boundingBox())!;
+  await build.getByText("Build", { exact: true }).dragTo(build, { targetPosition: { x: own.width / 2, y: own.height / 2 } });
+  await expect.poll(() => focusedPane(page)).toBe(one);
+
+  await terminalKeyboard(logs).focus();
+  await build.getByText("Build", { exact: true }).dragTo(logs);
+  await expect.poll(async () => (await build.boundingBox())!.x).toBeLessThan((await logs.boundingBox())!.x);
+  await expect.poll(() => focusedPane(page)).toBe(one);
+  await page.keyboard.type("echo DRAGGED:$((6 * 7))");
+  await page.keyboard.press("Enter");
+  await expect(build).toContainText("DRAGGED:42");
+  await expect(logs).not.toContainText("DRAGGED:42");
+});
+
+test("lets the name in a pane's header be selected rather than dragged while terminals are used by touch, and moves the pane by it with the mouse", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const one = await openNamedShell(page, "Build");
+  const two = await openNamedShell(page, "Logs");
+  await splitWithMenu(page, "Build");
+  const build = pane(page, one);
+  const logs = pane(page, two);
+  const buildIsRightOfLogs = async () => (await build.boundingBox())!.x > (await logs.boundingBox())!.x;
+  expect(await buildIsRightOfLogs()).toBe(true);
+
+  await fixTouchMode(build, "Use by touch");
+  const name = build.getByText("Build", { exact: true });
+  await name.dragTo(logs);
+  await name.dblclick();
+  await expect.poll(() => page.evaluate(() => document.getSelection()?.toString())).toBe("Build");
+  // ドラッグはペインを動かさない。名前を選んだあとに見るので、落としていれば入れ替わり済みである。
+  expect(await buildIsRightOfLogs()).toBe(true);
+  // ［…］からは、タッチで使う設定でも入れ替えられる。
+  await choosePaneMenuItem(build, "Move pane");
+  await choosePaneMenuItem(logs, "Swap with this pane");
+  await expect.poll(buildIsRightOfLogs).toBe(false);
+
+  await fixTouchMode(build, "Use by mouse");
+  await name.dragTo(logs);
+  await expect.poll(buildIsRightOfLogs).toBe(true);
 });
 
 test("preserves terminal mounts through swaps, focus mode, sidebar selection and mobile widths", async ({ page, installation }) => {
@@ -224,11 +477,11 @@ test("preserves terminal mounts through swaps, focus mode, sidebar selection and
   await page.keyboard.press("Control+f");
   const search = first.getByRole("textbox", { name: "Search terminal output" });
   await search.fill("mount-canary");
-  await first.getByRole("button", { name: "Swap Build pane" }).click();
-  await second.getByRole("button", { name: "Swap Logs pane" }).click();
-  expect((await first.boundingBox())!.x).toBeLessThan((await second.boundingBox())!.x);
+  await choosePaneMenuItem(first, "Move pane");
+  await choosePaneMenuItem(second, "Swap with this pane");
+  await expect.poll(async () => (await first.boundingBox())!.x).toBeLessThan((await second.boundingBox())!.x);
   await expect(search).toHaveValue("mount-canary");
-  await first.getByRole("button", { name: "Focus Build pane" }).click();
+  await choosePaneMenuItem(first, "Focus pane");
   await expect(second).toBeHidden();
   await page.getByRole("button", { name: "Logs", exact: true }).click();
   await expect(second).toBeVisible();
@@ -251,8 +504,8 @@ test("preserves terminal mounts through swaps, focus mode, sidebar selection and
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(first).toBeVisible();
   await expect(search).toHaveValue("mount-canary");
-  await first.getByRole("button", { name: "Swap Build pane" }).dragTo(second);
-  expect((await first.boundingBox())!.x).toBeGreaterThan((await second.boundingBox())!.x);
+  await first.getByText("Build", { exact: true }).dragTo(second);
+  await expect.poll(async () => (await first.boundingBox())!.x).toBeGreaterThan((await second.boundingBox())!.x);
 });
 
 test("opens a new session beside the only session from the terminal's menu", async ({ page, installation }) => {

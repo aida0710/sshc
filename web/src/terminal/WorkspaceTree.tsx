@@ -45,7 +45,8 @@ type WorkspaceTreeProps = {
   unreadBySession?: UnreadSessions;
   seenProgramStatus?: SeenProgramStatus;
   onSelect: (id: string) => void;
-  canSplitSession?: (id: string) => boolean;
+  canSplitSession?: (id: string, edge: PaneEdge) => boolean;
+  splitLacksRoom?: (id: string, edge: PaneEdge) => boolean;
   onSplitSession?: (id: string, edge: PaneEdge) => void;
   onRemoveSessionFromSplit?: (id: string) => void;
   onDuplicate: (id: string) => void;
@@ -87,6 +88,7 @@ export function WorkspaceTree({
   seenProgramStatus = new Map(),
   onSelect,
   canSplitSession,
+  splitLacksRoom,
   onSplitSession,
   onRemoveSessionFromSplit,
   onDuplicate,
@@ -326,6 +328,7 @@ export function WorkspaceTree({
                     seenProgramStatus={seenProgramStatus}
                     onSelect={onSelect}
                     {...(canSplitSession === undefined ? {} : { canSplitSession })}
+                    {...(splitLacksRoom === undefined ? {} : { splitLacksRoom })}
                     {...(onSplitSession === undefined ? {} : { onSplitSession })}
                     {...(onRemoveSessionFromSplit === undefined ? {} : { onRemoveSessionFromSplit })}
                     onClose={(id) => void terminalSessions.close(id)}

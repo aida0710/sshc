@@ -15,8 +15,8 @@ export type AppActionContext = {
   activeSessionId: string | null;
   // panes are the sessions of the split shown on the terminal screen, in order; one or none outside a split.
   panes: readonly string[];
-  // splitBesideActive asks what goes beside the session shown, or is null when nothing can.
-  splitBesideActive: ((edge: PaneEdge) => void) | null;
+  // splitBesideActive は、表示中のセッションの横に何を置くかを聞く操作を、置ける側ごとに持つ。置けない側は持たない。
+  splitBesideActive: Partial<Record<PaneEdge, () => void>>;
   navigate: (section: Section) => void;
   showSession: (id: string) => void;
   openPalette: () => void;
@@ -68,7 +68,8 @@ export function appActions(context: AppActionContext): Partial<Record<ShortcutAc
     toggleNavigation,
     newSession: () => requestSession({ action: "newSession" }),
     ...(terminalFace && activeSessionId !== null ? { closeSession: () => requestSession({ action: "closeSession", sessionId: activeSessionId }) } : {}),
-    ...(terminalFace && splitBesideActive !== null ? { splitRight: () => splitBesideActive("right"), splitBelow: () => splitBesideActive("bottom") } : {}),
+    ...(terminalFace && splitBesideActive.right !== undefined ? { splitRight: splitBesideActive.right } : {}),
+    ...(terminalFace && splitBesideActive.bottom !== undefined ? { splitBelow: splitBesideActive.bottom } : {}),
     ...(terminalFace && panes.length > 1 ? { nextPane: showNeighbour(panes, 1), previousPane: showNeighbour(panes, -1) } : {}),
     ...(sessionIds.length > 0 ? { nextSession: showNeighbour(sessionIds, 1), previousSession: showNeighbour(sessionIds, -1) } : {}),
     ...runTargetActions(context),

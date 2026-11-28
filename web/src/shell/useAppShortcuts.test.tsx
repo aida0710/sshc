@@ -15,7 +15,7 @@ function ShortcutHarness({ ready, openPalette }: { ready: boolean; openPalette: 
     orderedSessions: [],
     activeSessionId: null,
     panes: [],
-    splitBesideActive: null,
+    splitBesideActive: {},
     navigate: ignoreNavigation,
     showSession: ignoreSession,
     openPalette,
@@ -79,11 +79,11 @@ describe("useAppShortcuts on the terminal screen", () => {
   function press(key: string) {
     document.dispatchEvent(new KeyboardEvent("keydown", { key, altKey: true, bubbles: true, cancelable: true }));
   }
-  function setUp(panes: string[], { canSplit = true } = {}) {
+  function setUp(panes: string[], { splitSides = ["right", "bottom"] }: { splitSides?: readonly ("right" | "bottom")[] } = {}) {
     const showSession = vi.fn();
     const requestSession = vi.fn();
     const toggleNavigation = vi.fn();
-    const splitBesideActive = vi.fn();
+    const splitBesideActive = Object.fromEntries(splitSides.map((side) => [side, vi.fn()]));
     renderHook(() => useAppShortcuts({
       enabled: true,
       shortcuts: bindings,
@@ -91,7 +91,7 @@ describe("useAppShortcuts on the terminal screen", () => {
       orderedSessions: [session("one"), session("two"), session("three")],
       activeSessionId: "two",
       panes,
-      splitBesideActive: canSplit ? splitBesideActive : null,
+      splitBesideActive,
       navigate: ignoreNavigation,
       showSession,
       openPalette: ignoreNavigation,
@@ -114,16 +114,19 @@ describe("useAppShortcuts on the terminal screen", () => {
   it("asks what goes beside the session shown, on the side of the shortcut", () => {
     const { splitBesideActive } = setUp([]);
     press("r");
+    expect(splitBesideActive.right).toHaveBeenCalledOnce();
+    expect(splitBesideActive.bottom).not.toHaveBeenCalled();
     press("d");
-    expect(splitBesideActive.mock.calls).toEqual([["right"], ["bottom"]]);
+    expect(splitBesideActive.bottom).toHaveBeenCalledOnce();
   });
 
-  it("leaves a split shortcut to the terminal while nothing can go beside the session", () => {
-    const { splitBesideActive } = setUp([], { canSplit: false });
+  it("leaves a split shortcut to the terminal while nothing can go on that side of the session", () => {
+    // 右に足す幅は無いが、下には足せるとき。
+    const { splitBesideActive } = setUp([], { splitSides: ["bottom"] });
     const pressed = new KeyboardEvent("keydown", { key: "r", altKey: true, bubbles: true, cancelable: true });
     document.dispatchEvent(pressed);
     expect(pressed.defaultPrevented).toBe(false);
-    expect(splitBesideActive).not.toHaveBeenCalled();
+    expect(splitBesideActive.bottom).not.toHaveBeenCalled();
   });
 
   it("moves between the panes of the split shown, going round at either end", () => {
@@ -156,7 +159,7 @@ describe("useAppShortcuts for the remote session", () => {
       orderedSessions: [],
       activeSessionId: null,
       panes: [],
-      splitBesideActive: null,
+      splitBesideActive: {},
       navigate: ignoreNavigation,
       showSession: ignoreSession,
       openPalette: ignoreNavigation,

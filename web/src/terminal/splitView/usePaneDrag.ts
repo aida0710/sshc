@@ -5,17 +5,22 @@ import { maximumSplitViewPanes, paneSessionIds, type PaneEdge } from "./layout";
 import type { SplitViewController } from "./useSplitView";
 import { maximumSplitGroups } from "./splitGroups";
 
-// A pane handle swaps panes in the middle of another pane and moves beside its
-// edge near one; sidebar sessions split at the nearest edge.
+// ペインの見出しをつかんで、ほかのペインの中央へ落とすと入れ替え、端の近くへ落とすとその側へ移す。
+// サイドバーのセッションの行は、いちばん近い端の側へ分割する。
 const paneDragMimeType = "application/x-sshc-split-view-pane";
 type DropTarget = { sessionId: string; edge: PaneEdge | null };
 
+// PaneMove は、動かしているペインと、その動かし方である。drag は見出しをつかんでいる間、pick は［ペインを移動］で
+// 選んで、入れ替える相手のペインを待っている間。
+type PaneMove = { sessionId: string; by: "drag" | "pick" };
+
 export function usePaneDrag(splitView: SplitViewController) {
-  const [moving, setMoving] = useState<string | null>(null);
+  const [move, setMove] = useState<PaneMove | null>(null);
   const [target, setTarget] = useState<DropTarget | null>(null);
   const members = paneSessionIds(splitView.state.root);
-  const movingSession = moving !== null && members.includes(moving) ? moving : null;
-  function clear() { setMoving(null); setTarget(null); }
+  const movingSession = move !== null && members.includes(move.sessionId) ? move.sessionId : null;
+  const pickedSession = move?.by === "pick" ? movingSession : null;
+  function clear() { setMove(null); setTarget(null); }
   useEffect(() => {
     window.addEventListener("dragend", clear);
     window.addEventListener("drop", clear);
@@ -57,10 +62,14 @@ export function usePaneDrag(splitView: SplitViewController) {
     clear();
   }
   return {
-    moving: movingSession,
+    // picked は、［ペインを移動］で選んで、入れ替える相手を待っているペインである。ドラッグの間は null。
+    picked: pickedSession,
     target,
     atLimit: members.length >= maximumSplitViewPanes,
     atGroupLimit: splitView.activeGroupNumber === null && splitView.groups.length >= maximumSplitGroups,
+    // lacksRoom は、いま重ねている側に落としても、どれかのペインが最小の大きさを割るので分割しないこと。
+    // サイドバーの行は落とすまで何のセッションか分からないので、新しいペインとして見る。
+    lacksRoom: target !== null && target.edge !== null && splitView.lacksRoomFor(movingSession, target.sessionId, target.edge),
     clear,
     dragOver,
     drop,
@@ -70,12 +79,12 @@ export function usePaneDrag(splitView: SplitViewController) {
     begin(event: DragEvent, sessionId: string) {
       event.dataTransfer.setData(paneDragMimeType, sessionId);
       event.dataTransfer.effectAllowed = "move";
-      setMoving(sessionId);
+      setMove({ sessionId, by: "drag" });
     },
     pick(sessionId: string) {
-      if (movingSession === null) setMoving(sessionId);
+      if (pickedSession === null) setMove({ sessionId, by: "pick" });
       else {
-        splitView.dispatch({ type: "swap", sourceSessionId: movingSession, targetSessionId: sessionId });
+        splitView.dispatch({ type: "swap", sourceSessionId: pickedSession, targetSessionId: sessionId });
         clear();
       }
     },

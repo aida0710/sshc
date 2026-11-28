@@ -36,7 +36,7 @@ These stay this machine's whatever engine is chosen:
 1. Install sshc on the host and keep its engine running, for example with `sshc service install`. Using the same version as on this machine is the safest choice.
 2. Connect to that host once from a terminal on this machine to confirm its host key. Save any passphrase or password it needs in Connections.
 3. Open **Remote session** at the bottom of the sidebar and choose the host from **Add an engine…**. If it cannot be added, the reason appears above **Remote session**. When the sshc engine is not running on the host, **How to fix** lists the commands to run there, each with a button that copies it. Once the engine runs, choose **Try again**. **×** hides the reason.
-4. Choose the host in the list: the workspaces and sessions become that engine's, and the terminal heading says it runs there.
+4. Choose the host in the list: the workspaces and sessions become that engine's.
 
 The keyboard switches too. By default Alt+Shift+PageDown / Alt+Shift+PageUp go to the next and previous one, and Ctrl+1 to Ctrl+9 (Command+1 to Command+9 on a Mac) to the first to ninth in the list; the first is localhost. Typing "remote session" in the command search lists them by connection name as well. Change the keys in **Settings → Keyboard shortcuts**.
 

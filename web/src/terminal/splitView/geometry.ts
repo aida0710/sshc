@@ -1,14 +1,13 @@
 import type { CSSProperties } from "react";
-import type { SplitDirection, SplitMinimum } from "../../ui/SplitResizeHandle";
-import type { PaneEdge, SplitPath, SplitViewNode } from "./layout";
+import { fitSplitRatio, type SplitDirection, type SplitMinimum } from "../../ui/SplitResizeHandle";
+import type { PaneEdge, SplitPath, SplitViewBranch, SplitViewNode } from "./layout";
 
-// minimumPanePx is the least a pane keeps, padding included, however the
-// splits around it are dragged (measured in the desktop layout). Across: the
-// header's name cut to its dot and a few letters (52px), its search and "…"
-// buttons (2 × 28px), the swap, focus and close buttons (88px) and the
-// padding. Down: the 40px header, the terminal's 17px of padding and one
-// 15px row. A smaller pane pushes its close button out of sight, or leaves
-// xterm no row to draw while the shell writes on at the last size.
+// minimumPanePx は、余白を含めてペインに残す最小の大きさである（PC の組み方で測った）。仕切りをドラッグしたとき、
+// ペインを足すとき（layout.ts の split）、窓を狭めたとき（splitViewGeometry）に守る。見出しに要る幅は 188px
+// （点と数文字に縮めた名前の 52px、検索・［…］・外すボタンの 3 × 28px と余白）だが、窓の幅ごとに横に並べられる
+// ペインの数（1280px で4つ、1024px で3つ）を変えないよう 248px にしてある。余る 60px は名前に回る。
+// 高さは、見出しの 40px、ターミナルの余白の 17px と1行の 15px。これより小さいと外すボタンが見えなくなるか、
+// シェルが前の大きさで書き続ける間、xterm が描く行が無くなる。
 export const minimumPanePx = { width: 248, height: 80 };
 
 // minimumExtentPx is the least a part of the split takes along direction: its
@@ -18,6 +17,21 @@ export function minimumExtentPx(node: SplitViewNode, direction: SplitDirection):
   const first = minimumExtentPx(node.first, direction);
   const second = minimumExtentPx(node.second, direction);
   return node.direction === direction ? first + second : Math.max(first, second);
+}
+
+// splitMinimum は、分割の2つの半分それぞれが、分割の向きに要る最小の大きさ（px）である。
+export function splitMinimum(node: SplitViewBranch): SplitMinimum {
+  return { first: minimumExtentPx(node.first, node.direction), second: minimumExtentPx(node.second, node.direction) };
+}
+
+// SplitArea は、分割表示の領域の広さ（px）である。
+export type SplitArea = { width: number; height: number };
+
+// fitsSplitArea は、area の direction の向きの広さで、root のどのペインにも minimumPanePx を残せるかを返す。
+// ペインを足す分割は、足した向きの最小の大きさしか増やさない。もう一方の向きは窓を狭めて既に足りないことが
+// あるが、足しても今より狭くはならないので、それを理由に断らない。
+export function fitsSplitArea(root: SplitViewNode, area: SplitArea, direction: SplitDirection): boolean {
+  return minimumExtentPx(root, direction) <= (direction === "horizontal" ? area.width : area.height);
 }
 
 export type PaneBounds = { left: number; top: number; width: number; height: number };
@@ -34,15 +48,17 @@ function boundsStyle(bounds: PaneBounds): CSSProperties {
   return { left: `${bounds.left}%`, top: `${bounds.top}%`, width: `${bounds.width}%`, height: `${bounds.height}%` };
 }
 
-// Flat placements let React keep each terminal mounted as the split tree changes.
-export function splitViewGeometry(root: SplitViewNode | null): { panes: PanePlacement[]; dividers: DividerPlacement[] } {
+// 置き場所を平らな一覧で返すので、分割の木が変わっても React は各ターミナルをマウントしたまま保てる。
+// area は分割表示の領域の広さで、まだ測っていなければ null。広さが分かれば、覚えている比率のままでは
+// 最小の大きさを割るペイン（窓を狭めたときなど）に、最小の大きさを残す比率で描く。覚えている比率は変えないので、
+// 窓を広げ直せば元の比率に戻る。
+export function splitViewGeometry(root: SplitViewNode | null, area: SplitArea | null): { panes: PanePlacement[]; dividers: DividerPlacement[] } {
   const panes: PanePlacement[] = [];
   const dividers: DividerPlacement[] = [];
-  walkSplitTree(root, {
+  walkSplitTree(root, area, {
     pane: (sessionId, bounds) => panes.push({ sessionId, style: boundsStyle(bounds) }),
-    divider: (node, bounds, path) => dividers.push({
-      path, style: boundsStyle(bounds), direction: node.direction, ratio: node.ratio,
-      minimum: { first: minimumExtentPx(node.first, node.direction), second: minimumExtentPx(node.second, node.direction) },
+    divider: (node, ratio, bounds, path) => dividers.push({
+      path, style: boundsStyle(bounds), direction: node.direction, ratio, minimum: splitMinimum(node),
     }),
   });
   return { panes, dividers };
@@ -52,23 +68,27 @@ export function splitViewGeometry(root: SplitViewNode | null): { panes: PanePlac
 // of the layout (the sidebar's split list).
 export function paneBounds(root: SplitViewNode | null): { sessionId: string; bounds: PaneBounds }[] {
   const placed: { sessionId: string; bounds: PaneBounds }[] = [];
-  walkSplitTree(root, { pane: (sessionId, bounds) => placed.push({ sessionId, bounds }) });
+  walkSplitTree(root, null, { pane: (sessionId, bounds) => placed.push({ sessionId, bounds }) });
   return placed;
 }
 
-function walkSplitTree(root: SplitViewNode | null, visit: {
+// walkSplitTree は、各ペインと各仕切りの置き場所を、全体に対する割合で上から順に決める。仕切りの比率は、
+// area があれば fitSplitRatio で両側に最小の大きさを残す値にし、その比率で下の分割を置く。
+function walkSplitTree(root: SplitViewNode | null, area: SplitArea | null, visit: {
   pane: (sessionId: string, bounds: PaneBounds) => void;
-  divider?: (node: Exclude<SplitViewNode, { sessionId: string }>, bounds: PaneBounds, path: SplitPath) => void;
+  divider?: (node: SplitViewBranch, ratio: number, bounds: PaneBounds, path: SplitPath) => void;
 }) {
   function place(node: SplitViewNode, bounds: PaneBounds, path: SplitPath) {
     if ("sessionId" in node) {
       visit.pane(node.sessionId, bounds);
       return;
     }
-    visit.divider?.(node, bounds, path);
-    const first = node.ratio / 100;
-    const second = 1 - first;
     const horizontal = node.direction === "horizontal";
+    const extentPx = area === null ? 0 : horizontal ? bounds.width / 100 * area.width : bounds.height / 100 * area.height;
+    const ratio = fitSplitRatio(node.ratio, extentPx, splitMinimum(node));
+    visit.divider?.(node, ratio, bounds, path);
+    const first = ratio / 100;
+    const second = 1 - first;
     place(node.first, { ...bounds, width: bounds.width * (horizontal ? first : 1), height: bounds.height * (horizontal ? 1 : first) }, [...path, "first"]);
     place(node.second, {
       left: bounds.left + (horizontal ? bounds.width * first : 0),

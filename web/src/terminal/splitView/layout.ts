@@ -1,12 +1,14 @@
-import { clampSplitRatio, type SplitDirection } from "../../ui/SplitResizeHandle";
+import { clampSplitRatio, evenSplitRatio, minimumShareRatio, type SplitDirection } from "../../ui/SplitResizeHandle";
+import { fitsSplitArea, splitMinimum, type SplitArea } from "./geometry";
 
 // Four panes keep terminals usable at desktop widths.
 export const maximumSplitViewPanes = 4;
-const initialSplitRatio = 50;
 export type PaneEdge = "left" | "right" | "top" | "bottom";
 export type SplitViewNode =
   | { sessionId: string }
   | { direction: SplitDirection; ratio: number; first: SplitViewNode; second: SplitViewNode };
+// SplitViewBranch は、ペインではなく、2つに分けた部分である。
+export type SplitViewBranch = Exclude<SplitViewNode, { sessionId: string }>;
 export type SplitPath = ("first" | "second")[];
 export type SplitViewState = {
   root: SplitViewNode | null;
@@ -16,7 +18,8 @@ export type SplitViewState = {
 };
 export type SplitViewAction =
   | { type: "select"; sessionId: string | null; focus?: boolean }
-  | { type: "split"; sourceSessionId: string; targetSessionId: string; edge: PaneEdge }
+  // area は分割表示の領域の広さ。渡すと、足す向きにどれかのペインが最小の大きさを割る分割を断る。
+  | { type: "split"; sourceSessionId: string; targetSessionId: string; edge: PaneEdge; area?: SplitArea | undefined }
   | { type: "close"; sessionId: string }
   | { type: "swap"; sourceSessionId: string; targetSessionId: string }
   | { type: "resize"; path: SplitPath; ratio: number }
@@ -30,9 +33,57 @@ export function paneSessionIds(root: SplitViewNode | null): string[] {
   return "sessionId" in root ? [root.sessionId] : [...paneSessionIds(root.first), ...paneSessionIds(root.second)];
 }
 
-function replacePane(root: SplitViewNode, sessionId: string, replace: (pane: SplitViewNode) => SplitViewNode): SplitViewNode {
-  if ("sessionId" in root) return root.sessionId === sessionId ? replace(root) : root;
-  return { ...root, first: replacePane(root.first, sessionId, replace), second: replacePane(root.second, sessionId, replace) };
+// edgeDirection は、edge の側に並べる分割の向きである。
+export function edgeDirection(edge: PaneEdge): SplitDirection {
+  return edge === "left" || edge === "right" ? "horizontal" : "vertical";
+}
+
+function isSplitAlong(node: SplitViewNode, direction: SplitDirection): node is SplitViewBranch {
+  return !("sessionId" in node) && node.direction === direction;
+}
+
+// pathTo は、sessionId のペインまでの道筋である。そのペインが無ければ null。
+function pathTo(node: SplitViewNode, sessionId: string): SplitPath | null {
+  if ("sessionId" in node) return node.sessionId === sessionId ? [] : null;
+  for (const side of ["first", "second"] as const) {
+    const below = pathTo(node[side], sessionId);
+    if (below !== null) return [side, ...below];
+  }
+  return null;
+}
+
+function nodeAt(root: SplitViewNode, path: SplitPath): SplitViewNode {
+  const [side, ...rest] = path;
+  return side === undefined || "sessionId" in root ? root : nodeAt(root[side], rest);
+}
+
+// replaceAt は、path の位置の部分を replace の結果に替える。path がペインの先を指していれば何も変えない。
+function replaceAt(root: SplitViewNode, path: SplitPath, replace: (node: SplitViewNode) => SplitViewNode): SplitViewNode {
+  const [side, ...rest] = path;
+  if (side === undefined) return replace(root);
+  if ("sessionId" in root) return root;
+  return { ...root, [side]: replaceAt(root[side], rest, replace) };
+}
+
+// evenRun は、direction の向きに続く分割の比率を、並んだペインがどれも同じ大きさになるように割り直す。
+// 並びの中に向きの違う分割があれば、それを1つの区画として、最小の大きさに比例した分を渡す。
+function evenRun(node: SplitViewNode, direction: SplitDirection): SplitViewNode {
+  if (!isSplitAlong(node, direction)) return node;
+  return { ...node, ratio: minimumShareRatio(splitMinimum(node)), first: evenRun(node.first, direction), second: evenRun(node.second, direction) };
+}
+
+// paneBeside は、target と sourceSessionId のペインを、edge の側に並べた分割である。
+function paneBeside(target: SplitViewNode, sourceSessionId: string, edge: PaneEdge): SplitViewBranch {
+  const before = edge === "left" || edge === "top";
+  const source = { sessionId: sourceSessionId };
+  return { direction: edgeDirection(edge), ratio: evenSplitRatio, first: before ? source : target, second: before ? target : source };
+}
+
+// evenRunAbove は、path の分割から上へ、同じ向きの分割が続く所までの並びを均等に割り直す。
+function evenRunAbove(root: SplitViewNode, path: SplitPath, direction: SplitDirection): SplitViewNode {
+  let runTop = path.length;
+  while (runTop > 0 && isSplitAlong(nodeAt(root, path.slice(0, runTop - 1)), direction)) runTop -= 1;
+  return replaceAt(root, path.slice(0, runTop), (run) => evenRun(run, direction));
 }
 
 function removePanes(root: SplitViewNode, sessionIds: ReadonlySet<string>): SplitViewNode | null {
@@ -45,9 +96,7 @@ function removePanes(root: SplitViewNode, sessionIds: ReadonlySet<string>): Spli
 }
 
 function resizeSplit(root: SplitViewNode, path: SplitPath, ratio: number): SplitViewNode {
-  if ("sessionId" in root) return root;
-  const [side, ...rest] = path;
-  return side === undefined ? { ...root, ratio: clampSplitRatio(ratio) } : { ...root, [side]: resizeSplit(root[side], rest, ratio) };
+  return replaceAt(root, path, (node) => "sessionId" in node ? node : { ...node, ratio: clampSplitRatio(ratio) });
 }
 
 function closePanes(state: SplitViewState, sessionIds: ReadonlySet<string>): SplitViewState {
@@ -80,15 +129,13 @@ export function reduceSplitView(state: SplitViewState, action: SplitViewAction):
       if (!existing && members.length >= maximumSplitViewPanes) return state;
       const withoutSource = existing ? removePanes(state.root, new Set([sourceSessionId])) : state.root;
       if (withoutSource === null) return state;
-      const before = edge === "left" || edge === "top";
-      const direction = edge === "left" || edge === "right" ? "horizontal" : "vertical";
-      const source = { sessionId: sourceSessionId };
-      const root = replacePane(withoutSource, targetSessionId, (target) => ({
-        direction,
-        ratio: initialSplitRatio,
-        first: before ? source : target,
-        second: before ? target : source,
-      }));
+      const path = pathTo(withoutSource, targetSessionId);
+      if (path === null) return state;
+      // 足すたびに足した先のペインを半分に割ると、そのペインだけが細くなるので、加わった並びを均等に割り直す。
+      const placed = replaceAt(withoutSource, path, (target) => paneBeside(target, sourceSessionId, edge));
+      const direction = edgeDirection(edge);
+      const root = evenRunAbove(placed, path, direction);
+      if (action.area !== undefined && !fitsSplitArea(root, action.area, direction)) return state;
       return { root, activeSessionId: sourceSessionId, focusMode: false, focusRevision: state.focusRevision + 1 };
     }
     case "close":

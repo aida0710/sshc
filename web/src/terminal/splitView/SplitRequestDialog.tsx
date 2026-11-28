@@ -39,10 +39,10 @@ export function SplitRequestDialog(props: SplitRequestDialogProps) {
 function SplitRequestChoice({ splitView, sessions, aliases, hosts, runTarget, directDestination, onOpen, onSplit, request }: SplitRequestDialogProps & { request: SplitRequest }) {
   const t = useTranslate();
   const [choosingNew, setChoosingNew] = useState(false);
-  const { targetSessionId } = request;
+  const { targetSessionId, edge } = request;
   const { cancelSplitRequest, selectSession } = splitView;
   const target = sessions.find((session) => session.id === targetSessionId);
-  const candidates = sessions.filter((candidate) => splitView.canSplit(candidate.id, targetSessionId));
+  const candidates = sessions.filter((candidate) => splitView.canSplit(candidate.id, targetSessionId, edge));
 
   useEffect(() => {
     if (target === undefined) cancelSplitRequest();
@@ -63,7 +63,7 @@ function SplitRequestChoice({ splitView, sessions, aliases, hosts, runTarget, di
     return (
       <SplitSessionPicker
         sessions={candidates}
-        {...(splitView.canOpenBeside(targetSessionId) ? { onOpenNew: () => setChoosingNew(true) } : {})}
+        {...(splitView.canOpenBeside(targetSessionId, edge) ? { onOpenNew: () => setChoosingNew(true) } : {})}
         onClose={cancel}
         onSelect={(sourceSessionId) => {
           splitView.split({ ...request, sourceSessionId });
@@ -77,7 +77,7 @@ function SplitRequestChoice({ splitView, sessions, aliases, hosts, runTarget, di
   return (
     <HostPickerDialog
       open
-      heading={t(request.edge === "right" ? "splitView.newSessionRight" : "splitView.newSessionBelow")}
+      heading={t(edge === "right" ? "splitView.newSessionRight" : "splitView.newSessionBelow")}
       aliases={aliases}
       hosts={hosts}
       local={[duplicate, localShellChoice(t, runTarget)]}

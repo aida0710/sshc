@@ -313,11 +313,16 @@ export function App({
   }, [openLocalShell, openSSHSession]);
 
   // Splitting beside the session shown: a phone shows one pane at a time, and has no splitting to ask for.
-  const splittableSessionId = !splitView.compact && activeSessionId !== null && splitView.splitRefusal(activeSessionId) === null ? activeSessionId : null;
+  // 右と下は、それぞれの側にペインを足す広さがあるかが違うので、別々に決める。
+  const splitTargetId = splitView.compact ? null : activeSessionId;
+  const canSplitRight = splitTargetId !== null && splitView.splitRefusal(splitTargetId, "right") === null;
+  const canSplitBelow = splitTargetId !== null && splitView.splitRefusal(splitTargetId, "bottom") === null;
   const { requestSplit } = splitView;
-  const splitBesideActive = useMemo(() => splittableSessionId === null
-    ? null
-    : (edge: PaneEdge) => requestSplit({ targetSessionId: splittableSessionId, edge }), [requestSplit, splittableSessionId]);
+  const splitBesideActive = useMemo((): Partial<Record<PaneEdge, () => void>> => {
+    if (splitTargetId === null) return {};
+    const ask = (edge: PaneEdge) => () => requestSplit({ targetSessionId: splitTargetId, edge });
+    return { ...(canSplitRight ? { right: ask("right") } : {}), ...(canSplitBelow ? { bottom: ask("bottom") } : {}) };
+  }, [requestSplit, splitTargetId, canSplitRight, canSplitBelow]);
 
   // ターミナルの領域を見せる。リモートセッションを切り替えたときの接続の経過は、そこに出る。
   const showTerminalArea = useCallback(() => {
@@ -547,12 +552,14 @@ export function App({
               navigate("Terminal");
             }}
             onShowTerminal={showTerminalArea}
-            canSplitSession={(id) => id === activeSessionId ? splitBesideActive !== null : splitView.canSplit(id)}
+            canSplitSession={(id, edge) => id === activeSessionId ? splitBesideActive[edge] !== undefined : splitView.canSplit(id, activeSessionId, edge)}
+            splitLacksRoom={(id, edge) => activeSessionId !== null
+              && (id === activeSessionId ? splitView.splitRefusal(id, edge) === "room" : splitView.lacksRoomFor(id, activeSessionId, edge))}
             onSplitSession={(id, edge) => {
               if (activeSessionId === null) return;
               // The session shown cannot go beside itself: this asks what goes beside it, as the terminal's 「…」 does.
               if (id === activeSessionId) {
-                splitBesideActive?.(edge);
+                splitBesideActive[edge]?.();
                 return;
               }
               splitView.split({ sourceSessionId: id, targetSessionId: activeSessionId, edge });
