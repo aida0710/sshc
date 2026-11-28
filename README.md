@@ -87,7 +87,7 @@ sshc help                    # すべてのコマンド
 - パスワード、鍵のパスフレーズ、TOTPのセットアップキーをVaultに保存し、Terminal、SFTP、CLIで再利用する認証情報の管理
 - 選んだSSH接続だけを専用のVPN経由で接続する、接続ごとのVPN（WireGuard、L2TP/IPsec、OpenConnect、OpenVPN、IKEv2/IPsec。Dockerを使用）
 - セッション、ホスト、ファイル、スニペット、設定を横断するコマンド検索（Search）
-- S3互換ストレージを使った、エンドツーエンド暗号化（E2EE）のスナップショット同期。復号できるのは同じ同期キーを設定したマシンだけ
+- S3互換ストレージを使った、エンドツーエンド暗号化（E2EE）のスナップショット同期。復号できるのは同じ暗号化キーを設定したマシンだけ
 - SSH、SFTP、Serial、Telnet、同期、VPN、OTP、Terminal操作のCLI
 
 機能とセキュリティ上の制限は[利用者向けドキュメント](https://aida0710.github.io/sshc/)にまとめています。内部設計は[docs/design.md](docs/design.md)を参照してください。
