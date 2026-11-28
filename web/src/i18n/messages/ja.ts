@@ -859,7 +859,7 @@ export const ja = {
   "snippets.notFound": "スニペットか実行の記録が見つかりませんでした。ほかの画面で削除された可能性があります。",
   "snippets.previewChanged": "確認したあとでスニペットか対象の接続先が変わりました。もう一度確認してください。",
   "snippets.jobsFull": "実行中のスニペットが多すぎます。どれかが終わってから、もう一度実行してください。",
-  "snippets.jobFinished": "中止する前に実行が終わりました。",
+  "snippets.jobFinished": "中止する前に実行が終了しました。",
   "snippets.invalid": "スニペットか変数に使用できない値があります。",
   "snippets.name": "名前",
   "snippets.description": "説明",
