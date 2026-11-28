@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -130,6 +131,136 @@ func TestASecretTheShellEchoesIsHiddenInTheLog(t *testing.T) {
 	}
 }
 
+// checkLogLines は、ログ log の、[sshc] の行を除いた行が want であることを確かめる。
+func checkLogLines(t *testing.T, log string, want []string) {
+	t.Helper()
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSuffix(log, "\n"), "\n") {
+		if !strings.HasPrefix(line, "[sshc] ") {
+			lines = append(lines, line)
+		}
+	}
+	if !slices.Equal(lines, want) {
+		t.Fatalf("lines = %q, want %q", lines, want)
+	}
+}
+
+func TestASecretWrappedAtTheRightEdgeIsHiddenOnBothRows(t *testing.T) {
+	// readLog のターミナルは 40 桁。"--token=" までが 28 字なので、値は 12 字目のあとで折り返す。
+	const secret = "Zq7-hunter2-Kx9"
+	command := "$ deploy --env r100 --token=" + secret
+	for name, test := range map[string]struct {
+		writes []string
+		want   []string
+	}{
+		"both rows still on the screen when the log closes": {
+			writes: []string{command + "\r\n"},
+			want:   []string{"$ deploy --env r100 --token=[secret]", "[secret]"},
+		},
+		"the rows scroll off one at a time": {
+			writes: []string{command + "\r\n", "one\r\n", "two\r\n", "three\r\n", "four\r\n"},
+			want:   []string{"$ deploy --env r100 --token=[secret]", "[secret]", "one", "two", "three", "four"},
+		},
+		"output goes on after the value on the second row": {
+			writes: []string{command + " && echo ok\r\n", "ok\r\n", "$ \r\n", "$ \r\n"},
+			want:   []string{"$ deploy --env r100 --token=[secret]", "[secret] && echo ok", "ok", "$", "$"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := readLog(t, func(log *Log) {
+				log.Hide([]string{secret})
+				for _, output := range test.writes {
+					log.Write([]byte(output))
+				}
+			})
+			checkLogLines(t, got, test.want)
+		})
+	}
+}
+
+func TestASecretWrappedBeforeTheTerminalGrewWiderIsStillHidden(t *testing.T) {
+	// 画面は広がっても折り返し直さないので、右端だった桁のあとに空いた桁が続く。
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"Zq7-hunter2-Kx9"})
+		log.Write([]byte("$ deploy --env r100 --token=Zq7-hunter2-Kx9\r\n"))
+		log.Resize(terminal.Size{Cols: 80, Rows: 3})
+		log.Write([]byte("one\r\ntwo\r\n"))
+	})
+	checkLogLines(t, got, []string{"$ deploy --env r100 --token=[secret]", "[secret]", "one", "two"})
+}
+
+func TestASecretLongerThanARowIsHiddenOnEveryRowItCovers(t *testing.T) {
+	// 値は、頭の1字が1行目の右端に、最後の1字が3行目の左端に来る。3行目を受け取ったとき、値の頭はいちばん遠い。
+	const prefix = "$ unlock --vault r100 --phrase=pelican "
+	secret := strings.Repeat("Tail9", 8) + "Kx"
+	if len(prefix) != 39 || len(secret) != 42 {
+		t.Fatal("the example must start the secret on the last of the 40 columns and end it on the first of the third row")
+	}
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{secret})
+		log.Write([]byte(prefix + secret + "\r\n"))
+		log.Write([]byte("done\r\n$ \r\n$ \r\n$ \r\n"))
+	})
+	checkLogLines(t, got, []string{prefix + "[secret]", "[secret]", "[secret]", "done", "$", "$", "$"})
+}
+
+func TestASpaceOfASecretOnTheLastColumnDoesNotLeaveItShown(t *testing.T) {
+	const prefix, secret = "$ unlock --vault r100 --phrase=", "pelican9 dunlin"
+	if len(prefix)+strings.IndexByte(secret, ' ') != 39 {
+		t.Fatal("the example must put the space of the secret on the last of the 40 columns")
+	}
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{secret})
+		log.Write([]byte(prefix + secret + "\r\n"))
+	})
+	checkLogLines(t, got, []string{"$ unlock --vault r100 --phrase=[secret]", "[secret]"})
+}
+
+func TestSecretsThatStartAlikeAreHiddenWhole(t *testing.T) {
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"pelican-", "pelican-Tail9secret"})
+		log.Write([]byte("$ login pelican-Tail9secret\r\n"))
+	})
+	checkLogLines(t, got, []string{"$ login [secret]"})
+}
+
+func TestASecretHiddenWhileLinesWaitToBeWrittenIsHiddenInThem(t *testing.T) {
+	// 長い値があると、消した画面の行は、続きの行が来るまで書かずに留まる。そのあとで伏せる値が増えても、
+	// まだ書いていない行には効く。
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{strings.Repeat("Zq7-hunter2-Kx9", 40)})
+		log.Write([]byte("$ echo pelican-tail-77\r\n\x1b[2J"))
+		log.Hide([]string{"pelican-tail-77"})
+	})
+	checkLogLines(t, got, []string{"$ echo [secret]"})
+}
+
+func TestASecretWithALineBreakIsHiddenOnTheLinesTheShellShowsItOn(t *testing.T) {
+	// 引用しない改行はコマンドを区切るので、シェルは値の2行目を次のコマンドとして映す。
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"mirage-first-9f\npelican-second-7c"})
+		log.Write([]byte("$ unlock mirage-first-9f\r\n$ pelican-second-7c\r\nbash: pelican-second-7c: not found\r\n"))
+	})
+	checkLogLines(t, got, []string{"$ unlock [secret]", "$ [secret]", "bash: [secret]: not found"})
+}
+
+func TestASecretThatOnlyEndsWithALineBreakIsHiddenWhateverItsLength(t *testing.T) {
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"r100pw\n"})
+		log.Write([]byte("$ login r100pw\r\n"))
+	})
+	checkLogLines(t, got, []string{"$ login [secret]"})
+}
+
+func TestAShortLineOfASecretWithALineBreakIsLeftSoOrdinaryWordsStay(t *testing.T) {
+	// 改行を含む値の短い行まで伏せると、同じ語の通常の出力も消える。
+	got := readLog(t, func(log *Log) {
+		log.Hide([]string{"r100\npelican-second-7c"})
+		log.Write([]byte("$ ssh r100\r\n$ pelican-second-7c\r\n"))
+	})
+	checkLogLines(t, got, []string{"$ ssh r100", "$ [secret]"})
+}
+
 func TestTheLogAndItsFolderAreTheOwnersOnly(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows keeps them private with an ACL (internal/privatefile)")
@@ -150,22 +281,28 @@ func TestTheLogAndItsFolderAreTheOwnersOnly(t *testing.T) {
 }
 
 func TestANoteComesAfterTheLinesShownBeforeIt(t *testing.T) {
-	got := readLog(t, func(log *Log) {
-		log.Write([]byte("one\r\ntwo\r\n$ "))
-		log.Note("接続が切れました。")
-		log.Write([]byte("\r\nthree\r\nfour\r\n"))
-		log.Note("セッションが終わりました。")
-	})
-	var order []string
-	for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
-		if strings.HasPrefix(line, "[sshc] ") {
-			line = line[strings.LastIndex(line, " ")+1:]
-		}
-		order = append(order, line)
-	}
-	want := []string{"one", "two", "$", "接続が切れました。", "three", "four", "セッションが終わりました。"}
-	if strings.Join(order, "|") != strings.Join(want, "|") {
-		t.Fatalf("log = %q, want the lines in %q's order", got, want)
+	// 伏せる値があると、行は続きの行が来るまで手元に留まる。留まっているあいだも順は変わらない。
+	for name, secrets := range map[string][]string{"no secret": nil, "a secret to hide": {"Zq7-hunter2-Kx9"}} {
+		t.Run(name, func(t *testing.T) {
+			got := readLog(t, func(log *Log) {
+				log.Hide(secrets)
+				log.Write([]byte("one\r\ntwo\r\n$ "))
+				log.Note("接続が切れました。")
+				log.Write([]byte("\r\nthree\r\nfour\r\n"))
+				log.Note("セッションが終わりました。")
+			})
+			var order []string
+			for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+				if strings.HasPrefix(line, "[sshc] ") {
+					line = line[strings.LastIndex(line, " ")+1:]
+				}
+				order = append(order, line)
+			}
+			want := []string{"one", "two", "$", "接続が切れました。", "three", "four", "セッションが終わりました。"}
+			if strings.Join(order, "|") != strings.Join(want, "|") {
+				t.Fatalf("log = %q, want the lines in %q's order", got, want)
+			}
+		})
 	}
 }
 
@@ -189,31 +326,41 @@ func TestAFolderInsideTheSynchronizedFolderIsRefused(t *testing.T) {
 	}
 }
 
-// 画面より長い REP は、同じ行を何度も流す。ログはその行を1行ずつ書かず、続いた行の数を書く。
+// 画面より長い REP は、同じ行を何度も流す。ログはその行を1行ずつ書かず、そのすぐあとに続いた行の数を書く。
+// 伏せる値があると、行は、そのあとに値の長さの分の字が続くまで手元に留まる。留まっているあいだも、続いた行の数は
+// その行のあとに来る。長い値は、REP の前の "$ cat x" の行まで留める。
 func TestALineRepeatedPastTheScreenIsWrittenWithHowManyMoreFollowed(t *testing.T) {
-	got := readLog(t, func(log *Log) {
-		log.Write([]byte("$ cat x\r\na\x1b[65535b"))
-	})
-	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
-	if len(lines) > 20 {
-		t.Fatalf("log has %d lines for one REP, want the repeated line once with a count", len(lines))
-	}
-	// 40 字の行に 65536 字を打つと、40 字の行が 1638 行と、16 字の行が1行になる。
-	fullRow, fullRows := strings.Repeat("a", 40), 0
-	for _, line := range lines[1 : len(lines)-1] {
-		if line == fullRow {
-			fullRows++
-			continue
-		}
-		// 知らせの行は「[sshc] 日付 時刻 文」である。
-		fields := strings.SplitN(line, " ", 4)
-		var more int
-		if _, err := fmt.Sscanf(fields[len(fields)-1], repeatedLineNote, &more); len(fields) != 4 || err != nil {
-			t.Fatalf("line %q is neither the row nor how many more followed: %v", line, err)
-		}
-		fullRows += more
-	}
-	if lines[0] != "$ cat x" || fullRows != 1638 || lines[len(lines)-1] != strings.Repeat("a", 16) {
-		t.Fatalf("log has %d full rows (want 1638) in %q", fullRows, got)
+	for name, secrets := range map[string][]string{
+		"no secret": nil,
+		"a secret long enough to hold the rows before the repeat": {strings.Repeat("Zq7-hunter2-Kx9", 40)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := readLog(t, func(log *Log) {
+				log.Hide(secrets)
+				log.Write([]byte("$ cat x\r\na\x1b[65535b"))
+			})
+			lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+			if len(lines) > 20 {
+				t.Fatalf("log has %d lines for one REP, want the repeated line once with a count", len(lines))
+			}
+			// 40 字の行に 65536 字を打つと、40 字の行が 1638 行と、16 字の行が1行になる。
+			fullRow, fullRows := strings.Repeat("a", 40), 0
+			for _, line := range lines[1 : len(lines)-1] {
+				if line == fullRow {
+					fullRows++
+					continue
+				}
+				// 知らせの行は「[sshc] 日付 時刻 文」である。
+				fields := strings.SplitN(line, " ", 4)
+				var more int
+				if _, err := fmt.Sscanf(fields[len(fields)-1], repeatedLineNote, &more); len(fields) != 4 || err != nil {
+					t.Fatalf("line %q is neither the row nor how many more followed: %v", line, err)
+				}
+				fullRows += more
+			}
+			if lines[0] != "$ cat x" || fullRows != 1638 || lines[len(lines)-1] != strings.Repeat("a", 16) {
+				t.Fatalf("log has %d full rows (want 1638) in %q", fullRows, got)
+			}
+		})
 	}
 }

@@ -177,7 +177,7 @@ Turning on **Save a log of each session to a file** under **General** in Setting
 
 - The lines written are those that scroll off the top of the screen and those on a screen that is erased. A line still on the screen is written once it scrolls off or the session ends; when the session ends, the lines still on the screen are written too.
 - A program that redraws the same rows (Claude Code, for instance) leaves only what it drew last. What a full-screen program such as vim draws is not written, nor what tmux draws for a connection opened in tmux.
-- For an SSH session, only the shell's output after authentication is written: neither the password prompt nor what was typed at it. The values of secret Snippet variables are replaced with `[secret]`.
+- For an SSH session, only the shell's output after authentication is written: neither the password prompt nor what was typed at it. The values of secret Snippet variables are replaced with `[secret]`, also when a value wraps at the right edge across several lines. A value with line breaks is replaced line by line; in a value of two or more lines, lines shorter than 8 characters are written as they are.
 - Connecting, disconnecting, reconnecting and the end of the session are written as lines starting with `[sshc]`, with the time.
 - A file is named `<connection>-<time opened>-<first 8 characters of the session ID>.log`; a local shell's starts with `local-`. One file holds up to 100 MiB, and nothing past that is written.
 
